@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**49 items are open: 173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**50 items are open: 174,** whether a supervised agent's thirty-day review runs on its own each day, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,46 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 174. Should a supervised agent's thirty-day review run by itself each day?
+
+**In plain terms:** an agent you pin to Shadow (the receivables and renewal chaser is the first) is held
+at its bottom rung and is reviewed at thirty days against how often a person accepted its proposed
+actions unchanged. Today the review happens only when a person presses **Review** on the agent's page,
+so a pin whose thirty days are up simply waits, held, until somebody remembers. That is the safe
+direction, but it is not "reviewed at thirty days".
+
+I have built a daily check that does what **Review** does, for every pin whose thirty days are up,
+using the same decision (so it can never find an agent ready that **Review** would not). Below ninety
+percent of at least ten reviewed actions, or with nobody having reviewed enough, it holds the agent for
+another thirty days. At or over ninety it only marks the agent as **eligible**: raising its rung is still
+two people's decision, and nothing is ever released because a date passed. It writes the answer under the
+name `supervision-review`, so the history shows it as the system and not as a person.
+
+It ships **switched off** (Settings, Features, "Review supervised agents at thirty days on a schedule").
+While off it still looks each day and records only how many pins it would have extended or marked
+eligible, and writes nothing about any agent.
+
+Two smaller things you may want to change, both true of the Review button today as well:
+
+- **A review is not written to the audit log.** The pin's own row says who decided and when, but unlike
+  a move of an agent's rung it adds no entry to the tamper-evident ledger. Adding one is a small change
+  to the database that would also cover the button.
+- **An agent whose reviews contradict each other is skipped, not guessed at.** Two people giving
+  different verdicts on one action is left as it is and counted, and the pin stays held until somebody
+  settles it.
+
+**Option A: switch it on (what I recommend once you have seen a day of what it would do).** Pins are
+reviewed at thirty days without anybody pressing anything.
+
+**Option B: leave it off.** Nothing changes: a person presses **Review**, as now.
+
+**My recommendation:** A, after one day with the switch off, so the count it reports (how many it would
+extend, how many it would mark eligible) is what you switch it on against. The audit-log entry is worth
+adding in the same step if you want every review attributable on the ledger as a rung move is.
+
+**What I need from you:** nothing yet, or reply "174: A" to switch it on, or "174: B", or "174: A, and
+add the audit-log entry".
 
 ## 173. Connect Google Workspace so each person's own mail, calendar and documents can be asked about
 

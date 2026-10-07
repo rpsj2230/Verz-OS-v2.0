@@ -71,13 +71,7 @@ from brain.agents.leash_moves import (
     tripping,
 )
 from brain.agents.model import AgentRecord
-from brain.agents.supervision import (
-    ShadowOutcome,
-    ShadowReview,
-    SupervisionError,
-    pin,
-    review,
-)
+from brain.agents.supervision import ShadowReview, pin
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked, Asking
 from brain.attribution import trace_of_request
@@ -92,8 +86,9 @@ from brain.core.envelope import SideEffect
 from brain.core.scope import Scope
 from brain.gate.abstain import TAKEOVER_DEMOTION_THRESHOLD, AutonomyBreaker
 from brain.gate.injection import AutonomyTier
-from brain.gate.leash import DIGEST, ActionRecord, Leash
-from brain.ops.leash_store import LeashState, StoredLeash, simulated_only, state_in
+from brain.gate.leash import DIGEST, Leash
+from brain.ops.leash_store import LeashState, StoredLeash, state_in
+from brain.ops.supervision_review import Refusal, answer_review
 from brain.tables.leash import PinOutcome
 from brain.tools.registry import ToolRegistry
 
@@ -432,25 +427,6 @@ def awaiting_views(state: LeashState) -> list[AwaitingView]:
     ]
 
 
-def reviewed_in_window(state: LeashState) -> tuple[list[ShadowReview], list[ActionRecord]]:
-    """The simulated actions a review counts and the verdicts on them, as the domain takes them.
-
-    A verdict on an action that was not simulated in the pin's window is left out rather than
-    handed to `measure`, which refuses one: an action approved at Assisted is evidence for a
-    raise, and not about a shadow period.
-    """
-    if state.pin is None:
-        return [], []
-    simulated = [one for one in simulated_only(state.actions) if one.at >= state.pin.pin.pinned_at]
-    when = {one.action_digest: one.at for one in simulated}
-    verdicts = [
-        one
-        for one in state.verdicts
-        if one.action_digest in when and one.at >= when[one.action_digest]
-    ]
-    return verdicts, simulated
-
-
 # --------------------------------------------------------------------------- the reads
 async def _loaded(
     request: Request, agent_id: str, asked: Asking
@@ -642,32 +618,18 @@ async def review_agent(
     record, _, state, _ = await _loaded(request, agent_id, asked)
     if not may_move_leash(asked.reach, record, asked.now):
         return _refused(MOVING_A_RUNG_NEEDS_THE_LEASH_ROLE, 403)
-    if state.pin is None or state.pin.outcome is PinOutcome.ELIGIBLE:
+    answer = answer_review(state, now=asked.now)
+    if answer is Refusal.NOT_SUPERVISED:
         return _refused(NOT_SUPERVISED)
-    verdicts, simulated = reviewed_in_window(state)
-    try:
-        decision = review(
-            state.pin.pin,
-            simulated=simulated,
-            reviews=verdicts,
-            now=asked.now,
-        )
-    except SupervisionError:
-        log.warning("supervision review refused its evidence", agent=agent_id)
+    if isinstance(answer, Refusal):
         return _refused(NOT_DUE_YET)
-    if decision.outcome is ShadowOutcome.NOT_YET_DUE:
-        return _refused(NOT_DUE_YET)
-    outcome = (
-        PinOutcome.EXTENDED if decision.outcome is ShadowOutcome.EXTENDED else PinOutcome.ELIGIBLE
-    )
-    found = decision.confidence
     await StoredLeash(_require_session_factory(request)).write_pin(
-        decision.pin,
-        outcome,
+        answer.pin,
+        answer.outcome,
         by=asked.caller.principal.id,
-        counts=(found.understood, found.reviewed, found.simulated),
+        counts=answer.counts,
         at=asked.now,
         ent_hash=asked.reach.ent_hash(),
         trace_id=trace_of_request(),
     )
-    return SupervisionDoneView(outcome=outcome.value, review_due_at=decision.pin.review_due_at)
+    return SupervisionDoneView(outcome=answer.outcome.value, review_due_at=answer.pin.review_due_at)

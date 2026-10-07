@@ -95,6 +95,7 @@ from brain.ops.schedule import TICK, AtTime, Owed, owed, schedulable, time_of_da
 from brain.ops.secrets import VaultRole
 from brain.ops.spend_store import refresh_spend_daily_now
 from brain.ops.staff_sync_run import run_staff_sync_now
+from brain.ops.supervision_review import run_supervision_review_now
 from brain.ops.vault_audit_ship import run_vault_audit_ship_now
 from brain.ops.vault_renewal import run_renewal_now
 from brain.ops.webhook_delivery import run_dispatch_now
@@ -810,6 +811,29 @@ def approved_actions(now: datetime, report_only: bool, database_url: str) -> str
     ).summary()
 
 
+#: Why a supervision review writes nothing in report-only mode.
+A_SUPERVISION_REVIEW_IN_REPORT_ONLY_MODE_WRITES_NOTHING: Final = (
+    "Report-only mode means decide and do not act, so a review asked to only report works out "
+    "what it would have decided and records nothing: no pin is extended and none is marked "
+    "eligible."
+)
+
+
+def supervision_review(now: datetime, report_only: bool, database_url: str) -> str:
+    """Review each supervised agent's pin whose thirty days are up, or say what that would do.
+
+    `brain.ops.supervision_review.run_supervision_review_now` is the literal call the registry
+    reads. It writes only with the `supervision_review` feature on and report-only off, see
+    `A_SUPERVISION_REVIEW_IN_REPORT_ONLY_MODE_WRITES_NOTHING`, and takes the worker's event loop
+    for the reason `spend_report_refresh` gives.
+    """
+    from brain.ops.worker import _loop_factory
+
+    return run_supervision_review_now(
+        database_url, now=now, report_only=report_only, loop_factory=_loop_factory()
+    )
+
+
 #: Why the acceptance checks run nothing in report-only mode.
 AN_ACCEPTANCE_RUN_IN_REPORT_ONLY_MODE_CHECKS_NOTHING: Final = (
     "Report-only mode exists for controls that remove data, and the acceptance checks remove "
@@ -945,6 +969,9 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     Runner(name="evening_digest", run=evening_digest, workload=WorkloadClass.BATCH),
     # Wired on 2026-10-06 with `gate.approved_to_run` (`0201`). See `brain.ops.approved_runs`.
     Runner(name="approved_actions", run=approved_actions, workload=WorkloadClass.BACKGROUND),
+    # Wired on 2026-10-07 with `0212`, behind a feature that ships off. See
+    # `brain.ops.supervision_review`.
+    Runner(name="supervision_review", run=supervision_review, workload=WorkloadClass.BACKGROUND),
 )
 
 
@@ -1013,6 +1040,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return evening_digest(now, report_only, database_url)
         case "approved_actions":
             return approved_actions(now, report_only, database_url)
+        case "supervision_review":
+            return supervision_review(now, report_only, database_url)
         case _:
             runner = runner_for(name)
             msg = (

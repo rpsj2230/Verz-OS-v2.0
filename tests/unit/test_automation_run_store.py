@@ -83,9 +83,9 @@ def test_the_migration_widens_the_control_names_to_exactly_the_registry() -> Non
 
     `0068` widened the names once more with `connector_sync`, `0093` with `vault_audit_ship`,
     `0133` with `acceptance_run`, `0168` with `escalation_expiry`, `0169` with `evening_digest` and
-    `0182` with `entity_resolution`, `0201` with `approved_actions` and `0209` with
-    `elevation_anchor`, so each list is exactly the one the next replaces, and `0209`'s is
-    exactly the registry."""
+    `0182` with `entity_resolution`, `0201` with `approved_actions`, `0209` with
+    `elevation_anchor` and `0212` with `supervision_review`, so each list is exactly the one the
+    next replaces, and `0212`'s is exactly the registry."""
     module = migration_module(MIGRATION)
     after = migration_module(VERSIONS / "0068_connector_sync.py")
     vault = migration_module(VERSIONS / "0093_vault_leases_and_audit.py")
@@ -94,7 +94,8 @@ def test_the_migration_widens_the_control_names_to_exactly_the_registry() -> Non
     digest = migration_module(VERSIONS / "0169_evening_digest.py")
     resolution = migration_module(VERSIONS / "0182_entity_registry_observations.py")
     approved = migration_module(VERSIONS / "0201_approved_runs.py")
-    latest = migration_module(VERSIONS / "0209_elevation_chain.py")
+    anchor = migration_module(VERSIONS / "0209_elevation_chain.py")
+    latest = migration_module(VERSIONS / "0212_supervision_review_control.py")
     assert squash(module.WITH_AUTOMATION_RUN) == squash(after.WITHOUT_CONNECTOR_SYNC)
     assert squash(after.WITH_CONNECTOR_SYNC) == squash(vault.WITHOUT_VAULT_AUDIT_SHIP)
     assert squash(vault.WITH_VAULT_AUDIT_SHIP) == squash(acceptance.WITHOUT_ACCEPTANCE_RUN)
@@ -102,8 +103,9 @@ def test_the_migration_widens_the_control_names_to_exactly_the_registry() -> Non
     assert squash(escalation.WITH_ESCALATION_EXPIRY) == squash(digest.WITHOUT_EVENING_DIGEST)
     assert squash(digest.WITH_EVENING_DIGEST) == squash(resolution.WITHOUT_ENTITY_RESOLUTION)
     assert squash(resolution.WITH_ENTITY_RESOLUTION) == squash(approved.WITHOUT_APPROVED_ACTIONS)
-    assert squash(approved.WITH_APPROVED_ACTIONS) == squash(latest.WITHOUT_ELEVATION_ANCHOR)
-    assert squash(latest.WITH_ELEVATION_ANCHOR) == squash(
+    assert squash(approved.WITH_APPROVED_ACTIONS) == squash(anchor.WITHOUT_ELEVATION_ANCHOR)
+    assert squash(anchor.WITH_ELEVATION_ANCHOR) == squash(latest.WITHOUT_SUPERVISION_REVIEW)
+    assert squash(latest.WITH_SUPERVISION_REVIEW) == squash(
         one_of("name", tuple(one.name for one in CONTROLS))
     )
     assert module.SUPERSEDES == {module.WITHOUT_AUTOMATION_RUN: module.WITH_AUTOMATION_RUN}

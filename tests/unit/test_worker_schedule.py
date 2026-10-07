@@ -93,6 +93,7 @@ STARTED = [
     ("vault_audit_ship", False),
     ("acceptance_run", False),
     ("approved_actions", False),
+    ("supervision_review", False),
 ]
 
 
@@ -161,7 +162,7 @@ def starts(monkeypatch: pytest.MonkeyPatch) -> Starts:
 
 
 # ------------------------------------------------------------------- without a server
-def test_the_wired_runners_are_the_twenty_one_the_schedule_is_meant_to_start() -> None:
+def test_the_wired_runners_are_the_twenty_two_the_schedule_is_meant_to_start() -> None:
     """Asserted against the names, so a runner wired or unwired later moves this on purpose.
 
     The webhook dispatch, the erasure queue and the permission canaries joined on 2026-09-17,
@@ -170,9 +171,10 @@ def test_the_wired_runners_are_the_twenty_one_the_schedule_is_meant_to_start() -
     joined on 2026-09-21, the model health prober on 2026-09-22, the hourly denial digest on
     2026-09-28 and the install acceptance checks the same day, and the escalation expiry, the
     two recovery sweeps and the evening digest on 2026-09-30, and the entity registry, the
-    weekly fit and the approved actions on 2026-10-06, in the registry's own order.
+    weekly fit and the approved actions on 2026-10-06, and the supervision review on 2026-10-07,
+    in the registry's own order.
 
-    Delete this and every assertion below that names the twenty-one could be satisfied by a table
+    Delete this and every assertion below that names the twenty-two could be satisfied by a table
     that had quietly lost one of them."""
     assert WIRED == [
         "retention_sweep",
@@ -196,6 +198,7 @@ def test_the_wired_runners_are_the_twenty_one_the_schedule_is_meant_to_start() -
         "acceptance_run",
         "evening_digest",
         "approved_actions",
+        "supervision_review",
     ]
 
 
@@ -498,6 +501,7 @@ def test_a_due_control_is_started_once_and_its_run_is_recorded(starts: Starts) -
             ("retention_sweep", "refused", True, "retention_sweep ran"),
             ("side_effect_resume", "ok", False, "side_effect_resume ran"),
             ("spend_report_refresh", "ok", False, "spend_report_refresh ran"),
+            ("supervision_review", "ok", False, "supervision_review ran"),
             ("vault_audit_ship", "ok", False, "vault_audit_ship ran"),
             ("vault_token_renewal", "ok", False, "vault_token_renewal ran"),
         ]
@@ -605,6 +609,7 @@ def test_a_control_whose_lock_another_replica_holds_is_not_started_and_the_rest_
             "resolution_calibration",
             "retention_sweep",
             "side_effect_resume",
+            "supervision_review",
             "vault_audit_ship",
             "vault_token_renewal",
         ]
@@ -646,6 +651,7 @@ def test_a_runner_that_raises_is_recorded_as_failed_with_its_reason_and_the_next
             ("retention_sweep", "failed", "RuntimeError: retention_sweep broke on purpose"),
             ("side_effect_resume", "ok", "side_effect_resume ran"),
             ("spend_report_refresh", "ok", "spend_report_refresh ran"),
+            ("supervision_review", "ok", "supervision_review ran"),
             ("vault_audit_ship", "ok", "vault_audit_ship ran"),
             ("vault_token_renewal", "ok", "vault_token_renewal ran"),
         ]
@@ -722,6 +728,7 @@ def test_the_tick_records_the_re_verification_nag_through_the_real_runner(
         ("vault_audit_ship", False),
         ("acceptance_run", False),
         ("approved_actions", False),
+        ("supervision_review", False),
     ]
     # The registry's entry point is what the schedule starts, so the control cannot measure as
     # running through its decision functions while the store they need goes uncalled.
