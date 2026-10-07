@@ -171,7 +171,7 @@ async def a_job_is_paused_run_and_resumed_and_lists_its_runs(h: Harness) -> None
     from brain.feature_routes import SwitchAsked, switch_feature
     from brain.jobs_routes import job_runs, jobs, pause_job, resume_job, run_job
     from brain.listing import ListAsked
-    from brain.ops.features import SCHEDULE_CONTROL
+    from brain.ops.features import SCHEDULE_CONTROL, switch_states, switched_on_in
     from brain.ops.schedule_control import paused_controls
     from brain.tables.schedule import ControlRunRow
 
@@ -186,6 +186,14 @@ async def a_job_is_paused_run_and_resumed_and_lists_its_runs(h: Harness) -> None
     await h.person(reader, department=A, grants=screen_grants("queue"))
     console = console_for(h)
     job = a_job()
+    # Whether the switch was already on, which an install that has used the screen has it: switching
+    # it on again then changes nothing and writes nothing, so the trail holds one change fewer.
+    async with h.sessions() as session:
+        # Not `is_on`: that call names a feature's reader, and this check gates nothing on it.
+        already_on = SCHEDULE_CONTROL.name in switched_on_in(
+            await switch_states(session), (SCHEDULE_CONTROL,)
+        )
+        await session.commit()
     async with traced(h, 1):
         await switch_feature(
             console.request("POST"),
@@ -233,7 +241,7 @@ async def a_job_is_paused_run_and_resumed_and_lists_its_runs(h: Harness) -> None
             ).bindparams(actor=admin, trace=f"{h.trace_id}-c%")
         )
     ).scalar_one()
-    if int(entries) < 4:
+    if int(entries) < (3 if already_on else 4):
         raise CheckFailedError("a change to a job from the console is not in the audit trail")
 
     older, newer = datetime(2019, 3, 4, 9, tzinfo=UTC), datetime(2019, 3, 5, 9, tzinfo=UTC)

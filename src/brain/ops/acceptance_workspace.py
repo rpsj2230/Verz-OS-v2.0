@@ -36,7 +36,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Session, SessionTransaction
 
 from brain.core.scope import Scope
-from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, check
+from brain.ops.acceptance import (
+    RESERVED_DEPARTMENTS,
+    CheckFailedError,
+    CheckNotRunError,
+    check,
+)
 from brain.ops.acceptance_run import Harness
 
 if TYPE_CHECKING:
@@ -1364,7 +1369,11 @@ async def an_agents_report_holds_what_its_reader_may_see_and_is_rechecked(
     await h.found_departments()
     backend, prefix = await asyncio.to_thread(artifact_backend, h)
     if backend is None:
-        raise CheckFailedError("this install is not connected to its object store")
+        # Not a failure of the product: an install that chose no object store cannot be asked
+        # this (the word `acceptance_ingest` uses), and a red result there is the install's
+        # missing choice reported as a defect. It still proves nothing: the tasks it names are
+        # held until a store answers.
+        raise CheckNotRunError("this install is not connected to its object store")
     store = StoredArtifacts(h.sessions, backend, prefix)
 
     # A price list the product classifies, uploaded by a department's administrator.
