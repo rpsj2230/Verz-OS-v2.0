@@ -140,6 +140,7 @@ from brain.ops.idempotency import (
     assert_no_side_effect,
 )
 from brain.tools.registry import ToolRegistry
+from brain.tools.skills import SkillCard
 
 # ------------------------------------------------------------------ written-down reasons
 #: The rule this module exists to keep. See the module docstring.
@@ -574,6 +575,10 @@ class AgentRuntime:
     runs: RunLog | None = None
     #: What offers and holds a tool that changes something. None: this run only reads.
     side_effects: SideEffects | None = None
+    #: The cards of the skills this run was offered, shown beside the question: a name and a
+    #: description, never a body, which `skill.read_instructions` hands over when asked for
+    #: (M12.2.8). Without them a model has no skill name to ask for.
+    skill_cards: tuple[SkillCard, ...] = ()
     lane: Lane = Lane.ANSWER
     clock: Callable[[], float] = time.monotonic
     wall: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
@@ -694,7 +699,7 @@ class AgentRuntime:
             question,
             conversation=() if lane.follow_up is None else lane.follow_up.earlier,
             session=lane.session,
-            task=(),
+            task=self.skill_cards,
             asker=lane.hints,
             knowledge=None,
         )

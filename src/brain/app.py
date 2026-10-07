@@ -152,6 +152,7 @@ from brain.ops.replica_store import console_reads_for
 from brain.ops.sandbox import sandbox_address
 from brain.ops.secrets import VaultRole
 from brain.ops.sensitive_read_store import SensitiveReadRecorder
+from brain.ops.skill_store import StoredSkills
 from brain.ops.starter_store import furnish as furnish_install
 from brain.ops.telemetry_store import TelemetryRecorder
 from brain.ops.template_key import TemplateKeyState, keep_trying, template_key_at_start
@@ -193,6 +194,7 @@ from brain.session import (
 # `brain.settings.SETTINGS_ARE_READ_WITHOUT_BUILDING_THE_APPLICATION`.
 from brain.settings import Settings as Settings
 from brain.tools.registry import ToolRegistry
+from brain.tools.skill_tools import ScriptSandbox, SkillTools
 from brain.tools.startup import build_registry
 from brain.tools.website_check import WebsiteCheckTool
 
@@ -566,6 +568,29 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # was, and it is still one: a lite install with no database registers nothing and reports
     # the same True. What would fix it is readiness knowing which profile it is in, which is
     # a change to what the check means rather than to this line.
+    # Where skill scripts run, or None where this install runs no sandbox (M12.2.9), read before
+    # the tool registry is built because it decides whether the registry holds the script tool at
+    # all (`brain.tools.skill_tools`): switched on by `INSTALL_SERVICES` naming `sandbox`, read
+    # after the saved settings are held above, and started by the release only under gVisor
+    # (brain.ops.overlays). A value nobody declared runs no sandbox rather than stopping the start.
+    try:
+        switched = components_switched_on(switched_on_here())
+    except OverlayError:
+        switched = frozenset()
+    app.state.sandbox_address = sandbox_address(settings.sandbox_url, switched)
+    # The two tools a run reads a skill with: its instructions, and its scripts through the one
+    # execution tool where a sandbox runs. The script tool is registered only with an address.
+    sandbox_client = None
+    scripts = None
+    if app.state.sandbox_address is not None and app.state.db_sessions:
+        sandbox_client = httpx.Client()
+        app.state.sandbox_client = sandbox_client
+        scripts = ScriptSandbox(
+            address=app.state.sandbox_address,
+            client=sandbox_client,
+            script_bytes=StoredSkills(app.state.db_sessions).script_bytes,
+        )
+    skill_tools = SkillTools(scripts=scripts)
     records = SessionRowSource(app.state.db_sessions) if app.state.db_sessions else None
     # The live reads a connected source's figure tools make (M11.7.1), kept on the state so the
     # answer lane's refreshes share their throttle, breakers and fetches in flight
@@ -600,6 +625,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             figures=live if records else None,
             website=website,
             caches=knowledge_caches,
+            skills=skill_tools,
         )
 
     app.state.build_tools = tools
@@ -646,15 +672,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # per call from the ladder, the provider switches and the keys this process holds, so a
     # switch or a key saved from the console takes effect without a restart. See
     # `brain.ops.model_service` and `brain.models.assembly`.
-    # Where skill scripts run, or None where this install runs no sandbox (M12.2.9): switched on
-    # by `INSTALL_SERVICES` naming `sandbox`, read after the saved settings are held above, and
-    # started by the release only under gVisor (brain.ops.overlays). A value nobody declared runs
-    # no sandbox rather than stopping the start.
-    try:
-        switched = components_switched_on(switched_on_here())
-    except OverlayError:
-        switched = frozenset()
-    app.state.sandbox_address = sandbox_address(settings.sandbox_url, switched)
     # Every request to a third-party model is scrubbed of personal data on its way out, by the
     # rules and by the install's analyser where its profile deploys one (`brain.ops.egress`).
     app.state.models = model_service_at_start(
@@ -865,7 +882,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if valkey is not None:
             await valkey.aclose()
         # `ValkeyClient` declares no close, deliberately; the object that built it holds one.
-        for held in ("answer_client", "knowledge_cache_client"):
+        for held in ("answer_client", "knowledge_cache_client", "sandbox_client"):
             close_held = getattr(getattr(app.state, held, None), "close", None)
             if callable(close_held):
                 close_held()

@@ -46,6 +46,8 @@
     "M38.3.3.1": "needs a real send or a real question on the install, which the check does not make",
     "M38.3.3.2": "needs a real send or a real question on the install, which the check does not make",
     "M38.3.3.3": "needs a real send or a real question on the install, which the check does not make",
-    "M38.3.3.4": "needs a real send or a real question on the install, which the check does not make"
+    "M38.3.3.4": "needs a real send or a real question on the install, which the check does not make",
+    "M12.2.9": "passes against a sandbox the check answers for from the process where the install runs none; held until the install switches the script sandbox on and the check has talked to it",
+    "M12.4.11": "passes against a sandbox the check answers for from the process where the install runs none; held until the install switches the script sandbox on and the check has talked to it"
   }
 }
