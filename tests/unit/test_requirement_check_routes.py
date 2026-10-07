@@ -5,6 +5,7 @@ over a register of five rows and a store in memory. Every refusal has a permitte
 store's statements run against PostgreSQL at the foot, and **skip without a server**.
 
 Task ids: M1.8.8, M2.3.2, M5.6.5, M24.3.6, M11.8.13, M12.4.15, M7.7.7
+Task ids: M13.8.12, M13.8.14, M14.8.2, M16.7.11, M16.7.9
 """
 
 from __future__ import annotations
@@ -295,8 +296,19 @@ def test_the_areas_the_leaves_name_are_the_register_s_own_words() -> None:
         "M11.8.13",
         "M12.4.15",
         "M7.7.7",
+        "M13.8.12",
+        "M13.8.14",
+        "M14.8.2",
+        "M16.7.11",
+        "M16.7.9",
     }
     assert CHECKED_BY["Knowledge"] == "M7.7.7"
+    assert {area: CHECKED_BY[area] for area in ("Agents", "Harness", "Entity resolution")} == {
+        "Agents": "M13.8.12",
+        "Harness": "M13.8.14",
+        "Entity resolution": "M14.8.2",
+    }
+    assert (CHECKED_BY["Memory"], CHECKED_BY["Learning"]) == ("M16.7.11", "M16.7.9")
 
 
 def test_the_shipped_register_is_what_a_process_with_no_override_reads() -> None:

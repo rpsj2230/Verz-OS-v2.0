@@ -75,6 +75,19 @@ def departments_from(
     return known.get(word, DepartmentsFrom.STAFF_SOURCE)
 
 
+def the_list_places_people(
+    env: Mapping[str, str] | None = None, saved: Mapping[str, str] | None = None
+) -> bool:
+    """Whether a person the sync makes is placed in the department the list names.
+
+    True when departments come from the staff source, and False when People manages them, where
+    the sync places and moves nobody. The one question the people step and the accounts step both
+    ask, so neither can answer it differently, and the one the install check asks of the product
+    rather than of a copy of it (`brain.ops.acceptance_checks_people`).
+    """
+    return departments_from(env, saved) is DepartmentsFrom.STAFF_SOURCE
+
+
 def as_the_console_places_them(roster: Roster, placed: Mapping[str, str | None]) -> Roster:
     """The roster with each person's department the one People set, and no team or lead.
 

@@ -32,6 +32,7 @@ from brain.ops import (
     acceptance_checks_accounts,
     acceptance_checks_channels,
     acceptance_checks_class_pools,
+    acceptance_checks_people,
     acceptance_checks_recovery,
     acceptance_checks_services,
     acceptance_operations_console,
@@ -722,6 +723,11 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert outcomes.pop("three_classes_share_one_budget_and_give_way_in_order")[0] == NOT_RUN
     # No cache here either; `tests/unit/test_acceptance_cache.py` runs it with a store in its place.
     assert outcomes.pop("a_cached_answer_reaches_only_the_reach_it_was_computed_for")[0] == NOT_RUN
+    # No currency is set here, so no cost is recorded and a department's pace is withheld by
+    # design; `tests/unit/test_acceptance_company_views.py` sets one and runs it.
+    assert (
+        outcomes.pop("a_departments_head_reads_its_pace_and_its_knowledge_coverage")[0] == NOT_RUN
+    )
     assert outcomes.pop("a_skill_is_imported_from_a_github_commit_and_from_an_address") == (
         NOT_RUN,
         "this install names no public skill to import, so no import from GitHub was asked",
@@ -842,6 +848,17 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         NOT_RUN,
         acceptance_people_console_2.NOBODY_HAS_SIGNED_IN_WITH_AN_AUTHENTICATOR,
     )
+    # No staff source is chosen here, so the checks that need a list say so;
+    # `tests/unit/test_acceptance_checks_people.py` chooses Lark and every one of them passes.
+    assert outcomes.pop("sync_now_asks_the_worker_for_the_scheduled_staff_sync") == (
+        NOT_RUN,
+        acceptance_checks_people.NO_SOURCE_THE_WORKER_READS,
+    )
+    for list_check in (
+        "people_says_where_the_staff_list_puts_each_person",
+        "departments_managed_on_people_are_not_the_staff_sync_s",
+    ):
+        assert outcomes.pop(list_check) == (NOT_RUN, acceptance_checks_people.NO_STAFF_LIST_IS_READ)
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
     assert after == before
     assert runs == [(2,)] and len(recorded) == 2 * len(suite)
