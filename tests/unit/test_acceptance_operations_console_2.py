@@ -125,6 +125,27 @@ def test_every_operations_check_passes_on_an_install_and_leaves_nothing(install:
     assert _counts(install) == before
 
 
+@pytest.mark.needs_db
+def test_the_jobs_check_passes_where_the_switch_was_already_on() -> None:
+    """**An install that has used the screen has the switch on already.** Switching it on again
+    changes nothing and writes no entry, so the trail holds one change fewer than on the empty
+    database every other test uses. The check failed on the owner's install for exactly that
+    ("a change to a job from the console is not in the audit trail") and passed in CI. Delete this
+    and the check goes red on every install whose owner has switched pausing on, which is the one
+    that matters."""
+    from brain.ops.features import SCHEDULE_CONTROL, switch
+    from tests.unit.test_budget_stop_store import _as_app
+
+    with at_head("brain_acceptance_ops_console_2_on") as url:
+
+        async def switched_on(sessions: Any) -> None:
+            async with sessions() as session, session.begin():
+                await switch(session, SCHEDULE_CONTROL, on=True, by="u_owner")
+
+        _as_app(url, switched_on)
+        assert run_ops(url, JOBS) == {JOBS: (PASSED, "")}
+
+
 def _failed(url: str, name: str) -> str:
     [(outcome, reason)] = run_ops(url, name).values()
     assert outcome == FAILED, reason

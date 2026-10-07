@@ -32,7 +32,15 @@ from typing import Any
 import pytest
 
 from brain.ops import acceptance_workspace as workspace_checks
-from brain.ops.acceptance import FAILED, PASSED, REASON_CHARS, Check, check_modules, registered
+from brain.ops.acceptance import (
+    FAILED,
+    NOT_RUN,
+    PASSED,
+    REASON_CHARS,
+    Check,
+    check_modules,
+    registered,
+)
 from brain.ops.artifact_store import ARTIFACT_BUCKET
 from brain.ops.object_store import S3Backend, StoreCredential
 from brain.ops.storage import Backend, config_for
@@ -439,17 +447,20 @@ def test_an_automation_its_owner_may_start_fails_the_automation_check(
 
 
 @pytest.mark.needs_db
-def test_an_install_with_no_object_store_fails_the_artifact_check(
+def test_an_install_with_no_object_store_does_not_run_the_artifact_check(
     head: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """With no object store connected, the check says the install cannot keep an artifact rather
-    than keeping one somewhere the product never looks. Delete this and the check could pass on an
-    install whose Artifacts section can never hold anything."""
+    """With no object store connected, the check says it was not run and why, rather than keeping
+    an artifact somewhere the product never looks, and rather than reporting the install's missing
+    choice as a defect of the product (it was a failure until 2026-10-07, which put eleven tasks
+    behind a red result on an install that had simply chosen no store). Delete this and the check
+    could pass on an install whose Artifacts section can never hold anything, or fail on one that
+    chose none."""
     monkeypatch.setattr(workspace_checks, "artifact_backend", lambda h: (None, ""))
     name = "an_agents_report_holds_what_its_reader_may_see_and_is_rechecked"
 
     assert run_checks(head, (by_name(name),))[name] == (
-        FAILED,
+        NOT_RUN,
         "this install is not connected to its object store",
     )
 
