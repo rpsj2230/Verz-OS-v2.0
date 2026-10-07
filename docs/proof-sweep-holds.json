@@ -1,10 +1,14 @@
 {
   "_why": "Tasks whose install check passes against something the check made up, so the pass is not yet proof the install reaches the real thing. Read by brain.ops.proof_sweep; see A_RESULT_ON_SOMETHING_MADE_UP_IS_HELD. A task leaves this list when its check runs against the real thing, in the commit that says so.",
   "held": {
+    "M1.6.13": "passes against a stand-in the check made (accounts, a roster or a role handed to it); held until the install shows it on its own",
     "M1.6.16": "passes against a stand-in the check made (accounts, a roster or a role handed to it); held until the install shows it on its own",
     "M1.6.17": "passes against a stand-in the check made (accounts, a roster or a role handed to it); held until the install shows it on its own",
+    "M1.6.19": "passes against a stand-in the check made (accounts, a roster or a role handed to it); held until the install shows it on its own",
     "M1.10.1": "passes against a stand-in the check made (accounts, a roster or a role handed to it); held until the install shows it on its own",
     "M1.10.3": "passes against a stand-in the check made (accounts, a roster or a role handed to it); held until the install shows it on its own",
+    "M1.10.4": "passes against a stand-in the check made (accounts, a roster or a role handed to it); held until the install shows it on its own",
+    "M1.10.5": "passes against a stand-in the check made (accounts, a roster or a role handed to it); held until the install shows it on its own",
     "M10.5.1": "passes against a channel set up with secrets the check made; held until the install connects the owner's own account (needs-rupash 126)",
     "M10.5.2": "passes against a channel set up with secrets the check made; held until the install connects the owner's own account (needs-rupash 126)",
     "M10.5.3": "passes against a channel set up with secrets the check made; held until the install connects the owner's own account (needs-rupash 126)",
