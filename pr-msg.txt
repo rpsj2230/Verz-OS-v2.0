@@ -1,0 +1,9 @@
+The Requirement checks screen names the leaf each of five more areas is checked for
+
+Five leaves ask an area's requirements to be demonstrated on an install by a person and each check recorded against the requirement it proves: agents (M13.8.12), the harness (M13.8.14), entity resolution (M14.8.2), memory (M16.7.11) and learning (M16.7.9). The screen already lets a person record against any area, but CHECKED_BY named only seven, so for these five it said nothing about which task a recorded check proves. They are named now, with the register's own area words, so the person's checks are counted against their leaf.
+
+Rejected: adding the composite install-proof leaves (M16.7.7, M16.7.8, M14.8.1, M13.8.3) to ALSO_PROVED_BY. That map is for the live half of a leaf that no automated check may read, and those leaves are proved by automated checks that have not all been written.
+
+These are person-recorded leaves: nothing here closes any of them. Needs the owner's recorded checks.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
