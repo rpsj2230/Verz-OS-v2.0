@@ -34,6 +34,7 @@ from brain.ops import (
     acceptance_checks_class_pools,
     acceptance_checks_recovery,
     acceptance_checks_services,
+    acceptance_checks_starter,
     acceptance_operations_console,
     acceptance_operations_console_5,
     acceptance_operations_console_6,
@@ -831,6 +832,10 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert outcomes.pop("the_install_was_furnished_once_by_the_product") == (
         NOT_RUN,
         acceptance_operations_console.NOTHING_HAS_FURNISHED_THIS_DATABASE,
+    )
+    assert outcomes.pop("a_new_install_is_furnished_as_decided_and_not_blank") == (
+        NOT_RUN,
+        acceptance_checks_starter.NOTHING_HAS_FURNISHED_THIS_INSTALL,
     )
     # Nobody here has opened a console session with a second factor, so the realm's half is not
     # run; `tests/unit/test_acceptance_people_console_2.py` records one and it passes.
