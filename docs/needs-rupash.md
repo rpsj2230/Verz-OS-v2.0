@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**50 items are open: 174,** whether a supervised agent's thirty-day review runs on its own each day, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**54 items are open: 179,** whether a source asked too often is also treated as unwell, **178,** whether I may load test your install at the peak you planned for, **177,** whether the starter skills are approved by the product or by a person on your install, **176,** which outside AI services besides a chat model an agent may use, **174,** whether a supervised agent's thirty-day review runs on its own each day, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,91 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 179. When a source is asked too often, should it also be treated as unwell?
+
+**In plain terms:** each connected source has a ceiling on how often the Brain may ask it (the vendor's
+own limit). Past the ceiling the Brain stops asking for a while and says so. Separately, a source that
+answers with errors is marked unwell and left alone until it recovers. Your requirement for connector
+safety (M11.8.9) reads as one thing: "pushed past its rate ceiling is throttled and its circuit opens".
+The product keeps them apart on purpose: being asked too often is the Brain's own doing, not a sign
+the vendor is ill, and marking it unwell would hide a real outage behind a busy afternoon.
+
+**Option A: keep them apart.** Throttling past the ceiling; the circuit opens only when the source itself
+answers with errors. Both are shown on the source's page and both are checked on your install.
+
+**Option B: past the ceiling also opens the circuit.** One word for both: the source is shown unwell
+while it is being throttled.
+
+**My recommendation:** A, for the reason above.
+
+**What I need from you:** nothing, or reply "179: B".
+
+## 178. May I load test your install at the peak you planned for?
+
+**In plain terms:** your requirement LIVE-11 says your server carries the company's busiest use within
+the service levels, with memory to spare. What exists today is a test of one part, the part that decides
+which work to turn away when the server is busy (it never turns away a person who is waiting while it
+still lets batch work in). That test runs in the build, not on your server, and it says nothing about how
+fast your server answers at that load, which is the part you asked for (M22.3.3).
+
+Measuring that means asking your real install about two questions a second for ten minutes, with the
+mix of work a normal day has. It would slow the install for the people using it while it runs, and
+every question that reaches a model costs money unless the model is stood in for.
+
+**Option A: not on your install.** I keep the build's test, and your server's headroom is read from its
+own memory and connection figures after a busy day, which I already show. No load is made.
+
+**Option B: once, out of hours, with the model stood in for.** You pick a night. I make the load with
+made-up people and questions that no model is paid for, stop at the first sign the server is struggling,
+and give you the answer times in plain words the next morning. Nothing real is read or written.
+
+**My recommendation:** A until the install has more than a handful of people on it, then B once.
+
+**What I need from you:** nothing, or reply "178: B" with the night.
+
+## 177. Are the starter skills approved by the product, or by a person on your install?
+
+**In plain terms:** the plan says a new install comes with a starter library of eight skills: an SEO
+audit, keyword research, a website health check, ticket analysis, complaint analysis, a monthly SEO
+report, proposal writing and website troubleshooting, each "approved, assignable and rehearsed against
+its example tasks" (M12.4.7). Today every skill, including one you import yourself, waits for a person
+to review it, and a person cannot approve their own import. There is no skill of the kind in the
+library, so I have to write them, and then it matters who is said to have approved them.
+
+**Option A: they arrive waiting, like any import.** Your administrator reads and approves each once,
+the way they would any skill, and the rehearsal runs at that moment. Nothing runs that no person here
+has read. Eight reviews, once.
+
+**Option B: the product ships them already approved.** They work the moment the install is set up, but
+nobody on your install has read them, and "approved" would mean the product's word about its own text.
+Anything an agent does with a skill is still held to what its tools may reach, so the risk is the
+wording of the steps, not a wider reach.
+
+**My recommendation:** A. It is the same rule every other skill meets, and eight reviews is an hour.
+
+**What I need from you:** nothing, or reply "177: B".
+
+## 176. Which outside AI services, besides a chat model, may an agent use?
+
+**In plain terms:** your requirement says an agent can use outside AI services that are not a chat
+model, such as making an image or turning speech into text, each registered as a tool that only an agent
+allowed it can call (M12.3.7). Dictation in the message box (requirement ANY-018) is the one that needs
+it first. Nothing of the kind is connected today, because each is a provider, a key, a cost, and in two
+cases your people's voice or pictures leaving your server.
+
+**Option A: none yet.** Agents use chat models only. I build the registration so the first service is a
+setting, not new code, when you name one.
+
+**Option B: speech to text only.** You name the provider (or say "the one the chat models come from, if
+it offers it"). People can dictate to Ask; audio goes to that provider and is not kept by the Brain.
+
+**Option C: speech to text and image generation.** As B, and an agent can make an image for a document
+or a post; each image is a paid call, and the picture is kept as an artifact the person who asked can see.
+
+**My recommendation:** B once you have chosen a provider, and A until then.
+
+**What I need from you:** nothing, or reply "176: B" with the provider.
 
 ## 174. Should a supervised agent's thirty-day review run by itself each day?
 
