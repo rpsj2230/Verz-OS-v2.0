@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**50 items are open: 174,** whether a supervised agent's thirty-day review runs on its own each day, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**51 items are open: 175,** which tools the part of a model request that everybody shares may hold, **174,** whether a supervised agent's thirty-day review runs on its own each day, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,40 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 175. Which tools may the part of a model request that everybody shares hold?
+
+**In plain terms:** a model provider charges much less for the start of a request when it has seen the
+same start before, so the product keeps the start identical for everybody and puts what differs from
+person to person after it (M3.7.2). Your architecture says that shared start should list **every tool
+the product has**, with only the tools the person may use following it. The product's own rule says
+the opposite about one thing: a tool a person may not use is **absent** from what the model sees, never
+shown and refused, because a model that has been told about a tool it cannot use will say so ("there is
+a tool for that, but I may not use it for you"), and that sentence tells the person what exists.
+
+Today neither is done. The shared start holds the house rules and the agent's persona and **no tools
+at all**, no marker tells the provider where it may cache, and the list of tools shared by everybody
+is empty on the real question path, so no install has ever shown a cached start being reused. The two
+ways to settle it differ in what the model is told:
+
+**Option A: the shared start holds only the tools every person in the company already holds.** The tools
+only some people hold follow it, different per person, as now. The model never hears of a tool the
+person lacks, so there is nothing for it to repeat. The saving is smaller than the architecture's,
+because the shared part is only what everybody holds.
+
+**Option B: the shared start holds every tool, as the architecture says.** The biggest saving, and the
+same bytes for everybody. The model is then told about tools a person may not use, and the
+product's rule that a missing tool and a forbidden tool look the same to a person is gone for tools.
+
+**My recommendation:** A. A cost saving is not worth a sentence that tells a person what exists, and
+the architecture's reason for the union ("the cached bytes contain no per-user data") is met by A too:
+what is shared is what everybody holds.
+
+I will build it behind a switch that ships off, in either case, and prove it on your install with two
+real questions that reach the model, showing the second reuse the first's start. It needs your model
+provider to report cached tokens, which I read from its answer.
+
+**What I need from you:** reply "175: A" or "175: B".
 
 ## 174. Should a supervised agent's thirty-day review run by itself each day?
 
