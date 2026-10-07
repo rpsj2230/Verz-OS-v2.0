@@ -2,8 +2,10 @@
 
 M11.8.6 has a connector that authorises by OAuth consented to from the console, its refresh token
 kept by reference in the vault, its access renewed before it expires without a person, and a
-refused renewal or consent marking the source down in words. **No source this release ships
-authorises by OAuth yet: Google Workspace (M11.7.6) will be the first.** So this check stands one up
+refused renewal or consent marking the source down in words. **No source this release ships is
+consented to once for everybody: Google Workspace (M11.7.6), the one that ships, is consented to by
+each person for themselves, and `brain.ops.acceptance_checks_google_workspace` checks it.**
+So this check stands one up
 for the run: Xero's own declaration, reading and manifest, with an OAuth consent declared on it and
 its reading presenting `KeyScheme.OAUTH_REFRESH`, which is exactly what a connector module would
 declare. Nothing about Xero's shipped connection changes, and the check steps aside where the
@@ -76,10 +78,10 @@ CHECK_ORDER: Final = 335
 
 #: Why the check stands a consented source up rather than finding one.
 A_CONSENTED_SOURCE_IS_STOOD_UP_FOR_THE_RUN: Final = (
-    "No source this release ships authorises by OAuth yet, so the check declares one for the run "
-    "from Xero's own reading, manifest and form, with a consent and the OAuth key scheme added, "
-    "and drives the consent routes' bodies and the worker's read over it. Google Workspace will "
-    "be the first shipped source to use it, and this check is then pointed at that one."
+    "No source this release ships is consented to once for everybody, so the check declares one "
+    "for the run from Xero's own reading, manifest and form, with a consent and the OAuth key "
+    "scheme added, and drives the consent routes' bodies and the worker's read over it. Google "
+    "Workspace ships consented to by each person, and its own install check proves that."
 )
 
 #: What the check says where the install has Xero connected already.
@@ -393,11 +395,11 @@ def consented_xero() -> tuple[ConnectorDeclaration, _Consented]:
 @check(
     leaves=("M11.8.6",),
     sentence=(
-        "Because no shipped source uses OAuth yet (Google Workspace will be the first), one is "
-        "stood up from Xero's declaration and consented to through the console's routes: a wrong "
-        "or replayed state is refused, the code is exchanged, and the refresh token is kept in the "
-        "vault and no table. The worker renews access with it, a rotated token is written back, "
-        "and a refused renewal leaves the source down."
+        "Because no shipped source is consented to once for everybody (Google Workspace is "
+        "consented to by each person), one is stood up from Xero's declaration: a wrong or "
+        "replayed state is refused, the code is exchanged and the refresh token kept in the vault "
+        "and no table, the worker renews with it and writes a rotation back, and a refused "
+        "renewal leaves the source down."
     ),
 )
 async def a_consented_source_is_renewed_by_its_read_and_a_refusal_is_said(h: Harness) -> None:

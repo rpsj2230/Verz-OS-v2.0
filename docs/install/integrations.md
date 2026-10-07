@@ -37,13 +37,16 @@ moving department gets a different set of rows with nothing rewritten. `none` me
 tells us nothing we can act on, and this system's own grants are the only permissions there
 are.
 
-**Every connector shipping today declares `none`**, and that is not an oversight. Each of them
-authenticates with one shared credential, which is the honest reading of an API key, a service
-account or a bot token: the source is answering as us, and it never sees the person who asked.
-What stands between a person and a row in those sources is this system's own entitlements and
-nothing else. Read that as a requirement on how you grant, not as a gap to be worked around.
+**Every connector shipping today declares `none` except `google_workspace`**, and that is not an
+oversight. Each of the others authenticates with one shared credential, which is the honest
+reading of an API key, a service account or a bot token: the source is answering as us, and it
+never sees the person who asked. What stands between a person and a row in those sources is this
+system's own entitlements and nothing else. Read that as a requirement on how you grant, not as a
+gap to be worked around. `google_workspace` is `delegated`: each person's mail, calendar and
+documents are read with the consent that person gave for their own account, so Google applies its
+own rules to them on every call, beside this system's grant.
 
-**What it will run against.** Every one of the eleven has a rate ceiling recorded. Each is the
+**What it will run against.** Every one of the twelve has a rate ceiling recorded. Each is the
 source's published limit rather than a number chosen here, except your own Laravel database's
 and the domains connector's, for which nobody publishes one figure: each is this product's own
 pace, and says so. Where the ceiling belongs to your own account rather than to a subscription,
@@ -76,6 +79,7 @@ exists, because a row for something that is gone reads as coverage.
 | `freshdesk` | `rest` | `helpdesk` | `read_only` | `none` | `freshdesk` |
 | `google_analytics` | `rest` | `analytics_property` | `read_only` | `none` | `google_analytics` |
 | `google_drive` | `rest` | `folder` | `read_only` | `none` | `google_drive` |
+| `google_workspace` | `rest` | `oauth_client` | `read_only` | `delegated` | `google_workspace` |
 | `hubspot` | `rest` | `portal` | `read_only` | `none` | `hubspot` |
 | `laravel` | `database` | `view` | `read_only` | `none` | `laravel` |
 | `lark_base` | `rest` | `base_table` | `read_only` | `none` | `lark_base` |
@@ -335,6 +339,29 @@ four calls made at once, and are never stored anywhere here.
 
 **What it does not narrow.** One department reads the site: the one named at connect. Indexing
 issues are the sitemaps' own counts, because the API offers no page-indexing report to read.
+
+## `google_workspace`
+
+Each person's own Google mail, calendar and documents, read as them for their own questions.
+
+**Create** an OAuth client of type Web application in a Google Cloud project of your organisation,
+with its consent screen set to Internal, and enable only the APIs of the services you will read:
+Gmail for mail, Google Calendar for calendar, Google Drive for documents. Add this console's
+address followed by `/connector-consent` as the client's authorised redirect URI. Connect it with
+the client id, the services chosen and the department whose people may use it, and paste the
+client secret. Do not grant domain-wide delegation: it reads every mailbox as anybody.
+
+**Each person connects their own account**, from My workspace, once they hold
+`read:google_workspace` in the connection's department. Google asks them for the read-only scope
+of each chosen service and no other (`gmail.readonly`, `calendar.readonly`, `drive.readonly`),
+and the refresh token it issues is kept in their own vault slot. **A service not chosen is never
+called, and its permission is never asked of anybody.**
+
+**What is kept, and what is read.** Nothing about anybody's mail, events or documents is kept,
+not even an id. On every question the asker's own matching messages (subject, sender and Google's
+snippet, never the body), events and documents are read from Google with their own access, for
+that asker alone. Another person's question never uses their token and is told nothing of theirs.
+A consent the person withdraws at Google is said to them, and only their reads are down.
 
 ## `slack_messages`
 

@@ -236,6 +236,7 @@ from brain.ops.connector_store import StoredConnections
 from brain.ops.connector_sync_store import SourceEpochs, StoredSourceEpochs
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
 from brain.ops.drive_passages import WithDrive, drive_passages_for
+from brain.ops.google_workspace_live import workspace_passages_for
 from brain.ops.halt_store import Work, read_state, refusal_for, refusal_in
 from brain.ops.lark_base_index import LarkBaseUse, switched_on
 from brain.ops.lark_base_live import BaseSchema
@@ -1190,6 +1191,13 @@ def model_lane_of(state: Any) -> ModelLane | None:
     slack = slack_passages_for(getattr(state, "db_sessions", None), getattr(state, "vault", None))
     if slack is not None:
         search = Alongside(search, slack)
+    # And a connected Google Workspace, the asker's own mail, calendar and documents read live
+    # with their own consent (M11.7.6).
+    workspace = workspace_passages_for(
+        getattr(state, "db_sessions", None), getattr(state, "vault", None)
+    )
+    if workspace is not None:
+        search = Alongside(search, workspace)
     return ModelLane(search=search, model=models.calls, items=item_lookup_of(state))
 
 
