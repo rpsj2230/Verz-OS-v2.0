@@ -52,7 +52,7 @@ name, naming the answer it is about and never the words. See
 thread, which would need the thread's earlier question read a second time and the message ids
 handed back through every caller.
 
-Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4, M12.3.6, M16.2.8
+Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4, M12.3.6, M16.2.8, M16.2.3
 """
 
 from __future__ import annotations
@@ -73,7 +73,7 @@ from brain.chat.threads import Thread, ThreadMessage, as_turns, refs_as_json, re
 from brain.chat.turns import Correction, CorrectionKind, RecordRef, record_correction
 from brain.core.field_policy import Classification
 from brain.gate.context import Channel
-from brain.memory.signals import Observation, Signal, is_reask
+from brain.memory.signals import Observation, Signal, is_contradiction, is_reask
 from brain.ops.signal_store import noticed
 from brain.tables.chat import TITLE_CHARS, ConversationRow, MessageRole, MessageRow, RunState
 
@@ -280,6 +280,30 @@ async def _reasked(
     return uuid.UUID(str(answer_id))
 
 
+async def _contradicted(session: AsyncSession, held: uuid.UUID, question: str) -> uuid.UUID | None:
+    """The latest answer in this thread when `question` says it was wrong, or None (M16.2.3).
+
+    The verdict is `brain.memory.signals.is_contradiction`'s: a short list of the phrases people
+    use to correct an assistant, so a reader of the signal can see why it fired. Only the answer
+    it follows is named, and the follow-up's words go nowhere: see
+    `A_SIGNAL_IS_NOTICED_WHERE_BOTH_TEXTS_ARE`. Nothing is read when the words say no such thing.
+    """
+    if not is_contradiction(question):
+        return None
+    latest = (
+        await session.execute(
+            sa.select(MessageRow.id)
+            .where(
+                MessageRow.conversation_id == held,
+                MessageRow.role == MessageRole.ASSISTANT.value,
+            )
+            .order_by(MessageRow.created_at.desc(), MessageRow.id.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    return None if latest is None else uuid.UUID(str(latest))
+
+
 async def _answer_at(
     session: AsyncSession, held: uuid.UUID, answered_at: datetime
 ) -> uuid.UUID | None:
@@ -325,7 +349,8 @@ class StoredThreads:
 
         The learning signals this exchange is evidence of are written beside it, in the same
         transaction and in this person's name: the earlier answer it re-asks, when it re-asks one,
-        and this answer handed to a person, when it was. See
+        the earlier answer it says was wrong, when it does (M16.2.3), and this answer handed to a
+        person, when it was. See
         `A_SIGNAL_IS_NOTICED_WHERE_BOTH_TEXTS_ARE`.
         The signals name the exchange's own `trace_id`, the request it was answered on.
         """
@@ -334,10 +359,12 @@ class StoredThreads:
             await session.execute(_SET_PRINCIPAL, {"principal": principal_id})
             held = await self._own(session, wanted)
             reasked = None
+            contradicted = None
             if held is None:
                 held = await self._opened(session, principal_id, wanted, exchange.question)
             else:
                 reasked = await _reasked(session, held, exchange.question, now)
+                contradicted = await _contradicted(session, held, exchange.question)
             refs = list(UNREADABLE_REFS) if exchange.refs is None else refs_as_json(exchange.refs)
             written = await session.execute(
                 sa.insert(MessageRow).returning(
@@ -369,6 +396,8 @@ class StoredThreads:
             noticing: list[tuple[Signal, uuid.UUID]] = []
             if reasked is not None:
                 noticing.append((Signal.REASKED, reasked))
+            if contradicted is not None:
+                noticing.append((Signal.CONTRADICTED, contradicted))
             if exchange.escalated:
                 noticing.append((Signal.ESCALATED, answer))
             for signal, about in noticing:
