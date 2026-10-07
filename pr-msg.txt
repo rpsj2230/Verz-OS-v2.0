@@ -1,0 +1,12 @@
+Install checks for the surfaces an agent is offered and switched on for, and for a link to one tab of an agent
+
+Three M39 leaves were built and wired with no install check naming them.
+
+- M39.2.4.1 and M39.2.4.2: an agent reaching nothing sensitive is offered, on its page, every surface the install ships; one whose ceiling reaches a confidential field only the surfaces whose own adapters declare they can carry that class (the field is read out of the product's policy, not written into the check). Its steward then switches on a surface the page offers (200, and the channels now enabled say so) and is refused, as a refusal and not as a stale page, one it does not. A first draft passed by accident: it switched a second channel on with the page's old list, so the route answered "moved", not "refused". It now carries the new list forward and reads the outcome word. A restricted field is not asked: an agent's ceiling does not carry one, so no agent reaches it.
+- M39.1.2.4: a link to each tab of an agent lands, for its steward, on that tab at its address; for a colleague holding one tab it lands on that one and no other; and a link to a tab they hold nothing for, to a tab that does not exist, to an agent that does not exist and to something that is no link are answered with one kind and one set of words, public and logged.
+
+Every check is shown failing with the product broken (every surface offered, every surface switchable, a link landing at another address, a refusal that says why).
+
+Not claimed: M39.6.2.3 (a pause after repeated failures needs a task that fails, and no check can make the product's task fail without breaking the product), M39.2.4.4 (group installs need the bot's join event through the events route), M39.2.3.5 (nothing records a per-item retrieval), M39.8.1 (no single server-side editing-role gate; each route asks its own).
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
