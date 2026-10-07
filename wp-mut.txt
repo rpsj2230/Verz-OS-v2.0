@@ -1,0 +1,13 @@
+mutation: 3 mutation(s) in /var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/brain-mutate-20cd6f817d1b; running the unmutated tests
+mutation: unmutated tests clean in 22.2s
+mutation: [1/3] turning the write on must leave the administrator's ledger entry | caught    | test_the_whole_write_check_fails_where_its_path_is_broken[unrecorded-giving the reply key left no ledger entry by the administrator who gave it] (18.4s)
+mutation: [2/3] each delivery must verify as a receiver checks it | caught    | test_the_whole_write_check_fails_where_its_path_is_broken[unsigned-the settled reply's event was not delivered signed to the receiver after its first refusal] (20.5s)
+mutation: [3/3] the event must be delivered on a retry after the refusal | SURVIVED  | (34.8s)
+turning the write on must leave the administrator's ledger entry | caught    | test_the_whole_write_check_fails_where_its_path_is_broken[unrecorded-giving the reply key left no ledger entry by the administrator who gave it]
+each delivery must verify as a receiver checks it                | caught    | test_the_whole_write_check_fails_where_its_path_is_broken[unsigned-the settled reply's event was not delivered signed to the receiver after its first refusal]
+the event must be delivered on a retry after the refusal         | SURVIVED  |
+Traceback (most recent call last):
+  File "/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/.scratch/wt-c-writeproof/../../mut-wp.py", line 33, in <module>
+    assert not report.survivors
+           ^^^^^^^^^^^^^^^^^^^^
+AssertionError

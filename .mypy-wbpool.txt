@@ -1,0 +1,2 @@
+tests/unit/test_class_pools.py:756: error: Argument 3 to "_observe" has incompatible type "dict[str, object] | dict[str, Collection[str]]"; expected "dict[str, object]"  [arg-type]
+Found 1 error in 1 file (checked 1727 source files)

@@ -1,0 +1,388 @@
+Refreshing checks status every 90 seconds. Press Ctrl+C to quit.
+
+Install from empty and answer one question	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339477	
+Schema and registry sweeps	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339488	
+Unit tests, shard 2	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604555	
+Unit tests, shard 3	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604551	
+Unit tests, shard 5	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604628	
+Unit tests, shard 6	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604558	
+Unit tests, shard 7	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604623	
+Unit tests, shard 8	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604586	
+The previous release runs on the new schema	pass	31s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604469	
+Kind of change	pass	6s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611754804	
+Branch named for its module	pass	11s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611755086	
+Vulnerability scan, locks and image	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612605612	
+Lint, types, invariants	pass	6m14s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604529	
+A handover exports every store, removes the install and certifies it	pass	1m22s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604467	
+Console types, boundaries, tests, build	pass	6m7s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604427	
+Dependency audit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606008	
+Laravel read against MySQL	pass	40s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604394	
+Migrations round trip over an install-shaped database	pass	50s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604412	
+The personal data analyser starts, answers and fits its limit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606133	
+The whole stack starts	pass	1m46s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604477	
+Tracker matches the WBS	pass	13s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604426	
+Unit tests, shard 1	pass	6m49s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604576	
+Unit tests, shard 4	pass	10m10s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604578	
+Refreshing checks status every 90 seconds. Press Ctrl+C to quit.
+
+Schema and registry sweeps	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339488	
+Unit tests, shard 2	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604555	
+Unit tests, shard 5	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604628	
+Unit tests, shard 6	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604558	
+Unit tests, shard 7	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604623	
+Unit tests, shard 8	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604586	
+The previous release runs on the new schema	pass	31s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604469	
+Kind of change	pass	6s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611754804	
+Console types, boundaries, tests, build	pass	6m7s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604427	
+Branch named for its module	pass	11s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611755086	
+Lint, types, invariants	pass	6m14s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604529	
+Install from empty and answer one question	pass	54s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339477	
+Vulnerability scan, locks and image	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612605612	
+A handover exports every store, removes the install and certifies it	pass	1m22s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604467	
+Dependency audit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606008	
+The personal data analyser starts, answers and fits its limit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606133	
+Laravel read against MySQL	pass	40s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604394	
+Migrations round trip over an install-shaped database	pass	50s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604412	
+The whole stack starts	pass	1m46s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604477	
+Tracker matches the WBS	pass	13s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604426	
+Unit tests, shard 1	pass	6m49s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604576	
+Unit tests, shard 3	pass	16m8s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604551	
+Unit tests, shard 4	pass	10m10s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604578	
+Refreshing checks status every 90 seconds. Press Ctrl+C to quit.
+
+Unit tests, shard 2	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604555	
+Unit tests, shard 5	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604628	
+Unit tests, shard 6	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604558	
+Unit tests, shard 8	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604586	
+Laravel read against MySQL	pass	40s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604394	
+Kind of change	pass	6s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611754804	
+Branch named for its module	pass	11s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611755086	
+Vulnerability scan, locks and image	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612605612	
+Console types, boundaries, tests, build	pass	6m7s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604427	
+Dependency audit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606008	
+The personal data analyser starts, answers and fits its limit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606133	
+Install from empty and answer one question	pass	54s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339477	
+A handover exports every store, removes the install and certifies it	pass	1m22s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604467	
+Lint, types, invariants	pass	6m14s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604529	
+Migrations round trip over an install-shaped database	pass	50s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604412	
+Schema and registry sweeps	pass	1m19s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339488	
+The previous release runs on the new schema	pass	31s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604469	
+The whole stack starts	pass	1m46s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604477	
+Tracker matches the WBS	pass	13s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604426	
+Unit tests, shard 1	pass	6m49s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604576	
+Unit tests, shard 3	pass	16m8s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604551	
+Unit tests, shard 4	pass	10m10s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604578	
+Unit tests, shard 7	pass	9m24s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604623	
+Refreshing checks status every 90 seconds. Press Ctrl+C to quit.
+
+Unit tests, shard 2	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604555	
+Unit tests, shard 5	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604628	
+Unit tests, shard 8	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604586	
+Console types, boundaries, tests, build	pass	6m7s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604427	
+Branch named for its module	pass	11s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611755086	
+Vulnerability scan, locks and image	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612605612	
+Dependency audit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606008	
+The personal data analyser starts, answers and fits its limit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606133	
+A handover exports every store, removes the install and certifies it	pass	1m22s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604467	
+Install from empty and answer one question	pass	54s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339477	
+Kind of change	pass	6s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611754804	
+Laravel read against MySQL	pass	40s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604394	
+Lint, types, invariants	pass	6m14s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604529	
+Migrations round trip over an install-shaped database	pass	50s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604412	
+Schema and registry sweeps	pass	1m19s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339488	
+The previous release runs on the new schema	pass	31s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604469	
+The whole stack starts	pass	1m46s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604477	
+Tracker matches the WBS	pass	13s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604426	
+Unit tests, shard 1	pass	6m49s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604576	
+Unit tests, shard 3	pass	16m8s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604551	
+Unit tests, shard 4	pass	10m10s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604578	
+Unit tests, shard 6	pass	19m23s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604558	
+Unit tests, shard 7	pass	9m24s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604623	
+Refreshing checks status every 90 seconds. Press Ctrl+C to quit.
+
+A handover exports every store, removes the install and certifies it	pass	1m22s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604467	
+Branch named for its module	pass	11s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611755086	
+Console types, boundaries, tests, build	pass	6m7s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604427	
+Install from empty and answer one question	pass	54s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339477	
+Kind of change	pass	6s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611754804	
+Laravel read against MySQL	pass	40s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604394	
+Lint, types, invariants	pass	6m14s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604529	
+Migrations round trip over an install-shaped database	pass	50s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604412	
+Schema and registry sweeps	pass	1m19s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339488	
+The previous release runs on the new schema	pass	31s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604469	
+The whole stack starts	pass	1m46s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604477	
+Tracker matches the WBS	pass	13s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604426	
+Unit tests, shard 1	pass	6m49s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604576	
+Unit tests, shard 3	pass	16m8s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604551	
+Unit tests, shard 4	pass	10m10s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604578	
+Unit tests, shard 6	pass	19m23s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604558	
+Unit tests, shard 8	pass	20m24s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604586	
+Unit tests, shard 5	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604628	
+Dependency audit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606008	
+The personal data analyser starts, answers and fits its limit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606133	
+Vulnerability scan, locks and image	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612605612	
+Unit tests, shard 2	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604555	
+Unit tests, shard 7	pass	9m24s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604623	
+Refreshing checks status every 90 seconds. Press Ctrl+C to quit.
+
+A handover exports every store, removes the install and certifies it	pass	1m22s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604467	
+Branch named for its module	pass	11s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611755086	
+Console types, boundaries, tests, build	pass	6m7s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604427	
+Install from empty and answer one question	pass	54s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339477	
+Kind of change	pass	6s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611754804	
+Laravel read against MySQL	pass	40s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604394	
+Lint, types, invariants	pass	6m14s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604529	
+Migrations round trip over an install-shaped database	pass	50s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604412	
+Schema and registry sweeps	pass	1m19s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339488	
+The previous release runs on the new schema	pass	31s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604469	
+The whole stack starts	pass	1m46s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604477	
+Tracker matches the WBS	pass	13s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604426	
+Unit tests, shard 1	pass	6m49s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604576	
+Unit tests, shard 3	pass	16m8s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604551	
+Unit tests, shard 4	pass	10m10s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604578	
+Unit tests, shard 6	pass	19m23s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604558	
+Unit tests, shard 8	pass	20m24s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604586	
+Unit tests, shard 5	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604628	
+Dependency audit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606008	
+The personal data analyser starts, answers and fits its limit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606133	
+Vulnerability scan, locks and image	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612605612	
+Unit tests, shard 2	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604555	
+Unit tests, shard 7	pass	9m24s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604623	
+Refreshing checks status every 90 seconds. Press Ctrl+C to quit.
+
+A handover exports every store, removes the install and certifies it	pass	1m22s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604467	
+Branch named for its module	pass	11s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611755086	
+Console types, boundaries, tests, build	pass	6m7s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604427	
+Install from empty and answer one question	pass	54s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339477	
+Kind of change	pass	6s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611754804	
+Laravel read against MySQL	pass	40s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604394	
+Lint, types, invariants	pass	6m14s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604529	
+Migrations round trip over an install-shaped database	pass	50s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604412	
+Schema and registry sweeps	pass	1m19s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339488	
+The previous release runs on the new schema	pass	31s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604469	
+The whole stack starts	pass	1m46s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604477	
+Tracker matches the WBS	pass	13s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604426	
+Unit tests, shard 1	pass	6m49s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604576	
+Unit tests, shard 3	pass	16m8s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604551	
+Unit tests, shard 4	pass	10m10s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604578	
+Unit tests, shard 6	pass	19m23s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604558	
+Unit tests, shard 8	pass	20m24s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604586	
+Unit tests, shard 5	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604628	
+Dependency audit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606008	
+The personal data analyser starts, answers and fits its limit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606133	
+Vulnerability scan, locks and image	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612605612	
+Unit tests, shard 2	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604555	
+Unit tests, shard 7	pass	9m24s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604623	
+Refreshing checks status every 90 seconds. Press Ctrl+C to quit.
+
+A handover exports every store, removes the install and certifies it	pass	1m22s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604467	
+Branch named for its module	pass	11s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611755086	
+Console types, boundaries, tests, build	pass	6m7s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604427	
+Install from empty and answer one question	pass	54s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339477	
+Kind of change	pass	6s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611754804	
+Laravel read against MySQL	pass	40s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604394	
+Lint, types, invariants	pass	6m14s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604529	
+Migrations round trip over an install-shaped database	pass	50s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604412	
+Schema and registry sweeps	pass	1m19s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339488	
+The previous release runs on the new schema	pass	31s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604469	
+The whole stack starts	pass	1m46s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604477	
+Tracker matches the WBS	pass	13s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604426	
+Unit tests, shard 1	pass	6m49s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604576	
+Unit tests, shard 2	pass	20m51s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604555	
+Unit tests, shard 3	pass	16m8s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604551	
+Unit tests, shard 4	pass	10m10s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604578	
+Unit tests, shard 5	pass	21m34s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604628	
+Unit tests, shard 6	pass	19m23s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604558	
+Unit tests, shard 8	pass	20m24s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604586	
+Unit tests and coverage	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112619302593	
+Dependency audit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606008	
+The personal data analyser starts, answers and fits its limit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606133	
+Vulnerability scan, locks and image	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612605612	
+Unit tests, shard 7	pass	9m24s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604623	
+Test selection shadow (decides nothing)	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112619302565	
+Refreshing checks status every 90 seconds. Press Ctrl+C to quit.
+
+A handover exports every store, removes the install and certifies it	pass	1m22s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604467	
+Branch named for its module	pass	11s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611755086	
+Console types, boundaries, tests, build	pass	6m7s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604427	
+Install from empty and answer one question	pass	54s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339477	
+Kind of change	pass	6s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611754804	
+Laravel read against MySQL	pass	40s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604394	
+Lint, types, invariants	pass	6m14s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604529	
+Migrations round trip over an install-shaped database	pass	50s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604412	
+Schema and registry sweeps	pass	1m19s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339488	
+The previous release runs on the new schema	pass	31s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604469	
+The whole stack starts	pass	1m46s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604477	
+Tracker matches the WBS	pass	13s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604426	
+Unit tests, shard 1	pass	6m49s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604576	
+Unit tests, shard 2	pass	20m51s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604555	
+Unit tests, shard 3	pass	16m8s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604551	
+Unit tests, shard 4	pass	10m10s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604578	
+Unit tests, shard 5	pass	21m34s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604628	
+Unit tests, shard 6	pass	19m23s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604558	
+Unit tests, shard 8	pass	20m24s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604586	
+Unit tests and coverage	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112619302593	
+Dependency audit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606008	
+The personal data analyser starts, answers and fits its limit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606133	
+Vulnerability scan, locks and image	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612605612	
+Unit tests, shard 7	pass	9m24s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604623	
+Test selection shadow (decides nothing)	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112619302565	
+Refreshing checks status every 90 seconds. Press Ctrl+C to quit.
+
+A handover exports every store, removes the install and certifies it	pass	1m22s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604467	
+Branch named for its module	pass	11s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611755086	
+Console types, boundaries, tests, build	pass	6m7s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604427	
+Install from empty and answer one question	pass	54s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339477	
+Kind of change	pass	6s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611754804	
+Laravel read against MySQL	pass	40s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604394	
+Lint, types, invariants	pass	6m14s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604529	
+Migrations round trip over an install-shaped database	pass	50s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604412	
+Schema and registry sweeps	pass	1m19s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339488	
+Test selection shadow (decides nothing)	pass	20s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112619302565	
+The previous release runs on the new schema	pass	31s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604469	
+The whole stack starts	pass	1m46s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604477	
+Tracker matches the WBS	pass	13s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604426	
+Unit tests, shard 1	pass	6m49s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604576	
+Unit tests, shard 2	pass	20m51s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604555	
+Unit tests, shard 3	pass	16m8s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604551	
+Unit tests, shard 4	pass	10m10s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604578	
+Unit tests, shard 5	pass	21m34s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604628	
+Unit tests, shard 6	pass	19m23s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604558	
+Unit tests, shard 8	pass	20m24s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604586	
+Dependency audit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606008	
+The personal data analyser starts, answers and fits its limit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606133	
+Vulnerability scan, locks and image	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612605612	
+Unit tests, shard 7	pass	9m24s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604623	
+Unit tests and coverage	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112619302593	
+Refreshing checks status every 90 seconds. Press Ctrl+C to quit.
+
+A handover exports every store, removes the install and certifies it	pass	1m22s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604467	
+Branch named for its module	pass	11s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611755086	
+Console types, boundaries, tests, build	pass	6m7s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604427	
+Install from empty and answer one question	pass	54s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339477	
+Kind of change	pass	6s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611754804	
+Laravel read against MySQL	pass	40s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604394	
+Lint, types, invariants	pass	6m14s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604529	
+Migrations round trip over an install-shaped database	pass	50s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604412	
+Schema and registry sweeps	pass	1m19s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339488	
+Test selection shadow (decides nothing)	pass	20s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112619302565	
+The previous release runs on the new schema	pass	31s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604469	
+The whole stack starts	pass	1m46s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604477	
+Tracker matches the WBS	pass	13s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604426	
+Unit tests, shard 1	pass	6m49s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604576	
+Unit tests, shard 2	pass	20m51s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604555	
+Unit tests, shard 3	pass	16m8s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604551	
+Unit tests, shard 4	pass	10m10s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604578	
+Unit tests, shard 5	pass	21m34s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604628	
+Unit tests, shard 6	pass	19m23s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604558	
+Unit tests, shard 8	pass	20m24s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604586	
+Dependency audit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606008	
+The personal data analyser starts, answers and fits its limit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606133	
+Vulnerability scan, locks and image	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612605612	
+Unit tests, shard 7	pass	9m24s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604623	
+Unit tests and coverage	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112619302593	
+Refreshing checks status every 90 seconds. Press Ctrl+C to quit.
+
+A handover exports every store, removes the install and certifies it	pass	1m22s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604467	
+Branch named for its module	pass	11s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611755086	
+Console types, boundaries, tests, build	pass	6m7s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604427	
+Install from empty and answer one question	pass	54s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339477	
+Kind of change	pass	6s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611754804	
+Laravel read against MySQL	pass	40s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604394	
+Lint, types, invariants	pass	6m14s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604529	
+Migrations round trip over an install-shaped database	pass	50s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604412	
+Schema and registry sweeps	pass	1m19s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339488	
+Test selection shadow (decides nothing)	pass	20s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112619302565	
+The previous release runs on the new schema	pass	31s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604469	
+The whole stack starts	pass	1m46s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604477	
+Tracker matches the WBS	pass	13s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604426	
+Unit tests, shard 1	pass	6m49s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604576	
+Unit tests, shard 2	pass	20m51s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604555	
+Unit tests, shard 3	pass	16m8s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604551	
+Unit tests, shard 4	pass	10m10s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604578	
+Unit tests, shard 5	pass	21m34s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604628	
+Unit tests, shard 6	pass	19m23s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604558	
+Unit tests, shard 8	pass	20m24s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604586	
+Dependency audit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606008	
+The personal data analyser starts, answers and fits its limit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606133	
+Vulnerability scan, locks and image	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612605612	
+Unit tests, shard 7	pass	9m24s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604623	
+Unit tests and coverage	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112619302593	
+Refreshing checks status every 90 seconds. Press Ctrl+C to quit.
+
+A handover exports every store, removes the install and certifies it	pass	1m22s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604467	
+Branch named for its module	pass	11s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611755086	
+Console types, boundaries, tests, build	pass	6m7s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604427	
+Install from empty and answer one question	pass	54s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339477	
+Kind of change	pass	6s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611754804	
+Laravel read against MySQL	pass	40s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604394	
+Lint, types, invariants	pass	6m14s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604529	
+Migrations round trip over an install-shaped database	pass	50s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604412	
+Schema and registry sweeps	pass	1m19s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339488	
+Test selection shadow (decides nothing)	pass	20s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112619302565	
+The previous release runs on the new schema	pass	31s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604469	
+The whole stack starts	pass	1m46s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604477	
+Tracker matches the WBS	pass	13s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604426	
+Unit tests, shard 1	pass	6m49s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604576	
+Unit tests, shard 2	pass	20m51s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604555	
+Unit tests, shard 3	pass	16m8s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604551	
+Unit tests, shard 4	pass	10m10s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604578	
+Unit tests, shard 5	pass	21m34s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604628	
+Unit tests, shard 6	pass	19m23s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604558	
+Unit tests, shard 8	pass	20m24s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604586	
+Dependency audit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606008	
+The personal data analyser starts, answers and fits its limit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606133	
+Vulnerability scan, locks and image	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612605612	
+Unit tests and coverage	pending	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112619302593	
+Unit tests, shard 7	pass	9m24s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604623	
+A handover exports every store, removes the install and certifies it	pass	1m22s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604467	
+Branch named for its module	pass	11s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611755086	
+Console types, boundaries, tests, build	pass	6m7s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604427	
+Install from empty and answer one question	pass	54s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339477	
+Kind of change	pass	6s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611754804	
+Laravel read against MySQL	pass	40s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604394	
+Lint, types, invariants	pass	6m14s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604529	
+Migrations round trip over an install-shaped database	pass	50s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604412	
+Schema and registry sweeps	pass	1m19s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339488	
+Test selection shadow (decides nothing)	pass	20s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112619302565	
+The previous release runs on the new schema	pass	31s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604469	
+The whole stack starts	pass	1m46s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604477	
+Tracker matches the WBS	pass	13s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604426	
+Unit tests and coverage	pass	28s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112619302593	
+Unit tests, shard 1	pass	6m49s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604576	
+Unit tests, shard 2	pass	20m51s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604555	
+Unit tests, shard 3	pass	16m8s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604551	
+Unit tests, shard 5	pass	21m34s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604628	
+Unit tests, shard 6	pass	19m23s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604558	
+Unit tests, shard 8	pass	20m24s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604586	
+Dependency audit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606008	
+The personal data analyser starts, answers and fits its limit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606133	
+Vulnerability scan, locks and image	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612605612	
+Unit tests, shard 4	pass	10m10s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604578	
+Unit tests, shard 7	pass	9m24s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604623	
+A handover exports every store, removes the install and certifies it	pass	1m22s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604467	
+Branch named for its module	pass	11s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611755086	
+Console types, boundaries, tests, build	pass	6m7s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604427	
+Install from empty and answer one question	pass	54s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339477	
+Kind of change	pass	6s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112611754804	
+Laravel read against MySQL	pass	40s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604394	
+Lint, types, invariants	pass	6m14s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604529	
+Migrations round trip over an install-shaped database	pass	50s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604412	
+Schema and registry sweeps	pass	1m19s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112616339488	
+Test selection shadow (decides nothing)	pass	20s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112619302565	
+The previous release runs on the new schema	pass	31s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604469	
+The whole stack starts	pass	1m46s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604477	
+Tracker matches the WBS	pass	13s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604426	
+Unit tests and coverage	pass	28s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112619302593	
+Unit tests, shard 1	pass	6m49s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604576	
+Unit tests, shard 2	pass	20m51s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604555	
+Unit tests, shard 3	pass	16m8s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604551	
+Unit tests, shard 5	pass	21m34s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604628	
+Unit tests, shard 6	pass	19m23s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604558	
+Unit tests, shard 8	pass	20m24s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604586	
+Dependency audit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606008	
+The personal data analyser starts, answers and fits its limit	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612606133	
+Vulnerability scan, locks and image	skipping	0	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612605612	
+Unit tests, shard 4	pass	10m10s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604578	
+Unit tests, shard 7	pass	9m24s	https://github.com/rpsj2230/Verz-OS-v2.0/actions/runs/37565377985/job/112612604623	
+{"at":"2026-10-07T03:47:45Z","s":"MERGED"}

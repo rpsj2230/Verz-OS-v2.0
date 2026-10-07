@@ -1,0 +1,45 @@
+A connector write is proved whole on an install: turned on by an administrator, sent once, read back, and its event delivered signed after a refusal
+
+The Wave 3 leaf that proves a connector write needs more than #372's reply check shows: the write
+turned on by an administrator, and a signed outbound event reaching a receiving system after its
+first attempt is refused.
+
+A second check in acceptance_freshdesk_reply reaches the same approved reply by the same path
+(the reply setup is now one helper both checks use) and then:
+- runs the worker with nothing kept for the reply grant, which sends nothing and leaves the
+  approval standing;
+- turns the write on the way an administrator does, giving the reply key through
+  `connector_routes.keep_credential`, and finds the `credential` ledger entry by them;
+- runs again with a key lease that reads the grant's slot from the vault the keeper wrote, so the
+  reply is posted once with the key the administrator gave, at the requester's reach, read back
+  before it is done, and not sent a third time;
+- announces the settled operation as an `operation.settled` event through the outbox's own claim
+  and dispatch to a receiver that refuses the first attempt, and finds it delivered on the retry
+  with the same bytes both times, each signed as a receiver checks it, with the inbound
+  `brain.channels.webhook.sign` rather than the sender's own function.
+
+A delivery falls due on the database's clock, not the check's, so the first attempt is made at the
+row's own due instant and the retry once the whole retry window has passed.
+
+Four product breaks each fail it with their own sentence: the key kept with its record lost, the
+write sent with the read key's slot, the event signed over other bytes than it sends, and a refused
+delivery never tried again.
+
+Mutations (`brain.ops.mutation.verify`):
+
+| Mutation | Outcome | Caught by |
+|---|---|---|
+| turning the write on must leave the administrator's ledger entry | caught | the `unrecorded` break |
+| each delivery must verify as a receiver checks it | caught | the `unsigned` break |
+| the event must be delivered on a retry after the refusal (the request count dropped) | SURVIVED, equivalent | none |
+
+The survivor is equivalent and is kept as written rather than given an invented test: the
+receiver is the check's own, refusing exactly the first request, so a delivery that reaches
+DELIVERED within the two claims has been sent exactly twice, and every product break that loses
+the retry leaves the delivery pending or exhausted, which the state condition refuses. The count
+stays as the statement of what the check's scenario was.
+
+Stacked on #372 (and #368 under it), which are in the migration train.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+

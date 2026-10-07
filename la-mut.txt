@@ -1,0 +1,8 @@
+mutation: 3 mutation(s) in /var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/brain-mutate-f967ae525213; running the unmutated tests
+mutation: unmutated tests clean in 18.5s
+mutation: [1/3] a citation carries the instant its field was read | caught    | test_on_a_real_database_a_live_answer_cites_what_it_read_and_nothing_is_left, test_the_check_fails_where_the_live_answer_path_is_broken[unbound-an agent not bound to Freshdesk was answered from it] (7.9s)
+mutation: [2/3] the check refuses an answer that does not cite the read time | caught    | test_the_check_fails_where_the_live_answer_path_is_broken[undated-a question about an open ticket was not answered citing the ticket, the field read live, Freshdesk and the time it was read] (7.6s)
+mutation: [3/3] the Connectors area names the leaf its recorded checks prove | caught    | test_the_connectors_area_names_the_live_answers_leaf_its_recorded_checks_prove (8.3s)
+a citation carries the instant its field was read            | caught    | test_on_a_real_database_a_live_answer_cites_what_it_read_and_nothing_is_left, test_the_check_fails_where_the_live_answer_path_is_broken[unbound-an agent not bound to Freshdesk was answered from it]
+the check refuses an answer that does not cite the read time | caught    | test_the_check_fails_where_the_live_answer_path_is_broken[undated-a question about an open ticket was not answered citing the ticket, the field read live, Freshdesk and the time it was read]
+the Connectors area names the leaf its recorded checks prove | caught    | test_the_connectors_area_names_the_live_answers_leaf_its_recorded_checks_prove

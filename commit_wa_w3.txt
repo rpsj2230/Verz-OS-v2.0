@@ -1,0 +1,39 @@
+Install check for the wave-three milestone: an agent installed from a template, answering with knowledge and memory
+
+M38.2.2.4 states what must be live once wave three is done, and each clause already has a check of
+its own (every built-in template installs, a person is narrowed through an agent, a memory forms and
+is recalled). The milestone asks whether they compose, so this check drives them together in one
+rolled-back transaction, as a person meets them:
+
+- the catalogue's knowledge agent, internal_helpdesk, is installed from the gallery by an
+  administrator of acceptance_a over a copy of the shipped manifest signed with a key made for the
+  check (the worker holds no template signing key) and enabled with the lifecycle button;
+- a member of acceptance_a states a memory, then asks a question their department's document
+  answers, naming the agent. The install's own request row says that agent answered; the model, a
+  stand-in that asks for the document search once and then answers, is shown the document through
+  the agent's tool and the member's memory as a hint beside the question, the hint is not in the
+  shared prompt region, and the answer cites the document and carries none of the memory;
+- a colleague asking the same is answered from the document and is sent none of the member's memory;
+  a member of acceptance_b naming the agent is outside its audience, is not answered by it, and is
+  told neither the document nor any memory.
+
+The model is a stand-in that keeps its prompt, as acceptance_checks_memory's is, and the sentence
+says so: whether a model is shown a document and a memory is a fact about the prompt the install
+builds, and a real provider would be sent a reserved person's memory on every deploy to prove a
+string was in a prompt. The milestone's task is therefore added to docs/proof-sweep-holds.json with
+the reason M38.2.2.3 already carries: a real question put to a real model is the owner's.
+
+A first draft answered every question in one model turn and failed: an agent whose tools include
+the document search runs the tool loop, whose replies are strict JSON, so the stand-in had to be
+taught to ask for the tool once. The roster, ceiling and hint tests each break one real seam of
+this (an agent not offered, a ceiling implying no document read, a route that binds no hints, an
+audience that is ignored), so the check cannot pass on the default agent.
+
+Mutation (brain.ops.mutation, three rows, unmutated tests clean first):
+| the answering agent is not read off the request row | caught by test_an_agent_the_roster_does_not_offer_fails_the_milestone_check |
+| the asker's memory as a hint is not looked for | caught by test_an_answer_route_that_hands_a_model_no_memory_fails_the_milestone_check |
+| an answer by the agent outside its audience is not noticed | caught by test_an_agent_answering_somebody_outside_its_audience_fails_the_milestone_check |
+
+No Closes line: the leaf closes from the install's results, and not while it is held.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

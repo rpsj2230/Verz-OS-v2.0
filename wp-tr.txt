@@ -1,0 +1,9 @@
+ok: 1304 task id(s) claimed, all traceable, every closed leaf has a test
+note: 811 leaf/leaves claimed in source only
+note: 0 claimed id(s) name a group, so the tracker credits nothing
+note: 4 console read(s) have no screen in the browser, 1 exempted with a written reason
+      brain.console.automation_gallery declares no screen key, so no route could reach it and nothing in console/src names it
+      brain.console.automation_schedule declares no screen key, so no route could reach it and nothing in console/src names it
+      brain.console.automations declares no screen key, so no route could reach it and nothing in console/src names it
+      brain.console.role_surfaces declares no screen key, so no route could reach it and nothing in console/src names it
+note: navigations the design draws with no shell of their own to compare yet: My Workspace, Inside an Agent

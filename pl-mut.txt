@@ -1,0 +1,4 @@
+mutation: 1 mutation(s) in /var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/brain-mutate-c5f89170bde4; running the unmutated tests
+mutation: unmutated tests clean in 9.9s
+mutation: [1/1] the pooler is capped at its own pool | caught    | test_the_application_s_pooler_is_capped_across_logins_at_its_own_pool[docker-compose.yml], test_the_application_s_pooler_cap_is_the_figure_the_budget_counts, test_the_operations_page_gives_an_older_install_the_line_that_caps_its_pooler (4.0s)
+the pooler is capped at its own pool | caught    | test_the_application_s_pooler_is_capped_across_logins_at_its_own_pool[docker-compose.yml], test_the_application_s_pooler_cap_is_the_figure_the_budget_counts, test_the_operations_page_gives_an_older_install_the_line_that_caps_its_pooler
