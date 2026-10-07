@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-07T05:04:39.391643+00:00",
-  "commit": "eb840635",
-  "commit_subject": "A follow-up saying the answer was wrong is noticed as a signal, and four memory leaves are shown on the install (#489)",
+  "generated_at": "2026-10-07T05:11:15.776348+00:00",
+  "commit": "37edf8f4",
+  "commit_subject": "Install checks for the surfaces an agent is offered and switched on for, and for a link to one tab of an agent (#490)",
   "total": 1596,
   "done": 833,
   "percent": 52.2,
