@@ -107,9 +107,11 @@ def test_a_ceiling_sent_to_a_reader_whose_total_is_withheld_fails_the_check(
     goes too. Delete this and the check closes M33.1.1.3 on a read that sends the company's
     ceiling to a reader who should be shown nothing."""
     from brain import company_routes
-    from brain.console.global_surfaces import CompanyConsumption
+    from brain.console.global_surfaces import CompanyConsumption, company_consumption
 
-    original = company_routes.company_consumption
+    # The function the route imported, taken from where it is defined: mypy does not allow reading a
+    # name through a module that only imports it.
+    original = company_consumption
 
     def leaky(*args: Any, **kwargs: Any) -> Any:
         return original(*args, **kwargs) or CompanyConsumption(spend_minor=0, by_department=())
