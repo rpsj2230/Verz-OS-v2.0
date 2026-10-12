@@ -184,6 +184,7 @@ from brain.knowledge.embed_policy import embedding_revision, policy_gaps
 from brain.knowledge.embed_queue import (
     EMBED_TASK,
     EMBED_TRAFFIC_CLASS,
+    REEMBED_TASK,
     EmbeddingService,
     embed_batch_gaps,
 )
@@ -193,6 +194,7 @@ from brain.knowledge.parse_budget import (
     parse_budget_note,
     parse_worker_gaps,
 )
+from brain.knowledge.reembed import run_reembed_page, start_rebuild
 from brain.ops.admission import WorkloadClass
 from brain.ops.checkpoints import channel_policy_gaps, connection_refusals
 from brain.ops.class_pools import Follower, Routing, queued_class, routed_url
@@ -1379,8 +1381,31 @@ def register_tasks(
         finally:
             await engine.dispose()
 
+    async def run_reembed(after_chunk_id: str, size: int, model: str) -> str:
+        # The page reads across every owner, so it connects as this worker's own login and never
+        # as the application role: see `brain.knowledge.reembed.A_REBUILD_PAGE_READS_NO_BODY`.
+        engine = make_app_engine(
+            routed_url(database_url, queued_class(EMBED_TRAFFIC_CLASS), running=moved())
+        )
+
+        async def enqueue(job: Job) -> object:
+            return await enqueue_job(app, job)
+
+        try:
+            return await run_reembed_page(
+                make_session_factory(engine),
+                enqueue,
+                after_chunk_id=after_chunk_id,
+                size=size,
+                model=model,
+                revision=embedding_revision(env),
+            )
+        finally:
+            await engine.dispose()
+
     register_task(app, CONTROL_TASK, run_control, traffic_class=TrafficClass.SYSTEM)
     register_task(app, EMBED_TASK, run_embed, traffic_class=EMBED_TRAFFIC_CLASS)
+    register_task(app, REEMBED_TASK, run_reembed, traffic_class=EMBED_TRAFFIC_CLASS)
     # Queued uploads (M7.1.5): a standard-slot task and a parse-worker task, each read here.
     register_ingest_tasks(app, database_url=database_url, env=env, routing=routing)
 
@@ -1623,15 +1648,63 @@ def run_control_text(
     return 0, f"control {name} enqueued as job {job_id}"
 
 
+async def enqueue_rebuild(app: Any, database_url: str, env: Mapping[str, str]) -> tuple[int, str]:
+    """Queue the first page of a rebuild onto the model this install serves, and say so."""
+    engine = make_app_engine(database_url)
+    try:
+        async with app.open_async():
+
+            async def enqueue(job: Job) -> object:
+                return await enqueue_job(app, job)
+
+            return await start_rebuild(
+                make_session_factory(engine), enqueue, revision=embedding_revision(env)
+            )
+    finally:
+        await engine.dispose()
+
+
+def run_reembed_text(env: Mapping[str, str], *, worker_component: str) -> tuple[int, str]:
+    """Start moving the corpus onto the embedding model this install serves, and say so.
+
+    The same refusals as `run_control_text`, for the same reason: only the general worker with the
+    application's database registers the rebuild's task, so enqueueing from anywhere else would
+    put a job on a queue whose task this process could not describe. See
+    `brain.knowledge.reembed`.
+    """
+    database_url = schedule_url(env) if schedules_here(worker_component) else None
+    if database_url is None:
+        return EXIT_MISCONFIGURED, (
+            "a rebuild is started from the general worker with the application's database: "
+            f"{A_WORKER_THAT_SCHEDULES_NEEDS_THE_APPLICATIONS_DATABASE_URL}"
+        )
+    refused = schedule_url_refusal(database_url)
+    if refused is not None:
+        return EXIT_MISCONFIGURED, f"the rebuild was not started: {refused}"
+    share, split = queue_pool_max(env, worker_component=worker_component)
+    if share is None:
+        reason = "; ".join(split) if split else f"{POOL_MAX_ENV} is not set"
+        return EXIT_MISCONFIGURED, f"the rebuild was not started: {reason}"
+    try:
+        app = queue_app(
+            (env.get(QUEUE_URL_ENV) or "").strip(), pool_max=share, schema=DRIVER_SCHEMA
+        )
+        register_tasks(app, database_url=database_url, env=env)
+        return asyncio.run(enqueue_rebuild(app, database_url, env), loop_factory=_loop_factory())
+    except (QueueError, RunnerError) as exc:
+        return EXIT_MISCONFIGURED, f"the rebuild was not started: {exc}"
+
+
 def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
     """`python -m brain.ops.worker [--check | --ready | --deploy-plan | --install-queue |
-    --install-checkpointer | --run-control NAME]`.
+    --install-checkpointer | --run-control NAME | --reembed]`.
 
-    Seven modes, and each one is used by something. `--check` is an operator asking whether a
+    Eight modes, and each one is used by something. `--check` is an operator asking whether a
     deployment would start; `--ready` is the container healthcheck; `--deploy-plan` is the
     steps that install the queue and `--install-queue` is those steps run;
     `--install-checkpointer` installs the saver's tables; `--run-control` enqueues one control
-    run; no argument is the container's command. The environment is a parameter defaulting to
+    run; `--reembed` queues the first page of a move onto the embedding model this install
+    serves; no argument is the container's command. The environment is a parameter defaulting to
     the real one so the modes can be tested without one, which is the same reason
     `brain.ops.admission` takes `now` rather than reading a clock.
     """
@@ -1710,6 +1783,11 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None
         # After the preflight for the same reason as the queue: `connection_refusals` has already
         # been asked about the checkpointer URL, so the tables cannot be installed on the pooler.
         code, text = install_checkpointer_text(environment)
+        print(text, file=sys.stdout if code == 0 else sys.stderr)
+        return code
+
+    if "--reembed" in arguments:
+        code, text = run_reembed_text(environment, worker_component=worker_component)
         print(text, file=sys.stdout if code == 0 else sys.stderr)
         return code
 
