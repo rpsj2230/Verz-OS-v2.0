@@ -50,11 +50,17 @@ figure is shown, because a reader shown the company total has been shown every r
 about, and a reader shown nothing must not learn that the company ran more than a load's worth of
 requests. See `A_LOAD_BOUND_IS_SAID_ONLY_BESIDE_THE_FIGURE_IT_BOUNDS`.
 
-**What is not here, and why.** The leaf names a company budget beside the consumption, and nothing
-in the product writes a company ceiling: `brain.ops.budgets.company_budget` builds one,
-`brain.ops.budget_store` would keep it, and no route, wizard step or job ever appends one, so a
-read here would answer None on every install. The page shows what was spent and says no ceiling
-is set rather than inventing where one would come from.
+**The company's budget is written here, and was written nowhere before.**
+`brain.ops.budgets.company_budget` built one and `brain.ops.budget_store` kept one, and no route,
+wizard step or job ever appended one, so a read of the ceiling answered None on every install.
+`PUT /company/budget` appends the next version of the company's monthly ceiling as `admin:budget`
+held over everything, and the consumption read puts the ceiling beside what was spent, **only
+where the figure is shown**: a reader the consumption is withheld from is told no ceiling either,
+because a ceiling beside a withheld total is half of a subtraction. A holder of the authority over
+one department only is refused, in a sentence that names the role, as an agent's budget does
+(`brain.agent_workspace_routes.SETTING_A_BUDGET_NEEDS_THE_BUDGET_ROLE`). **A ceiling is not an
+instruction to stop anything**: whether a spent budget refuses questions or only says it would
+have is the install's own switch (needs-rupash item 169), which this route does not touch.
 
 Task ids: M33.1.1.1, M33.1.1.2, M33.1.1.3
 """
@@ -68,6 +74,7 @@ from typing import Annotated, Final
 import structlog
 from fastapi import APIRouter, Query, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -75,6 +82,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from brain.agent_routes import actual_of, record_of
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked, Asking
+from brain.attribution import trace_of_request
 from brain.audit.ledger import IDENTIFIER, AuditEntry
 from brain.audit.view import (
     DEFAULT_PAGE_SIZE,
@@ -108,12 +116,15 @@ from brain.console.global_surfaces import (
     visible_estate,
 )
 from brain.console.govern_surfaces import departments_offered
-from brain.console.organisation import nameable
+from brain.console.organisation import COMPANY_ID, nameable
 from brain.console.reads import permitted
+from brain.console.scoped_authority import within_reach
 from brain.console.screens import Lens, screen
 from brain.console.workspace import SPEND_OF_OTHERS_SCREEN
 from brain.core.department import SLUG_PATTERN
+from brain.core.entitlement import Capability
 from brain.core.errors import Absent, Failed
+from brain.core.scope import Scope
 from brain.directory_routes import (
     MAX_DEPARTMENTS,
     MAX_PEOPLE,
@@ -123,6 +134,8 @@ from brain.directory_routes import (
 )
 from brain.estate_routes import MAX_ITEMS_CONSIDERED, retrievable_items
 from brain.listing import MAX_SEARCH_CHARS, says_every_word, search_words
+from brain.ops.budget_store import append, in_force
+from brain.ops.budgets import BudgetError, BudgetLevel, BudgetPeriod, BudgetRow
 from brain.ops.connector_store import every_live
 from brain.ops.skill_store import MAX_LIBRARY, library_of
 from brain.ops.spend import Actual
@@ -271,7 +284,8 @@ class ConsumptionView(BaseModel):
     `withheld` true carries no figure and no line, for `global_surfaces.
     A_COMPANY_TOTAL_ASSEMBLED_FROM_ONE_READERS_ROWS_IS_CONFIDENTLY_WRONG`. `incomplete` is false
     wherever the figure is withheld; see `A_LOAD_BOUND_IS_SAID_ONLY_BESIDE_THE_FIGURE_IT_BOUNDS`.
-    `ceiling_set` is always false today, and the module docstring says why.
+    `ceiling_set` is true when a company budget is in force, and the ceiling is sent with the figure
+    and never without it.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -284,6 +298,68 @@ class ConsumptionView(BaseModel):
     by_department: list[DepartmentSpendView]
     incomplete: bool
     ceiling_set: bool = False
+    #: The company's monthly ceiling in force, in the same minor units, only where the figure is
+    #: shown. See `A_CEILING_IS_SHOWN_ONLY_BESIDE_THE_FIGURE_IT_IS_MEASURED_AGAINST`.
+    ceiling_minor: int | None = None
+    #: Whether this reader may set the company's budget, so the page offers the form to them only.
+    #: True only beside a shown figure, for the reason `ceiling_minor` travels with it.
+    may_set_budget: bool = False
+
+
+# ------------------------------------------------------------------ the company's budget
+#: Why the ceiling travels with the figure and never alone.
+A_CEILING_IS_SHOWN_ONLY_BESIDE_THE_FIGURE_IT_IS_MEASURED_AGAINST: Final = (
+    "The consumption read answers a reader who may not be shown the company's total with no "
+    "figure at all. A ceiling sent to that reader beside nothing would be the other half of a "
+    "subtraction, so it is sent only where the total is."
+)
+
+#: What a reader who may see the company's spend and may not set its budget is told.
+SETTING_THE_COMPANY_BUDGET_NEEDS_THE_BUDGET_ROLE: Final = (
+    "Setting the company's monthly budget needs the budget administrator's role over everything. "
+    "A budget administrator over one department sets that department's budget."
+)
+
+#: What a second write in the same instant is told.
+THE_COMPANY_BUDGET_CHANGED_JUST_NOW: Final = (
+    "The company's budget changed a moment ago. Load the page again."
+)
+
+#: The authority a budget is set with, as `brain.agent_workspace_routes.BUDGET_AUTHORITY` holds it.
+COMPANY_BUDGET_AUTHORITY: Final = Capability(value="admin:budget")
+
+#: The largest monthly ceiling accepted, in minor units, so a typing slip is not a real ceiling.
+MAX_COMPANY_CEILING_MINOR: Final = 100_000_000_000
+
+COMPANY_BUDGET_PATH: Final = "/company/budget"
+
+COMPANY_BUDGET_KEY: Final = (BudgetLevel.COMPANY, COMPANY_ID, BudgetPeriod.MONTH)
+
+
+class CompanyBudgetAsked(BaseModel):
+    """A new monthly ceiling for the company, in the install's minor units, and why."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    ceiling_minor: Annotated[int, Field(ge=1, le=MAX_COMPANY_CEILING_MINOR)]
+    reason: Annotated[str, Field(min_length=1, max_length=200)]
+
+
+class CompanyBudgetView(BaseModel):
+    """The company's monthly ceiling as it now stands."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    ceiling_minor: int
+    currency: str
+    version: int
+    effective_from: datetime
+
+
+async def company_ceiling(session: AsyncSession, now: datetime) -> int | None:
+    """The company's monthly ceiling in force at `now`, or None when none was ever set."""
+    found = await in_force(session, COMPANY_BUDGET_KEY, now)
+    return None if found is None else found.ceiling_minor
 
 
 # -------------------------------------------------------------------- the statements
@@ -618,6 +694,10 @@ async def company_consumption_view(
     actuals: list[Actual] = [one for one in (actual_of(row) for row in loaded) if one is not None]
     found = company_consumption(actuals, asked.reach, since=since, until=until, now=asked.now)
     code, _zone = money_and_clock()
+    ceiling: int | None = None
+    if found is not None:
+        async with factory() as session:
+            ceiling = await company_ceiling(session, asked.now)
     if found is None:
         return ConsumptionView(
             currency=code,
@@ -639,4 +719,66 @@ async def company_consumption_view(
             for name, minor in found.by_department
         ],
         incomplete=len(loaded) >= MAX_SPEND_ROWS,
+        ceiling_set=ceiling is not None,
+        ceiling_minor=ceiling,
+        may_set_budget=within_reach(
+            asked.reach, COMPANY_BUDGET_AUTHORITY, Scope.unrestricted(), asked.now
+        ),
+    )
+
+
+def _refused_budget(message: str, status: int) -> JSONResponse:
+    return JSONResponse(status_code=status, content={"message": message})
+
+
+@router.put(COMPANY_BUDGET_PATH, response_model=CompanyBudgetView, responses=COMMON_RESPONSES)
+async def set_company_budget(
+    request: Request, body: CompanyBudgetAsked, asked: Asked
+) -> JSONResponse | CompanyBudgetView:
+    """Set the company's monthly ceiling, as the next version of it (M33.1.1.3).
+
+    The budget screen's question first, so a reader with no grant for it is answered as for any
+    screen they cannot open; then the authority over everything, whose refusal names the role.
+    """
+    if not permitted(screen(SPEND_OF_OTHERS_SCREEN).read, asked.reach, asked.now):
+        log.info("company budget not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable("budget")
+    if not within_reach(asked.reach, COMPANY_BUDGET_AUTHORITY, Scope.unrestricted(), asked.now):
+        log.info("company budget refused", principal=asked.caller.principal.id)
+        return _refused_budget(SETTING_THE_COMPANY_BUDGET_NEEDS_THE_BUDGET_ROLE, 403)
+    factory = _require_sessions(request)
+    async with factory() as session:
+        current = await in_force(session, COMPANY_BUDGET_KEY, asked.now)
+        try:
+            row = (
+                BudgetRow(
+                    level=BudgetLevel.COMPANY,
+                    subject=COMPANY_ID,
+                    period=BudgetPeriod.MONTH,
+                    ceiling_minor=body.ceiling_minor,
+                    version=1,
+                    author=asked.caller.principal.id,
+                    effective_from=asked.now,
+                    reason=body.reason,
+                )
+                if current is None
+                else current.superseded_by(
+                    ceiling_minor=body.ceiling_minor,
+                    author=asked.caller.principal.id,
+                    effective_from=asked.now,
+                    reason=body.reason,
+                )
+            )
+        except BudgetError:
+            await session.rollback()
+            return _refused_budget(THE_COMPANY_BUDGET_CHANGED_JUST_NOW, 409)
+        await append(session, row, ent_hash=asked.reach.ent_hash(), trace_id=trace_of_request())
+        await session.commit()
+    code, _zone = money_and_clock()
+    log.info("company budget set", principal=asked.caller.principal.id)
+    return CompanyBudgetView(
+        ceiling_minor=row.ceiling_minor,
+        currency=code,
+        version=row.version,
+        effective_from=row.effective_from,
     )

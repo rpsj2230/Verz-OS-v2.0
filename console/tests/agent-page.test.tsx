@@ -359,6 +359,29 @@ describe("where the page is reachable", () => {
     expect(currentView(mounted.container)).toBe("Profile");
   });
 
+  test("the views and the way back to the roster are links a keyboard reaches, in the order the page draws them", async () => {
+    // What breaks if this is deleted: a view or the way back drawn as something a keyboard cannot
+    // land on (a div with a click handler, or a link taken out of the tab order), which leaves a
+    // person who does not use a mouse with a page they cannot leave or move around (M39.1.2.5).
+    const mounted = await consoleAt("/agents/quote-helper", agentAnswers("quote-helper", body()));
+    const nav = mounted.container.querySelector(`nav[aria-label="${VIEWS_LABEL}"]`) as Element;
+    const views = [...nav.querySelectorAll("a")];
+    expect(views.map((one) => one.textContent)).toEqual(["Dashboard", "Profile", "About"]);
+    const roster = [...mounted.container.querySelectorAll("a")].find(
+      (one) => one.getAttribute("href") === "/agents" && !nav.contains(one),
+    );
+    if (roster === undefined) {
+      throw new Error("the page draws no link back to the roster");
+    }
+    for (const one of [roster, ...views]) {
+      expect(one.getAttribute("tabindex"), one.textContent ?? "").not.toBe("-1");
+      (one as HTMLElement).focus();
+      expect(document.activeElement).toBe(one);
+    }
+    // The roster comes before the views in the document, which is the order Tab walks them in.
+    expect(roster.compareDocumentPosition(views[0] as Element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   test("an address naming a section this reader cannot open lands where the bare address does", async () => {
     // What breaks if this is deleted: a probe for a tab ("memory", "automations" for a reader without
     // it) that answers differently from an address with no tab, which tells the prober the tab exists.

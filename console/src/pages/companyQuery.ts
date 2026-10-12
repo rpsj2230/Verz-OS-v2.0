@@ -32,6 +32,9 @@ export const ESTATE_API_PATH = "/company/estate";
 export const ACTIVITY_API_PATH = "/company/activity";
 export const CONSUMPTION_API_PATH = "/company/consumption";
 
+/** Where the company's monthly budget is set, under the API base. */
+export const COMPANY_BUDGET_API_PATH = "/company/budget";
+
 /** The console addresses. */
 export const ESTATE_PATH = "/company/estate";
 export const ACTIVITY_PATH = "/company/activity";
@@ -159,6 +162,10 @@ export type Consumption =
       readonly lines: readonly { readonly department: string; readonly spendMinor: number }[];
       readonly incomplete: boolean;
       readonly ceilingSet: boolean;
+      /** The company's monthly ceiling in minor units, sent only beside a figure, or null. */
+      readonly ceilingMinor: number | null;
+      /** Whether this reader may set the company's budget, so the form is offered to them alone. */
+      readonly maySetBudget: boolean;
     };
 
 /**
@@ -188,5 +195,7 @@ export function readConsumption(payload: unknown): Consumption | null {
     lines: body.by_department.map((one) => ({ department: one.department, spendMinor: one.spend_minor })),
     incomplete: body.incomplete === true,
     ceilingSet: body.ceiling_set === true,
+    ceilingMinor: typeof body.ceiling_minor === "number" ? body.ceiling_minor : null,
+    maySetBudget: body.may_set_budget === true,
   };
 }

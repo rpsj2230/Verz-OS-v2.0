@@ -31,6 +31,7 @@ from brain.api import API_PREFIX
 from brain.audit.view import AuditFilter
 from brain.company_routes import (
     ACTIVITY_PATH,
+    COMPANY_BUDGET_PATH,
     CONSUMPTION_PATH,
     ESTATE_PATH,
     MAX_SPEND_ROWS,
@@ -52,6 +53,7 @@ from brain.gate.context import TrafficClass
 from brain.knowledge.visibility import Visibility
 from brain.ops.jobs import NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT
 from brain.tables.agent import AgentRow
+from brain.tables.budget import BudgetVersionRow
 from brain.tables.skill import SkillRow
 from brain.tables.spend import SpendActualRow
 from tests.fixtures.console_http import Stub, console_client, get, headers
@@ -115,6 +117,7 @@ GRANTS: Mapping[str, tuple[Grant, ...]] = {
         *everywhere(read("audit"), "read:audit.*"),
     ),
     "u_wide": (*PLANES, *everywhere(read("library"))),
+    "u_elsewhere": (*PLANES, *everywhere(read("budget"), "admin:budget")),
     "u_none": (),
 }
 
@@ -191,9 +194,27 @@ def costs() -> list[SpendActualRow]:
     ]
 
 
-def answerer(spend: list[SpendActualRow]) -> Callable[[Any], Result | None]:
+def a_company_budget(ceiling_minor: int) -> BudgetVersionRow:
+    return BudgetVersionRow(
+        level="company",
+        subject="company",
+        period="month",
+        ceiling_minor=ceiling_minor,
+        version=1,
+        author="u_admin",
+        effective_from=BEGAN,
+        reason="the company's hard ceiling for the period",
+        alert_fractions=[0.75, 0.9],
+    )
+
+
+def answerer(
+    spend: list[SpendActualRow], budgets: list[BudgetVersionRow] | None = None
+) -> Callable[[Any], Result | None]:
     def answer(statement: Any) -> Result | None:
         columns = names_of(statement)
+        if columns == ["BudgetVersionRow"]:
+            return Result(budgets or [])
         if columns == ["AgentRow"]:
             return Result(AGENTS)
         if columns == ["SkillRow", "SkillReviewRow"]:
@@ -215,7 +236,9 @@ def answerer(spend: list[SpendActualRow]) -> Callable[[Any], Result | None]:
 
 @contextmanager
 def serving(
-    monkeypatch: pytest.MonkeyPatch, spend: list[SpendActualRow] | None = None
+    monkeypatch: pytest.MonkeyPatch,
+    spend: list[SpendActualRow] | None = None,
+    budgets: list[BudgetVersionRow] | None = None,
 ) -> Iterator[tuple[TestClient, Stub, Ledger]]:
     monkeypatch.setattr(company_routes, "money_and_clock", lambda: ("SGD", "UTC"))
     ledger = Ledger(rows=[stored(one) for one in chain_of(PLAN)])
@@ -223,7 +246,7 @@ def serving(
         app: Any = client.app
         app.state.audit_ledger = ledger
         app.state.people_names = Names()
-        stub.answerers.append(answerer(costs() if spend is None else spend))
+        stub.answerers.append(answerer(costs() if spend is None else spend, budgets))
         yield client, stub, ledger
 
 
@@ -532,7 +555,57 @@ def test_a_reader_of_the_budget_over_everything_is_shown_the_company_total_by_de
         DepartmentSpendView(department=MAINTENANCE, spend_minor=300),
     ]
     assert view.currency == "SGD"
-    assert view.ceiling_set is False
+    assert (view.ceiling_set, view.ceiling_minor) == (False, None)
+
+
+def test_a_company_budget_in_force_is_shown_beside_the_figure_and_never_beside_a_withheld_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The company's ceiling is read with the total and goes only to the reader the total goes to.
+    Delete this and a ceiling is either never shown, or sent to a reader whose figure is withheld,
+    which is the other half of a subtraction (M33.1.1.3)."""
+    with serving(monkeypatch, budgets=[a_company_budget(2_000)]) as (client, _stub, _ledger):
+        wide = consumption_of(client, "u_admin")
+        narrow = consumption_of(client, "u_narrow")
+
+    assert (wide.withheld, wide.spend_minor, wide.ceiling_set, wide.ceiling_minor) == (
+        False,
+        800,
+        True,
+        2_000,
+    )
+    assert (narrow.withheld, narrow.ceiling_set, narrow.ceiling_minor) == (True, False, None)
+    assert (wide.may_set_budget, narrow.may_set_budget) == (False, False)
+
+
+def test_only_a_reader_holding_the_budget_authority_over_everything_is_offered_the_form(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The consumption says who may set the budget, so the page offers the form to them alone.
+    Delete this and the form is offered to everybody who may read the figure, or to nobody."""
+    with serving(monkeypatch) as (client, _stub, _ledger):
+        holder = consumption_of(client, "u_elsewhere")
+        reader = consumption_of(client, "u_admin")
+
+    assert (holder.may_set_budget, reader.may_set_budget) == (True, False)
+
+
+def test_setting_the_companys_budget_is_refused_in_words_naming_the_role_and_never_to_a_stranger(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A reader of the budget screen without the authority is told which role would let them; a
+    reader with no budget screen is answered as there is none, the one 404, and neither writes.
+    Delete this and a refusal says nothing, or a stranger learns the budget exists."""
+    body = {"ceiling_minor": 5_000, "reason": "a test"}
+    url = f"{API_PREFIX}{COMPANY_BUDGET_PATH}"
+    with serving(monkeypatch) as (client, stub, _ledger):
+        told = client.put(url, json=body, headers=headers("u_admin"))
+        stranger = client.put(url, json=body, headers=headers("u_none"))
+
+    assert told.status_code == 403
+    assert "budget administrator" in told.json()["message"]
+    assert stranger.status_code == 404
+    assert not [one for one in stub.statements if "budget_version" in str(one)]
 
 
 def test_a_reader_whose_budget_grant_is_narrower_is_told_the_figure_is_withheld(
