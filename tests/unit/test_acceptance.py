@@ -731,6 +731,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         == NOT_RUN
     )
     assert outcomes.pop("an_embedding_is_kept_under_its_content_and_model_alone")[0] == NOT_RUN
+    # Nor a cache to keep a conversation's notes in; `tests/unit/test_acceptance_session.py` runs it
+    # with a client in memory standing in the cache's place.
+    assert outcomes.pop("session_memory_is_one_conversations_own_and_silent")[0] == NOT_RUN
     # No currency is set here, so no cost is recorded and a department's pace is withheld by
     # design; `tests/unit/test_acceptance_company_views.py` sets one and runs it.
     assert (

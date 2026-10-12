@@ -17773,10 +17773,12 @@
    "leaves": [
     "M39.1.2.2",
     "M39.1.2.4",
-    "M27.11.11"
+    "M27.11.11",
+    "M39.9.1.1"
    ],
    "proof": [
-    "M27.14.2"
+    "M27.14.2",
+    "M39.9.1.9"
    ],
    "decision": null
   },
@@ -17853,11 +17855,14 @@
     "M39.6.1.1",
     "M27.12.3",
     "M17.4.1",
-    "M39.6.2.1"
+    "M39.6.2.1",
+    "M39.9.2.1"
    ],
    "proof": [
     "M17.6.8",
-    "M27.14.5"
+    "M27.14.5",
+    "M39.9.2.5",
+    "M39.9.2.6"
    ],
    "decision": null
   },
@@ -17965,10 +17970,13 @@
    "requirement": "A person can add knowledge for an agent by extracting it from links.",
    "leaves": [
     "M39.2.3.2",
-    "M7.1.1"
+    "M7.1.1",
+    "M39.9.1.3"
    ],
    "proof": [
-    "M27.14.3"
+    "M27.14.3",
+    "M39.9.1.8",
+    "M39.9.1.9"
    ],
    "decision": null
   },
@@ -17980,10 +17988,13 @@
    "leaves": [
     "M39.2.3.2",
     "M40.3.1.2",
-    "M12.2.2"
+    "M12.2.2",
+    "M39.9.1.2"
    ],
    "proof": [
-    "M27.14.3"
+    "M27.14.3",
+    "M39.9.1.8",
+    "M39.9.1.9"
    ],
    "decision": null
   },
@@ -18635,6 +18646,44 @@
     "M32.1.2.6"
    ],
    "decision": null
+  },
+  {
+   "id": "ANY-058",
+   "source": "owner's review of the AnyGen workspace, 2026-10-12",
+   "area": "Knowledge",
+   "requirement": "An agent's Knowledge section lists what the agent draws on, says for anything a person adds whether this agent reaches it and what to do if it does not, and shows only items its reader may read.",
+   "leaves": [
+    "M39.9.1.1",
+    "M39.9.1.4",
+    "M39.9.1.5",
+    "M39.9.1.6",
+    "M39.9.1.7",
+    "M39.2.3.5"
+   ],
+   "proof": [
+    "M39.9.1.8",
+    "M39.9.1.9"
+   ],
+   "decision": "needs-rupash 176: built as the company's own document, in the agent's rule or one press to widen it; private-to-the-agent is the alternative the owner may choose"
+  },
+  {
+   "id": "ANY-059",
+   "source": "owner's review of the AnyGen workspace, 2026-10-12",
+   "area": "Workflows",
+   "requirement": "A person creates a new automation from the agent's Automations section, chooses what triggers it and an optional condition, sets what the agent does within its ceiling, and rehearses it before switching it on.",
+   "leaves": [
+    "M39.9.2.1",
+    "M39.9.2.2",
+    "M39.9.2.3",
+    "M39.9.2.4",
+    "M17.4.1",
+    "M17.4.2"
+   ],
+   "proof": [
+    "M39.9.2.5",
+    "M39.9.2.6"
+   ],
+   "decision": "needs-rupash 177: which conditions a trigger may carry, a short named list as recommended"
   }
  ]
 }

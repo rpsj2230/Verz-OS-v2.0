@@ -1,6 +1,6 @@
 """The company-wide publication check: registered, passing on a real schema, and able to fail.
 
-Task ids: M33.1.2.1
+Task ids: M33.1.2.1, M13.8.4
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from tests.unit.test_acceptance import at_head, checks_in, counts
 
 MODULE = "brain.ops.acceptance_checks_publication"
 NAME = "a_second_person_publishes_an_agent_company_wide_and_retires_it"
+ONLY = "only_the_company_visibility_holder_publishes_and_retires"
 
 
 def run_checks(url: str, checks: Sequence[Check]) -> dict[str, tuple[str, str]]:
@@ -46,9 +47,10 @@ def mine() -> dict[str, Check]:
 
 def test_the_publication_check_is_listed_with_the_leaf_it_proves() -> None:
     """Delete this and the check can drop out of the module, or close a leaf it does not prove."""
-    assert checks_in(MODULE) == [NAME]
+    assert checks_in(MODULE) == [NAME, ONLY]
     assert MODULE in check_modules()
     assert mine()[NAME].leaves == ("M33.1.2.1",)
+    assert mine()[ONLY].leaves == ("M13.8.4",)
 
 
 @pytest.mark.needs_db
@@ -114,3 +116,30 @@ def test_the_publication_check_fails_where_the_product_is_broken(
     with at_head(f"brain_acceptance_publication_{broken}") as url:
         outcome = run_checks(url, (mine()[NAME],))
     assert outcome[NAME] == (FAILED, getattr(module, reason))
+
+
+@pytest.mark.needs_db
+def test_on_a_real_database_only_the_visibility_holder_publishes_and_retires() -> None:
+    """**The second check as the worker runs it.** Delete this and M13.8.4 closes on a check that
+    can never pass on a real schema, or that leaves an agent behind on the owner's install."""
+    with at_head("brain_acceptance_publication_only") as url:
+        before = counts(url)
+        outcome = run_checks(url, (mine()[ONLY],))
+        after = counts(url)
+    assert outcome == {ONLY: (PASSED, "")}
+    assert after == before
+
+
+@pytest.mark.needs_db
+def test_the_check_fails_where_a_department_administrator_may_publish_company_wide(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The visibility authority given to every reader, in the route and in the move it writes.
+    Delete this and M13.8.4 closes on a publication any administrator of a department may make."""
+    import brain.ops.acceptance_checks_publication as module
+
+    _lifecycle_publishes(monkeypatch)
+    _steward_may_publish(monkeypatch)
+    with at_head("brain_acceptance_publication_only_broken") as url:
+        outcome = run_checks(url, (mine()[ONLY],))
+    assert outcome[ONLY] == (FAILED, module.A_DEPARTMENT_ADMIN_PUBLISHED)

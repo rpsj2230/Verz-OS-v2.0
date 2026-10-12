@@ -5,7 +5,7 @@ up for the run connected, read as it was and then read with the ticket's status 
 and every table it writes holds afterwards what it held before. Then it is run against the product
 broken where it proves, and each break fails it with its own sentence.
 
-Task ids: M11.8.7
+Task ids: M11.8.7, M11.8.9
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ def mine() -> dict[str, Check]:
 def test_the_check_is_registered_with_the_leaf_it_proves() -> None:
     """Delete this and the check can close a leaf it does not exercise, or name an id no task
     has."""
-    assert {name: one.leaves for name, one in mine().items()} == {NAME: ("M11.8.7",)}
+    assert {name: one.leaves for name, one in mine().items()} == {NAME: ("M11.8.7", "M11.8.9")}
     wbs = json.loads((ROOT / "docs" / "wbs.json").read_text(encoding="utf-8"))
     leaves = {one for m in wbs["modules"] for one in m["leaf_ids"]}
     assert set(mine()[NAME].leaves) <= leaves

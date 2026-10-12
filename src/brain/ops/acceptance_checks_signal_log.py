@@ -15,7 +15,7 @@ word was really there to be copied. See `A_PLANTED_WORD_IS_LOOKED_FOR_IN_EVERY_C
 A retrieval is not checked here: `ops.retrieval_event` (migration `0193`) keeps M15.3.4's log, and
 its own check proves it.
 
-Task ids: M16.2.8, M9.2.4
+Task ids: M16.2.8, M9.2.4, M16.2.1
 """
 
 from __future__ import annotations
@@ -53,6 +53,11 @@ NO_REASK_KEPT: Final = (
     "a question asking the thread's last one again in different words was not kept as a signal "
     "naming the earlier answer, at the trace it was asked on"
 )
+#: A question asked again after the window had closed was kept as a re-ask.
+A_REASK_AFTER_THE_WINDOW_WAS_KEPT: Final = (
+    "a question asking the thread's last one again after the window had closed was kept as a "
+    "re-ask of the answer before it"
+)
 #: A question on another subject was kept as a re-ask.
 AN_UNRELATED_QUESTION_WAS_A_REASK: Final = (
     "a question on another subject was kept as a re-ask of the answer before it"
@@ -84,9 +89,11 @@ async def _asked(
     question: str,
     thread: str | None,
     n: int,
+    later: timedelta = timedelta(0),
 ) -> tuple[Answered, str | None, str]:
     """One question through `/answer`'s own function, kept as the route keeps it, at its own
-    trace: the answer, the thread it was kept in, and the trace."""
+    trace: the answer, the thread it was kept in, and the trace. `later` is how long after the
+    wall clock the question is taken to have been asked, which is how a window is crossed."""
     from brain.api_routes import Answering, Question, answered_for, remembered
     from brain.gate.answer import Answered
     from brain.gate.context import Channel, open_trace
@@ -97,7 +104,7 @@ async def _asked(
         principal=asking.caller.principal,
         reach=asking.reach,
         channel=Channel.CONSOLE,
-        now=asking.now,
+        now=asking.now + later,
     )
     ask = Question(question=question, thread=thread)
     request = _request(app)
@@ -177,18 +184,18 @@ async def _written_as(h: Harness, writer: str, owner: str, thread: str, answer: 
 
 # ------------------------------------------------- 1. a re-ask and a correction (M16.2.8, M9.2.4)
 @check(
-    leaves=("M16.2.8", "M9.2.4"),
+    leaves=("M16.2.8", "M9.2.4", "M16.2.1"),
     sentence=(
         "A member of acceptance_a asks a question with a planted word, asks it again in other "
         "words, asks about something else and marks the last answer wrong: the re-ask and the "
-        "correction are two signals naming their answers, the other question is none, no signal "
-        "holds the planted word, acceptance_b can neither read nor write one, and signals are "
-        "counted by kind and never per person."
+        "correction are two signals naming their answers, the other question is none, nor is a "
+        "re-ask after the window, none holds the planted word, acceptance_b reaches none, and "
+        "signals are counted by kind alone."
     ),
 )
 async def a_reask_and_a_correction_are_logged_by_id_and_never_in_words(h: Harness) -> None:
     from brain.chat.turns import CorrectionKind
-    from brain.memory.signals import Signal
+    from brain.memory.signals import REASK_WINDOW, Signal
     from brain.ops.acceptance_checks import _in
     from brain.ops.acceptance_threads import _asking, _request, _web
     from brain.ops.signal_store import StoredSignals
@@ -204,7 +211,8 @@ async def a_reask_and_a_correction_are_logged_by_id_and_never_in_words(h: Harnes
     planted, subject = h.word(), h.word()
     first = f"How many hours are left on the {subject} retainer {planted}"
     again = f"What is the remaining hours balance for the {subject} retainer"
-    elsewhere = f"Who approved the {h.word()} invoice last week"
+    other_subject = h.word()
+    elsewhere = f"Who approved the {other_subject} invoice last week"
     _, thread, _ = await _asked(h, app, member, first, None, 1)
     if thread is None:
         raise CheckFailedError("an answered question was kept in no thread")
@@ -244,6 +252,14 @@ async def a_reask_and_a_correction_are_logged_by_id_and_never_in_words(h: Harnes
     rows = await _rows_as_text(h, member, "mem.signal")
     if len(rows) != 2 or any(planted.lower() in one.lower() for one in rows):
         raise CheckFailedError(WORDS_IN_A_SIGNAL)
+
+    # The window: the last question asked again in other words, after ten minutes and a minute,
+    # is a new question and not a re-ask, so nothing more is kept.
+    before_window = len(await signals.own(member))
+    paraphrase = f"Which person approved the {other_subject} invoice last week please"
+    await _asked(h, app, member, paraphrase, thread, 4, later=REASK_WINDOW + timedelta(minutes=1))
+    if len(await signals.own(member)) != before_window:
+        raise CheckFailedError(A_REASK_AFTER_THE_WINDOW_WAS_KEPT)
 
     if await signals.own(other) or await _written_as(h, other, member, thread, answers[1]):
         raise CheckFailedError(ANOTHER_PERSON_REACHED_A_SIGNAL)

@@ -7,7 +7,7 @@ policies, and the check fails with the sentence written for that property.
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M16.2.8, M9.2.4
+Task ids: M16.2.8, M9.2.4, M16.2.1
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ def test_the_signal_log_check_is_listed_with_its_leaves_in_page_order() -> None:
     assert MODULE in check_modules()
     assert checks_in(MODULE) == [LOGGED]
     assert [(one.name, one.leaves) for one in registered((MODULE,))] == [
-        (LOGGED, ("M16.2.8", "M9.2.4")),
+        (LOGGED, ("M16.2.8", "M9.2.4", "M16.2.1")),
     ]
     assert module.CHECK_ORDER == 442
 
@@ -110,6 +110,19 @@ def _every_question_a_reask(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(thread_store, "is_reask", lambda *args, **kwargs: True)
 
 
+def _the_window_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The detector judging the words and never how long ago the earlier question was asked."""
+    from datetime import timedelta
+
+    from brain.chat import thread_store
+    from brain.memory.signals import is_reask as real
+
+    def timeless(earlier: str, later: str, **kwargs: Any) -> bool:
+        return real(earlier, later, **{**kwargs, "apart": timedelta(0)})
+
+    monkeypatch.setattr(thread_store, "is_reask", timeless)
+
+
 def _correction_feeds_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
     from brain.chat import thread_store
 
@@ -161,6 +174,7 @@ BREAKS: Final[dict[str, tuple[Callable[[pytest.MonkeyPatch], None], str, str]]] 
         LOGGED,
         "AN_UNRELATED_QUESTION_WAS_A_REASK",
     ),
+    "window_ignored": (_the_window_ignored, LOGGED, "A_REASK_AFTER_THE_WINDOW_WAS_KEPT"),
     "correction_feeds_nothing": (_correction_feeds_nothing, LOGGED, "NO_CORRECTION_KEPT"),
     "question_copied": (_the_question_copied_into_the_signal, LOGGED, "WORDS_IN_A_SIGNAL"),
     "counted_per_person": (_counted_per_person, LOGGED, "COUNTED_BY_PERSON"),
@@ -176,9 +190,9 @@ def test_each_check_fails_where_the_product_is_broken(
     broken: str,
 ) -> None:
     """One break per property, each failing the check with its own sentence: no re-ask kept,
-    every follow-up kept as one, a correction that feeds nothing, the question's words copied
-    into a signal, and signals counted per person. Delete this and the check can pass with any of
-    those properties gone."""
+    every follow-up kept as one, a window that is never closed, a correction that feeds
+    nothing, the question's words copied into a signal, and signals counted per person. Delete
+    this and the check can pass with any of those properties gone."""
     import brain.ops.acceptance_checks_signal_log as module
 
     setup, name, reason = BREAKS[broken]
