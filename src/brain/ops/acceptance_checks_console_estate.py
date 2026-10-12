@@ -96,10 +96,12 @@ async def the_library_lists_every_department_with_each_items_reach(h: Harness) -
         "all": await a_document(h, whole, "all", visibility="company", department=None),
     }
     request = _request(_app(h))
-    if not await _refused(library(request, await _asking(h, nobody), ListAsked(limit=200))):
+    # Only the check's own documents, found by their references, whatever else the install holds.
+    ours = ListAsked(search=f"acceptance-{h.run}", limit=200)
+    if not await _refused(library(request, await _asking(h, nobody), ours)):
         raise CheckFailedError("the library was shown to a person without the screen")
 
-    page = await library(request, await _asking(h, whole), ListAsked(limit=200))
+    page = await library(request, await _asking(h, whole), ours)
     levels = {one.item_id: one.level.value for one in page.items}
     if not set(mine.values()) <= set(levels):
         if page.truncated:
@@ -112,7 +114,7 @@ async def the_library_lists_every_department_with_each_items_reach(h: Harness) -
     ):
         raise CheckFailedError("the library did not say how widely each document reaches")
 
-    seen = await library(request, await _asking(h, narrow), ListAsked(limit=200))
+    seen = await library(request, await _asking(h, narrow), ours)
     shown = {one.item_id for one in seen.items}
     if mine["a"] not in shown or mine["b"] in shown or mine["all"] in shown:
         raise CheckFailedError("a reader of one department was shown another's documents")
