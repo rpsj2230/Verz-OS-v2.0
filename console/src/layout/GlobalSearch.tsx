@@ -7,12 +7,15 @@
  * that matches leave no group, so the one sentence for both is "Nothing matches", and there is no
  * count and no "more" anywhere.
  *
- * The query waits a moment after the last key so one word is one request, is at least two
- * characters (the route refuses fewer), and Escape clears the box.
+ * The header shows a Search button, and the box opens when it is pressed: no input sits on every
+ * page for a page's own search to be mistaken for. The query waits a moment after the last key so
+ * one word is one request, is at least two characters (the route refuses fewer), and Escape
+ * clears and closes the box.
  *
  * Task ids: M27.10.5
  */
 
+import { Search } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { Link } from "react-router-dom";
 import { request } from "../api/client";
@@ -70,6 +73,7 @@ export function searchPath(query: string): string {
 
 export function GlobalSearch() {
   const id = useId();
+  const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState("");
   const [found, setFound] = useState<readonly SearchGroup[] | null>(null);
   const query = typed.trim();
@@ -94,9 +98,25 @@ export function GlobalSearch() {
     };
   }, [query]);
 
+  if (!open) {
+    return (
+      <button
+        type="button"
+        data-slot="global-search"
+        aria-label={SEARCH_LABEL}
+        className="button inline-flex items-center gap-1"
+        onClick={() => {
+          setOpen(true);
+        }}
+      >
+        <Search aria-hidden className="size-4" />
+      </button>
+    );
+  }
   return (
     <div data-slot="global-search" className="relative min-w-0">
       <input
+        autoFocus
         id={id}
         type="search"
         role="searchbox"
@@ -109,6 +129,7 @@ export function GlobalSearch() {
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             setTyped("");
+            setOpen(false);
           }
         }}
         className="h-8 w-48 rounded-md border border-line bg-surface px-2 text-[13px] text-ink md:w-64"

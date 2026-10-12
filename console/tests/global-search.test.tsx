@@ -43,6 +43,12 @@ async function consoleWith(search: unknown) {
 }
 
 async function typed(container: HTMLElement, text: string) {
+  const opener = container.querySelector("button[data-slot='global-search']");
+  if (opener !== null) {
+    await act(async () => {
+      fireEvent.click(opener);
+    });
+  }
   const box = container.querySelector(`input[aria-label='${SEARCH_LABEL}']`) as HTMLInputElement;
   await act(async () => {
     fireEvent.change(box, { target: { value: text } });
