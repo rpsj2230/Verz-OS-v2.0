@@ -1352,6 +1352,7 @@ def test_the_cascade_is_reached_by_the_worker_run_and_by_nothing_on_the_request_
 
     assert sorted(importers) == [
         "ops/acceptance_checks_calibration.py",
+        "ops/acceptance_checks_er_cascade.py",
         "ops/acceptance_checks_matching.py",
     ]
 

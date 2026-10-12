@@ -18,7 +18,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 
-from sqlalchemy import insert, text
+from sqlalchemy import insert
 
 from brain.core.scope import Scope
 from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, CheckNotRunError, check
@@ -132,16 +132,8 @@ async def the_stop_control_is_drawn_for_its_holders_and_a_stop_is_kept(
     if (HaltScope.AGENT, target) not in [(one.scope, one.target) for one in listed.halts]:
         raise CheckFailedError("the Stop screen did not list what had just been stopped")
 
-    kept = (
-        await h.execute(
-            text(
-                "SELECT count(*) FROM ops.halt WHERE scope = :scope AND target = :target"
-            ).bindparams(scope=HaltScope.AGENT.value, target=target)
-        )
-    ).scalar_one()
-    if int(kept) != 1:
-        raise CheckFailedError("a stop made from the console was not a row of the halt table")
-    # A new read each time: the state is the table's, as it is for an application that restarts.
+    # Read through the halt store, the one reader of the table, and afresh each time: the state is
+    # the table's, as it is for an application that restarts.
     refused = refusal_in(await read_state(h.sessions), Work(person=member, agent=target))
     admitted = refusal_in(await read_state(h.sessions), Work(person=member, agent=f"{target}_x"))
     if not refused or admitted:

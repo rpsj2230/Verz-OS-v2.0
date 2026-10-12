@@ -278,8 +278,16 @@ def test_the_sequence_is_assembled_here_and_run_from_the_store_the_worker_and_th
     assert call_sites("brain.knowledge.embed_policy:dimension_gaps") == ("brain.knowledge.embed",)
     assert call_sites("brain.knowledge.embed_policy:question_vector") == ("brain.knowledge.embed",)
     assert call_sites("brain.knowledge.embed:embed_units") == ("brain.knowledge.chunk_store",)
-    assert call_sites("brain.knowledge.chunk_store:run_embed_job") == ("brain.ops.worker",)
-    assert call_sites("brain.knowledge.embed:embed_question") == ("brain.knowledge.document_tools",)
+
+    # An install check calls the same two entry points to prove them on the install, which is a
+    # caller of a different kind: it does not decide when anything runs, so it is not counted.
+    def product_callers(symbol: str) -> tuple[str, ...]:
+        return tuple(one for one in call_sites(symbol) if ".acceptance_checks_" not in one)
+
+    assert product_callers("brain.knowledge.chunk_store:run_embed_job") == ("brain.ops.worker",)
+    assert product_callers("brain.knowledge.embed:embed_question") == (
+        "brain.knowledge.document_tools",
+    )
 
 
 def test_the_report_names_a_step_and_what_it_needs_rather_than_counting_them() -> None:
