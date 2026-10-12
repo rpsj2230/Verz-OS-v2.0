@@ -73,7 +73,7 @@ rate limit, so the run needs one sign-in token for each of several test people (
 "Before you start" are two; more spread the load). I give you the steps for getting each token when you
 choose A.
 
-**Option A: run it, small first.** One run of two hundred requests (about eighty seconds, about one
+**Option A: run it, small first.** One run of two hundred requests (a hundred seconds, about one
 hundred and sixty model calls) to see the figures, then the full run if they hold, at a time you choose.
 
 **Option B: not now.** The task stays open and is run when the install has real traffic to compare with.
