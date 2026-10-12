@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-12T16:20:20.927676+00:00",
-  "commit": "a909f9ee",
-  "commit_subject": "An approval card names its agent, an agent's page lists only the cards its reader could decide, and every artifact download is on the ledger (M27) (#528)",
+  "generated_at": "2026-10-12T16:35:37.860621+00:00",
+  "commit": "77911560",
+  "commit_subject": "Roles and administration proved on an install, clause by clause (M27.15.3) (#532)",
   "total": 1611,
   "done": 831,
   "percent": 51.6,
