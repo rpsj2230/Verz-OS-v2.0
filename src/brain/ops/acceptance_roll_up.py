@@ -68,11 +68,8 @@ A_ROLL_UP_READS_THIS_RUN_AND_NO_OTHER: Final = (
 ROLL_UP_LEAVES: Final[frozenset[str]] = frozenset(
     {
         "M14.8.1",
-        "M14.8.2",
         "M16.7.7",
         "M16.7.8",
-        "M16.7.9",
-        "M16.7.11",
         "M28.5.1",
         "M28.5.2",
         "M28.5.3",
