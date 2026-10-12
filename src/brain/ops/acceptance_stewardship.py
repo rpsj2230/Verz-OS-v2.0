@@ -80,7 +80,7 @@ SELF_GRANT_REASON: Final = "An install acceptance check grants itself this to se
 
 
 @check(
-    leaves=("M7.7.2",),
+    leaves=("M7.7.2", "M27.5.5"),
     sentence=(
         "A source's administrator names a reader of its invoices its steward, and the ledger "
         "records it; a person who cannot reach it, or is not here, cannot be named. Somebody "
