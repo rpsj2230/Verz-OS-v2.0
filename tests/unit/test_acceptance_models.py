@@ -20,7 +20,7 @@ wrongly has not answered.
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M38.5.1, M3.6.3, M5.7.1, M5.6.1, M5.6.3, M38.2.2.2
+Task ids: M38.5.1, M3.6.3, M5.7.1, M5.6.1, M5.6.3, M38.2.2.2, M27.15.6
 """
 
 from __future__ import annotations
@@ -93,7 +93,7 @@ def test_each_provider_has_its_own_check_for_each_leaf_and_the_rest_follow() -> 
         *((f"the_{one}_provider_answers_the_models_screen_test", ("M5.7.1",)) for one in PROVIDERS),
         *((f"a_question_is_answered_end_to_end_via_{one}", ("M5.6.1",)) for one in PROVIDERS),
         ("a_step_that_cannot_be_reached_falls_back_to_the_next", ("M5.6.3",)),
-        ("a_request_row_holds_the_route_it_was_given", ("M3.6.3",)),
+        ("a_request_row_holds_the_route_it_was_given", ("M3.6.3", "M27.15.6")),
         ("a_console_question_is_answered_from_the_askers_department_only", ("M38.2.2.2",)),
     ]
 
@@ -397,6 +397,28 @@ def test_a_model_that_answers_wrongly_fails_the_console_check(providers: Provide
     assert outcomes["a_console_question_is_answered_from_the_askers_department_only"] == (
         FAILED,
         "the answer did not say what the asker's own document says",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_recorder_that_times_nothing_fails_the_route_check_saying_so(
+    providers: Providers, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """M27.15.6 against the product broken: the recorder naming no time for any step leaves a
+    request row with no stage map, and the route check says that, rather than passing on a row
+    that holds its route and nothing about where its time went.
+
+    Delete this and the stage map can stop being written, or the route check stop reading it,
+    with the whole module green."""
+    from brain.gate.context import Recorder
+
+    monkeypatch.setattr(Recorder, "stage_ms", lambda self, until: None)
+    with at_head("brain_acceptance_models_untimed") as url:
+        laddered(url)
+        outcomes = run_models(url)
+    assert outcomes["a_request_row_holds_the_route_it_was_given"] == (
+        FAILED,
+        "a request row did not say how long each gate step took",
     )
 
 

@@ -122,6 +122,7 @@ MIGRATION_SERVICE_ACCOUNTS = VERSIONS / "0095_service_accounts_and_partner_reach
 MIGRATION_MODEL_REGISTRY = VERSIONS / "0097_model_registry_and_matrix_gate.py"
 MIGRATION_GATE_FRONT_HALF = VERSIONS / "0100_gate_front_half.py"
 MIGRATION_REQUEST_ROUTE = VERSIONS / "0113_request_route.py"
+MIGRATION_REQUEST_STAGES = VERSIONS / "0219_request_reasoning_and_stages.py"
 MIGRATION_ACCESS_REQUEST = VERSIONS / "0101_access_request.py"
 MIGRATION_SENSITIVE_READ = VERSIONS / "0098_sensitive_reads_and_budget_audit.py"
 MIGRATION_REQUIREMENT_CHECK = VERSIONS / "0099_requirement_check.py"
@@ -2596,6 +2597,38 @@ def test_0113_adds_the_route_columns_nullable_on_0108_and_drops_them_on_the_way_
         assert table("obs.request_telemetry").columns[column].nullable
         assert f"ALTER TABLE obs.request_telemetry DROP COLUMN {column}" in down
     assert check_file(MIGRATION_REQUEST_ROUTE) == []
+
+
+# ------------------------------------------------------------------ 0219, reasoning and stages
+def test_0219_copies_its_two_checks_from_the_model() -> None:
+    """The migration's copied predicates are the model's, for the object check on `stage_ms` and
+    the non-negative check on `reasoning_tokens`.
+
+    Delete this and the model and the database disagree about what a stage map may be, and the
+    first row carrying one is refused at write time, losing the request's whole record."""
+    stages = migration_module(MIGRATION_REQUEST_STAGES)
+    found = checks("obs.request_telemetry")
+    assert found["ck_request_telemetry_stage_ms_object"] == stages.STAGE_MS_OBJECT
+    assert (
+        found["ck_request_telemetry_reasoning_tokens_not_negative"] == stages.REASONING_NOT_NEGATIVE
+    )
+
+
+def test_0219_adds_both_columns_nullable_and_drops_them_on_the_way_down() -> None:
+    """Nullable, because every row written before 0219 has neither; the downgrade takes both away
+    and the file passes the policy.
+
+    Delete this and a required column is added to a populated ledger, or the downgrade leaves a
+    column no release reads."""
+    stages = migration_module(MIGRATION_REQUEST_STAGES)
+    assert stages.revision == "0219"
+    up = squash(rendered("upgrade", MIGRATION_REQUEST_STAGES))
+    down = squash(rendered("downgrade", MIGRATION_REQUEST_STAGES))
+    for column in ("reasoning_tokens", "stage_ms"):
+        assert f"ALTER TABLE obs.request_telemetry ADD COLUMN {column}" in up
+        assert table("obs.request_telemetry").columns[column].nullable
+        assert f"ALTER TABLE obs.request_telemetry DROP COLUMN {column}" in down
+    assert check_file(MIGRATION_REQUEST_STAGES) == []
 
 
 # ------------------------------------------------------------------ 0101, access requests

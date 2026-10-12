@@ -57,7 +57,7 @@ import asyncio
 import uuid
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Final, Protocol, runtime_checkable
 
 import structlog
@@ -462,7 +462,7 @@ class ChatAnswerer:
         except ValidationError:
             return ChatReply(TOO_LONG_TOLD, ChannelPayload(), Classification.INTERNAL, False)
         trace = trace_of_request() or f"chat-{uuid.uuid4().hex[:16]}"
-        recorder = open_trace(trace, now, channel)
+        recorder = open_trace(trace, now, channel, clock=lambda: datetime.now(UTC))
         outcome = await answered_for(
             self._request,
             recorder,

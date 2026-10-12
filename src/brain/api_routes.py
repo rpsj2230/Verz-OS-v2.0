@@ -1649,7 +1649,7 @@ async def recorded_at_ingress(request: Request) -> AsyncIterator[Recorder]:
     del request
     trace_id = str(structlog.contextvars.get_contextvars().get("trace_id", ""))
     # See AN_ARRIVAL_IS_RECORDED_BEFORE_ITS_CHANNEL_IS_KNOWN.
-    recorder = open_trace(trace_id, datetime.now(UTC), Channel.API)
+    recorder = open_trace(trace_id, datetime.now(UTC), Channel.API, clock=lambda: datetime.now(UTC))
     try:
         yield recorder
     finally:
