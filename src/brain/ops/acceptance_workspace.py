@@ -1648,6 +1648,7 @@ def _leash_tools() -> tuple[Any, Any, Any]:
         "M39.3.2.5",
         "M39.8.2",
         "M39.8.3",
+        "M27.15.29",
     ),
     sentence=(
         "One action runs simulated at Shadow, suspends at Assisted and proceeds at Autonomous "

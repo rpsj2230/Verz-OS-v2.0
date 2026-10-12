@@ -508,7 +508,7 @@ async def a_service_account_key_is_shown_once_rotated_and_revoked(h: Harness) ->
 
 # --------------------------------------------------------- 8. certification and lists (M27.15.21)
 @check(
-    leaves=("M27.15.21",),
+    leaves=("M27.15.21", "M27.13.7"),
     sentence=(
         "An administrator of acceptance_a takes the access certification report: it is recorded "
         "under them and carries their member's grant, nothing of acceptance_b and no line about "
