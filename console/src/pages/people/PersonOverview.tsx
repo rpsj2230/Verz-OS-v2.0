@@ -41,6 +41,7 @@ import {
 } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { agentAddress } from "../agents/AgentsPage";
+import { AUTOMATIONS_API_PATH, automationAddress } from "../automations/automationsQuery";
 import { StatePill } from "../agents/pills";
 import { dayWords } from "../access/formParts";
 import { DEPARTMENT_SET_ON_PEOPLE, EDITED_AT_THE_SOURCE } from "./peopleActions";
@@ -53,6 +54,7 @@ import {
   TRANSFERS_API_PATH,
   aboutPerson,
   readOwnedAgents,
+  readOwnedAutomations,
   readWaiting,
   transferApiPath,
   type PersonDetail,
@@ -61,6 +63,8 @@ import {
 
 export const ABOUT_HEADING = "About";
 export const STEWARDS_HEADING = "Agents they steward";
+export const AUTOMATIONS_OWNED_HEADING = "Automations they own";
+export const NO_AUTOMATIONS_OWNED = "No automation you may open runs as them.";
 export const NO_AGENTS_STEWARDED = "No agent you may open has them as its steward.";
 export const TAKE_ON = "Take it on";
 export const HAND_ON = "Hand on";
@@ -118,6 +122,40 @@ function TakeOn({ waiting, onTaken }: { readonly waiting: Waiting; readonly onTa
         }}
       />
     </>
+  );
+}
+
+/** The automations that run as this person, from the automations list filtered by who they run as. */
+function OwnedAutomations({ principalId }: { readonly principalId: string }) {
+  const found = useResource<unknown>(aboutPerson(AUTOMATIONS_API_PATH, "owner_id", principalId));
+  const owned = readOwnedAutomations(found.data);
+  let body;
+  if (found.failure !== null) {
+    body = <FailureState failure={found.failure} />;
+  } else if (found.data === null) {
+    body = <LoadingState label="Loading the automations they own." rows={2} />;
+  } else if (owned.length === 0) {
+    body = <p className="m-0 text-[13px] text-dim">{NO_AUTOMATIONS_OWNED}</p>;
+  } else {
+    body = (
+      <ul data-slot="owned-automations" className="m-0 flex list-none flex-col divide-y divide-line p-0">
+        {owned.map((one) => (
+          <li key={one.automationId} className="flex flex-wrap items-center justify-between gap-2 py-2">
+            <Link to={automationAddress(one.automationId)} className="font-medium text-ink underline-offset-4 hover:underline [overflow-wrap:anywhere]">
+              {one.name}
+            </Link>
+            <span className="text-[12px] text-dim">
+              {one.agentName} · {one.state}
+            </span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  return (
+    <SectionCard title={AUTOMATIONS_OWNED_HEADING} lede="Scheduled work that runs as this person, on agents you may open.">
+      {body}
+    </SectionCard>
   );
 }
 
@@ -249,6 +287,7 @@ export function PersonOverview({
         {detail.mayAddWorkEmail ? <WorkEmail principalId={person.principalId} onDone={onWorkEmail} /> : null}
       </SectionCard>
       <Stewarded principalId={person.principalId} />
+      <OwnedAutomations principalId={person.principalId} />
       <Advanced>
         <FactList>
           <Fact label="Person id">

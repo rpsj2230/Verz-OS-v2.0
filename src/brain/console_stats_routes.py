@@ -261,6 +261,28 @@ class ProjectionView(BaseModel):
     over_ceiling: bool
 
 
+class RecentRunView(BaseModel):
+    """One request that chose this agent: who asked, how it ended and how long it took.
+
+    **Only the runs the reader is counted over**: on the narrower basis these are the reader's own
+    and nobody else's reach this process, so a list carries no row that stands for somebody the
+    reader may not be told of, and no count of those left off. `status` is the request's own word
+    and a refusal and an absence are the one word, `nothing_returned`, for the reason
+    `brain.console.entity_stats.A_REFUSAL_AND_AN_ABSENCE_ARE_ONE_FIGURE` gives. The text of the
+    question and of the answer are never here: a run's list is its fact and not its content.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    at: datetime
+    principal_id: str
+    name: str | None = None
+    status: str
+    duration_ms: float
+    #: A person sent it, as against an automation or the system's own run.
+    by_a_person: bool = True
+
+
 class AgentStatsView(BaseModel):
     """One agent's figures, and whose they are.
 
@@ -281,6 +303,9 @@ class AgentStatsView(BaseModel):
     periods: list[AgentPeriodView]
     unrecorded: list[UnrecordedView]
     projection: ProjectionView | None = None
+    #: The newest runs the reader is counted over, newest first, at most `RECENT_RUNS_SHOWN`
+    #: (M27.15.27). Empty for an agent nobody the reader may be told of has asked.
+    recent: list[RecentRunView] = []
 
 
 class SkillPeriodView(BaseModel):
@@ -642,6 +667,33 @@ def channel_bindings(channel: Channel, *, basis: Basis, caller_id: str) -> Selec
     return statement.distinct()
 
 
+#: How many of an agent's newest runs its Dashboard lists. A bound on what one page draws; the
+#: figures above it are counted over every run read.
+RECENT_RUNS_SHOWN: Final = 20
+
+
+def recent_runs(
+    runs: Sequence[Run], names: Mapping[str, str], *, shown: int = RECENT_RUNS_SHOWN
+) -> list[RecentRunView]:
+    """The newest of these runs, newest first, as the Dashboard lists them.
+
+    The runs are `agent_requests`' rows already narrowed to the reader's basis in the statement,
+    so nothing is dropped here and nothing is counted: this only orders and cuts.
+    """
+    newest = sorted(runs, key=lambda one: one.at, reverse=True)[:shown]
+    return [
+        RecentRunView(
+            at=one.at,
+            principal_id=one.principal_id,
+            name=names.get(one.principal_id),
+            status=one.status.value,
+            duration_ms=one.duration_ms,
+            by_a_person=one.by_a_person,
+        )
+        for one in newest
+    ]
+
+
 # ---------------------------------------------------------------------------- the wiring
 async def _agent_runs(
     session: AsyncSession, agent_id: str, since: datetime, *, basis: Basis, caller_id: str
@@ -778,11 +830,10 @@ async def agent_stats(request: Request, agent_id: Named, asked: Asked) -> AgentS
         runs = await _agent_runs(session, agent_id, since, basis=basis, caller_id=caller_id)
         costs = (await session.execute(spend_for(agent_id, since))).scalars().all()
         spend: list[Actual] = [one for one in (actual_of(row) for row in costs) if one is not None]
+        named = {one.principal_id for one in spend} | {one.principal_id for one in runs}
         names = await steward_names(
             session,
-            sorted({one.principal_id for one in spend})
-            if cost_basis is Basis.EVERYONE
-            else [caller_id],
+            sorted(named) if Basis.EVERYONE in (basis, cost_basis) else [caller_id],
         )
         ceiling = await in_force(
             session, (BudgetLevel.AGENT, agent_id, BudgetPeriod.MONTH), asked.now
@@ -813,6 +864,7 @@ async def agent_stats(request: Request, agent_id: Named, asked: Asked) -> AgentS
             now=asked.now,
             recorded=recorded,
         ),
+        recent=recent_runs(runs, names),
         unrecorded=_unrecorded(
             ()
             if recorded

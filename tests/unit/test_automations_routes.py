@@ -269,6 +269,10 @@ def test_the_list_is_every_automation_on_the_agents_a_reader_may_see_and_no_coun
     assert set(listing(client, "u_admin").json()) == {"items", "next_cursor"}
     assert listing(client, "u_wide").json()["items"] == []
     assert set(rows(client, "u_admin", "?filter=state:ownerless")) == {"auto_gone"}
+    # M27.15.18: a person's page asks for the automations they own by their id, which the rows
+    # never carry: the filter reads a field excluded from the body.
+    assert set(rows(client, "u_admin", "?filter=owner_id:u_narrow")) == {"auto_one"}
+    assert rows(client, "u_admin", "?filter=owner_id:u_nobody") == {}
 
 
 def test_no_module_read_a_hidden_automation_and_a_missing_one_are_one_answer(
