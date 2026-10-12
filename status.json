@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-12T14:25:02.051501+00:00",
-  "commit": "0c457bb6",
-  "commit_subject": "Needs page items 194 to 196: the peak load run, deduplication across a record and a passage, the React Flow task (#527)",
+  "generated_at": "2026-10-12T14:39:40.116558+00:00",
+  "commit": "14663b3a",
+  "commit_subject": "Install checks for an agent's Profile and its whole life, the Memory history, the handover description and the money figures; an agent's cost is not nought where nothing is priced (#525)",
   "total": 1611,
   "done": 831,
   "percent": 51.6,
