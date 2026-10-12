@@ -315,7 +315,7 @@ export function dayWords(instant: string | undefined): string | undefined {
 }
 
 /** The verification badge in words, with a name and a day only when the API sent them. */
-export function verifiedWords(row: DocRow): string {
+export function verifiedWords(row: Pick<DocRow, "verification" | "verifiedByName" | "verifiedAt">): string {
   const named = row.verifiedByName === undefined ? "" : ` by ${row.verifiedByName}`;
   const day = dayWords(row.verifiedAt);
   const when = day === undefined ? "" : ` on ${day}`;
