@@ -83,6 +83,7 @@ import hashlib
 import json
 import re
 import secrets
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Final
 from urllib.parse import urlencode, urlsplit
@@ -249,6 +250,11 @@ class OAuthConsent:
     #: For a personal consent, the capability a person holds in the connection's department to be
     #: read anything from the source, and so to consent for themselves at all; empty otherwise.
     reader: str = ""
+    #: The setting whose comma-separated choices narrow which scopes a consent asks for, or empty
+    #: when every consent asks for all of `scopes`. See `A_SCOPE_NOT_CHOSEN_IS_NEVER_ASKED_FOR`.
+    chosen_by: str = ""
+    #: Each choice that setting may hold and the one scope it asks for, every scope one of `scopes`.
+    scope_of_choice: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         _https(self.authorize_url, "consent page")
@@ -257,6 +263,7 @@ class OAuthConsent:
             msg = f"{self.client_id_setting!r} is not a setting a client id can be typed into"
             raise ConnectorContractError(msg)
         self._reader_matches_kind()
+        self._choices_name_declared_scopes()
         if not self.scopes:
             msg = "an OAuth consent asks for at least one scope, or it can read nothing"
             raise ConnectorContractError(msg)
@@ -269,6 +276,23 @@ class OAuthConsent:
         for name, _ in self.authorize_params:
             if name in reserved:
                 msg = f"{name!r} is set by the consent itself and is not the vendor's to declare"
+                raise ConnectorContractError(msg)
+
+    def _choices_name_declared_scopes(self) -> None:
+        """A choice names a setting and a declared scope, or there are no choices at all."""
+        if bool(self.chosen_by) != bool(self.scope_of_choice):
+            msg = "a consent narrowed by a setting names the setting and what each choice asks"
+            raise ConnectorContractError(msg)
+        if self.chosen_by and not _SETTING_RE.match(self.chosen_by):
+            msg = f"{self.chosen_by!r} is not a setting a choice can be read from"
+            raise ConnectorContractError(msg)
+        names = [name for name, _ in self.scope_of_choice]
+        if len(names) != len(set(names)):
+            msg = "a consent declares one choice twice"
+            raise ConnectorContractError(msg)
+        for name, scope in self.scope_of_choice:
+            if not _SETTING_RE.match(name) or scope not in self.scopes:
+                msg = f"the choice {name!r} asks for a scope this consent does not declare"
                 raise ConnectorContractError(msg)
 
     def _reader_matches_kind(self) -> None:
@@ -396,10 +420,46 @@ def opened_verifier(state: str, sealed: str) -> ConsentStart:
         raise ConnectorContractError(msg) from None
 
 
+#: Why a consent asks only for the scopes of what the connection chose.
+A_SCOPE_NOT_CHOSEN_IS_NEVER_ASKED_FOR: Final = (
+    "A source whose services are chosen when it is connected asks a person's consent for the "
+    "scopes of those services and no others, so a service nobody chose is one this install holds "
+    "no grant to read at all, rather than one it holds a grant to and merely does not call."
+)
+
+
+def asked_scopes(consent: OAuthConsent, settings: Mapping[str, str]) -> tuple[str, ...]:
+    """The scopes a consent under these settings asks for, in the declared order, or a refusal.
+
+    Every declared scope when the consent is not narrowed by a setting; otherwise the scopes of
+    the choices the setting holds, a choice it does not declare refused, and no choice at all
+    refused, because a consent asking for nothing reads nothing. See
+    `A_SCOPE_NOT_CHOSEN_IS_NEVER_ASKED_FOR`.
+    """
+    if not consent.chosen_by:
+        return consent.scopes
+    of = dict(consent.scope_of_choice)
+    chosen = {one.strip() for one in settings.get(consent.chosen_by, "").split(",") if one.strip()}
+    unknown = sorted(chosen - set(of))
+    if unknown or not chosen:
+        msg = f"the {consent.chosen_by!r} setting holds no choice this consent can ask for"
+        raise ConnectorContractError(msg)
+    wanted = {of[one] for one in chosen}
+    return tuple(one for one in consent.scopes if one in wanted)
+
+
 def consent_address(
-    consent: OAuthConsent, *, client_id: str, redirect_uri: str, start: ConsentStart
+    consent: OAuthConsent,
+    *,
+    client_id: str,
+    redirect_uri: str,
+    start: ConsentStart,
+    scopes: tuple[str, ...] | None = None,
 ) -> str:
-    """Where the administrator is sent to consent: the vendor's page, asking with this start."""
+    """Where the person is sent to consent: the vendor's page, asking with this start.
+
+    `scopes` are the ones `asked_scopes` chose for the connection, or every declared scope.
+    """
     if not client_id.strip():
         msg = "a consent is asked for by a client id, and this one is empty"
         raise ConnectorContractError(msg)
@@ -408,7 +468,7 @@ def consent_address(
         "response_type": "code",
         "client_id": client_id,
         "redirect_uri": redirect_uri,
-        "scope": " ".join(consent.scopes),
+        "scope": " ".join(consent.scopes if scopes is None else scopes),
         "state": start.state,
         "code_challenge": start.challenge,
         "code_challenge_method": "S256",

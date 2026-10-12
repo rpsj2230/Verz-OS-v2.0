@@ -84,6 +84,7 @@ from brain.connectors.live_read import (
     read_live,
 )
 from brain.connectors.manifest import manifest_digest
+from brain.connectors.oauth import ConsentKind
 from brain.connectors.xero import ENTITY_INVOICE
 from brain.core.envelope import IdentityMode, SideEffect
 from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, CheckNotRunError, check
@@ -1001,6 +1002,13 @@ async def a_burst_is_paced_by_the_source_s_documented_ceiling(h: Harness) -> Non
             connected_at=h.now,
         )
         plan = plan_for(connection, last=None, now=h.now)
+        declared = shipped()[name]
+        if declared.oauth is not None and declared.oauth.kind is ConsentKind.PERSON:
+            # Read only live, per question, with each person's own consent (M11.7.6): the
+            # worker plans no read of it, so there is nothing of the worker's to pace.
+            if plan.refused != NO_READING:
+                raise CheckFailedError("a source each person consents to was planned for reading")
+            continue
         row = connector_ceiling(manifest.ceiling)
         if row is None:
             # Refused for its missing ceiling, or before that for having no reading at all: either
