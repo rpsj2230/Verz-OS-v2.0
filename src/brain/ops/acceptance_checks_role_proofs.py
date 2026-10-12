@@ -33,6 +33,7 @@ from __future__ import annotations
 from typing import Any, Final
 
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 
 from brain.connectors.manifest import implementable_permission_sync
 from brain.ops.acceptance import CheckFailedError, check
@@ -48,6 +49,9 @@ A_FILED_REQUEST_MOVED_THE_SECOND_CHAIN: Final = (
 )
 AN_APPROVAL_WAS_NOT_IN_THE_SECOND_CHAIN: Final = (
     "an approved elevation was not written to the elevation chain once, as break_glass"
+)
+THE_CHAIN_COULD_BE_EDITED: Final = (
+    "an entry in the elevation chain could be changed or removed by the application's own role"
 )
 THE_ENTRY_NAMED_THE_WRONG_PEOPLE: Final = (
     "the elevation chain's entry did not name the authoriser as its actor, and the partner, the "
@@ -79,6 +83,20 @@ async def _chain_rows(h: Harness, table: str, subject: str) -> list[Any]:
     return list(found.all())
 
 
+async def _refused_by_the_database(h: Harness, statement: str, subject: str) -> bool:
+    """Whether the database refused this statement about one session, as the application role.
+
+    Run in the savepoint every `Harness.execute` is, so a refusal ends that statement and leaves
+    the check's transaction usable. Nothing is written when it is refused, and a statement that
+    was not refused is undone with the transaction.
+    """
+    try:
+        await h.execute(text(statement).bindparams(subject=subject))
+    except DBAPIError:
+        return True
+    return False
+
+
 async def _outside(h: Harness, table: str) -> int:
     """How many entries of this table are not an elevation: the product's rule, install-wide."""
     found = await h.execute(
@@ -90,10 +108,10 @@ async def _outside(h: Harness, table: str) -> int:
 @check(
     leaves=("M33.7.1.3",),
     sentence=(
-        "An installing partner's elevation request is filed and written nowhere in the elevation "
-        "chain; once the authoriser approves it, the chain holds one break_glass entry for it in "
-        "the authoriser's name carrying the partner, the authoriser and the reason, the main "
-        "ledger holds the same session, and nothing but elevations is in the elevation chain."
+        "A filed elevation request writes nothing to the elevation chain; once approved, the chain "
+        "holds one break_glass entry for it in the authoriser's name, the main ledger holds its "
+        "twin, only elevations are in the chain, and the application's role cannot change or "
+        "remove an entry."
     ),
 )
 async def an_elevation_is_written_to_its_own_chain_beside_the_main_ledger(h: Harness) -> None:
@@ -127,6 +145,13 @@ async def an_elevation_is_written_to_its_own_chain_beside_the_main_ledger(h: Har
         raise CheckFailedError(AN_APPROVAL_HAD_NO_TWIN_IN_THE_MAIN_LEDGER)
     if await _outside(h, "elevation_entry"):
         raise CheckFailedError(AN_ORDINARY_ENTRY_WAS_IN_THE_SECOND_CHAIN)
+    for statement in (
+        "UPDATE obs.elevation_entry SET actor_id = actor_id WHERE subject = :subject",
+        "DELETE FROM obs.elevation_entry WHERE subject = :subject",
+    ):
+        if await _refused_by_the_database(h, statement, subject):
+            continue
+        raise CheckFailedError(THE_CHAIN_COULD_BE_EDITED)
 
 
 @check(
