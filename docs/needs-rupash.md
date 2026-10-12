@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**57 items are open: 181,** where the count of redactions on the audit screen should come from, **180,** whether an agent's parts include tools and workflows, and which kinds of memory an agent is told apart by, **179,** what the ceiling is that a leash may not be raised beyond, **178,** who may change which part of an agent, and whether a refusal names the role, **177,** which conditions an automation's trigger may carry, **176,** where a document added from an agent's own page lives, **175,** which tools the part of a model request that everybody shares may hold, **174,** whether a supervised agent's thirty-day review runs on its own each day, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**60 items are open: 196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **181,** where the count of redactions on the audit screen should come from, **180,** whether an agent's parts include tools and workflows, and which kinds of memory an agent is told apart by, **179,** what the ceiling is that a leash may not be raised beyond, **178,** who may change which part of an agent, and whether a refusal names the role, **177,** which conditions an automation's trigger may carry, **176,** where a document added from an agent's own page lives, **175,** which tools the part of a model request that everybody shares may hold, **174,** whether a supervised agent's thirty-day review runs on its own each day, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,75 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 196. Is the React Flow task closed by what it is for, as item 123 asks for the table library?
+
+**In plain terms:** task M32.5.2.3 says the trace graph and the procedure canvas are drawn with a
+particular library (React Flow). They are: the graph of a finished run, the automation canvas and the
+procedure canvas all use it, and the Trace page that draws a run's graph is on the Audit screen. What
+the install's checks prove is the data each one draws (the steps of a completed run, M20.2.1, and the
+five kinds of step a canvas may hold, M20.2.2 to M20.2.4); a check run on the server cannot see which
+drawing library the browser uses, so nothing on the install can show this task by itself. As with the
+table library in item 123, the library was a means and the screens are the end.
+
+**Option A: closed by what it is for.** The task is marked decided on the strength of the two install
+checks above and the console's own tests, and the requirement it serves stays exactly as it is.
+
+**Option B: you look.** On **Audit**, open **Trace** and enter a run's trace id: the run's steps appear as
+boxes joined by lines you can drag. Then open an agent's procedure and see its steps drawn the same way.
+Record both against the task.
+
+**My recommendation:** A, for the reason I gave on item 123.
+
+**What I need from you:** reply "196: A" or "196: B".
+
+## 195. Is deduplication across a record and a passage closed by what it is for?
+
+**In plain terms:** task M15.3.3 says that when a record from a connected system and a passage from a
+document state the same fact, a person should see it once and not as two sources agreeing. The rule is
+built and tested: the two are grouped, the record represents the group, the passage is kept as a second
+citation, a result that states nothing comparable is never merged, and nothing is lost. What it cannot
+do yet is act, because no answer today draws on a record and a passage together and nothing links a
+passage to the record it is about, so there is never a fact for a passage to carry. The install check I
+wrote runs the rule over results the check makes, so the task is held and will not close on it.
+
+**Option A: closed by what it is for.** The rule is the requirement and it holds wherever a source of
+facts exists. The check stays, held, and I add the link between a passage and a record when a connector
+that has one is built.
+
+**Option B: build the link first.** A connected record would name the documents it is about (a contract
+record naming its file) and the passage would be read for the figures the record holds. It is a design
+of its own, because a wrong link merges two different facts into one and loses the second without a
+trace, and I would want your say on which connector gets it first.
+
+**My recommendation:** A. Nothing you have asked for is waiting on it.
+
+**What I need from you:** reply "195: A" or "195: B".
+
+## 194. Run the peak load test on your install?
+
+**In plain terms:** task M22.3.3 asks for a test at the busiest the system should get: two questions a
+second for ten minutes, with the service levels held (answers inside eight seconds, record lookups inside
+half a second, nearly every request succeeding). The refusal rule under load is already tested without a
+server and runs on every push. What was missing was the run against a live install, which is now a
+command: `python -m brain.ops.load_peak`. It sends the questions you give it, as the people you give it
+tokens for, and prints each lane's 95th percentile and success rate against the targets.
+
+**It spends real model calls**, because most of the questions go to your model provider: the full run is
+twelve hundred requests, about nine hundred and sixty of them to the model, and it should be done at a
+quiet time. It is bounded: it will not send more than the number you name. Each person has their own
+rate limit, so the run needs one sign-in token for each of several test people (the two test people from
+"Before you start" are two; more spread the load). I give you the steps for getting each token when you
+choose A.
+
+**Option A: run it, small first.** One run of two hundred requests (about eighty seconds, about one
+hundred and sixty model calls) to see the figures, then the full run if they hold, at a time you choose.
+
+**Option B: not now.** The task stays open and is run when the install has real traffic to compare with.
+
+**My recommendation:** A, the small run first, at a quiet hour.
+
+**What I need from you:** reply "194: A" or "194: B", and when.
 
 ## 181. Where should the audit screen's count of redactions come from?
 
