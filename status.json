@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-12T13:39:33.450392+00:00",
-  "commit": "e4ddae2b",
-  "commit_subject": "The Knowledge section lists the agent's other sources, each by kind and linked to its own page (#505)",
+  "generated_at": "2026-10-12T14:14:06.762504+00:00",
+  "commit": "2e7b6be6",
+  "commit_subject": "Two install checks for what retrieval hands an answer: a reranker is adopted only when it earns its latency, and one fact in a row and a passage is one result with both kept (#521)",
   "total": 1611,
   "done": 831,
   "percent": 51.6,
