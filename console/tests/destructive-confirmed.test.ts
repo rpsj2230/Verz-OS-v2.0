@@ -93,10 +93,11 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Recording a check appends a row. A later check supersedes an earlier one without editing it and " +
     "nothing is removed, which tests/unit/test_requirement_check_routes.py holds, so nothing existing " +
     "is ended or replaced.",
-  "src/pages/knowledge/addForms.tsx uploadPath(place.kind, place.level, place.department)":
+  "src/pages/knowledge/addForms.tsx (door?.upload ?? uploadPath)(place.kind, place.level, place.department)":
     "Adding a document writes a new item. The same file sent again to the same place is the same item " +
     "with the same text, because its reference is a digest of the bytes, the owner and the place, which " +
-    "tests/unit/test_knowledge_upload.py holds, so nothing existing is ended or removed.",
+    "tests/unit/test_knowledge_upload.py holds, so nothing existing is ended or removed. From an agent's " +
+    "Knowledge section the same form sends to the agent's own address, which calls the same door.",
   "src/pages/knowledge/parts.tsx taskDonePath(taskId)":
     "Marking a task read closes a notice in the reader's own list: a document handed to them, or a " +
     "promotion or a solution of theirs decided. What it reports is unchanged and in the ledger, and a " +
@@ -121,10 +122,11 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "the dialog says so and shows who will read the words before anything is sent. Rejecting adds " +
     "nothing to the document and keeps the reason. Both are recorded in the ledger under the reviewer, " +
     "which tests/unit/test_acceptance_corrections.py holds.",
-  "src/pages/knowledge/addForms.tsx LINKS_API_PATH":
+  "src/pages/knowledge/addForms.tsx door?.link ?? LINKS_API_PATH":
     "Adding a page by its link writes a new item, and the same page added again to the same place is " +
     "the same item, because its reference is a digest of the bytes, the owner and the place, which " +
-    "tests/unit/test_link_intake.py holds, so nothing existing is ended or removed.",
+    "tests/unit/test_link_intake.py holds, so nothing existing is ended or removed. From an agent's " +
+    "Knowledge section the same form sends to the agent's own address, which calls the same door.",
   "src/pages/knowledge/addForms.tsx queuedPath(place.kind, place.level, place.department)":
     "Queueing a file keeps it and a ticket for the worker; the item it becomes is named by a digest " +
     "of the bytes, the owner and the place, as an upload is, which tests/unit/test_ingest_queue.py " +
