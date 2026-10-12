@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-12T15:09:03.893364+00:00",
-  "commit": "26d51452",
-  "commit_subject": "Google Workspace lands with a check that it is ready for a person and their agent once connected (M11.7.6, M11.9.12) (#522)",
+  "generated_at": "2026-10-12T15:44:38.456290+00:00",
+  "commit": "32aa7635",
+  "commit_subject": "An install check that the worker reads a connected source with the key the vault holds (M32.7.2) (#524)",
   "total": 1611,
   "done": 831,
   "percent": 51.6,
