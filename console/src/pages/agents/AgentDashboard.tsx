@@ -9,10 +9,10 @@
  * figures are is said under each, because a reader shown their own runs would otherwise read them as
  * the agent's.
  *
- * **Two blocks say what the page is not sent yet, rather than drawing examples.** No route lists one
- * agent's runs, and approvals carry no agent to filter by, so "Recent runs" and "Waiting on a person"
- * are notes with a link to where the company-wide list is. The design of record draws both with
- * example rows; an install shows no example.
+ * **One block says what the page is not sent yet, rather than drawing an example.** No route lists
+ * one agent's runs, so "Recent runs" is a note. "Waiting on a person" is the Approvals queue narrowed
+ * to this agent (`AgentWaiting.tsx`, M27.15.30): the cards this reader could decide, and no block at
+ * all for a reader who could decide none.
  *
  * **Automations are live.** A reader of the Automations tab sees this agent's automations with the
  * start and stop the API offers, which is `components/AgentAutomations.tsx` unchanged, and a link to
@@ -34,8 +34,8 @@ import { useResource, type Resource } from "../../api/useResource";
 import { AgentAutomations } from "../../components/AgentAutomations";
 import { Note, SectionCard, StatCard, StatsStrip } from "../../components/kit";
 import { cn } from "../../lib/utils";
-import { WORKS_AT } from "./agentActions";
 import { CostByPerson, MonthAgainstBudget } from "./AgentSpend";
+import { AgentWaiting } from "./AgentWaiting";
 import {
   AGENT_PERIODS,
   agentStatsApiPath,
@@ -70,8 +70,6 @@ export const NOTHING_RETURNED_SUB = "refused or no answer, as one figure";
 
 export const RECENT_RUNS = "Recent runs";
 export const RECENT_RUNS_NOT_YET = "a list of this agent's own runs. Its figures above are counted from them.";
-export const WAITING = "Waiting on a person";
-export const WAITING_NOT_YET = "approvals for one agent. Every approval you may decide is on the Approvals page.";
 export const AUTOMATIONS_HEADING = "Automations";
 export const OPEN_GALLERY = "Browse automations to install";
 
@@ -171,17 +169,7 @@ export function AgentDashboard({
         </SectionCard>
 
         <div className="flex min-w-0 flex-col gap-4">
-          <SectionCard
-            title={WAITING}
-            lede="Actions this agent stopped before they happened, for a person who may decide them."
-            action={
-              <Link to={WORKS_AT.approvals} className="inline-flex items-center gap-1 text-[12px] text-acc-text underline-offset-4 hover:underline">
-                Approvals <ArrowUpRight aria-hidden className="size-3" />
-              </Link>
-            }
-          >
-            <Note kind="not-yet">{WAITING_NOT_YET}</Note>
-          </SectionCard>
+          <AgentWaiting agentId={agentId} />
 
           {automations === undefined || automationsAddress === undefined ? null : (
             <SectionCard
