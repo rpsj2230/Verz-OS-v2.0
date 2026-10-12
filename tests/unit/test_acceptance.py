@@ -908,8 +908,10 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     # A roll-up reads what the checks before it came to, so on an install where some of those are
     # not run it is not run too, and it is never failed while they pass; each one's own test file
     # runs the checks it reads (`tests/unit/test_acceptance_roll_up.py`).
+    from brain.ops.acceptance_roll_up import is_roll_up
+
     for one in suite_checks:
-        if one.run.__module__.endswith("_roll_up"):
+        if is_roll_up(one):
             assert outcomes.pop(one.name)[0] in (PASSED, NOT_RUN), one.name
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
     assert after == before

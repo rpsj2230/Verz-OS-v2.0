@@ -1318,10 +1318,12 @@ def test_the_cascade_is_reached_by_the_worker_run_and_by_nothing_on_the_request_
     """Said in a constant and held to the source in both directions.
 
     The worker's registry run reaches the cascade through `matching_store`, which is inside the
-    package; outside it, only two install checks import this module: the matching run's, for the
-    feature names and the scorer it compares the database's total with, and the weekly fit's, for
-    the feature it requires the fit to have measured. Nothing in the gate, the
-    tools or the channels imports it, because no answer resolves a named client yet.
+    package; outside it, only three install checks import this module: the matching run's, for the
+    feature names and the scorer it compares the database's total with, the weekly fit's, for
+    the feature it requires the fit to have measured, and the cascade checks', which hand it
+    observations to show stage one decide a verified identifier and refuse an unverified one.
+    Nothing in the gate, the tools or the channels imports it, because no answer resolves a named
+    client yet.
 
     Imports are parsed rather than searched for, because half the package is quoted by name in
     other modules' prose.
