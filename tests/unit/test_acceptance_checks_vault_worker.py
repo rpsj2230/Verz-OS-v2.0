@@ -89,16 +89,14 @@ def test_a_healthy_reading_passes_and_says_which_source() -> None:
     assert SOURCE in assess(healthy())
 
 
-def test_a_vault_that_is_not_open_fails_with_the_screens_own_sentence() -> None:
-    """Sealed, silent, uninitialised and absent, each its own sentence from the Secrets vault
-    screen. Delete this and an install whose vault is sealed is reported as one that has not yet
-    connected a source, which waits for the owner when it is the owner's server that is broken."""
-    from brain.ops.vault_status import SEAL_SAYS
-
+def test_a_vault_that_is_not_open_fails_and_points_at_the_screen_that_says_which() -> None:
+    """Sealed, silent, uninitialised and absent, each failing with the one sentence that names the
+    Secrets vault screen. Delete this and an install whose vault is sealed is reported as one that
+    has not yet connected a source, which waits for the owner when the server is what is broken."""
     for seal in (Seal.SEALED, Seal.UNREACHABLE, Seal.UNINITIALISED, Seal.ABSENT):
         with pytest.raises(CheckFailedError) as raised:
             assess(healthy(seal=seal))
-        assert str(raised.value) == SEAL_SAYS[seal]
+        assert str(raised.value) == module.THE_VAULT_IS_NOT_OPEN
 
 
 def test_an_install_that_has_not_finished_connecting_is_not_run_and_says_which_step() -> None:

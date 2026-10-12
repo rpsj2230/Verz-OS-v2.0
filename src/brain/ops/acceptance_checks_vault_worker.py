@@ -49,7 +49,7 @@ from brain.ops.acceptance import CheckFailedError, CheckNotRunError, check
 from brain.ops.acceptance_run import Harness
 from brain.ops.connector_slots import SLOT_SCOPES
 from brain.ops.connector_sync import CONTROL_EVERY, LONGEST_WAIT_AFTER_FAILURES, SyncOutcome
-from brain.ops.vault_status import SEAL_SAYS, Seal, SlotState
+from brain.ops.vault_status import Seal, SlotState
 
 if TYPE_CHECKING:
     from brain.ops.connector_sync import SyncState
@@ -96,6 +96,27 @@ NO_SOURCE_HAS_BEEN_READ: Final = (
 )
 
 
+THE_VAULT_IS_NOT_OPEN: Final = (
+    "the secrets vault is not open: sealed, not answering, never initialised or not named; the "
+    "Secrets vault screen says which and ops/openbao/UNSEAL.md has the steps"
+)
+
+# What a source holding a key is failing at, each its own literal: no result is built from a value.
+THE_NEWEST_READ_DID_NOT_READ: Final = (
+    "the worker's newest read of a source holding a key did not read it"
+)
+THE_KEY_WAS_NEVER_HANDED_OUT: Final = (
+    "a source holding a key was read without the vault handing the key out"
+)
+THE_NEXT_READ_IS_OVERDUE: Final = (
+    "a source holding a key is overdue its next read, so the worker is late"
+)
+NO_WORKER_HAS_BEEN_SEEN: Final = (
+    "no scheduled run has started or finished lately, so the health screen's worker figure is "
+    "stale and the worker is not running"
+)
+
+
 @dataclass(frozen=True)
 class Reading:
     """Everything the check judges, as the install said it. Names and instants, no value."""
@@ -122,7 +143,7 @@ def assess(reading: Reading) -> str:
     worker.
     """
     if reading.seal is not Seal.OPEN:
-        raise CheckFailedError(SEAL_SAYS[reading.seal])
+        raise CheckFailedError(THE_VAULT_IS_NOT_OPEN)
     keyed = tuple(name for name in reading.connected if name in SLOT_SCOPES)
     if not keyed:
         raise CheckNotRunError(NO_SOURCE_THAT_TAKES_A_KEY)
@@ -133,26 +154,27 @@ def assess(reading: Reading) -> str:
     if not read:
         raise CheckNotRunError(NO_SOURCE_HAS_BEEN_READ)
 
-    shown: list[str] = []
+    seen = max((one for pair in reading.runs for one in pair if one is not None), default=None)
+    worker_is_alive = seen is not None and reading.now - seen <= WORKER_SEEN_WITHIN
+    # The first source that is on schedule decides; failing that, the first one's own failing.
+    failing = ""
     for name in read:
         state = reading.states[name]
         if state.outcome is not SyncOutcome.SYNCED:
-            shown.append("the worker's newest read of a source holding a key did not read it")
-            continue
-        if reading.leases.get(name) is None or reading.leases[name].issued < 1:
-            shown.append("a source holding a key was read without the vault handing the key out")
-            continue
-        if reading.now - state.next_attempt_at > OVERDUE_AFTER:
-            shown.append("a source holding a key is overdue its next read, so the worker is late")
-            continue
-        seen = max((one for pair in reading.runs for one in pair if one is not None), default=None)
-        if seen is None or reading.now - seen > WORKER_SEEN_WITHIN:
-            raise CheckFailedError(
-                "no scheduled run has started or finished lately, so the health screen's worker "
-                "figure is stale and the worker is not running"
-            )
-        return f"{name} was read on schedule with a key the vault handed out"
-    raise CheckFailedError("; ".join(dict.fromkeys(shown)))
+            failing = failing or "read"
+        elif reading.leases.get(name) is None or reading.leases[name].issued < 1:
+            failing = failing or "lease"
+        elif reading.now - state.next_attempt_at > OVERDUE_AFTER:
+            failing = failing or "overdue"
+        elif not worker_is_alive:
+            raise CheckFailedError(NO_WORKER_HAS_BEEN_SEEN)
+        else:
+            return f"{name} was read on schedule with a key the vault handed out"
+    if failing == "read":
+        raise CheckFailedError(THE_NEWEST_READ_DID_NOT_READ)
+    if failing == "lease":
+        raise CheckFailedError(THE_KEY_WAS_NEVER_HANDED_OUT)
+    raise CheckFailedError(THE_NEXT_READ_IS_OVERDUE)
 
 
 # ------------------------------------------------------------------ the reading
