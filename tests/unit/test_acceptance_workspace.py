@@ -12,6 +12,7 @@ Task ids: M39.1.1.2, M39.1.1.4, M39.1.1.5, M39.1.3.1, M39.1.3.2, M39.1.3.3, M39.
 Task ids: M39.2.1.4, M39.2.2.1, M39.2.2.2, M39.2.2.3, M39.2.2.4, M39.2.2.5
 Task ids: M39.2.3.1, M39.2.3.2, M39.2.3.3, M39.2.3.4, M39.3.1.1, M39.3.1.2, M39.3.1.3, M39.3.1.4
 Task ids: M39.4.1.1, M39.4.1.2, M39.4.1.3, M39.4.1.4, M39.4.1.5, M39.4.2.1, M39.4.2.2, M39.4.2.4
+Task ids: M16.5.2
 Task ids: M39.6.1.1, M39.6.1.2, M39.6.1.3, M39.6.1.4, M39.6.1.5, M39.6.2.1, M39.6.2.2, M39.6.2.4
 Task ids: M39.5.1.1, M39.5.1.2, M39.5.1.4, M39.5.1.5, M39.5.2.1, M39.5.2.2, M39.5.2.3, M39.5.2.4
 Task ids: M39.5.2.5, M39.8.4, M39.8.5
@@ -95,6 +96,7 @@ LEAVES = {
         "M39.4.2.1",
         "M39.4.2.2",
         "M39.4.2.4",
+        "M16.5.2",
     ),
     "an_agents_automation_is_installed_started_run_and_removed": (
         "M39.6.1.1",
@@ -606,4 +608,28 @@ def test_a_ceiling_that_ignores_the_connector_list_fails_the_tools_check(
     assert run_checks(head, (by_name(TOOLS_CHECK),))[TOOLS_CHECK] == (
         FAILED,
         "an agent naming no connector read a connected source",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_memory_listed_without_its_confidence_fails_the_memory_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With every memory listed at a confidence of nought, the memory check says so. Delete this
+    and M16.5.2 closes on a tab that lists what was learned and not how sure the agent is."""
+    import brain.agent_memory_routes as routes
+
+    real = routes.item_view
+
+    def unsure(text: Any, *, reader_id: str, steward: bool) -> Any:
+        return real(text, reader_id=reader_id, steward=steward).model_copy(
+            update={"confidence": 0.0}
+        )
+
+    monkeypatch.setattr(routes, "item_view", unsure)
+    name = "an_agents_memory_is_text_its_owner_corrects_and_its_tiers_route"
+
+    assert run_checks(head, (by_name(name),))[name] == (
+        FAILED,
+        "a memory was listed without its confidence, its source or its date",
     )
