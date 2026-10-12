@@ -187,12 +187,14 @@ from brain.knowledge.embed_queue import (
     EmbeddingService,
     embed_batch_gaps,
 )
+from brain.knowledge.embedding import EmbeddingError
 from brain.knowledge.ingest_queue import register_ingest_tasks
 from brain.knowledge.parse_budget import (
     PARSE_WORKER_COMPONENT,
     parse_budget_note,
     parse_worker_gaps,
 )
+from brain.knowledge.parse_layout import layout_request_gaps
 from brain.ops.admission import WorkloadClass
 from brain.ops.checkpoints import channel_policy_gaps, connection_refusals
 from brain.ops.class_pools import Follower, Routing, queued_class, routed_url
@@ -927,7 +929,45 @@ def advisories(env: Mapping[str, str], *, worker_component: str) -> tuple[str, .
     no longer splits the way the budget describes is wrong in the budget's documentation rather
     than in the database, which is this list's exact subject.
     """
-    return (*policy_gaps(), *queue_split_advisory(env, worker_component=worker_component))
+    return (
+        *policy_gaps(),
+        *queue_split_advisory(env, worker_component=worker_component),
+        *model_server_advisory(_declared_revision(env)),
+    )
+
+
+def _declared_revision(env: Mapping[str, str]) -> str | None:
+    """The embedding revision this install declares, or None when it has not said or said a
+    value this system cannot record.
+
+    A value that is set and unusable reads as undeclared here, because this is an advisory and
+    an advisory must not stop a worker from starting. The same value is refused by name where it
+    is acted on: `brain.knowledge.embed_policy.embedding_revision` raises for it on the ingest
+    leg, which is where the person who wrote it needs to be told.
+    """
+    try:
+        return embedding_revision(env)
+    except EmbeddingError:
+        return None
+
+
+def model_server_advisory(revision: str | None) -> tuple[str, ...]:
+    """What the door admits that the model server cannot be sent, said once an install has one.
+
+    **Declared by the embedding revision, and nothing else.** An install that has not said which
+    weights its model server holds has no model server to send a file to, and printing that a
+    50 MiB PDF is larger than a request ceiling on a server that does not exist would be a finding
+    every operator learns to read past. An install that has declared one gets
+    `brain.knowledge.parse_layout.layout_request_gaps`: the door's largest file, base64 encoded,
+    against the request the server accepts. It is an advisory rather than a refusal for the reason
+    `advisories` gives: the worker has other work, and what is wrong is a file accepted at the
+    door that the parse service would refuse after it had been fetched, scanned and stored.
+    Closing it is the owner's choice (a smaller door, a larger container or another request
+    format), and printing it at every start is what makes it a decision rather than a surprise.
+    """
+    if revision is None:
+        return ()
+    return layout_request_gaps()
 
 
 # ----------------------------------------------------------------------------- the process
