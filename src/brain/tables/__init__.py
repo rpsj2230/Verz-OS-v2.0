@@ -51,6 +51,7 @@ from brain.tables.access_request import AccessRequestHandledRow, AccessRequestRo
 from brain.tables.adoption import QuestionAskedRow
 from brain.tables.agent import AgentRow
 from brain.tables.agent_automation import AgentAutomationRow
+from brain.tables.agent_item_use import AgentItemUseRow
 from brain.tables.agent_run import AgentRunRow
 from brain.tables.application_log import ApplicationLogRow
 from brain.tables.artifact import ArtifactChangeRow, ArtifactRow
@@ -508,6 +509,8 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0211_budget_stop. Points at nothing: the ceiling, the principal and the recipients are
     # values, so a stop's row outlives a ceiling's next version and a person leaving.
     "ops.budget_stop",
+    # 0213_agent_item_use. Points at nothing: the agent and the document are values.
+    "ops.agent_item_use",
 )
 
 __all__ = [
@@ -518,6 +521,7 @@ __all__ = [
     "ActionVerdictRow",
     "AdaptiveMemoryRow",
     "AgentAutomationRow",
+    "AgentItemUseRow",
     "AgentRow",
     "AgentRunRow",
     "ApiKeyRow",

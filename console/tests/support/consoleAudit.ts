@@ -360,6 +360,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.action_verdict",
       "agent.supervision_pin",
       "agent.tool_attachment",
+      "ops.agent_item_use",
       "agent.group_install",
       "ops.channel_room",
       "agent.browser_envelope",

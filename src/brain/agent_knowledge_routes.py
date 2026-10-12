@@ -50,7 +50,12 @@ where the rule already reaches. **Nothing is added to the agent's reach by the a
 (`brain.console.agent_tabs.ADDING_AN_ITEM_IS_NOT_THE_SAME_AS_REACHING_IT`): an item outside the
 rule is the company's document and stays unreached until a person changes the rule.
 
-Task ids: M39.9.1.1, M39.9.1.2, M39.9.1.3, M39.9.1.4, M39.9.1.6
+**The figure beside an item is counted over the page the reader is shown and nothing else.**
+`StoredItemUses.uses` is asked for the documents on the page, so a count of a document the reader
+may not open is never read, let alone shown. While `agent_item_counts` is off nothing is read and no
+item carries a figure, which is not the same as nought: a nought says the agent never touched it.
+
+Task ids: M39.2.3.5, M39.9.1.1, M39.9.1.2, M39.9.1.3, M39.9.1.4, M39.9.1.6
 """
 
 from __future__ import annotations
@@ -80,6 +85,7 @@ from brain.knowledge.verification import disclose
 from brain.knowledge.visibility import Visibility
 from brain.knowledge_intake_routes import LinkAsked, add_link
 from brain.knowledge_routes import UPLOAD_RESPONSES, UploadedView, live_departments, upload
+from brain.ops.agent_item_use import WINDOW_DAYS, StoredItemUses, counting_is_on
 
 log = structlog.get_logger()
 
@@ -121,6 +127,9 @@ THE_AGENT_CANNOT_SAY_WHAT_IT_REACHES: Final = (
     "Added to the company's documents. This agent's rule is not about where documents sit, so "
     "whether it draws on this one cannot be said here."
 )
+
+#: Whose activity the figure beside an item counts.
+COUNT_BASIS: Final = "answers by everybody who asked this agent"
 
 # ------------------------------------------------------------------------ the figures
 KNOWLEDGE_PATH: Final = "/agents/{agent_id}/knowledge"
@@ -172,9 +181,22 @@ class AgentKnowledgeItemView(BaseModel):
     review_by: datetime | None = None
     #: Whether its review date has arrived.
     due: bool = False
+    #: How many of this agent's answers cited it in the window, or None when nothing is counted.
+    #: None is not nought: nought says the agent never touched it.
+    uses: int | None = None
     #: Whether this agent's rule reaches it. Every listed item is reached; the field is the
     #: contract the add answer shares, so the page draws one shape for both.
     reached: bool = True
+
+
+class UseFiguresView(BaseModel):
+    """What the figure beside each item counts. Said once, so no row has to say it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    window_days: int
+    #: Whose activity the figures are, in words: everybody who asked this agent.
+    basis: str
 
 
 class AgentKnowledgeView(BaseModel):
@@ -196,6 +218,9 @@ class AgentKnowledgeView(BaseModel):
     at_least: bool = False
     #: Set, with an empty list, when nothing here could look.
     unread: str = ""
+    #: Set when the figures beside each item are counted: the window in days and whose activity
+    #: they are. None while `agent_item_counts` is off, and then no item carries a figure.
+    use_figures: UseFiguresView | None = None
     kept_rule: str = A_SECTION_LISTS_THE_COMPANYS_DOCUMENTS_AND_KEEPS_NONE
 
 
@@ -243,7 +268,9 @@ def place_of(item: StoredItem) -> str:
     return item.visibility.department or COMPANY_PLACE
 
 
-def item_view(one: StoredItem, *, asked: Asking, names: dict[str, str]) -> AgentKnowledgeItemView:
+def item_view(
+    one: StoredItem, *, asked: Asking, names: dict[str, str], uses: int | None = None
+) -> AgentKnowledgeItemView:
     """One document as this reader is shown it: the badge as they may be told it, never the text."""
     shown = disclose(one, reader=asked.reach, now=asked.now)
     named = shown.verified_by
@@ -262,6 +289,7 @@ def item_view(one: StoredItem, *, asked: Asking, names: dict[str, str]) -> Agent
         verified_at=shown.verified_at,
         review_by=one.review_by,
         due=one.review_by is not None and one.review_by <= asked.now and one.is_retrievable,
+        uses=uses,
     )
 
 
@@ -383,9 +411,22 @@ async def agent_knowledge(
         names = await names_of(
             session, [*(one.owner_id for one in page), *(one.verified_by for one in page)]
         )
+    counted: dict[str, int] | None = None
+    if await counting_is_on(factory):
+        counted = await StoredItemUses(factory).uses(
+            agent_id, [one.item_id for one in page], today=asked.now.date()
+        )
     return AgentKnowledgeView(
         agent_id=agent_id,
-        items=[item_view(one, asked=asked, names=names) for one in page],
+        items=[
+            item_view(
+                one,
+                asked=asked,
+                names=names,
+                uses=None if counted is None else counted.get(one.item_id, 0),
+            )
+            for one in page
+        ],
         rule=[
             KnowledgeClauseView(field=clause.field, op=clause.op.value, value=str(clause.value))
             for clause in scope.predicate.clauses
@@ -394,6 +435,9 @@ async def agent_knowledge(
         add_into=department_default(scope),
         more=len(ordered) > offset + limit,
         at_least=full,
+        use_figures=None
+        if counted is None
+        else UseFiguresView(window_days=WINDOW_DAYS, basis=COUNT_BASIS),
     )
 
 

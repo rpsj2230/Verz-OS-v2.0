@@ -6,7 +6,7 @@
  * **Mounted through the application's own route table** and answered by a stand-in API that
  * records every request, as `agent-artifacts.test.tsx` mounts the Artifacts section.
  *
- * Task ids: M39.9.1.1, M39.9.1.2, M39.9.1.3, M39.9.1.4, M39.9.1.6
+ * Task ids: M39.2.3.5, M39.9.1.1, M39.9.1.2, M39.9.1.3, M39.9.1.4, M39.9.1.6
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -275,6 +275,32 @@ describe("adding from the Knowledge section", () => {
     // What breaks if this is deleted: a malformed answer drawn as a blank confirmation.
     expect(readKnowledgeAdded({ item_id: "x" })).toBeNull();
     expect(readKnowledgeAdded(addedWire())?.reached).toBe(true);
+  });
+});
+
+describe("the figures beside each document", () => {
+  test("a document the agent drew on says how often, one it never touched says so, and the basis is stated once", async () => {
+    // What breaks if this is deleted: M39.2.3.5's per-item figures reaching the page without saying
+    // whose activity they are, or an untouched document with nothing to prune it by.
+    const { container } = await consoleAt(
+      answers(
+        knowledgeWire({
+          items: [item("one", { uses: 4 }), item("two", { uses: 0 }), item("three", { uses: 1 })],
+          use_figures: { window_days: 30, basis: "answers by everybody who asked this agent" },
+        }),
+      ),
+    );
+    const said = rows(container).map((one) => one.querySelector('[data-slot="knowledge-uses"]')?.textContent);
+    expect(said).toEqual(["Cited in 4 answers in the last 30 days", "Not cited in the last 30 days", "Cited in 1 answer in the last 30 days"]);
+    expect(container.textContent).toContain("count answers by everybody who asked this agent");
+  });
+
+  test("while nothing is counted no document carries a figure, which is not the same as nought", async () => {
+    // What breaks if this is deleted: an install that never switched counting on drawing every
+    // document as one the agent never touched.
+    const { container } = await consoleAt(answers());
+    expect(container.querySelectorAll('[data-slot="knowledge-uses"]').length).toBe(0);
+    expect(container.textContent).not.toContain("Not cited");
   });
 });
 

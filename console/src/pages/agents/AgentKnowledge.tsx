@@ -43,6 +43,7 @@ import {
   readKnowledgeAdded,
   type KnowledgeAdded,
   type AgentKnowledge as Knowledge,
+  type UseFigures,
   type KnowledgeItem,
 } from "./agentKnowledgeQuery";
 
@@ -60,7 +61,15 @@ export const WIDEN_THROUGH_A_DRAFT = "Widen what it draws on, through a draft";
 export const DOES_NOT_MATCH = "It does not match";
 export const NARROWS_NOTHING_OWN = "It narrows nothing of its own: it draws on whatever you may read.";
 
-function ItemRow({ item }: { readonly item: KnowledgeItem }) {
+/** What the figure beside an item says. Absent while nothing is counted, and never drawn as nought. */
+export function usesWords(uses: number, figures: UseFigures): string {
+  if (uses === 0) {
+    return `Not cited in the last ${String(figures.windowDays)} days`;
+  }
+  return `Cited in ${uses === 1 ? "1 answer" : `${String(uses)} answers`} in the last ${String(figures.windowDays)} days`;
+}
+
+function ItemRow({ item, figures }: { readonly item: KnowledgeItem; readonly figures?: UseFigures | undefined }) {
   const addedBy = item.addedByName === "" ? undefined : item.addedByName;
   const day = dayWords(item.addedAt);
   const added = [addedBy === undefined ? null : `added by ${addedBy}`, day === "" ? null : day].filter((one): one is string => one !== null);
@@ -79,6 +88,7 @@ function ItemRow({ item }: { readonly item: KnowledgeItem }) {
         {added.length === 0 ? null : <span>{added.join(", ")}</span>}
         <span data-slot="knowledge-badge">{verifiedWords(item)}</span>
         {item.reviewBy === undefined ? null : <span>{`review by ${dayWords(item.reviewBy)}`}</span>}
+        {item.uses === undefined || figures === undefined ? null : <span data-slot="knowledge-uses">{usesWords(item.uses, figures)}</span>}
       </div>
     </li>
   );
@@ -213,7 +223,7 @@ export function AgentKnowledge({ agentId, onWiden }: { readonly agentId: string;
       <>
         <ul data-slot="knowledge-list" className="m-0 flex list-none flex-col p-0">
           {items.map((one) => (
-            <ItemRow key={one.itemId} item={one} />
+            <ItemRow key={one.itemId} item={one} figures={knowledge.useFigures} />
           ))}
         </ul>
         {hasMore ? (
@@ -240,6 +250,7 @@ export function AgentKnowledge({ agentId, onWiden }: { readonly agentId: string;
           {added === null ? null : <Answer added={added} onWiden={onWiden} onClose={() => setAdded(null)} />}
           {body}
           {form}
+          {knowledge.useFigures === undefined ? null : <Note>{`Figures beside each document count ${knowledge.useFigures.basis}.`}</Note>}
           {knowledge.keptRule === "" ? null : <Note>{knowledge.keptRule}</Note>}
         </div>
       </SectionCard>
