@@ -22,6 +22,7 @@ PERSON = "a_persons_page_lists_what_they_own_and_what_the_ledger_says"
 STOPPED = "adoption_counts_who_stopped_asking_in_the_readers_departments"
 FIGURES = "landing_figures_follow_the_period_and_department_a_reader_reads"
 LINK = "an_account_bound_to_nobody_is_told_who_can_link_it"
+SEARCH = "one_search_lists_what_each_modules_own_read_would_to_the_reader"
 
 
 def test_the_module_declares_the_leaf_each_check_proves() -> None:
@@ -33,8 +34,9 @@ def test_the_module_declares_the_leaf_each_check_proves() -> None:
         STOPPED: ("M27.7.17",),
         FIGURES: ("M27.15.17",),
         LINK: ("M27.15.4",),
+        SEARCH: ("M27.10.5",),
     }
-    assert checks_in(MODULE) == [RECENT, PERSON, STOPPED, FIGURES, LINK]
+    assert checks_in(MODULE) == [RECENT, PERSON, STOPPED, FIGURES, LINK, SEARCH]
 
 
 @pytest.fixture(scope="module")
@@ -67,6 +69,7 @@ def test_the_checks_pass_on_an_install_and_leave_nothing(install: str) -> None:
         STOPPED: (PASSED, ""),
         FIGURES: (PASSED, ""),
         LINK: (PASSED, ""),
+        SEARCH: (PASSED, ""),
     }
     assert counts(install) == before
 
@@ -136,3 +139,15 @@ def test_a_status_that_names_nobody_fails_the_link_check(
 
     monkeypatch.setattr(SignInBindings, "administrators_linked", nobody)
     assert "who can link it" in _failed(install, LINK)
+
+
+@pytest.mark.needs_db
+def test_a_search_that_ignores_the_readers_reach_fails_the_search_check(
+    install: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A people module that lists everybody to everybody. Delete this and M27.10.5 closes on a
+    search box that names a person a reader's own People screen would not."""
+    from brain import directory_routes
+
+    monkeypatch.setattr(directory_routes, "nameable", lambda people, reach, now=None: list(people))
+    assert "unlike a search that matched nothing" in _failed(install, SEARCH)

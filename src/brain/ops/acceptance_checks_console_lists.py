@@ -5,7 +5,7 @@ Each check calls the route the page calls, as the reader that page serves, over 
 transaction. **Every row the checks write is the check's own** (an agent, requests and spend rows
 for reserved people of acceptance_a), so nothing the install holds is changed and nothing is left.
 
-Task ids: M27.15.27, M27.15.18, M27.7.17, M27.15.17, M27.15.4
+Task ids: M27.15.27, M27.15.18, M27.7.17, M27.15.17, M27.15.4, M27.10.5
 """
 
 from __future__ import annotations
@@ -396,3 +396,64 @@ async def an_account_bound_to_nobody_is_told_who_can_link_it(h: Harness) -> None
         pass
     else:
         raise CheckFailedError("a token the gate would refuse was told whether it is linked")
+
+
+# ----------------------------------------------- 6. one search over every module's read (M27.10.5)
+@check(
+    leaves=("M27.10.5",),
+    sentence=(
+        "A reader of People and of the agents in acceptance_a who searches for a person and an "
+        "agent of acceptance_a by name is listed both with where to open them; a reader of "
+        "acceptance_b is answered, for the same words, exactly as for words nothing matches, and "
+        "no answer carries a count."
+    ),
+)
+async def one_search_lists_what_each_modules_own_read_would_to_the_reader(h: Harness) -> None:
+    from brain.ops.acceptance_operations_console import asking_as, console_for, screen_grants
+    from brain.ops.acceptance_workspace import installed_agent
+    from brain.search_routes import SearchResultsView as SearchShape
+    from brain.search_routes import search
+
+    await h.found_departments()
+    word = f"find{h.run}"
+    reader, outsider, owner = (
+        h.principal(A, "reader"),
+        h.principal(B, "reader"),
+        h.principal(A, word),
+    )
+    await h.person(owner, department=A)
+    await h.person(
+        reader,
+        department=A,
+        grants=tuple(dict.fromkeys((*screen_grants("people"), *screen_grants("agents")))),
+    )
+    await h.person(
+        outsider,
+        department=B,
+        grants=tuple(
+            dict.fromkeys(
+                (
+                    *screen_grants("people", Scope.department(B)),
+                    *screen_grants("agents", Scope.department(B)),
+                )
+            )
+        ),
+    )
+    await installed_agent(h, owner, suffix=f"_{word}")
+    console = console_for(h)
+
+    found = await search(console.request(), await asking_as(h, reader), word)
+    by_module = {one.key: one.hits for one in found.groups}
+    if [one.to for one in by_module.get("people", [])] != [f"/people/{owner}"]:
+        raise CheckFailedError("a reader of People was not given the person who was searched for")
+    if not any(one.to.startswith("/agents/") for one in by_module.get("agents", [])):
+        raise CheckFailedError("a reader of the agents was not given the agent searched for")
+
+    theirs = await search(console.request(), await asking_as(h, outsider), word)
+    nothing = await search(console.request(), await asking_as(h, outsider), f"nothing{h.run}")
+    if theirs.groups != nothing.groups:
+        raise CheckFailedError(
+            "a reader outside the department was answered unlike a search that matched nothing"
+        )
+    if "total" in SearchShape.model_fields or "next_cursor" in SearchShape.model_fields:
+        raise CheckFailedError("the search answer has a place for a count or a cursor")

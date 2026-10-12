@@ -3,12 +3,13 @@
 - **Screens:** `/people`, `/people/:personId`, `/people/:personId/:view`, `/roles`, `/capabilities`, `/scopes`, `/packs`, `/access_review`, `/access_review/:kind/:rowId`, `/elevation`, `/elevation/:requestId`, `/sessions`, `/sign-in-links`, `/staff_sources`, `/access-requests`, `/service-accounts`, `/service-accounts/:clientId`
 - **Tables:** `auth.principal`, `auth.principal_identity`, `auth.session`, `auth.directory_role_grant`, `gate.capability_grant`, `gate.capability_pack`, `gate.capability_pack_assignment`, `gate.capability_registry`, `gate.scope`, `gate.grants_version`, `gate.policy_epoch`, `gate.review_decision`, `gate.elevation_request`, `auth.staff_member`, `auth.staff_sync_run`, `auth.service_account`, `auth.api_key`, `gate.access_request`, `gate.access_request_handled`, `gate.role_grant`, `gate.role_nomination`, `auth.group_role_rule`, `gate.break_glass_notice`, `gate.self_grant`, `ops.connector_steward`
 - **Installation values:** `INSTALL_OIDC_ISSUER`, `INSTALL_OIDC_REALM`, `INSTALL_OIDC_CLIENT_ID`, `INSTALL_OIDC_REDIRECT_URIS`, `INSTALL_BROKERED_DIRECTORY`, `INSTALL_STAFF_SOURCE`, `INSTALL_STAFF_SOURCE_LOCATION`, `INSTALL_BROKERED_CLIENT_ID`, `INSTALL_ACCOUNT_EMPLOYMENT_TYPES`, `INSTALL_DEPARTMENTS_FROM`
-- **Measured here:** 76 routes, 2 called by no screen; 44 write routes, 42 with all three proofs; 6 gaps.
+- **Measured here:** 77 routes, 3 called by no screen; 44 write routes, 42 with all three proofs; 6 gaps.
 
 | Route | Called by |
 | --- | --- |
 | `GET /api/v1/access-requests` | `/access-requests` |
 | `GET /api/v1/console/navigation` | `/department`, `/department/:view` |
+| `GET /api/v1/console/search` | **no screen** |
 | `GET /api/v1/escalations` | `/access-requests` |
 | `GET /api/v1/govern/access-review` | `/access_review`, `/access_review/:kind/:rowId` |
 | `GET /api/v1/govern/capabilities` | `/capabilities` |

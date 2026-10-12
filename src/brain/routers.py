@@ -420,6 +420,10 @@ from brain.routing_routes import router as routing_router
 # `brain.rule_routes`.
 from brain.rule_routes import router as rule_router
 
+# One search box over the console: each module's own list route asked for one query as the person
+# asking, so no match and not permitted are one answer. See `brain.search_routes`.
+from brain.search_routes import router as search_router
+
 # Service accounts: an integration registered at its owner's reach, a key shown once, and both
 # taken away, behind `admin:credential`. See `brain.service_account_routes`.
 from brain.service_account_routes import router as service_account_router
