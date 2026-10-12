@@ -379,7 +379,7 @@ async def connected_here(h: Harness, admin: str) -> None:
 
 
 @check(
-    leaves=("M27.15.39",),
+    leaves=("M27.15.39", "M27.11.9"),
     sentence=(
         "With a Xero tenant made up for the check connected, the Connectors routes list it as "
         "connected apart from the sources available to connect, its export carries the "

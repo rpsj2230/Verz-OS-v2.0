@@ -9,7 +9,7 @@ kept with another reason, a notice to the wrong person, and a grant read past it
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M33.5.1.1, M33.5.1.2, M33.6.1.2, M33.6.1.4, M33.7.1.2, M33.7.1.4, M33.7.1.5
+Task ids: M27.11.9, M33.5.1.1, M33.5.1.2, M33.6.1.2, M33.6.1.4, M33.7.1.2, M33.7.1.4, M33.7.1.5
 """
 
 from __future__ import annotations
@@ -37,8 +37,8 @@ ENDS = "an_elevation_lapses_by_itself_and_can_be_revoked_before_it_does"
 
 #: Each check and the one leaf it proves.
 LEAVES = {
-    CONNECTS: ("M33.5.1.1",),
-    ROTATES: ("M33.5.1.2",),
+    CONNECTS: ("M33.5.1.1", "M27.11.9"),
+    ROTATES: ("M33.5.1.2", "M27.11.9"),
     ARTEFACT: ("M33.6.1.2",),
     LAPSES: ("M33.6.1.4",),
     ELEVATED: ("M33.7.1.2",),
