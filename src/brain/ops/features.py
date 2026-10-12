@@ -283,6 +283,27 @@ SUPERVISION_REVIEW: Final = Feature(
     read_by=("brain.ops.supervision_review:review_switch_is_on",),
 )
 
+#: Furnishing a new install's library with the eight starter skills. Off until the owner decides
+#: needs-rupash 181: whether they arrive waiting for a person's review, which is the recommended
+#: answer and the only one this builds, or approved by the product, which nothing here does.
+STARTER_SKILLS_SWITCH: Final = Feature(
+    name="starter_skills",
+    title="Furnish the library with the starter skills",
+    what=(
+        "At the next start the library gains eight ready-made skills: an SEO audit, keyword "
+        "research, a website health check, ticket analysis, complaint analysis, a monthly SEO "
+        "report, proposal generation and website troubleshooting. Each arrives waiting for "
+        "review with its example tasks, and no agent can read one until a person has rehearsed "
+        "it and approved it."
+    ),
+    while_off=(
+        "The library holds only what an administrator added. Starter skills furnished while this "
+        "was on stay in the library, and one an administrator edited, retired or rejected is "
+        "never put back."
+    ),
+    read_by=("brain.ops.starter_skill_store:furnish_skills_when_on",),
+)
+
 #: Every feature this product can switch on, in the order the screen lists them.
 FEATURES: Final[tuple[Feature, ...]] = (
     PROMPT_EDITING,
@@ -291,6 +312,7 @@ FEATURES: Final[tuple[Feature, ...]] = (
     UNATTENDED_ENTITY_MERGE,
     BUDGET_ENFORCEMENT,
     SUPERVISION_REVIEW,
+    STARTER_SKILLS_SWITCH,
 )
 
 
