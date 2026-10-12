@@ -28,7 +28,7 @@ come back in, and **takes no field argument at all**, so there is no parameter a
 `brain.memory.signals`' "a signal is evidence and never an instruction"; the test of that walks the
 imports of every package that decides an answer.
 
-Task ids: M16.2.8, M9.2.4
+Task ids: M16.2.8, M9.2.4, M16.2.2
 """
 
 from __future__ import annotations
@@ -47,6 +47,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.audit.ledger import TRACE_ID
 from brain.memory.signals import Observation, Signal, counts_by
+from brain.tables.chat import ConversationRow, MessageRole, MessageRow
 from brain.tables.signal_log import SignalRow
 
 log = structlog.get_logger(__name__)
@@ -145,6 +146,48 @@ class StoredSignals:
             )
             for kind, conversation, message, principal, at in rows
         )
+
+    async def copied(self, *, principal_id: str, trace_id: str, now: datetime) -> bool:
+        """Keep that this person copied the answer a trace produced; False, writing nothing, if it
+        is not an answer in one of their own threads (M16.2.2).
+
+        **The answer is found by the trace it ran under, in the person's own threads and nowhere
+        else.** A trace somebody else was answered at, one that never ran and one that was never
+        kept in a thread are one refusal, which is `brain.ops.learning_signal_store.
+        A_MARK_IS_ON_AN_ANSWER_THE_MARKER_WAS_GIVEN`'s rule for the same reason: a person must
+        not learn which traces exist from what a refusal says. The signal is the one the log
+        keeps for every kind, naming a conversation and an answer and holding no word of it, and
+        a second copy of one answer is the same piece of evidence and writes nothing.
+        """
+        async with self._sessions() as session, session.begin():
+            await session.execute(_SET_PRINCIPAL, {"principal": principal_id})
+            found = (
+                await session.execute(
+                    select(MessageRow.id, MessageRow.conversation_id)
+                    .join(ConversationRow, ConversationRow.id == MessageRow.conversation_id)
+                    .where(
+                        ConversationRow.principal_id == principal_id,
+                        MessageRow.role == MessageRole.ASSISTANT.value,
+                        MessageRow.trace_id == trace_id,
+                    )
+                    .order_by(MessageRow.created_at, MessageRow.id)
+                    .limit(1)
+                )
+            ).first()
+            if found is None:
+                return False
+            message, conversation = found
+            return await noticed(
+                session,
+                Observation(
+                    signal=Signal.COPIED,
+                    conversation_id=str(conversation),
+                    message_id=str(message),
+                    principal_id=principal_id,
+                    at=now,
+                ),
+                trace_id=trace_id,
+            )
 
     async def counts_by(self, principal_id: str, field: str) -> Mapping[str, int]:
         """This person's own signals counted by one field, through `signals.counts_by`.

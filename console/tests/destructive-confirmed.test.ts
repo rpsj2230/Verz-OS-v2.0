@@ -274,6 +274,10 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "A mark is one bit against an answer the person was given, counted and read by nothing that " +
     "decides an answer, and a second mark replaces the first in the count, which " +
     "tests/unit/test_learning_signal.py holds; it ends and replaces nothing.",
+  "src/pages/Ask.tsx COPIED_API_PATH":
+    "A copy is noted as one signal against an answer the person was given, and a second copy of the " +
+    "same answer adds nothing, which tests/unit/test_acceptance_copied.py holds; it ends and " +
+    "replaces nothing.",
   "src/components/MyChannels.tsx myCodeApiPath(row.channel)":
     "Asking for a code binds nothing: the code is shown to the person who asked and does nothing " +
     "until they send it from their own chat. It ends only an older code of theirs for that channel " +
