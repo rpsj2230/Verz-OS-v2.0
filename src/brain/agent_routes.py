@@ -322,8 +322,11 @@ ONLY_WHAT_THIS_ROUTE_HOLDS_IS_POPULATED: Final = (
     "brain.agent_memory_routes serves behind the Memory tab's read for every agent alike, so it "
     "says nothing about whether any memory exists. The Artifacts tab always holds its filters "
     "and the rule an artifact's window is chosen by, which brain.agent_artifact_routes serves "
-    "behind the Artifacts tab's read for every agent alike. Marking the other three populated "
-    "would draw three headings over nothing; marking Settings empty would withhold a tab whose "
+    "behind the Artifacts tab's read for every agent alike. The Knowledge tab always holds its "
+    "empty state and the two ways to add, which brain.agent_knowledge_routes serves behind the "
+    "Knowledge tab's read for every agent alike, so an empty list says nothing about the "
+    "documents the reader may not open. Marking the other two populated "
+    "would draw two headings over nothing; marking Settings empty would withhold a tab whose "
     "content is already in the response."
 )
 
@@ -427,7 +430,7 @@ MAX_ROSTER_ENTRIES: Final = 500
 
 #: The tabs with something in them for every agent. See `ONLY_WHAT_THIS_ROUTE_HOLDS_IS_POPULATED`.
 POPULATED_HERE: Final[frozenset[Tab]] = frozenset(
-    {Tab.SETTINGS, GALLERY_TAB, Tab.MEMORY, Tab.ARTIFACTS}
+    {Tab.SETTINGS, GALLERY_TAB, Tab.KNOWLEDGE, Tab.MEMORY, Tab.ARTIFACTS}
 )
 
 #: The most templates one gallery answer carries. A resource bound, as the roster's is.

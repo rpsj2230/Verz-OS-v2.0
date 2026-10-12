@@ -44,9 +44,11 @@
  *
  * **The Memory section** (`AgentMemory.tsx`) is at `/agents/{id}/memory` for a reader whose strip
  * holds it, which the API sends for every agent to a reader of the Memory tab. **The Artifacts
- * section** (`AgentArtifacts.tsx`) is at `/agents/{id}/artifacts` on the same terms.
+ * section** (`AgentArtifacts.tsx`) is at `/agents/{id}/artifacts` on the same terms, and **the
+ * Knowledge section** (`AgentKnowledge.tsx`) at `/agents/{id}/knowledge`: the documents the agent
+ * draws on, at the reader's own reach, with the two ways to add one.
  *
- * Task ids: M39.5.2.1, M39.4.1.1, M39.1.2.1, M39.1.2.2, M39.1.2.3, M39.1.2.4, M39.1.2.5, M39.6.1.3, M5.7.3, M27.10.2, M27.11.6, M13.4.2
+ * Task ids: M39.9.1.1, M39.5.2.1, M39.4.1.1, M39.1.2.1, M39.1.2.2, M39.1.2.3, M39.1.2.4, M39.1.2.5, M39.6.1.3, M5.7.3, M27.10.2, M27.11.6, M13.4.2
  */
 
 import { ChevronDown, IdCard, Info, LayoutDashboard, Settings } from "lucide-react";
@@ -86,6 +88,7 @@ import { WORKS_AT } from "./agentActions";
 import { AgentAbout } from "./AgentAbout";
 import { AgentConversations } from "./AgentConversations";
 import { AgentArtifacts } from "./AgentArtifacts";
+import { AgentKnowledge } from "./AgentKnowledge";
 import { AgentMemory } from "./AgentMemory";
 import { agentCapabilitiesApiPath, readAgentCapabilities } from "./agentCapabilitiesQuery";
 import { AgentDashboard, usePeriod } from "./AgentDashboard";
@@ -129,9 +132,14 @@ export const MEMORY_SECTION = "Memory and learning";
 export const ARTIFACTS_TAB = "artifacts";
 export const ARTIFACTS_SECTION = "Artifacts";
 
+/** The Knowledge section's key, as the API's strip spells it. */
+export const KNOWLEDGE_TAB = "knowledge";
+export const KNOWLEDGE_SECTION = "Knowledge";
+
 /** A section's name as the Sections menu lists it, for the sections this page draws a view of. */
 export const SECTION_LABELS: Readonly<Record<string, string>> = Object.freeze({
   [AUTOMATIONS_TAB]: AUTOMATIONS_SECTION,
+  [KNOWLEDGE_TAB]: KNOWLEDGE_SECTION,
   [MEMORY_TAB]: MEMORY_SECTION,
   [ARTIFACTS_TAB]: ARTIFACTS_SECTION,
 });
@@ -188,7 +196,7 @@ export function viewAddress(agentId: string, view: AgentView | string): string {
 export function viewFor(
   tab: string | undefined,
   sections: readonly string[],
-): AgentView | typeof AUTOMATIONS_TAB | typeof MEMORY_TAB | typeof CONVERSATIONS_TAB | typeof ARTIFACTS_TAB {
+): AgentView | typeof AUTOMATIONS_TAB | typeof KNOWLEDGE_TAB | typeof MEMORY_TAB | typeof CONVERSATIONS_TAB | typeof ARTIFACTS_TAB {
   if (tab === "profile" || tab === "about") {
     return tab;
   }
@@ -200,6 +208,9 @@ export function viewFor(
   }
   if (tab === CONVERSATIONS_TAB) {
     return CONVERSATIONS_TAB;
+  }
+  if (tab === KNOWLEDGE_TAB && sections.includes(KNOWLEDGE_TAB)) {
+    return KNOWLEDGE_TAB;
   }
   if (tab === MEMORY_TAB && sections.includes(MEMORY_TAB)) {
     return MEMORY_TAB;
@@ -465,6 +476,7 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
           <AgentConversations agentId={agentId} />
         </SectionCard>
       ) : null}
+      {view === KNOWLEDGE_TAB ? <AgentKnowledge agentId={agentId} /> : null}
       {view === MEMORY_TAB ? <AgentMemory agentId={agentId} /> : null}
       {view === ARTIFACTS_TAB ? <AgentArtifacts agentId={agentId} /> : null}
       {view === AUTOMATIONS_TAB ? (

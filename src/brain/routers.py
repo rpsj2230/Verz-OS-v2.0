@@ -75,6 +75,9 @@ from brain.agent_conversation_routes import router as agent_conversation_router
 # channels (M39.2.4.4). See `brain.agent_group_routes`.
 from brain.agent_group_routes import router as agent_group_router
 
+# One agent's Knowledge section: the company's documents it draws on, at the reader's own reach.
+from brain.agent_knowledge_routes import router as agent_knowledge_router
+
 # One agent's leash: its rungs as they stand, every move with its evidence, a verdict that the
 # breaker reads, and the supervision pin and its reviews.
 from brain.agent_leash_routes import router as agent_leash_router

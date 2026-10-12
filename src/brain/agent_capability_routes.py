@@ -111,7 +111,7 @@ from brain.gate.badge_store import NO_BODY_READ
 from brain.gate.entitlement_store import StoredEntitlements
 from brain.gate.screening import NOTHING_MATCHED
 from brain.knowledge.item import KnowledgeItem
-from brain.knowledge.lifecycle import StoredItem, authority_for
+from brain.knowledge.lifecycle import Authority, StoredItem, authority_for
 from brain.knowledge.lifecycle_store import MAX_ITEMS, as_person, live_items
 from brain.knowledge_routes import live_departments
 from brain.ops.attachment_store import changes_in
@@ -528,18 +528,32 @@ def knowledge_scope_of(record: AgentRecord) -> KnowledgeScope | None:
         return None
 
 
-async def reader_items(
+async def reader_stored_items(
     sessions: async_sessionmaker[AsyncSession], reach: EntitlementSet, now: datetime
-) -> tuple[tuple[KnowledgeItem, ...], bool]:
-    """The live documents this reach may see, as the documents list reads them, and whether the
-    read came back full."""
+) -> tuple[Authority, tuple[StoredItem, ...], bool]:
+    """The live documents this reach may see as stored rows, with the reach's authority over them,
+    and whether the read came back full.
+
+    The one read of "the documents this reader may see", so the Profile's slice
+    (`reader_items`) and the Knowledge section's list (`brain.agent_knowledge_routes`) cannot
+    disagree about which documents exist for a reader.
+    """
     departments = await live_departments(sessions)
     authority = authority_for(reach, departments=departments, now=now)
     async with sessions() as session, session.begin():
         await as_person(session, authority)
         found = await live_items(session, limit=MAX_SLICE_ITEMS)
-    seen = tuple(knowledge_item_of(one) for one in found if authority.may_see(one))
-    return seen, len(found) >= MAX_SLICE_ITEMS
+    seen = tuple(one for one in found if authority.may_see(one))
+    return authority, seen, len(found) >= MAX_SLICE_ITEMS
+
+
+async def reader_items(
+    sessions: async_sessionmaker[AsyncSession], reach: EntitlementSet, now: datetime
+) -> tuple[tuple[KnowledgeItem, ...], bool]:
+    """The live documents this reach may see, as the documents list reads them, and whether the
+    read came back full."""
+    _, seen, full = await reader_stored_items(sessions, reach, now)
+    return tuple(knowledge_item_of(one) for one in seen), full
 
 
 def knowledge_view(
