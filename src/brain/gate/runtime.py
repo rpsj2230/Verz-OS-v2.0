@@ -125,6 +125,7 @@ from brain.gate.model_lane import (
 )
 from brain.gate.provenance import SEED_HORIZONS, Horizons
 from brain.gate.roster import run_entitlement
+from brain.gate.shared_start import shared_and_following
 from brain.gate.stop import StopReason
 from brain.gate.turn_context import ContextNote, ContextParts, assemble
 from brain.models.adapter import is_refusal
@@ -575,6 +576,9 @@ class AgentRuntime:
     #: What offers and holds a tool that changes something. None: this run only reads.
     side_effects: SideEffects | None = None
     lane: Lane = Lane.ANSWER
+    #: The tools the shared start of the request may name (M3.7.2): empty, today's one block, or
+    #: those every person holds. See `brain.gate.shared_start`.
+    universal: frozenset[str] = frozenset()
     clock: Callable[[], float] = time.monotonic
     wall: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
 
@@ -590,6 +594,26 @@ class AgentRuntime:
             for one in invocation.catalogue.tools
             if one.side_effect is SideEffect.NONE or (effects is not None and effects.offers(one))
         )
+
+    def _system_messages(
+        self, protocol: str, offered: Sequence[ToolDefinition]
+    ) -> list[DriverMessage]:
+        """The system messages: one block, or the shared start and then the person's own tools.
+
+        With no universal tool this is the block a run has always sent. With some, the first
+        message is the protocol and the offered tools everybody holds, and the second the rest,
+        so two people offered the same universal tools send the same first bytes. The driver
+        joins system messages in order. See `brain.gate.shared_start`.
+        """
+        shared, following = shared_and_following(offered, self.universal)
+        if not self.universal or not shared:
+            return [
+                DriverMessage(role=Role.SYSTEM, content=f"{protocol}\n\n{tools_block(offered)}")
+            ]
+        found = [DriverMessage(role=Role.SYSTEM, content=f"{protocol}\n\n{tools_block(shared)}")]
+        if following:
+            found.append(DriverMessage(role=Role.SYSTEM, content=tools_block(following)))
+        return found
 
     async def drafted(
         self,
@@ -700,7 +724,7 @@ class AgentRuntime:
         )
         run.context = parts.note()
         messages: list[DriverMessage] = [
-            DriverMessage(role=Role.SYSTEM, content=f"{protocol}\n\n{tools_block(offered)}"),
+            *self._system_messages(protocol, offered),
             DriverMessage(role=Role.USER, content=tool_loop_turn(parts)),
         ]
         by_name = {one.name: one for one in offered}
