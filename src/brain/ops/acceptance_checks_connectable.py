@@ -50,6 +50,7 @@ them for the running process.
 
 Task ids: M11.9.3, M11.9.4, M11.9.5, M11.9.6, M11.9.7, M11.9.8
 Task ids: M11.9.10, M11.9.11, M11.9.13, M11.9.14
+Task ids: M11.9.9
 """
 
 from __future__ import annotations
@@ -58,7 +59,7 @@ import json
 import secrets
 import uuid
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, Final
 
@@ -132,6 +133,9 @@ class _Source:
     caller: Any
     keys: Any
     poster: Any = None
+    #: The connector's declaration with a recorded reading in it, for a source read by a driver
+    #: and not by a call (the maintenance portal). None for every source that is called.
+    declarations: Any = None
 
 
 @dataclass(frozen=True)
@@ -187,6 +191,7 @@ async def _from_the_console(
     *,
     keys: Any = None,
     poster: Any = None,
+    reading: Any = None,
 ) -> _Source:
     """Judge the form as the connect route does, connect it, and read it as the worker does.
 
@@ -230,7 +235,11 @@ async def _from_the_console(
         ent_hash=SET_UP_REACH,
         keep_key=_nothing_kept,
     )
-    plan = plan_for(connection, last=None, now=h.now)
+    plan = (
+        plan_for(connection, last=None, now=h.now)
+        if reading is None
+        else plan_for(connection, last=None, now=h.now, readings={name: reading})
+    )
     if plan.refused or not plan.due:
         raise CheckFailedError("the worker's plan would not read a source connected as declared")
     keys = _Keys() if keys is None else keys
@@ -248,7 +257,24 @@ async def _from_the_console(
     )
     if done.outcome is not SyncOutcome.SYNCED or done.records < 1:
         raise CheckFailedError("the worker did not read a source connected from the console")
-    return _Source(connection=connection, caller=caller, keys=keys, poster=poster)
+    return _Source(
+        connection=connection,
+        caller=caller,
+        keys=keys,
+        poster=poster,
+        declarations=None if reading is None else {name: _declared_with(name, reading)},
+    )
+
+
+def _declared_with(name: str, reading: Any) -> Any:
+    """The maintenance portal's own declaration with the check's recorded driver in its place."""
+    from dataclasses import replace
+
+    from brain.connectors import laravel
+
+    if name != laravel.CONNECTOR_NAME:
+        raise CheckFailedError("a recorded driver was handed to a source that is read by a call")
+    return replace(laravel.CONNECTOR, reading=reading)
 
 
 async def _answering(h: Harness, source: _Source) -> FastAPI:
@@ -272,6 +298,7 @@ async def _answering(h: Harness, source: _Source) -> FastAPI:
             resolver=_Resolver(),
             clock=lambda: h.now,
             poster=source.poster,
+            declarations=source.declarations,
         )
 
     app = FastAPI()
@@ -1081,3 +1108,94 @@ async def search_console_is_ready_for_a_person_and_an_agent_once_connected(
         ),
         scope=Scope.department(A),
     )
+
+
+# ------------------------------------------------------- M11.9.9: the maintenance portal
+@check(
+    leaves=("M11.9.9",),
+    sentence=(
+        "A maintenance portal database made up for the check is connected from its form and read "
+        "by the worker through its executor over a recorded driver, nothing else set: a "
+        "permitted person's question about a client's contract value is answered from the portal "
+        "when asked, an agent naming it installs ready and answers it too, and one not bound to "
+        "it is told what a client nobody has tells it."
+    ),
+)
+async def the_maintenance_portal_is_ready_once_connected(
+    h: Harness,
+) -> None:
+    from brain.connectors import laravel
+    from brain.connectors.minimal_index import fresh_canary
+    from brain.ops.acceptance_checks_laravel import (
+        HOST,
+        MAX_ROWS,
+        SCHEMA,
+        _Logins,
+        _NoCall,
+        _Views,
+    )
+
+    await h.found_departments()
+    canary = fresh_canary("ACCEPTANCE")
+    name = f"Acceptance {h.word()}"
+    client_id = 900_000 + secrets.randbelow(99_999)
+    when = datetime(2019, 3, 1, 10, 0)
+    views = _Views(
+        clients=(
+            {
+                "id": client_id,
+                "contract_value": canary,
+                "department": A,
+                "manager_id": 1,
+                "name": name,
+                "status": "active",
+                "updated_at": when,
+            },
+        ),
+        users=(
+            {
+                "id": client_id,
+                "department": A,
+                "display_name": f"Acceptance {h.word()}",
+                "status": "active",
+                "updated_at": when,
+            },
+        ),
+    )
+    source = await _from_the_console(
+        h,
+        laravel.CONNECTOR_NAME,
+        {
+            laravel.SCHEMA_SETTING: SCHEMA,
+            laravel.HOST_SETTING: HOST,
+            laravel.PORT_SETTING: str(laravel.MYSQL_PORT),
+            laravel.PRIVATE_NETWORK_SETTING: "no",
+            laravel.TLS_SETTING: laravel.VERIFY_WORD,
+            laravel.CLIENT_RULE_SETTING: f"department = {A}",
+            laravel.USER_RULE_SETTING: f"department = {A}",
+            laravel.MAX_ROWS_SETTING: str(MAX_ROWS),
+            laravel.TIMEOUT_SETTING: "5",
+        },
+        _NoCall(),
+        keys=_Logins(),
+        reading=laravel.LaravelReading(views.opener),
+    )
+    reads = (
+        "read:laravel_client",
+        "read:laravel_client.name",
+        "read:laravel_client.status",
+        "read:laravel_client.contract_value",
+    )
+    await _ready_on_ask(
+        h,
+        source,
+        _Asking(
+            present=_asked("contract_value", name),
+            absent=_asked("contract_value", f"Acceptance {h.word()}"),
+            told=canary,
+        ),
+        reads=reads,
+        scope=Scope.department(A),
+    )
+    if not views.selected:
+        raise CheckFailedError("the portal was never read through its views")
