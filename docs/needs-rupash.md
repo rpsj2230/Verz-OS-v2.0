@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**53 items are open: 177,** which conditions an automation's trigger may carry, **176,** where a document added from an agent's own page lives, **175,** which tools the part of a model request that everybody shares may hold, **174,** whether a supervised agent's thirty-day review runs on its own each day, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**57 items are open: 181,** which person approves the eight starter skills, **180,** which outside AI services are offered first and what they count as, **179,** whether a skill is refused when its agent lacks one of its tools, **178,** what a skill names when it needs knowledge, **177,** which conditions an automation's trigger may carry, **176,** where a document added from an agent's own page lives, **175,** which tools the part of a model request that everybody shares may hold, **174,** whether a supervised agent's thirty-day review runs on its own each day, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,100 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 181. Who approves the eight starter skills a new install is furnished with?
+
+**In plain terms:** your plan says a new install comes with eight ready-made skills: an SEO audit,
+keyword research, a website health check, ticket analysis, complaint analysis, a monthly SEO report,
+proposal generation and website troubleshooting, each approved, assignable to an agent and rehearsed
+against its example tasks (M12.4.7). None of the eight exists yet. A skill is only ever approved by a
+named person who has read it (the library records who, and an approval is of those exact words), so
+"furnished already approved" has to mean that somebody approved it.
+
+**Option A: they arrive waiting for review.** The product ships the eight, each with its example tasks,
+and each lands in the library as undecided, like any import. An administrator of your install reads each
+one, rehearses its examples and approves it, and the library records that person. Nothing runs before a
+person has read it, which is the rule for every other skill.
+
+**Option B: they arrive approved by the product.** The product approves them itself when it furnishes a
+new install. Quicker to use, but a skill is the one part of an agent that arrives from outside the
+company, and an approval nobody on the install gave breaks the rule that every skill has a named
+approver.
+
+**My recommendation:** A. It costs an administrator one review per skill, once, and every skill on every
+install then has a person's name on it. I will write the eight, name only tools the install really has
+(the website check, the knowledge search and the connected figures), and show on your install that they
+land waiting for review.
+
+**What I need from you:** reply "181: A" or "181: B".
+
+## 180. Which outside AI services does the product offer first, and what do they count as?
+
+**In plain terms:** your plan says an agent may use an outside AI service that is not a chat model, such
+as image generation or speech to text, registered as a tool that needs a permission and declares what it
+does (M12.3.7), and that any agent whose ceiling does not name it is refused. The refusal already works
+for every tool. What does not exist is a first service to register: nothing in the product calls an image
+or a speech provider today, and each needs a provider account and a key kept in the vault.
+
+Two things only you can say. **Which service first** (speech to text for recorded calls and voice notes,
+image generation for slides and posts, or both), and **what it counts as.** A call sends your material to
+an outside company, so the product's own rule would class it as a tool that sends something out, whose
+rung is capped at Assisted: a person approves each call.
+
+**Option A: count it as sending something out.** Every call waits for a person. Safe, and slow for speech
+to text, where nothing leaves that the person did not choose to submit.
+
+**Option B: speech to text counts as a read and image generation as a draft.** Fewer approvals. The catch
+is that what is sent is the person's own recording or prompt, which the product cannot check is free of a
+client's details.
+
+**My recommendation:** A for both, and I build nothing until you name the first service and give me the
+provider account, so that no tool is registered that cannot be called.
+
+**What I need from you:** the service and the provider, and "180: A" or "180: B".
+
+## 179. Is a skill refused when the agent it is given to lacks one of the skill's tools?
+
+**In plain terms:** a skill names the tools it expects to use. Today, when an administrator gives a skill
+to an agent, the screen shows which of those tools the agent can actually reach, and the assignment goes
+ahead either way: the skill simply cannot use a tool its agent does not have. Your plan for skill reuse
+(M12.4.10) says the assignment is refused, with the missing tools named. The two differ in what an
+administrator can do in one step.
+
+**Option A: refuse, naming what is missing.** "Not assigned: this agent cannot reach ticket.read."
+Nothing half-working is ever assigned, and the way forward is stated. The administrator widens the agent
+through its normal publish (which a second person approves), then assigns.
+
+**Option B: assign, and show each missing tool as requested but not in the agent's ceiling** (today's
+screen). Quicker to assign. An agent can carry a skill it cannot fully use, and nothing tells it so until
+the skill's steps fail in a run.
+
+**My recommendation:** A. A skill that cannot do what it says is worse than none, and a refusal that names
+the tool is the same sentence the screen already shows. It never widens the agent: only the publish gate
+does that.
+
+**What I need from you:** reply "179: A" or "179: B".
+
+## 178. What does a skill name when it needs knowledge?
+
+**In plain terms:** your plan says a skill declares the knowledge it needs, and giving it to an agent whose
+knowledge does not cover that need is refused, saying what is missing (M12.3.3). Nothing in a skill says
+this yet, so the refusal cannot be written. An agent's knowledge is cut by **department** (the only thing
+a knowledge scope tests), so the natural thing for a skill to name is the departments whose knowledge it
+needs, such as "finance" for a skill that quotes from the pricing notes.
+
+**Option A: departments.** A skill lists the departments whose knowledge it needs. Giving it to an agent
+whose knowledge scope does not include one of them is refused, naming the departments missing. The same
+list is what a skill drafted in conversation (M12.4.14) carries. It needs one new field on the skill,
+which becomes part of what an approval covers; a skill written before it is unchanged.
+
+**Option B: kinds of document** (a standard procedure, a pricing note, a template). This names what the
+skill reads rather than where it sits, but an agent's knowledge is not cut by kind, so there would be no
+scope to compare it with and nothing to refuse on.
+
+**My recommendation:** A.
+
+**What I need from you:** reply "178: A" or "178: B".
 
 ## 177. Which conditions may an automation's trigger carry?
 
