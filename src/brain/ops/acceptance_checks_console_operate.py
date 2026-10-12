@@ -15,13 +15,13 @@ Task ids: M27.15.14, M27.12.4, M27.2.8, M27.2.6, M27.12.3, M27.15.37
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 
 from sqlalchemy import insert, text
 
 from brain.core.scope import Scope
-from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, check
+from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, CheckNotRunError, check
 from brain.ops.acceptance_operations_console import (
     asking_as,
     console_for,
@@ -53,6 +53,12 @@ A_HALT_IS_THE_TABLES_AND_NEVER_THE_PROCESS_S: Final = (
     "the halts in force through a new session each time and holds the row itself, so a halt kept "
     "in a variable of the process that stopped it would show on the page that stopped it and "
     "not on the read made afterwards."
+)
+
+#: Said when this install lists more automations than one page holds.
+MORE_AUTOMATIONS_THAN_ONE_PAGE: Final = (
+    "this install lists more automations than one page of the screen holds, so the one the "
+    "check made may not be on the page it reads"
 )
 
 # ------------------------------------------------------------------------ the figures
@@ -113,10 +119,6 @@ async def the_stop_control_is_drawn_for_its_holders_and_a_stop_is_kept(
     before = await halts(console.request(), await asking_as(h, whole, strong=True))
     if not before.known:
         raise CheckFailedError("the Stop screen could not say what was stopped")
-    if any(one.scope is HaltScope.AGENT for one in before.halts):
-        # The check names its own agent below, and an install already holding that stop would
-        # make the listing ambiguous.
-        raise CheckFailedError("an install was already holding the check's own agent stop")
     target = f"{h.word().lower()}_operator"
     stopped = await stop_now(
         console.request("POST"),
@@ -157,7 +159,9 @@ async def the_stop_control_is_drawn_for_its_holders_and_a_stop_is_kept(
     ),
 )
 async def running_and_waiting_work_is_listed_by_state_to_its_readers(h: Harness) -> None:
+    from brain.console.operate import unattended_waiting
     from brain.operate_routes import live_runs
+    from brain.ops.schedule import Owed
     from brain.tables.schedule import ControlRunRow
 
     await h.found_departments()
@@ -189,16 +193,26 @@ async def running_and_waiting_work_is_listed_by_state_to_its_readers(h: Harness)
         raise CheckFailedError("Live runs did not list a job started and not finished as running")
     if job.name in waiting_to_both:
         raise CheckFailedError("a job already running was also listed as waiting")
-    if not waiting_to_both:
-        raise CheckFailedError("Live runs listed no job as waiting to a reader of the queue")
     running_only, waiting_in_runs = await seen(runner)
     if job.name not in running_only or waiting_in_runs:
         raise CheckFailedError("a reader of running work was shown the queue, or not the run")
     running_in_queue, waiting_only = await seen(waiter)
-    if running_in_queue or not waiting_only:
+    if running_in_queue or waiting_only != waiting_to_both:
         raise CheckFailedError("a reader of the queue was shown running work, or not the queue")
     if any(await seen(nobody)):
         raise CheckFailedError("Live runs showed work to a person with neither screen")
+
+    # Whether anything is owed a run now is the install's own state, so what is owed is made up:
+    # a control that has never run, shown through the same decision the route asks.
+    owed = Owed(
+        name=job.name, due_since=h.now, late_by=timedelta(), first_run=True, report_only=False
+    )
+    shown = {
+        who: [one.control for one in unattended_waiting([owed], await h.reach(who), h.now)]
+        for who in (runner, waiter, both, nobody)
+    }
+    if shown != {runner: [], waiter: [job.name], both: [job.name], nobody: []}:
+        raise CheckFailedError("a control owed a run was not listed to its screen's readers alone")
 
 
 # ------------------------------------------------- 3. an installed automation (M27.12.3, M27.15.37)
@@ -289,9 +303,11 @@ async def an_automation_is_started_changed_paused_and_removed(
         )
 
     listed = await automations(
-        console.request(), await asking_as(h, approver, strong=True), ListAsked(limit=50)
+        console.request(), await asking_as(h, approver, strong=True), ListAsked(limit=200)
     )
     if automation_id not in [one.automation_id for one in listed.items]:
+        if listed.next_cursor is not None:
+            raise CheckNotRunError(MORE_AUTOMATIONS_THAN_ONE_PAGE)
         raise CheckFailedError("the Automations screen did not list an automation to its reader")
     if await refused(automation(console.request(), automation_id, await asking_as(h, stranger))):
         pass
