@@ -915,8 +915,10 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     # runs the checks it reads (`tests/unit/test_acceptance_roll_up.py`).
     from brain.ops.acceptance_roll_up import is_roll_up
 
+    # The memory roll-up module also holds smaller sentences (M16.3.2, M16.7.3, M16.7.14) that are
+    # not roll-up leaves but ask the same of the run, so the module is what marks them.
     for one in suite_checks:
-        if is_roll_up(one):
+        if is_roll_up(one) or one.run.__module__.endswith("_roll_up"):
             assert outcomes.pop(one.name)[0] in (PASSED, NOT_RUN), one.name
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
     assert after == before
