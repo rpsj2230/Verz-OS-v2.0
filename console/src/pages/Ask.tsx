@@ -98,13 +98,14 @@
  * conversations sees no panel.
  *
  * Task ids: M42.6.3, M35.2.1.3, M27.8.5, M3.9.8, M8.1.1, M8.1.2, M8.1.3, M7.4.7, M11.4.9, M7.6.1
- * Task ids: M9.1.1, M9.1.2, M9.1.3, M12.3.6
+ * Task ids: M9.1.1, M9.1.2, M9.1.3, M12.3.6, M16.2.2
  */
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { openStream, request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
+import { copied } from "../components/kit/copyText";
 import { Badge } from "../ui/Badge";
 import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import { Notice } from "../ui/Notice";
@@ -114,6 +115,8 @@ import {
   ANSWER_API_PATH,
   askBody,
   citationAddress,
+  COPIED_API_PATH,
+  copiedBody,
   freshnessWords,
   MARK_API_PATH,
   markBody,
@@ -188,6 +191,12 @@ export const ANSWER_LABEL = "Answer";
 
 /** The question over the two marks, and the two marks. One action each, and no words. */
 export const WAS_IT_HELPFUL = "Was this answer helpful?";
+
+/** The control that puts the answer on the clipboard, and what a person is told of it. */
+export const COPY_ANSWER = "Copy answer";
+export const ANSWER_COPIED = "Copied.";
+export const ANSWER_NOT_COPIED =
+  "Your browser did not allow copying. Select the answer and copy it by hand.";
 export const HELPFUL = "Helpful";
 export const NOT_HELPFUL = "Not helpful";
 
@@ -344,6 +353,40 @@ function Marking({ traceId }: { readonly traceId: string }) {
       </div>
       {failure ? <FailureNotice failure={failure} /> : null}
     </section>
+  );
+}
+
+/**
+ * Copies the answer just given and notes that it was copied (M16.2.2). The note is the answer's
+ * reference and nothing else, sent once the browser has taken the text, and what happens to it is
+ * the person's business and not the page's: a failed note says nothing, because the person copied
+ * some text and that worked.
+ */
+function CopyAnswer({ text, traceId }: { readonly text: string; readonly traceId: string }) {
+  const [told, setTold] = useState("");
+
+  const copy = useCallback(() => {
+    void (async () => {
+      const kept = await copied(text);
+      setTold(kept ? ANSWER_COPIED : ANSWER_NOT_COPIED);
+      const body = copiedBody(traceId);
+      if (kept && body !== null) {
+        await request<unknown>(COPIED_API_PATH, { method: "POST", body });
+      }
+    })();
+  }, [text, traceId]);
+
+  return (
+    <div className="ask__copy">
+      <button type="button" className="button" onClick={copy}>
+        {COPY_ANSWER}
+      </button>
+      {told !== "" ? (
+        <p className="note" role="status">
+          {told}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -629,6 +672,8 @@ export function Ask() {
           aria-label={ANSWER_LABEL}
         >
           {view.answer !== "" ? <p className="ask__answer">{view.answer}</p> : null}
+
+          {!busy && view.answer !== "" ? <CopyAnswer text={view.answer} traceId={traceId} key={traceId} /> : null}
 
           {thread !== "" && !busy && view.answer !== "" ? (
             <form

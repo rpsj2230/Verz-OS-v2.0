@@ -80,6 +80,17 @@ export const ANSWER_API_PATH = "/answer";
 /** Where a person marks an answer they were given helpful or not (M16.6.4). */
 export const MARK_API_PATH = "/answer/mark";
 
+/** Where a person's copy of an answer they were given is noted (M16.2.2). */
+export const COPIED_API_PATH = "/answer/copied";
+
+/**
+ * The body one copy is sent as: the answer's reference and nothing else, which is also all the
+ * route accepts. Null when there is no reference, which a stream that opened without one leaves.
+ */
+export function copiedBody(traceId: string): { readonly trace_id: string } | null {
+  return traceId === "" ? null : { trace_id: traceId };
+}
+
 /**
  * The body one mark is sent as: the answer's reference and one bit, and nothing else, because a
  * box beside an answer is where the answer gets pasted (`brain.ops.feedback`). Null when there is
