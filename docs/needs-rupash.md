@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**63 items are open: 196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **193,** which formats an agent's generated documents start with and which libraries may be added, **192,** whether sensitive actions that cannot be undone need a second person, **191,** whether an agent may ever answer with nothing behind it, **181,** where the count of redactions on the audit screen should come from, **180,** whether an agent's parts include tools and workflows, and which kinds of memory an agent is told apart by, **179,** what the ceiling is that a leash may not be raised beyond, **178,** who may change which part of an agent, and whether a refusal names the role, **177,** which conditions an automation's trigger may carry, **176,** where a document added from an agent's own page lives, **175,** which tools the part of a model request that everybody shares may hold, **174,** whether a supervised agent's thirty-day review runs on its own each day, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**66 items are open: 202,** three disclosure decisions on screens I built (who the sign-in page names, what the landing figures show a reader without the spend screens, and whether every file download is written down), **201,** who an agent is shared with and whether its page has a browsing switch, **200,** what happens to a person's agents when the person is switched off, **196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **193,** which formats an agent's generated documents start with and which libraries may be added, **192,** whether sensitive actions that cannot be undone need a second person, **191,** whether an agent may ever answer with nothing behind it, **181,** where the count of redactions on the audit screen should come from, **180,** whether an agent's parts include tools and workflows, and which kinds of memory an agent is told apart by, **179,** what the ceiling is that a leash may not be raised beyond, **178,** who may change which part of an agent, and whether a refusal names the role, **177,** which conditions an automation's trigger may carry, **176,** where a document added from an agent's own page lives, **175,** which tools the part of a model request that everybody shares may hold, **174,** whether a supervised agent's thirty-day review runs on its own each day, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,82 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 202. Three things I built tell a reader a little more than you may want: who administers, what the figures show, and which downloads are written down
+
+**In plain terms:** while building the console I made three choices about what a person is told, and each
+is a disclosure, so each is yours to confirm.
+
+**a. The sign-in page names the administrators.** A person who signs in through your company's identity
+provider but has not been linked to an account here used to be sent round in a circle. They now see one
+sentence saying their account is not linked yet and who can link it, by name. They are not yet a member,
+so this tells a stranger who runs the system; the identity provider has already vouched that they work
+for your company.
+
+**b. The landing page figures follow the period and the department a reader reads.** A reader who does
+not hold the Usage or Budget screens used to get nothing for those figures. I narrowed them to what that
+reader's own questions cost, rather than withholding them, because a person is always told their own
+figures. I did not build a per-department split of the approvals queue, because a count of the queue by
+department would tell a reader how many approvals sit in departments they cannot see.
+
+**c. Every download of an agent's stored file is written down.** Opening a file an agent kept now leaves a
+line in the read log: who opened it, which file, when. It stays for as long as the log is kept. It
+records that a file was opened and never what it contained.
+
+**Options for each:** A, as built. B, the stricter version: (a) the page says only "ask an administrator"
+and names nobody; (b) a reader without the spend screens sees no cost figure at all; (c) only the
+downloads of a file under a restricted label are written down.
+
+**My recommendation:** A for all three. A person the identity provider has vouched for is already inside
+the company, a person's own figures are theirs, and a read log that skips ordinary files cannot answer
+"who opened this" for the file somebody later calls sensitive.
+
+**What I need from you:** reply "202: a A, b A, c A", changing a letter for any you want stricter.
+
+## 201. Who may find and use an agent, and does its page need a browsing switch?
+
+**In plain terms:** an agent's page lets you say who can use it: everybody, one department, or only its
+owner. That is a single choice, so an agent cannot be shared with Sales and Support together, and cannot
+be given to two named people. Separately, its Behaviour tab has a switch for whether the agent may learn
+from the questions it is asked, and one for browsing the web. The learning switch works on the server
+and has no button on the page yet. The browsing switch has no meaning yet, because the sealed browser
+that would run it has never been started on an install, and the page already shows "computer use" as not
+offered.
+
+**Question 1, who an agent is shared with.** Option A: keep one choice. Option B: allow several
+departments and named people, which needs a small new table of who an agent is shared with, a control on
+the page to add and remove them, and the same rule as today that nobody can be shown an agent they could
+not already see.
+
+**Question 2, the switches.** Option A: show a learning switch on the page and show browsing as "not
+offered", as computer use is. Option B: show both as working switches.
+
+**My recommendation:** 1 B, because a shared agent used by two departments is the ordinary case, and 2 A,
+because a switch that does nothing teaches people to ignore switches.
+
+**What I need from you:** reply "201: 1 B, 2 A", changing either choice.
+
+## 200. When a person is switched off, what happens to the agents they own?
+
+**In plain terms:** switching a person off stops them signing in and removes what they could see. It does
+not touch the agents they own: those keep answering the people they are shared with, still in the
+switched-off person's name. A hand-over is only queued when the staff list itself shows the person has
+left, and nothing is queued for a person you switch off by hand. A person's page does list the agents they
+own, and Hand over exists, so nothing is hidden, but nothing prompts anyone to use it.
+
+**Option A: leave it as it is.** Switching a person off changes only the person. An administrator moves
+their agents using the list on the person's page.
+
+**Option B: switch off the person's agents too**, queue each for adoption by a department administrator,
+and bring them back when the person is switched on again.
+
+**Option C: a setting with A as its default.** "When a person is switched off, switch off their agents and
+queue them for adoption." Off until you turn it on.
+
+**My recommendation:** C, with it off. An agent a department relies on stopping silently because someone
+went on leave is its own incident; a company that wants the stricter rule can turn it on.
+
+**What I need from you:** reply "200: A", "200: B" or "200: C".
 
 ## 196. Is the React Flow task closed by what it is for, as item 123 asks for the table library?
 
