@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-12T15:44:38.456290+00:00",
-  "commit": "32aa7635",
-  "commit_subject": "An install check that the worker reads a connected source with the key the vault holds (M32.7.2) (#524)",
+  "generated_at": "2026-10-12T16:10:32.361011+00:00",
+  "commit": "f748266f",
+  "commit_subject": "Four install-proof leaves get checks: the channels, the connectors area, and roll-ups that name what no check shows yet (#530)",
   "total": 1611,
   "done": 831,
   "percent": 51.6,
