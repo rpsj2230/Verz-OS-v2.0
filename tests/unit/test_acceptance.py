@@ -32,6 +32,7 @@ from brain.ops import (
     acceptance_checks_accounts,
     acceptance_checks_channels,
     acceptance_checks_class_pools,
+    acceptance_checks_evaluation,
     acceptance_checks_people,
     acceptance_checks_recovery,
     acceptance_checks_services,
@@ -864,13 +865,17 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         "departments_managed_on_people_are_not_the_staff_sync_s",
     ):
         assert outcomes.pop(list_check) == (NOT_RUN, acceptance_checks_people.NO_STAFF_LIST_IS_READ)
+    # No worker has run the canaries here, so the scheduled run's own record is not there to judge;
+    # `tests/unit/test_acceptance_evaluation.py` records one and the check passes.
+    assert outcomes.pop("the_scheduled_canary_run_is_owed_runs_and_alerts") == (
+        NOT_RUN,
+        acceptance_checks_evaluation.THE_WORKER_HAS_NOT_STARTED_THEM,
+    )
     # A roll-up reads what the checks before it came to, so on an install where some of those are
     # not run it is not run too, and it is never failed while they pass; each one's own test file
     # runs the checks it reads (`tests/unit/test_acceptance_roll_up.py`).
-    from brain.ops.acceptance_roll_up import is_roll_up
-
     for one in suite_checks:
-        if is_roll_up(one):
+        if one.run.__module__.endswith("_roll_up"):
             assert outcomes.pop(one.name)[0] in (PASSED, NOT_RUN), one.name
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
     assert after == before
