@@ -5,15 +5,15 @@ two names resolves to one entity keeping both aliases, a hard identifier links o
 name-only match goes to review with its weighted evidence in words, a merge touching financial
 records waits for a person, an unmerge restores the prior state and an old citation still resolves,
 and an ambiguous question names both records with the review link and combines no figures. Every
-clause has a check, written for the narrower leaf it was built under. M14.8.2 says every entity
-resolution requirement in the register is demonstrated on an install.
+clause has a check, written for the narrower leaf it was built under. (M14.8.2, that every
+requirement in the register is demonstrated, is the requirement-area checks' own.)
 
-This module holds the two roll-ups and nothing else, and **neither asks anything of the install**:
-each reads what the clause checks came to earlier in this run, through
-`brain.ops.acceptance_roll_up`, which is why this module sits after every one of them. See that
-module for why a roll-up does not run its clauses again.
+This module holds the one roll-up and **it asks nothing of the install**: it reads what the clause
+checks came to earlier in this run, through `brain.ops.acceptance_roll_up`, which is why this
+module sits after every one of them. See that module for why a roll-up does not run its clauses
+again.
 
-Task ids: M14.8.1, M14.8.2
+Task ids: M14.8.1
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from __future__ import annotations
 from typing import Final
 
 from brain.ops.acceptance import check
-from brain.ops.acceptance_roll_up import clauses_demonstrated, requirements_demonstrated
+from brain.ops.acceptance_roll_up import clauses_demonstrated
 from brain.ops.acceptance_run import Harness
 
 #: Where this module's checks stand on the Install page, after every module they read.
@@ -50,20 +50,4 @@ CLAUSES: Final = {
 async def entity_resolution_is_shown_clause_by_clause_in_this_run(h: Harness) -> None:
     await clauses_demonstrated(
         h, CLAUSES, own="entity_resolution_is_shown_clause_by_clause_in_this_run"
-    )
-
-
-@check(
-    leaves=("M14.8.2",),
-    sentence=(
-        "Every entity resolution requirement in the register that rests on this leaf has a check "
-        "naming each leaf of M14 it builds, and every such check passed in this run."
-    ),
-)
-async def every_entity_resolution_requirement_is_demonstrated_in_this_run(h: Harness) -> None:
-    await requirements_demonstrated(
-        h,
-        "M14.8.2",
-        own="every_entity_resolution_requirement_is_demonstrated_in_this_run",
-        prefix="M14.",
     )
