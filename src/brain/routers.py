@@ -320,6 +320,10 @@ from brain.knowledge_routes import router as knowledge_router
 # `brain.lark_connect_routes`.
 from brain.lark_connect_routes import router as lark_connect_router
 
+# Sign in with Lark: the one address the sign-in service posts a returned code to, answered only on
+# an install that brokers sign-in to Lark. See `brain.lark_sign_in_routes`.
+from brain.lark_sign_in_routes import router as lark_sign_in_router
+
 # Logs: the warnings and errors this install kept, redacted on their way in, searchable and
 # paged, behind `admin:application_log` over everything. See `brain.log_routes`.
 from brain.log_routes import router as log_router

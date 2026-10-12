@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**57 items are open: 181,** where the count of redactions on the audit screen should come from, **180,** whether an agent's parts include tools and workflows, and which kinds of memory an agent is told apart by, **179,** what the ceiling is that a leash may not be raised beyond, **178,** who may change which part of an agent, and whether a refusal names the role, **177,** which conditions an automation's trigger may carry, **176,** where a document added from an agent's own page lives, **175,** which tools the part of a model request that everybody shares may hold, **174,** whether a supervised agent's thirty-day review runs on its own each day, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**58 items are open: 197,** sign in with Lark, what you do and one question, **181,** where the count of redactions on the audit screen should come from, **180,** whether an agent's parts include tools and workflows, and which kinds of memory an agent is told apart by, **179,** what the ceiling is that a leash may not be raised beyond, **178,** who may change which part of an agent, and whether a refusal names the role, **177,** which conditions an automation's trigger may carry, **176,** where a document added from an agent's own page lives, **175,** which tools the part of a model request that everybody shares may hold, **174,** whether a supervised agent's thirty-day review runs on its own each day, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,53 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 197. Sign in with Lark: what you do on your install, and one question
+
+**In plain terms:** item 115 decided that your people could sign in with Lark and no password, after the
+staff sync's own accounts were in place. That is built and **switched off**. A person on your Lark staff list
+presses **Lark** on the sign-in page, signs in to Lark as they always do, and lands in the console as the
+account the staff sync made for them. It never makes an account (a person the staff list does not name is
+refused), a leaver whose account the sync closed is refused, and nobody is sent an email. I have tested it
+against Lark's documented answers and never against Lark itself, so **it is not proved until you have done
+the steps below and signed in once.**
+
+**What you do (about 20 minutes, once). I cannot do any of it, because it needs your Lark app's secret.**
+
+1. Open the Lark developer console (open.larksuite.com/app, or open.feishu.cn/app for Feishu) and open the
+   app you made for the staff list, the one Connect Lark uses.
+2. In its left menu choose **Security settings**. Under **Redirect URLs** add
+   `https://<your sign-in address>/realms/brain/broker/lark/endpoint`. Your sign-in address is the web
+   address at the top of your sign-in page, the one that shows the password form.
+3. In the left menu choose **Permissions & scopes**, then the permissions granted with a user's own identity,
+   and add `contact:user.email:readonly` and `contact:user.employee:readonly`. Then **Version management &
+   release**: create a version and release it, as you did for the staff list's permissions.
+4. On **Credentials & basic info** copy the **App ID**. Open **Install > Settings** in the console, section
+   **Sign-in**. If **Company directory used for sign-in** does not read `lark`, or **App registered with that
+   directory** is empty, tell me "197: settings" and the App ID, and I put them in (the App ID is not a
+   secret).
+5. The **App Secret** goes into the sign-in service's vault, on the server, never into the console or into
+   chat. Copy it from the same Lark page, then follow step 3 of "What INSTALL_BROKERED_DIRECTORY does" in
+   `docs/install/authentication.md` (one `docker run` command, which asks for the secret and which you end
+   with Ctrl-D).
+6. On your install the sign-in realm already exists, so give it the Lark entry: the two commands in "Signing
+   in with Lark" in `docs/install/authentication.md`, step 6 (the application prints the entry, then a script
+   adds it and reads it back). If the first command prints a reason, the install is not set up for Lark yet
+   and the reason names the setting.
+7. **Prove it, about five minutes.** Sign out. On the sign-in page press **Lark** and sign in as yourself: you
+   land in the console. Then try a Lark account of somebody who is not on the staff list, or a leaver after
+   the next staff sync: you are refused and nothing loops. Record both on **Install > Requirement checks**
+   (area Identity) and tell me "197 done"; I then run the install check for it.
+
+**One question, with my recommendation.** Lark's own sign-in is not your password and second factor, so a
+person who signs in with Lark is signed in **ordinarily**: they can ask and read, and the console asks them to
+sign in again with their password and second factor before an administrator's button or an approval
+(requirement DEF-06). **Option A (my recommendation): keep it so.** **Option B:** count a Lark sign-in as
+strong too, once your Lark requires two-step verification for everyone (the same condition as approving from a
+Lark card, item 117). B lets a person with no password press an administrator's button, so it should wait
+until Lark's two-step is switched on for the whole company.
+
+**What I need from you:** nothing if you agree with A, or reply "197: B".
 
 ## 181. Where should the audit screen's count of redactions come from?
 

@@ -21,15 +21,25 @@ vault reference, and the secret is a file in Keycloak's vault directory that an 
 on the server. Rejected: an `INSTALL_` value holding it, which would put a credential in the
 environment file, on the Settings screen's list of names, and in every backup of that file.
 
-**Lark and LDAP are refused with a reason rather than approximated.** Keycloak ships no Lark
-broker and Lark's sign-in is not standard OpenID Connect, so a generic entry would be a sign-in
-that fails at the token exchange. LDAP is a user federation needing a bind account and search
-base this product has no settings for yet. Either way people sign in with accounts held in the
+**Lark is brokered through a bridge and a link-only flow, and LDAP is still refused with a
+reason.** Keycloak ships no Lark broker and Lark's sign-in is not standard OpenID Connect, so a
+generic entry pointed at Lark fails at the token exchange. The entry here is Keycloak's generic
+OpenID Connect provider pointed at Lark's own sign-in page and at this install's own translation
+(`brain.identity.lark_sign_in`, served by `brain.lark_sign_in_routes`), and **it is the only
+entry whose first sign-in may not create anybody**: its first-login flow is `LINK_FLOW_ALIAS`,
+which finds the account the staff sync already made by the person's work address and signs them
+into it, and refuses everybody else. Google and Microsoft are restricted to the company's own
+tenant because they would otherwise create an account for a stranger; Lark is restricted by there
+being nothing to create, which holds whatever application the company registered. A person the
+staff list does not name has no account to link, and one the sync has closed is linked to a
+disabled account, which Keycloak refuses. See `A_LARK_SIGN_IN_LINKS_AND_NEVER_CREATES`. LDAP is a
+user federation needing a bind account and search base this product has no settings for yet.
+Either way a directory that is not brokered leaves people signing in with accounts held in the
 realm, and the Settings screen says so rather than letting the value look applied.
 
 Scope: pure. Values in, a representation out; nothing here reads a setting or opens a socket.
 
-Task ids: M41.1.5
+Task ids: M41.1.5, M1.1.8
 """
 
 from __future__ import annotations
@@ -40,6 +50,19 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Final
 
+from brain.identity.lark_sign_in import (
+    ALIAS as LARK_ALIAS,
+)
+from brain.identity.lark_sign_in import (
+    SIGN_IN_SCOPES,
+    TOKEN_PATH,
+    LarkSignInError,
+    authorize_base,
+)
+
+#: The staff source a Lark broker pairs with, and the one value its location may hold.
+LARK_SOURCE: Final = "lark"
+
 #: Why a broker is never emitted without the company's own domain or tenant.
 A_BROKER_WITH_NO_TENANT_SIGNS_IN_STRANGERS: Final = (
     "A Google broker with no hosted domain, or a Microsoft broker with no tenant or a "
@@ -47,6 +70,18 @@ A_BROKER_WITH_NO_TENANT_SIGNS_IN_STRANGERS: Final = (
     "be given an account in this realm. Refusing leaves people signing in with the realm's own "
     "accounts, which is where every install starts."
 )
+
+#: Why a Lark broker needs no tenant to restrict it to.
+A_LARK_SIGN_IN_LINKS_AND_NEVER_CREATES: Final = (
+    "The Lark broker's first-login flow only links a person to an account that exists, by the "
+    "address Lark gives for them, and refuses everybody else. A person Lark signs in who has no "
+    "account here is therefore refused rather than given one, so unlike the Google and Microsoft "
+    "brokers it cannot hand a stranger an account whatever tenant the application belongs to."
+)
+
+#: The first-login flow the Lark entry names, which the reviewed realm carries. A test holds the
+#: two together: an entry naming a flow the realm lacks is an import Keycloak refuses.
+LINK_FLOW_ALIAS: Final = "brain link by work address"
 
 #: The value meaning sign-in is not brokered.
 NOT_BROKERED: Final = "none"
@@ -57,16 +92,12 @@ UNSET: Final = "unset"
 #: Each directory this release brokers, and the staff source whose location restricts it. Held to
 #: `brain.setup_wizard.STAFF_SOURCE_BROKERS` by a test, so the two cannot pair differently.
 BROKERED_BY: Final[Mapping[str, str]] = MappingProxyType(
-    {"google": "google_workspace", "microsoft": "microsoft_entra"}
+    {"google": "google_workspace", "microsoft": "microsoft_entra", "lark": LARK_SOURCE}
 )
 
 #: Directories the setting may name that this release does not broker, and why, in words.
 NOT_BROKERED_BY_THIS_RELEASE: Final[Mapping[str, str]] = MappingProxyType(
     {
-        "lark": (
-            "Lark's sign-in is not the standard kind this product's sign-in service can hand "
-            "people over to, so this release cannot sign people in through Lark."
-        ),
         "ldap": (
             "Signing in through an LDAP directory needs an account to search it with, which this "
             "release has no settings for, so it cannot sign people in through one."
@@ -115,8 +146,74 @@ def vault_file(realm: str) -> str:
     return f"{realm.replace('_', '__')}_{VAULT_KEY.replace('_', '__')}"
 
 
-def brokering(*, directory: str, client_id: str, staff_source: str, location: str) -> Brokering:
-    """The broker this configuration asks for, restricted to the company's tenant, or a reason."""
+def lark_entry(*, client_id: str, location: str, origin: str) -> Brokering:
+    """The Lark entry: Keycloak's generic OpenID Connect provider, bridged and link-only.
+
+    The page the person signs in on is Lark's own; the exchange goes to this install's bridge,
+    under `origin`, which is the address its console is served from. ID token signatures are not
+    validated because the token is made by the bridge and read straight from its answer (see
+    `brain.identity.lark_sign_in.THE_IDENTITY_PROOF_NEVER_TRAVELS_THROUGH_THE_BROWSER`), and the
+    nonce is off because the page the person is sent to is Lark's, which echoes none. See
+    `A_LARK_SIGN_IN_LINKS_AND_NEVER_CREATES` for why the address is trusted and nobody is made.
+    """
+    try:
+        page = authorize_base(location)
+    except LarkSignInError:
+        return Brokering(
+            problem=(
+                f"{DIRECTORY_SETTING} is 'lark' and {LOCATION_SETTING} is {location.strip()!r}, "
+                "which is not one of Lark's two platforms, larksuite.com and feishu.cn. The "
+                "location decides which address the application's secret is sent to."
+            )
+        )
+    if origin in ("", UNSET):
+        return Brokering(
+            problem=(
+                f"{DIRECTORY_SETTING} is 'lark' and this install has no public address to give "
+                "Lark's sign-in a return address, so sign-in is not brokered."
+            )
+        )
+    return Brokering(
+        provider={
+            "alias": LARK_ALIAS,
+            "displayName": "Lark",
+            "providerId": "oidc",
+            "enabled": True,
+            "trustEmail": True,
+            "storeToken": False,
+            "linkOnly": False,
+            "firstBrokerLoginFlowAlias": LINK_FLOW_ALIAS,
+            "config": {
+                "clientId": client_id.strip(),
+                "clientSecret": VAULT_REFERENCE,
+                "clientAuthMethod": "client_secret_post",
+                "authorizationUrl": page,
+                "tokenUrl": f"{origin.rstrip('/')}{TOKEN_PATH}",
+                "defaultScope": SIGN_IN_SCOPES,
+                "pkceEnabled": "false",
+                "disableNonce": "true",
+                "disableUserInfo": "true",
+                "validateSignature": "false",
+                "useJwksUrl": "false",
+                "syncMode": "IMPORT",
+            },
+        }
+    )
+
+
+def brokering(
+    *,
+    directory: str,
+    client_id: str,
+    staff_source: str,
+    location: str,
+    origin: str = "",
+) -> Brokering:
+    """The broker this configuration asks for, restricted to the company's tenant, or a reason.
+
+    `origin` is the address this install's console is served from, which only the Lark entry
+    needs: it is where Keycloak is pointed for the exchange.
+    """
     chosen = directory.strip().lower()
     if chosen in ("", NOT_BROKERED):
         return Brokering()
@@ -143,6 +240,15 @@ def brokering(*, directory: str, client_id: str, staff_source: str, location: st
             )
         )
     tenant = location.strip()
+    if chosen == LARK_SOURCE:
+        if staff_source.strip() != LARK_SOURCE:
+            return Brokering(
+                problem=(
+                    f"{DIRECTORY_SETTING} is 'lark' and {SOURCE_SETTING} is not 'lark', so "
+                    "there is no Lark staff list to link a person to. Sign-in is not brokered."
+                )
+            )
+        return lark_entry(client_id=client, location=tenant, origin=origin.strip())
     if staff_source.strip() != BROKERED_BY[chosen] or tenant in ("", UNSET):
         return Brokering(
             problem=(
