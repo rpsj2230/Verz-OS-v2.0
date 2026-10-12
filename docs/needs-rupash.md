@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**51 items are open: 175,** which tools the part of a model request that everybody shares may hold, **174,** whether a supervised agent's thirty-day review runs on its own each day, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**53 items are open: 177,** which conditions an automation's trigger may carry, **176,** where a document added from an agent's own page lives, **175,** which tools the part of a model request that everybody shares may hold, **174,** whether a supervised agent's thirty-day review runs on its own each day, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,57 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 177. Which conditions may an automation's trigger carry?
+
+**In plain terms:** the New automation flow on an agent's page lets a person choose when an automation
+runs: on a schedule, when something happens in a connected system, or when another system calls it. They
+may also want a condition on top, such as "only when an invoice is more than seven days overdue". The
+question is how free that condition is. This sits behind the trigger kinds (task M17.4.1), so nothing is
+built for it yet.
+
+**Option A: a short named list.** A condition is one comparison of a field a connected system reports
+against a value: equals, is over, is under, contains, is within some days of now. Chosen from lists in the
+form, shown on the automation's card in words, and checked at the person's own reach. No code, and
+nothing that could read what the person cannot.
+
+**Option B: no conditions at first.** A trigger only says when to look. The automation's instruction
+(what the agent is told to do) decides whether there is anything to do that time. Simplest, and an
+automation that fires and finds nothing to do costs a run each time.
+
+**Option C: free expressions.** Rejected: an expression is code, and code in a condition is a way to
+reach data the person's grants do not allow.
+
+**My recommendation:** A, built after the trigger kinds. B is the fallback if you would rather start with
+less.
+
+**What I need from you:** nothing, or reply "177: B".
+
+## 176. Where does a document added from an agent's own page live?
+
+**In plain terms:** you asked for a Knowledge section on each agent's page, where a person adds
+documents and web pages as that agent's own context, as the AnyGen workspace does ("Add some context for
+the team": extract from links, upload from a device). Our knowledge is the company's, and every document
+says who may read it. So the question is whether what a person adds on an agent's page is the company's
+document like any other, or private to that one agent.
+
+**Option A: the company's document, as recommended.** The item joins the company's knowledge in the
+department or collection the person chooses (the one the agent's rule already draws on, by default), with
+the same classification and the same access as any document. The agent's section lists the items its rule
+reaches, and if the new one is outside that rule it says so and offers one press to widen the rule
+through a draft. The item also appears on the Knowledge page, and any other agent whose rule reaches it
+can draw on it. Nobody can read through an agent anything they could not read otherwise.
+
+**Option B: private to the agent.** The item is readable only by that agent's runs, and anybody who may
+run the agent gets answers from it. Easier to picture, but it is a second way to read a document, one
+that skips the reader's own access: somebody with no access to a contract could ask the agent that holds
+it. It would need a new permission design and breaks the rule that an agent is a lens and never a
+principal.
+
+**My recommendation:** A. It is what the code is built for (adding an item is not the same as the agent
+reaching it), and the section exists to say which it is. I am building it as A; "176: B" changes that.
+
+**What I need from you:** nothing, or reply "176: B".
 
 ## 175. Which tools may the part of a model request that everybody shares hold?
 
