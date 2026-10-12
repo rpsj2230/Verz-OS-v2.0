@@ -1269,7 +1269,7 @@
     "M2.3.1",
     "M39.8.3"
    ],
-   "decision": null
+   "decision": "needs-rupash 179: what ceiling a leash may not be raised beyond; open until answered"
   },
   {
    "id": "ARC-A-073",
@@ -2585,7 +2585,7 @@
    "proof": [
     "M39.8.8"
    ],
-   "decision": null
+   "decision": "needs-rupash 180: which kinds of memory an agent is told apart by; open until answered"
   },
   {
    "id": "ARC-A-152",
@@ -4906,7 +4906,7 @@
    "proof": [
     "M27.14.7"
    ],
-   "decision": null
+   "decision": "needs-rupash 181: where the count of redactions comes from, because nothing writes the marker the audit count reads; open until answered"
   },
   {
    "id": "FEAT-12.12",
@@ -5960,7 +5960,7 @@
     "M39.7.2",
     "M39.8.8"
    ],
-   "decision": null
+   "decision": "needs-rupash 180: whether tools and workflows are parts of an agent's composition; open until answered"
   },
   {
    "id": "ARC-B-064",
@@ -5976,7 +5976,7 @@
    "proof": [
     "M2.3.1"
    ],
-   "decision": null
+   "decision": "needs-rupash 178: whether the steward may still change connectors and channels, and whether every refusal names its role; open until answered"
   },
   {
    "id": "ARC-B-065",

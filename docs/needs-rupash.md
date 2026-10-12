@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**53 items are open: 177,** which conditions an automation's trigger may carry, **176,** where a document added from an agent's own page lives, **175,** which tools the part of a model request that everybody shares may hold, **174,** whether a supervised agent's thirty-day review runs on its own each day, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**57 items are open: 181,** where the count of redactions on the audit screen should come from, **180,** whether an agent's parts include tools and workflows, and which kinds of memory an agent is told apart by, **179,** what the ceiling is that a leash may not be raised beyond, **178,** who may change which part of an agent, and whether a refusal names the role, **177,** which conditions an automation's trigger may carry, **176,** where a document added from an agent's own page lives, **175,** which tools the part of a model request that everybody shares may hold, **174,** whether a supervised agent's thirty-day review runs on its own each day, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,95 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 181. Where should the audit screen's count of redactions come from?
+
+**In plain terms:** the Activity screen is meant to show an auditor two statistics: how often each kind of
+refusal happened, and how many entries carried a redaction (a value the ledger replaced with a marker
+instead of keeping). The count of redactions reads the marker out of the ledger's own entries. On a real
+install nothing writes that marker: every ledger entry on an install is written by the database itself from
+field names, so none of them can carry one, and the figure can only ever read nought. It is not wrong, it is
+a number that cannot move.
+
+**Option A: count the requests whose answer was redacted.** Each question's telemetry already records how
+many fields were redacted from its answer. Counted over the window, that is the figure an auditor means. The
+catch is that telemetry has no idea who may see it, so the count has to be kept to the readers who may see
+every request, or it would tell someone how much happened that they cannot see.
+
+**Option B: leave it as it is.** The count stays at nought on every install, which is true and tells the
+auditor nothing, and the leaf stays open.
+
+**My recommendation:** A, shown only to a reader whose audit grant covers everybody, as the company
+consumption figure is.
+
+**What I need from you:** nothing, or reply "181: B". (Task M33.4.1.3; the refusal half is built and works.)
+
+## 180. Does an agent have tools and workflows as parts of its own, and which kinds of memory is it told apart by?
+
+**In plain terms:** the task for an agent's composition lists twelve parts (persona, knowledge scope,
+connectors, skills, tools, workflows, channels, availability, leash, model policy, memory, automations). The
+page and the code have ten: there is no part for tools (they are attached, but not drawn as a part) and none
+for workflows. Separately, the task for memory says an agent is set up with which of five kinds it may read
+and write (the conversation, the task, the project, the person and its own). The memory built has three kinds:
+session, persistent and adaptive, told apart by how long they live, not by what they are about.
+
+**Option A: add tools as a part, and treat workflows as automations; keep memory's three kinds.** Tools are
+real and already attached per agent. A workflow is today what an automation runs, so it does not need its own
+row. For memory, the three built kinds stay and an agent's setting is which of them it may read and write.
+
+**Option B: add all of it as written.** Tools and workflows as separate parts, and five memory kinds, which is
+a new way of sorting everything the Brain remembers and would need a migration for what is stored.
+
+**My recommendation:** A. It uses what exists, and a workflow that is more than an automation can be added as
+a part the day one exists (the stored, versioned workflows of M17.4.2).
+
+**What I need from you:** nothing, or reply "180: B". (Tasks M39.1.1.1 and M39.7.1.)
+
+## 179. What is the ceiling that a leash may not be raised beyond?
+
+**In plain terms:** the task for a department administrator's leash says they can lower a leash at once but
+never raise one beyond "the ceiling". Nothing says which ceiling, and there are three it could mean.
+
+**Option A: the rung the agent was published at.** Publishing an agent is approved (by two people when it
+widens anything), so the rung it went out at is the most any later press may reach; going higher means
+publishing again. Lowering always works.
+
+**Option B: the default rung of what the tool does.** Reading may go to Autonomous, writing and sending to
+Assisted, and anything touching money stays at Shadow for ever. This is the rule the gate already applies
+when a run happens. It would also mean a money action could never be promoted, which contradicts the other task
+that lets a money rung rise with two approvers.
+
+**Option C: no ceiling beyond the evidence.** A rise needs counted clean runs and a named approver, as built,
+and a money rise needs two. Nothing else.
+
+**My recommendation:** A. It is the only one of the three that is decided by people in advance and does not
+fight the money rule.
+
+**What I need from you:** nothing, or reply "179: B" or "179: C". (Task M33.2.2.4.)
+
+## 178. Who may change which part of an agent, and should a refusal name the role?
+
+**In plain terms:** the task for an agent's parts says each has a named editor: the owner for persona,
+knowledge, skills, memory and automations; the department's administrator for connectors, channels, ceiling
+and leash; the super admin for model policy. And the refusal names the role it needs. What is built differs in
+two ways. An agent's steward can also change its connectors and its channels, not only the department's
+administrator. And the refusals disagree: tools, connectors, the leash and the budget say which role is needed,
+but the model setting and the Connectors screen answer as if the thing did not exist, so nobody learns which
+role to ask.
+
+**Option A: the task as written.** Only the department's administrator changes connectors and channels, the
+steward no longer can, and every refusal names its role. The role is not a secret: a person who can open the
+page already knows the part exists, and naming the role only tells them whom to ask.
+
+**Option B: keep the steward able to change them, and name the role in every refusal.** The steward is
+trusted with the agent, and each connector they attach is still limited by what they can read themselves.
+
+**Option C: leave it.** Some refusals name a role and some do not.
+
+**My recommendation:** B, because the steward already answers for the agent and cannot hand it a source they
+could not read; and the refusals should name the role everywhere a person can already see the page.
+
+**What I need from you:** nothing, or reply "178: A" or "178: C". (Tasks M39.8.1 and M33.8.3.)
 
 ## 177. Which conditions may an automation's trigger carry?
 
