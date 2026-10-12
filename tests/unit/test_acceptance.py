@@ -32,10 +32,13 @@ from brain.ops import (
     acceptance_checks_accounts,
     acceptance_checks_channels,
     acceptance_checks_class_pools,
+    acceptance_checks_connectors_area,
     acceptance_checks_people,
+    acceptance_checks_proof_gaps,
     acceptance_checks_recovery,
     acceptance_checks_services,
     acceptance_checks_starter,
+    acceptance_checks_vault_worker,
     acceptance_operations_console,
     acceptance_operations_console_5,
     acceptance_operations_console_6,
@@ -846,6 +849,12 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         "the_scrub_meets_its_budget_on_this_install_s_processor",
     ):
         assert outcomes.pop(worker_check) == (NOT_RUN, acceptance_deployment.NOT_IN_A_WORKER)
+    # No vault is named here, so no key can be held in one; the install's own check is read-only and
+    # `tests/unit/test_acceptance_checks_vault_worker.py` shows each refusal over a reading.
+    assert outcomes.pop("the_worker_reads_a_connected_source_with_the_key_the_vault_holds") == (
+        NOT_RUN,
+        acceptance_checks_vault_worker.NO_VAULT_HERE,
+    )
     # No worker has ticked here, so neither recovery sweep has a scheduled run to judge;
     # `tests/unit/test_acceptance_recovery.py` records one and both pass.
     for recovery_check in registered(("brain.ops.acceptance_checks_recovery",)):
@@ -862,6 +871,22 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert outcomes.pop("a_new_install_is_furnished_as_decided_and_not_blank") == (
         NOT_RUN,
         acceptance_checks_starter.NOTHING_HAS_FURNISHED_THIS_INSTALL,
+    )
+    # Pressing Forgot password for a reserved person needs a mailbox somebody reads, so the check
+    # that names it says so on every install, and nothing here supplies one.
+    assert outcomes.pop("a_reserved_person_resets_their_password_and_sets_a_second_factor") == (
+        NOT_RUN,
+        acceptance_checks_proof_gaps.A_REAL_ACCOUNT_AND_A_REAL_MAILBOX_ARE_NEEDED,
+    )
+    assert outcomes.pop("a_reserved_person_signs_in_with_lark_and_a_leaver_cannot") == (
+        NOT_RUN,
+        acceptance_checks_proof_gaps.A_REAL_LARK_ACCOUNT_AND_A_REAL_SIGN_IN_ARE_NEEDED,
+    )
+    # No person has recorded a check against the Connectors requirements on a new install, so
+    # the area's check says so; `tests/unit/test_acceptance_connectors_area.py` records them.
+    assert outcomes.pop("every_connectors_requirement_is_shown_working_by_a_person") == (
+        NOT_RUN,
+        acceptance_checks_connectors_area.SOME_REQUIREMENT_HAS_NO_RECORDED_CHECK,
     )
     # Nobody here has opened a console session with a second factor, so the realm's half is not
     # run; `tests/unit/test_acceptance_people_console_2.py` records one and it passes.

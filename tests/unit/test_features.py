@@ -108,6 +108,7 @@ def test_every_declared_reader_asks_about_its_feature_and_nothing_else_asks() ->
         "brain.resolution.merge_store",
         "brain.ops.budget_stop_store",
         "brain.ops.supervision_review",
+        "brain.ops.shared_start",
     }
 
 
@@ -225,6 +226,7 @@ def test_switching_a_feature_on_writes_its_row_and_the_next_read_sees_it(
         "unattended_entity_merge": False,
         "budget_enforcement": False,
         "supervision_review": False,
+        "shared_tool_start": False,
     }
 
 
