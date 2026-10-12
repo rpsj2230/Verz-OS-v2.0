@@ -1269,7 +1269,7 @@
     "M2.3.1",
     "M39.8.3"
    ],
-   "decision": "needs-rupash 179: what ceiling a leash may not be raised beyond; open until answered"
+   "decision": "needs-rupash 179: decided 2026-10-12, A: a leash is not raised beyond the rung the agent was published at"
   },
   {
    "id": "ARC-A-073",
@@ -2585,7 +2585,7 @@
    "proof": [
     "M39.8.8"
    ],
-   "decision": "needs-rupash 180: which kinds of memory an agent is told apart by; open until answered"
+   "decision": "needs-rupash 180: decided 2026-10-12, B: five kinds of memory, as written"
   },
   {
    "id": "ARC-A-152",
@@ -4906,7 +4906,7 @@
    "proof": [
     "M27.14.7"
    ],
-   "decision": "needs-rupash 181: where the count of redactions comes from, because nothing writes the marker the audit count reads; open until answered"
+   "decision": "needs-rupash 181: decided 2026-10-12, A: the count is the requests whose answer was redacted"
   },
   {
    "id": "FEAT-12.12",
@@ -5960,7 +5960,7 @@
     "M39.7.2",
     "M39.8.8"
    ],
-   "decision": "needs-rupash 180: whether tools and workflows are parts of an agent's composition; open until answered"
+   "decision": "needs-rupash 180: decided 2026-10-12, B: tools and workflows are parts of an agent in their own right"
   },
   {
    "id": "ARC-B-064",
@@ -5976,7 +5976,7 @@
    "proof": [
     "M2.3.1"
    ],
-   "decision": "needs-rupash 178: whether the steward may still change connectors and channels, and whether every refusal names its role; open until answered"
+   "decision": "needs-rupash 178: decided 2026-10-12, A: only the department administrator changes connectors and channels, and a refusal names the role"
   },
   {
    "id": "ARC-B-065",
@@ -18664,7 +18664,7 @@
     "M39.9.1.8",
     "M39.9.1.9"
    ],
-   "decision": "needs-rupash 176: built as the company's own document, in the agent's rule or one press to widen it; private-to-the-agent is the alternative the owner may choose"
+   "decision": "needs-rupash 176: decided 2026-10-12, A: the company's own document, in the agent's rule or one press to widen it"
   },
   {
    "id": "ANY-059",
@@ -18683,7 +18683,26 @@
     "M39.9.2.5",
     "M39.9.2.6"
    ],
-   "decision": "needs-rupash 177: which conditions a trigger may carry, a short named list as recommended"
+   "decision": "needs-rupash 177: decided 2026-10-12, A: a short named list of conditions"
+  },
+  {
+   "id": "ANY-060",
+   "source": "owner's direction on needs item 173, 2026-10-12",
+   "area": "Agents",
+   "requirement": "There are two kinds of agent. A person creates their own personal agent, which only they can use and to which they connect their own Google account; a department administrator or a super administrator creates both kinds; a team agent never exposes one person's mail to anybody else.",
+   "leaves": [
+    "M39.10.1",
+    "M39.10.2",
+    "M39.10.3",
+    "M39.10.4",
+    "M39.10.5",
+    "M11.7.6"
+   ],
+   "proof": [
+    "M39.10.6",
+    "M39.10.7"
+   ],
+   "decision": "needs-rupash 189: how a team agent may use mail; open until answered"
   }
  ]
 }
