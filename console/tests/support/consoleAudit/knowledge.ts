@@ -8,6 +8,7 @@
  * Task ids: none
  */
 
+import { agentKnowledgeLinkApiPath, agentKnowledgeUploadApiPath } from "../../../src/pages/agents/agentKnowledgeQuery";
 import { uploadPath } from "../../../src/pages/knowledgeQuery";
 import {
   correctionDecisionPath,
@@ -89,8 +90,15 @@ export const READ_AFTER_AN_ACTION: Readonly<Record<string, ReadAfterAnAction>> =
 };
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
-  "src/pages/knowledge/addForms.tsx uploadPath(place.kind, place.level, place.department)": [
+  // The form is drawn on the Knowledge page and, with the agent's addresses, on an agent's Knowledge
+  // section (`brain.agent_knowledge_routes`), which calls the same door.
+  "src/pages/knowledge/addForms.tsx (door?.upload ?? uploadPath)(place.kind, place.level, place.department)": [
     at("POST /api/v1/knowledge/uploads", "uploadPath", uploadPath("sop", "department", "web").split("?")[0] ?? ""),
+    at(
+      "POST /api/v1/agents/{agent_id}/knowledge/uploads",
+      "door?.upload",
+      agentKnowledgeUploadApiPath("quote-helper", "sop", "department", "web").split("?")[0] ?? "",
+    ),
   ],
   "src/pages/knowledge/parts.tsx taskDonePath(taskId)": [
     at("POST /api/v1/knowledge/tasks/{task_id}/done", "taskDonePath", taskDonePath("steward.x")),
@@ -134,7 +142,10 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
       correctionDecisionPath("correction.x"),
     ),
   ],
-  "src/pages/knowledge/addForms.tsx LINKS_API_PATH": [at("POST /api/v1/knowledge/links", "LINKS_API_PATH", LINKS_API_PATH)],
+  "src/pages/knowledge/addForms.tsx door?.link ?? LINKS_API_PATH": [
+    at("POST /api/v1/knowledge/links", "LINKS_API_PATH", LINKS_API_PATH),
+    at("POST /api/v1/agents/{agent_id}/knowledge/links", "door?.link", agentKnowledgeLinkApiPath("quote-helper")),
+  ],
   "src/pages/knowledge/addForms.tsx queuedPath(place.kind, place.level, place.department)": [
     at(
       "POST /api/v1/knowledge/uploads/queued",
@@ -144,7 +155,27 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
 };
 
+/** Why an agent's add routes have no database test of their own yet. */
+const THE_DOOR_IS_PRESSED_ELSEWHERE =
+  "This address calls the Knowledge page's own door function with the same request, and that door's row and ledger entry are followed by its own database tests; no database test presses this address yet. The install check for the agent's Knowledge section (M39.9.1.8) does.";
+
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/agents/{agent_id}/knowledge/uploads": {
+    row: { none: THE_DOOR_IS_PRESSED_ELSEWHERE, leaf: "M39.9.1.8" },
+    audit: { none: THE_DOOR_IS_PRESSED_ELSEWHERE, leaf: "M39.9.1.8" },
+    behaviour: t(
+      "test_agent_knowledge_add",
+      "test_a_file_added_outside_the_rule_is_added_and_said_not_to_be_drawn_on_with_the_clause",
+    ),
+  },
+  "POST /api/v1/agents/{agent_id}/knowledge/links": {
+    row: { none: THE_DOOR_IS_PRESSED_ELSEWHERE, leaf: "M39.9.1.8" },
+    audit: { none: THE_DOOR_IS_PRESSED_ELSEWHERE, leaf: "M39.9.1.8" },
+    behaviour: t(
+      "test_agent_knowledge_add",
+      "test_a_link_is_fetched_once_through_the_checked_door_and_answered_the_same_way",
+    ),
+  },
   "POST /api/v1/knowledge/uploads": {
     row: t(
       "test_knowledge_upload_db",

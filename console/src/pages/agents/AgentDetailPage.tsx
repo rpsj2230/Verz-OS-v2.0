@@ -476,7 +476,7 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
           <AgentConversations agentId={agentId} />
         </SectionCard>
       ) : null}
-      {view === KNOWLEDGE_TAB ? <AgentKnowledge agentId={agentId} /> : null}
+      {view === KNOWLEDGE_TAB ? <AgentKnowledge agentId={agentId} onWiden={editDraft} /> : null}
       {view === MEMORY_TAB ? <AgentMemory agentId={agentId} /> : null}
       {view === ARTIFACTS_TAB ? <AgentArtifacts agentId={agentId} /> : null}
       {view === AUTOMATIONS_TAB ? (

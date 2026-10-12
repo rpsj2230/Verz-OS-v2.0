@@ -73,6 +73,17 @@ import {
   Submit,
 } from "./formParts";
 
+/**
+ * Where a form sends what it is given, when it is not the Knowledge page's own addresses. The agent's
+ * Knowledge section hands its own, which are the same door called from that page
+ * (`brain.agent_knowledge_routes`), and the department its rule already draws on as the default.
+ */
+export interface Door {
+  readonly upload: (kind: string, level: UploadLevel, department: string) => string;
+  readonly link: string;
+  readonly department?: string;
+}
+
 export function levelsOf(options: UploadOptions): UploadLevel[] {
   return [
     ...(options.departments.length > 0 ? (["department"] as const) : []),
@@ -86,11 +97,16 @@ interface Place {
   readonly department: string;
 }
 
-function firstPlace(options: UploadOptions): Place {
+function firstPlace(options: UploadOptions, wanted?: string): Place {
   return {
     kind: "",
     level: levelsOf(options)[0] ?? "department",
-    department: options.departments.length === 1 ? (options.departments[0] ?? "") : "",
+    department:
+      wanted !== undefined && options.departments.includes(wanted)
+        ? wanted
+        : options.departments.length === 1
+          ? (options.departments[0] ?? "")
+          : "",
   };
 }
 
@@ -184,9 +200,17 @@ function PlaceFields({
 
 // ------------------------------------------------------------------ adding (K1, K3)
 /** Upload one file (M7.6.3). */
-export function AddFileForm({ options, onAdded }: { readonly options: UploadOptions; readonly onAdded: () => void }) {
+export function AddFileForm({
+  options,
+  onAdded,
+  door,
+}: {
+  readonly options: UploadOptions;
+  readonly onAdded: (answer: unknown) => void;
+  readonly door?: Door | undefined;
+}) {
   const [file, setFile] = useState<File | null>(null);
-  const [place, setPlace] = useState<Place>(firstPlace(options));
+  const [place, setPlace] = useState<Place>(firstPlace(options, door?.department));
   const [problems, setProblems] = useState<readonly string[]>([]);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
@@ -215,7 +239,7 @@ export function AddFileForm({ options, onAdded }: { readonly options: UploadOpti
     }
     setBusy(true);
     void (async () => {
-      const result = await request<unknown>(uploadPath(place.kind, place.level, place.department), {
+      const result = await request<unknown>((door?.upload ?? uploadPath)(place.kind, place.level, place.department), {
         method: "POST",
         file: { body: file, type: type.mediaType, name: file.name },
       });
@@ -224,7 +248,7 @@ export function AddFileForm({ options, onAdded }: { readonly options: UploadOpti
       if (result.ok) {
         const added = readUploaded(result.data);
         setSaid(added === null ? "" : addedSentence(added));
-        onAdded();
+        onAdded(result.data);
       }
     })();
   };
@@ -270,9 +294,17 @@ export function AddFileForm({ options, onAdded }: { readonly options: UploadOpti
 }
 
 /** Add a web page by its link (M7.1.2). */
-export function AddLinkForm({ options, onAdded }: { readonly options: UploadOptions; readonly onAdded: () => void }) {
+export function AddLinkForm({
+  options,
+  onAdded,
+  door,
+}: {
+  readonly options: UploadOptions;
+  readonly onAdded: (answer: unknown) => void;
+  readonly door?: Door | undefined;
+}) {
   const [url, setUrl] = useState("");
-  const [place, setPlace] = useState<Place>(firstPlace(options));
+  const [place, setPlace] = useState<Place>(firstPlace(options, door?.department));
   const [problems, setProblems] = useState<readonly LinkProblem[]>([]);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
@@ -289,13 +321,13 @@ export function AddLinkForm({ options, onAdded }: { readonly options: UploadOpti
     }
     setBusy(true);
     void (async () => {
-      const result = await request<unknown>(LINKS_API_PATH, { method: "POST", body: linkBody(draft) });
+      const result = await request<unknown>(door?.link ?? LINKS_API_PATH, { method: "POST", body: linkBody(draft) });
       setBusy(false);
       setFailure(result.ok ? null : result.failure);
       if (result.ok) {
         const added = readUploaded(result.data);
         setSaid(added === null ? "" : addedSentence(added));
-        onAdded();
+        onAdded(result.data);
       }
     })();
   };
