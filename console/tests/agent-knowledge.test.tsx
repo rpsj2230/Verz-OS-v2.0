@@ -6,14 +6,20 @@
  * **Mounted through the application's own route table** and answered by a stand-in API that
  * records every request, as `agent-artifacts.test.tsx` mounts the Artifacts section.
  *
- * Task ids: M39.9.1.1, M39.9.1.6
+ * Task ids: M39.9.1.1, M39.9.1.2, M39.9.1.3, M39.9.1.4, M39.9.1.6
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
-import { EMPTY_TITLE, NOTHING_YOURS_TO_SEE, SHOW_MORE } from "../src/pages/agents/AgentKnowledge";
-import { agentKnowledgeApiPath, readAgentKnowledge } from "../src/pages/agents/agentKnowledgeQuery";
+import { DOES_NOT_MATCH, EMPTY_TITLE, NOTHING_YOURS_TO_SEE, SHOW_MORE, WIDEN_THROUGH_A_DRAFT } from "../src/pages/agents/AgentKnowledge";
+import {
+  agentKnowledgeApiPath,
+  agentKnowledgeLinkApiPath,
+  agentKnowledgeUploadApiPath,
+  readAgentKnowledge,
+  readKnowledgeAdded,
+} from "../src/pages/agents/agentKnowledgeQuery";
 import { KNOWLEDGE_TAB, viewAddress } from "../src/pages/agents/AgentDetailPage";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { installRadixStubs } from "./support/radix";
@@ -38,6 +44,16 @@ function workspaceWire(): unknown {
     headline: { basis: "own", range: "30d", spend_minor: 0, runs: 0, recorded: false },
   };
 }
+
+const OPTIONS = {
+  kinds: [{ value: "sop", label: "SOP" }],
+  departments: ["web"],
+  personal: false,
+  types: [{ media_type: "text/markdown", extensions: [".md", ".markdown"], max_bytes: 5 * 1024 * 1024 }],
+  found_by: "text search",
+  checked_by: "structural check",
+  offered_as_tables: [".csv", ".xlsx"],
+};
 
 function item(itemId: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -66,6 +82,7 @@ function knowledgeWire(extra: Record<string, unknown> = {}): unknown {
     items: [item("one"), item("two", { verification: "due", due: true, verified_by_name: null })],
     rule: [{ field: "department", op: "eq", value: "web" }],
     can_add: true,
+    add_into: "web",
     more: false,
     at_least: false,
     unread: "",
@@ -111,13 +128,155 @@ function answers(knowledge: unknown = knowledgeWire(), extra: Readonly<Record<st
   return {
     [`/api/v1/agents/${AGENT}/workspace`]: { body: workspaceWire() },
     [`GET /api/v1${agentKnowledgeApiPath(AGENT, 0)}`]: { body: knowledge },
+    "GET /api/v1/knowledge/uploads/options": { body: OPTIONS },
     ...extra,
   };
+}
+
+function addedWire(extra: Record<string, unknown> = {}): unknown {
+  return {
+    item_id: "fresh",
+    title: "Handover",
+    kind: "sop",
+    level: "department",
+    department: "web",
+    passages: 1,
+    found_by: "text search",
+    route: "link",
+    reached: true,
+    said: "Added. This agent draws on it now.",
+    blocking: [],
+    can_widen: false,
+    ...extra,
+  };
+}
+
+function posts(idp: FakeIdp): { url: string; init: RequestInit }[] {
+  return idp.calls
+    .filter((call) => call.init?.method === "POST" && call.url.includes("/api/v1/"))
+    .map((call) => ({ url: call.url, init: call.init as RequestInit }));
+}
+
+function change(container: HTMLElement, name: string, value: string): void {
+  const field = container.querySelector(`[name="${name}"]`);
+  if (field === null) {
+    throw new Error(`no ${name} field`);
+  }
+  fireEvent.change(field, { target: { value } });
+}
+
+async function openWay(container: HTMLElement, label: string): Promise<void> {
+  const button = await waitFor(() => {
+    const found = [...container.querySelectorAll("button")].find((one) => one.textContent === label);
+    if (found === undefined) {
+      throw new Error(`no ${label} button`);
+    }
+    return found;
+  });
+  await act(async () => {
+    fireEvent.click(button);
+  });
 }
 
 function rows(container: HTMLElement): Element[] {
   return [...container.querySelectorAll('[data-slot="knowledge-item"]')];
 }
+
+describe("adding from the Knowledge section", () => {
+  test("a web page is sent to the agent's own address with the rule's department already chosen, and the answer says the agent draws on it", async () => {
+    // What breaks if this is deleted: M39.9.1.3's link added from the agent's page, or told nothing
+    // about whether the agent will use it.
+    const { container, idp } = await consoleAt(
+      answers(knowledgeWire(), { [`POST /api/v1${agentKnowledgeLinkApiPath(AGENT)}`]: { status: 201, body: addedWire() } }),
+    );
+    await openWay(container, "Add a web page by its link");
+    expect((container.querySelector('[name="department"]') as HTMLSelectElement).value).toBe("web");
+    change(container, "url", "https://example.test/pricing");
+    change(container, "kind", "sop");
+    await act(async () => {
+      fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+    });
+    await waitFor(() => {
+      expect(container.querySelector('[data-slot="knowledge-added"]')?.textContent).toContain("This agent draws on it now.");
+    });
+    const [sent] = posts(idp);
+    expect(sent?.url.endsWith(agentKnowledgeLinkApiPath(AGENT))).toBe(true);
+    expect(JSON.parse(String(sent?.init.body))).toMatchObject({ url: "https://example.test/pricing", department: "web", level: "department" });
+    expect(container.querySelector('[data-slot="knowledge-blocking"]')).toBeNull();
+  });
+
+  test("a file is sent raw to the agent's own address, and an item outside the rule says why and offers the draft", async () => {
+    // What breaks if this is deleted: M39.9.1.2's upload from the agent's page and M39.9.1.4's one
+    // next step: an unreached item reported as drawn on, or widened for every agent silently.
+    const target = agentKnowledgeUploadApiPath(AGENT, "sop", "department", "web");
+    const blocked = addedWire({
+      route: "upload",
+      reached: false,
+      said: "Added to the company's documents, but this agent does not draw on it.",
+      blocking: [{ field: "department", op: "eq", value: "finance" }],
+      can_widen: true,
+    });
+    const { container, idp } = await consoleAt(answers(knowledgeWire(), { [`POST /api/v1${target}`]: { status: 201, body: blocked } }));
+    await openWay(container, "Add a file");
+    const file = new File(["# Notes"], "Notes.md", { type: "" });
+    fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, { target: { files: [file] } });
+    change(container, "kind", "sop");
+    await act(async () => {
+      fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+    });
+    await waitFor(() => {
+      expect(container.querySelector('[data-slot="knowledge-blocking"]')?.textContent).toContain(DOES_NOT_MATCH);
+    });
+    expect(container.querySelector('[data-slot="knowledge-blocking"]')?.textContent).toContain("finance");
+    const [sent] = posts(idp);
+    expect(sent?.url.endsWith(target)).toBe(true);
+    expect(sent?.init.body).toBe(file);
+    const widen = [...container.querySelectorAll("button")].find((one) => one.textContent === WIDEN_THROUGH_A_DRAFT);
+    expect(widen).toBeDefined();
+    // Pressing it opens the confirmation for a draft of this agent and changes nothing yet.
+    await act(async () => {
+      fireEvent.click(widen as Element);
+    });
+    await waitFor(() => {
+      expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
+    });
+    expect(posts(idp).some((one) => one.url.includes(`/agents/${AGENT}/drafts`))).toBe(false);
+  });
+
+  test("the door's refusal is drawn in its own words and nothing is added", async () => {
+    // What breaks if this is deleted: a refused address (a private one, say) shown as a generic
+    // failure, or as success.
+    const refusal = {
+      message: "that address is refused by the address check",
+      problems: [{ field: "url", code: "not_added", message: "that address is refused by the address check" }],
+    };
+    const { container } = await consoleAt(
+      answers(knowledgeWire(), { [`POST /api/v1${agentKnowledgeLinkApiPath(AGENT)}`]: { status: 422, body: refusal } }),
+    );
+    await openWay(container, "Add a web page by its link");
+    change(container, "url", "https://169.254.169.254/");
+    change(container, "kind", "sop");
+    await act(async () => {
+      fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("refused by the address check");
+    });
+    expect(container.querySelector('[data-slot="knowledge-added"]')).toBeNull();
+  });
+
+  test("a reader the API says may not add is offered no way to add", async () => {
+    // What breaks if this is deleted: an add offered to a reader the door will refuse.
+    const { container } = await consoleAt(answers(knowledgeWire({ can_add: false })));
+    expect([...container.querySelectorAll("button")].some((one) => one.textContent === "Add a file")).toBe(false);
+  });
+
+  test("an answer with no sentence is not an addition", () => {
+    // What breaks if this is deleted: a malformed answer drawn as a blank confirmation.
+    expect(readKnowledgeAdded({ item_id: "x" })).toBeNull();
+    expect(readKnowledgeAdded(addedWire())?.reached).toBe(true);
+  });
+});
 
 describe("the Knowledge section", () => {
   test("it lists each document with its kind, where it sits, who added it, its badge and the rule it is the answer to", async () => {
@@ -141,8 +300,10 @@ describe("the Knowledge section", () => {
     // where context for the agent is added.
     const { container } = await consoleAt(answers(knowledgeWire({ items: [] })));
     expect(container.querySelector('[data-slot="knowledge-empty"]')?.textContent).toContain(EMPTY_TITLE);
-    const links = [...container.querySelectorAll('[data-slot="knowledge-empty"] a')].map((one) => one.textContent);
-    expect(links).toEqual(["Add a file", "Add a web page by its link"]);
+    await waitFor(() => {
+      const ways = [...container.querySelectorAll('[data-slot="knowledge-empty"] button')].map((one) => one.textContent);
+      expect(ways).toEqual(["Add a file", "Add a web page by its link"]);
+    });
   });
 
   test("an empty list for a reader who may not add offers nothing to add and claims nothing about what exists", async () => {
