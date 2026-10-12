@@ -32,6 +32,7 @@ from brain.ops import (
     acceptance_checks_accounts,
     acceptance_checks_channels,
     acceptance_checks_class_pools,
+    acceptance_checks_knowledge_models,
     acceptance_checks_people,
     acceptance_checks_recovery,
     acceptance_checks_services,
@@ -792,6 +793,11 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert outcomes.pop("the_detector_finds_every_entity_the_scrub_relies_on_it_for") == (
         NOT_RUN,
         acceptance_checks_services.NO_DETECTOR_HERE,
+    )
+    # A default install declares no embedding revision, so there is no model server to ask.
+    assert outcomes.pop("the_install_s_inference_server_embeds_a_sentence_as_declared") == (
+        NOT_RUN,
+        acceptance_checks_knowledge_models.NO_EMBEDDING_REVISION_IS_DECLARED,
     )
     assert outcomes.pop("the_sandbox_finds_no_network_and_stops_scripts_at_their_limits") == (
         NOT_RUN,
