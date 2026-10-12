@@ -775,6 +775,10 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         assert outcomes.pop(escalation_check.name)[0] == NOT_RUN, escalation_check.name
     # An agent's skill reaches a model too; `tests/unit/test_acceptance_skill_runs.py` runs it.
     assert outcomes.pop("an_agents_run_reads_its_assigned_skills_and_its_level")[0] == NOT_RUN
+    # So does the reuse of one skill by two agents; `tests/unit/test_acceptance_skill_reuse.py`.
+    assert (
+        outcomes.pop("a_skill_is_reused_by_two_agents_and_refused_where_unservable")[0] == NOT_RUN
+    )
     # The co-author asks a model too, with no tools;
     # `tests/unit/test_acceptance_coauthor.py` runs it.
     assert outcomes.pop("the_coauthor_proposes_and_nothing_changes_until_taken")[0] == NOT_RUN

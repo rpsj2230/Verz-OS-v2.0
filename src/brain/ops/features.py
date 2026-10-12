@@ -283,6 +283,25 @@ SUPERVISION_REVIEW: Final = Feature(
     read_by=("brain.ops.supervision_review:review_switch_is_on",),
 )
 
+#: Refusing a skill an agent cannot use. Off until the owner decides needs-rupash 178 and 179: a
+#: skill that names tools or knowledge an agent lacks is today assigned and shown with what the
+#: agent cannot reach, and refusing it is a change in what an administrator can do in one step.
+SKILL_NEEDS: Final = Feature(
+    name="skill_needs",
+    title="Refuse a skill an agent cannot use",
+    what=(
+        "Giving a skill to an agent is refused when a tool the skill names is outside the agent's "
+        "own tools or when a department whose knowledge it needs is outside the agent's scope. "
+        "The refusal names what is missing, and nothing is widened: the agent changes only "
+        "through its own publish."
+    ),
+    while_off=(
+        "A skill is given to any agent and the screen shows which of its tools the agent can "
+        "reach. A skill given while this was on stays given."
+    ),
+    read_by=("brain.skill_routes:assign_skill",),
+)
+
 #: Every feature this product can switch on, in the order the screen lists them.
 FEATURES: Final[tuple[Feature, ...]] = (
     PROMPT_EDITING,
@@ -291,6 +310,7 @@ FEATURES: Final[tuple[Feature, ...]] = (
     UNATTENDED_ENTITY_MERGE,
     BUDGET_ENFORCEMENT,
     SUPERVISION_REVIEW,
+    SKILL_NEEDS,
 )
 
 

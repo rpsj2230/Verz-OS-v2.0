@@ -119,6 +119,7 @@ from brain.tools.skills import (
     SourceKind,
 )
 from tests.fixtures.http_client import Response
+from tests.fixtures.setting_rows import SettingRows
 from tests.fixtures.skill_sources import (
     COMMIT,
     FOLDER,
@@ -519,6 +520,11 @@ class StubResult:
         return list(self._rows)
 
 
+#: The install's feature switches, held in memory. Empty unless a test holds one, which is every
+#: feature off, as a fresh install has them.
+_SWITCHES = SettingRows()
+
+
 class StubSession(AsyncSession):
     """An `AsyncSession` answering the two statements this router makes, and no other.
 
@@ -531,6 +537,9 @@ class StubSession(AsyncSession):
 
     async def execute(self, statement: Any, *args: Any, **kwargs: Any) -> Any:
         _STORED.statements.append(statement)
+        switches = _SWITCHES.answer(statement)
+        if switches is not None:
+            return switches
         if len(statement.column_descriptions) == 2:
             asked = set(statement.whereclause.right.value)
             return StubResult(
@@ -556,6 +565,7 @@ def stored() -> Iterator[Stored]:
     """A fresh store per test, so one test's rows are never another's evidence."""
     global _STORED
     _STORED = Stored()
+    _SWITCHES.rows.clear()
     yield _STORED
 
 
@@ -811,6 +821,9 @@ def test_an_install_belonging_to_an_agent_outside_the_audience_is_dropped_by_the
     class GenerousSession(StubSession):
         async def execute(self, statement: Any, *args: Any, **kwargs: Any) -> Any:
             _STORED.statements.append(statement)
+            switches = _SWITCHES.answer(statement)
+            if switches is not None:
+                return switches
             if len(statement.column_descriptions) == 2:
                 return StubResult([_STORED.installs[key] for key in sorted(_STORED.installs)])
             return StubResult([_STORED.agents[key] for key in sorted(_STORED.agents)])
@@ -1452,6 +1465,38 @@ def test_a_rejected_skill_is_refused_assignment_and_nothing_is_written(
     assert "cannot be pinned" in refused.json()["message"]
     assert stored.library.assigned == []
     assert stored.installs["company_desk"][0].effective_hash == before
+
+
+def test_a_skill_the_agent_cannot_use_is_refused_only_while_the_switch_is_on(
+    client: TestClient, stored: Stored
+) -> None:
+    """The skill names a tool the agent is not allowed. With the install's `skill_needs` switch off
+    it is assigned and the screen shows what the agent reaches; with it on the same assignment is
+    refused with the tool named, and nothing is written.
+
+    Delete this and the rule is a function nobody asks: an install switches it on and every skill
+    is still assigned, or it cannot be switched off and an administrator cannot assign a skill
+    whose tools they mean to widen the agent for afterwards."""
+    an_assignable_agent(stored)
+    digest = post(client, "u_admin", SKILLS, a_package()).json()["digest"]
+    post(client, "u_wide", f"{SKILLS}/{digest}/review", {"decision": "approve"})
+    _SWITCHES.hold("feature.skill_needs", True, value_type="boolean")
+
+    refused = post(
+        client, "u_admin", f"{SKILLS}/{digest}/assignments", {"agent_id": "company_desk"}
+    )
+
+    assert refused.status_code == 404, refused.text
+    assert "nothing was assigned" in refused.json()["message"]
+    assert "desk.read_ticket" in refused.json()["message"]
+    assert "crm.read_client" not in refused.json()["message"]
+    assert stored.library.assigned == []
+
+    _SWITCHES.rows.clear()
+    allowed = post(
+        client, "u_admin", f"{SKILLS}/{digest}/assignments", {"agent_id": "company_desk"}
+    )
+    assert allowed.status_code == 201, allowed.text
 
 
 def test_an_agent_outside_the_audience_or_the_authority_is_refused_as_one_that_does_not_exist(
