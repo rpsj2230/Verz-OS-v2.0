@@ -132,7 +132,7 @@ Task ids: M31.1.4.1, M31.1.4.3, M31.1.4.4, M32.5.2.1, M1.1.7, M1.8.2, M23.1.1, M
 through `brain.chat.remember` after the lane answers, and the response names the thread in
 `THREAD_HEADER`, which a follow-up sends back as `Question.thread`.
 
-Task ids: M7.6.1, M9.1.1, M9.1.2, M9.2.3, M11.8.4, M11.7.8
+Task ids: M7.6.1, M9.1.1, M9.1.2, M9.2.3, M11.8.4, M11.7.8, M16.2.2
 """
 
 from __future__ import annotations
@@ -260,6 +260,7 @@ from brain.ops.model_service import ModelService
 from brain.ops.retrieval_store import StoredRetrievals
 from brain.ops.sensitive_referral_store import SensitiveReferrals, StoredSensitiveReferrals
 from brain.ops.session_memory_store import SessionRecollection, StoredSessions
+from brain.ops.signal_store import StoredSignals
 from brain.ops.slack_messages_live import Alongside
 from brain.ops.trace_sink import CountingTraceSink
 from brain.reviewed_connectors import current as reviewed_now
@@ -2470,6 +2471,63 @@ async def mark_answer(request: Request, asked: Asked, body: MarkAsked) -> Marked
         raise Absent("that answer cannot be marked by this caller")
     log.info("answer marked", principal=asked.caller.principal.id, helpful=body.helpful)
     return MarkedView(counted=True, told=MARK_COUNTED)
+
+
+# ---------------------------------------------------------------- a copy (M16.2.2)
+#: What a person is told once their copy is noted. A sentence of no consequence, said the same way
+#: whether or not anything was kept, so that the answer is not a way to find out what was.
+COPY_NOTED: Final = "Noted."
+
+#: Why a copy changes nothing by itself.
+A_COPY_IS_EVIDENCE_AND_CHANGES_NOTHING_BY_ITSELF: Final = (
+    "Copying an answer is the one signal that says something went right, and it is still one "
+    "person doing one thing to one answer. It is kept in the signal log naming the answer and "
+    "nothing it said, and no retrieval, memory, rule or agent setting reads it."
+)
+
+
+class CopiedAsked(BaseModel):
+    """One copy of one answer: the trace it ran under. Nothing else."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    trace_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._:-]+$")
+
+
+class CopiedView(BaseModel):
+    """What a copy came to: the one sentence a person is told, whatever was kept."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    told: str
+
+
+def signals_of(state: Any) -> StoredSignals | None:
+    """Where learning signals are written: `app.state.learning_signals`, or the database's."""
+    found = getattr(state, "learning_signals", None)
+    if isinstance(found, StoredSignals):
+        return found
+    sessions = getattr(state, "db_sessions", None)
+    return StoredSignals(sessions) if isinstance(sessions, async_sessionmaker) else None
+
+
+@router.post("/answer/copied", response_model=CopiedView, responses=COMMON_RESPONSES)
+async def copied_answer(request: Request, asked: Asked, body: CopiedAsked) -> CopiedView:
+    """Note that the caller copied an answer they were given (M16.2.2).
+
+    Kept in the signal log as the one positive signal, against the answer the trace names, in the
+    caller's own thread. See `A_COPY_IS_EVIDENCE_AND_CHANGES_NOTHING_BY_ITSELF`. A copy that
+    cannot be kept, whether because the trace is not the caller's answer or because nothing here
+    keeps signals, is answered with the same sentence and a 200: the person copied some text, and
+    nothing about that is a failure they need to hear of, or a way to learn which traces exist.
+    """
+    signals = signals_of(request.app.state)
+    if signals is not None:
+        kept = await signals.copied(
+            principal_id=asked.caller.principal.id, trace_id=body.trace_id, now=asked.now
+        )
+        log.info("answer copied", principal=asked.caller.principal.id, kept=kept)
+    return CopiedView(told=COPY_NOTED)
 
 
 # ------------------------------------------------------- the retrieval log (M15.3.4)
