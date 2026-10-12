@@ -899,13 +899,20 @@ def test_a_connector_with_no_verified_ceiling_says_so_rather_than_leaving_a_cell
 def test_every_connector_shipping_today_is_bound_read_only_and_claims_no_source_enforcement() -> (
     None
 ):
-    """The guide states both as facts about all nine. Delete this and a connector shipped with
-    a write binding, or claiming its source applies the asker's own permissions, changes what a
-    client should grant and the page goes on saying otherwise. The row check would catch it as
-    a cell mismatch; this says which direction the whole table is expected to point."""
+    """The guide states both as facts: every connector read-only, and every one claiming no
+    source enforcement except Google Workspace, which reads each person's account with their own
+    consent (M11.7.6) and so claims `delegated`. Delete this and a connector shipped with a write
+    binding, or claiming its source applies the asker's own permissions, changes what a client
+    should grant and the page goes on saying otherwise. The row check would catch it as a cell
+    mismatch; this says which direction the whole table is expected to point."""
+    delegated = set()
     for one in manifests():
         assert one.credential.mode is AccessMode.READ_ONLY, one.name
-        assert one.permission_sync is PermissionSync.NONE, one.name
+        if one.permission_sync is PermissionSync.DELEGATED:
+            delegated.add(one.name)
+        else:
+            assert one.permission_sync is PermissionSync.NONE, one.name
+    assert delegated == {"google_workspace"}
 
 
 def test_one_connectors_tool_names_change_with_how_it_is_configured() -> None:

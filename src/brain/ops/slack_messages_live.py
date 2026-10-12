@@ -29,7 +29,7 @@ import asyncio
 import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, Protocol
 
 import structlog
 from sqlalchemy import select
@@ -259,10 +259,20 @@ class SlackPassages:
         return body
 
 
-class Alongside:
-    """`PassageSearch` over another search and Slack: the other's passages first."""
+class PersonalPassages(Protocol):
+    """A live reader of passages personal to the asker: Slack's, or Google Workspace's (M11.7.6)."""
 
-    def __init__(self, first: Any, second: SlackPassages) -> None:
+    async def passages(
+        self, question: str, *, entitlement: EntitlementSet, now: datetime
+    ) -> TypedResult[KnowledgePassage]:
+        """The asker's own passages on the question, read live."""
+        ...
+
+
+class Alongside:
+    """`PassageSearch` over another search and a personal reader: the other's passages first."""
+
+    def __init__(self, first: Any, second: PersonalPassages) -> None:
         self._first = first
         self._second = second
 

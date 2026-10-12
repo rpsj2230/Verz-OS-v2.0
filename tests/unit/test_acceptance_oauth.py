@@ -50,18 +50,21 @@ def test_the_oauth_checks_are_listed_in_their_page_order() -> None:
     assert checks_in(MODULE) == [NAME, OWN]
 
 
-def test_the_check_says_no_shipped_source_authorises_by_oauth_yet() -> None:
-    """The check stands a consented source up because none ships, and says so in the sentence the
-    Install page shows, naming the first that will. Held against the shipped declarations, so the
-    day one declares a consent this fails and the check is pointed at it instead.
+def test_the_check_says_no_shipped_source_is_consented_to_once_for_everybody() -> None:
+    """The check stands a source's own consent up because none ships, and says so in the sentence
+    the Install page shows, naming Google Workspace as consented to by each person instead. Held
+    against the shipped declarations, so the day one declares a source's own consent this fails
+    and the check is pointed at it instead.
 
     Delete this and the page can read as a shipped source proved working when none is."""
     from brain.connectors.declaration import shipped
+    from brain.connectors.oauth import ConsentKind
 
     sentence = mine()[NAME].sentence
-    assert "no shipped source uses OAuth yet" in sentence
-    assert "Google Workspace will be the first" in sentence
-    assert not [name for name, one in shipped().items() if one.oauth is not None]
+    assert "no shipped source is consented to once for everybody" in sentence
+    assert "Google Workspace is consented to by each person" in sentence
+    kinds = {name: one.oauth.kind for name, one in shipped().items() if one.oauth is not None}
+    assert kinds == {"google_workspace": ConsentKind.PERSON}
 
 
 def test_the_stood_up_declaration_is_one_the_platform_accepts_and_renews_by_its_consent() -> None:
