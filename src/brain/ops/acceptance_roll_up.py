@@ -70,6 +70,7 @@ ROLL_UP_LEAVES: Final[frozenset[str]] = frozenset(
         "M14.8.1",
         "M16.7.7",
         "M16.7.8",
+        "M16.7.14",
         "M28.5.1",
         "M28.5.2",
         "M28.5.3",
