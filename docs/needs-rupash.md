@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**63 items are open: 199,** whether these are the criteria to hold the Maintenance Agent to, **198,** going live with your real systems, the order and one rule for the recordings, **197,** sign in with Lark, what you do and one question, **196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **181,** where the count of redactions on the audit screen should come from, **180,** whether an agent's parts include tools and workflows, and which kinds of memory an agent is told apart by, **179,** what the ceiling is that a leash may not be raised beyond, **178,** who may change which part of an agent, and whether a refusal names the role, **177,** which conditions an automation's trigger may carry, **176,** where a document added from an agent's own page lives, **175,** which tools the part of a model request that everybody shares may hold, **174,** whether a supervised agent's thirty-day review runs on its own each day, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**66 items are open: 199,** whether these are the criteria to hold the Maintenance Agent to, **198,** going live with your real systems, the order and one rule for the recordings, **197,** sign in with Lark, what you do and one question, **196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **193,** which formats an agent's generated documents start with and which libraries may be added, **192,** whether sensitive actions that cannot be undone need a second person, **191,** whether an agent may ever answer with nothing behind it, **181,** where the count of redactions on the audit screen should come from, **180,** whether an agent's parts include tools and workflows, and which kinds of memory an agent is told apart by, **179,** what the ceiling is that a leash may not be raised beyond, **178,** who may change which part of an agent, and whether a refusal names the role, **177,** which conditions an automation's trigger may carry, **176,** where a document added from an agent's own page lives, **175,** which tools the part of a model request that everybody shares may hold, **174,** whether a supervised agent's thirty-day review runs on its own each day, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -192,6 +192,71 @@ hundred and sixty model calls) to see the figures, then the full run if they hol
 **My recommendation:** A, the small run first, at a quiet hour.
 
 **What I need from you:** reply "194: A" or "194: B", and when.
+
+## 193. Which documents may an agent generate first, and may the product take two new libraries?
+
+**In plain terms:** your plan says an agent produces a document, a slide deck or a spreadsheet from an
+approved company template through one registered tool, and the file is kept as an artifact holding only
+what the person asking may see (M12.3.5). The product can write Word documents today, because it already
+holds the library that reads them. It holds no library that writes a slide deck or a spreadsheet, and
+adding one is a decision about code that runs on every install. The template is a document in your
+knowledge of kind Template that a person has verified, so a template nobody vouched for is never used.
+
+**Option A: Word documents first.** The tool, the template, the redaction and the artifact are built for
+Word, which needs nothing new. Decks and spreadsheets follow once you allow their libraries. Fewest new
+moving parts, and the whole path is proved on your install before it is widened.
+
+**Option B: allow both libraries now.** `python-pptx` for decks and `openpyxl` for spreadsheets are
+widely used and small, and all three formats arrive together.
+
+**My recommendation:** A. The part that needs care is not the file format but that the file holds only
+what the asker may see, and that is the same for every format.
+
+**What I need from you:** reply "193: A" or "193: B".
+
+## 192. Do sensitive actions that cannot be undone need a second person?
+
+**In plain terms:** your plan says an irreversible action, such as deleting information, changing DNS or
+changing a financial record, needs a second person: it cannot be approved by the person who asked for it,
+or by the person the agent runs as (M12.4.2, and your decision D4 says the two-person rule stays). Today
+an agent's prepared action is approved by one person, and that person may be the one who asked, because
+that is what the Assisted rung means. Only moving an agent up a rung needs two people. So the plan and the
+product differ, and the plan is the stricter.
+
+**Option A: two different people for every action the product classes as sensitive and irreversible.**
+The asker may not be either of them. It needs a place to record the first approval, which is a change to
+the database, and the action runs only after the second. Slower for those few actions and exactly what
+the plan says.
+
+**Option B: two people for money only.** The rule the leash already uses for raising a rung. Quicker, and
+leaves deletion and DNS to one person.
+
+**My recommendation:** A, for the seven kinds the product already recognises by name, with a reason
+recorded for each approval.
+
+**What I need from you:** reply "192: A" or "192: B".
+
+## 191. May an agent ever answer with nothing behind it?
+
+**In plain terms:** your plan says an answer with no source behind it is refused, and that this is
+configurable for each agent (M8.2.4). The refusal is built: a question nothing answers is told so and no
+model is asked. What is not built is the setting, and I stopped before building it because I could not find
+anything for it to change. No answer on any path is given without a source today, so a per-agent switch
+that let one through would switch off nothing and look like a control. To make it mean something the
+product would have to let a model answer from its own general knowledge, labelled as not from your
+documents, which is a different product behaviour from the one you described.
+
+**Option A: never.** Every agent refuses an answer nothing stands behind, as now. The task is closed by
+showing that on your install for an agent of each kind, and no setting is added.
+
+**Option B: allow it, per agent, with a label.** An agent's steward may let it answer from the model's
+own knowledge, each such answer says plainly that it is not from your documents, and doing so is recorded.
+It is a new behaviour behind a switch that ships off.
+
+**My recommendation:** A. A company system that is trusted because it cites is weakened by an answer that
+does not, and nothing in your plan asks for one.
+
+**What I need from you:** reply "191: A" or "191: B".
 
 ## 181. Where should the audit screen's count of redactions come from?
 
