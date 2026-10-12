@@ -32,6 +32,7 @@ from brain.ops import (
     acceptance_checks_accounts,
     acceptance_checks_channels,
     acceptance_checks_class_pools,
+    acceptance_checks_lark_sign_in,
     acceptance_checks_people,
     acceptance_checks_recovery,
     acceptance_checks_services,
@@ -875,6 +876,12 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         "departments_managed_on_people_are_not_the_staff_sync_s",
     ):
         assert outcomes.pop(list_check) == (NOT_RUN, acceptance_checks_people.NO_STAFF_LIST_IS_READ)
+    # No install here brokers sign-in to Lark, so the bridge has nothing at its address to ask;
+    # `tests/unit/test_acceptance_lark_sign_in.py` brokers it and the check passes.
+    assert outcomes.pop("the_lark_bridge_names_the_person_lark_names_and_nobody_else") == (
+        NOT_RUN,
+        acceptance_checks_lark_sign_in.THIS_INSTALL_DOES_NOT_BROKER_SIGN_IN_TO_LARK,
+    )
     # A roll-up reads what the checks before it came to, so on an install where some of those are
     # not run it is not run too, and it is never failed while they pass; each one's own test file
     # runs the checks it reads (`tests/unit/test_acceptance_roll_up.py`).

@@ -94,8 +94,7 @@ class _Lark:
             )
         if outbound.url == f"https://{self.host}/open-apis/authen/v1/user_info":
             return Answer(status=200, body={"code": 0, "data": self.person})
-        msg = "the bridge asked an address that is not Lark's"
-        raise CheckFailedError(msg)
+        raise CheckFailedError("the bridge asked an address that is not Lark's")
 
 
 def _claims(token: str) -> dict[str, Any]:
