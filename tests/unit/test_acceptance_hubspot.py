@@ -6,7 +6,7 @@ question reaches them, and the live lookup naming no one-record read, so a deal'
 read. Each fails with its own sentence, and every table the check writes holds afterwards what it
 held before.
 
-Task ids: M11.9.2, M11.6.5
+Task ids: M11.9.2, M11.6.5, M11.6.6
 """
 
 from __future__ import annotations
@@ -39,7 +39,9 @@ def mine() -> dict[str, Check]:
 def test_the_hubspot_check_is_registered_with_the_leaves_it_proves() -> None:
     """Delete this and the check can close a leaf it does not exercise, or name an id no task
     has."""
-    assert {name: one.leaves for name, one in mine().items()} == {NAME: ("M11.9.2", "M11.6.5")}
+    assert {name: one.leaves for name, one in mine().items()} == {
+        NAME: ("M11.9.2", "M11.6.5", "M11.6.6")
+    }
     wbs = json.loads((ROOT / "docs" / "wbs.json").read_text(encoding="utf-8"))
     leaves = {one for module in wbs["modules"] for one in module["leaf_ids"]}
     assert set(mine()[NAME].leaves) <= leaves

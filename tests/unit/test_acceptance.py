@@ -35,6 +35,7 @@ from brain.ops import (
     acceptance_checks_people,
     acceptance_checks_recovery,
     acceptance_checks_services,
+    acceptance_checks_starter,
     acceptance_operations_console,
     acceptance_operations_console_5,
     acceptance_operations_console_6,
@@ -723,6 +724,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert outcomes.pop("three_classes_share_one_budget_and_give_way_in_order")[0] == NOT_RUN
     # No cache here either; `tests/unit/test_acceptance_cache.py` runs it with a store in its place.
     assert outcomes.pop("a_cached_answer_reaches_only_the_reach_it_was_computed_for")[0] == NOT_RUN
+    # Nor a cache to keep a conversation's notes in; `tests/unit/test_acceptance_session.py` runs it
+    # with a client in memory standing in the cache's place.
+    assert outcomes.pop("session_memory_is_one_conversations_own_and_silent")[0] == NOT_RUN
     # No currency is set here, so no cost is recorded and a department's pace is withheld by
     # design; `tests/unit/test_acceptance_company_views.py` sets one and runs it.
     assert (
@@ -841,6 +845,10 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert outcomes.pop("the_install_was_furnished_once_by_the_product") == (
         NOT_RUN,
         acceptance_operations_console.NOTHING_HAS_FURNISHED_THIS_DATABASE,
+    )
+    assert outcomes.pop("a_new_install_is_furnished_as_decided_and_not_blank") == (
+        NOT_RUN,
+        acceptance_checks_starter.NOTHING_HAS_FURNISHED_THIS_INSTALL,
     )
     # Nobody here has opened a console session with a second factor, so the realm's half is not
     # run; `tests/unit/test_acceptance_people_console_2.py` records one and it passes.

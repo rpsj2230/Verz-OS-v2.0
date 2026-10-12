@@ -21,7 +21,7 @@ the key each read leases is minted for the check
 **The check steps aside where the install has HubSpot connected already**, for
 `brain.ops.acceptance_checks_sources.A_SOURCE_IS_CONNECTED_HERE_ALREADY`'s reason.
 
-Task ids: M11.9.2, M11.6.5
+Task ids: M11.9.2, M11.6.5, M11.6.6
 """
 
 from __future__ import annotations
@@ -102,7 +102,7 @@ class _RecordedAccount:
 
 
 @check(
-    leaves=("M11.9.2", "M11.6.5"),
+    leaves=("M11.9.2", "M11.6.5", "M11.6.6"),
     sentence=(
         "A HubSpot account made up for the check is connected, read by the worker into its index "
         "from recorded answers, and asked about on Ask: a company is answered by name, a deal's "

@@ -21,7 +21,7 @@ by another name, which is what a vendor's rename looks like from here.
 source the answer lane would read is the check's own `_Desk`, which counts its calls. What only a
 real helpdesk proves is the rename itself, which no install can be asked to make.
 
-Task ids: M11.8.7
+Task ids: M11.8.7, M11.8.9
 """
 
 from __future__ import annotations
@@ -119,7 +119,7 @@ async def _read(
 
 
 @check(
-    leaves=("M11.8.7",),
+    leaves=("M11.8.7", "M11.8.9"),
     sentence=(
         "A helpdesk made up for the check, read as it was and then read again calling the "
         "ticket's status by another name: the second read is degraded on the source's health, "

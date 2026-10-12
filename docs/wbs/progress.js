@@ -1321,13 +1321,13 @@ const PROGRESS = {
   },
   "M17.4.1": {
     status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (orchestration.unattended); open for proof on the install or a decision, not for code",
-    updated: "2026-10-06",
+    why: "PLAN 2026-10-12: also reached from the agent page's New automation (M39.9.2.2); the trigger kinds must be selectable and shown there. PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (orchestration.unattended); open for proof on the install or a decision, not for code",
+    updated: "2026-10-12",
   },
   "M17.4.2": {
     status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (orchestration.unattended); open for proof on the install or a decision, not for code",
-    updated: "2026-10-06",
+    why: "PLAN 2026-10-12: also the data model behind New automation on the agent page (M39.9.2.1); a template with changed settings needs none of it, anything else does. PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (orchestration.unattended); open for proof on the install or a decision, not for code",
+    updated: "2026-10-12",
   },
   "M17.4.3": {
     status: "OPEN",
@@ -3361,8 +3361,8 @@ const PROGRESS = {
   },
   "M39.1.2.2": {
     status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.workspace, ops.acceptance_checks_agent_page, pages/agents/AgentDetailPage.tsx); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/wire-agent-upgrade, no PR; branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; +12 more",
-    updated: "2026-10-06",
+    why: "PLAN 2026-10-12: reopened. The strip is claimed to carry Conversations, Automations, People, Knowledge, Memory, Artifacts and Settings, but the console draws only Conversations, Automations, Memory, Artifacts and Settings (AgentDetailPage.tsx SECTION_LABELS), so People and Knowledge are listed by the API and never shown. Knowledge is M39.9.1.1; People has no task of its own beyond this one and stays here. PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.workspace, ops.acceptance_checks_agent_page, pages/agents/AgentDetailPage.tsx); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/wire-agent-upgrade, no PR; branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; +12 more",
+    updated: "2026-10-12",
   },
   "M39.1.2.3": {
     status: "OPEN",
@@ -3401,8 +3401,8 @@ const PROGRESS = {
   },
   "M39.2.3.5": {
     status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_capability_routes, console.agent_tabs); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #235's branch M39/w3-agent-workspace-5 (may be replayed already); closed PR #254's branch M39/w3-agent-workspace-6 (may be replayed already); closed PR #257's branch M39/w3-agent-workspace-7 (may be replayed already); +1 more",
-    updated: "2026-10-06",
+    why: "PLAN 2026-10-12 (agent Knowledge section, P1): the counts need storage that does not exist. ops.retrieval_event keeps no document, no question and no principal, so a per-item, per-agent count cannot be read from it; a new record of (agent, item, day, count) with no question text is needed, which is a migration (next free number is 0213, the coordinator's) behind a flag; the figure is shown beside each item in the Knowledge section (M39.9.1.1). PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_capability_routes, console.agent_tabs); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #235's branch M39/w3-agent-workspace-5 (may be replayed already); closed PR #254's branch M39/w3-agent-workspace-6 (may be replayed already); closed PR #257's branch M39/w3-agent-workspace-7 (may be replayed already); +1 more",
+    updated: "2026-10-12",
   },
   "M39.2.4.1": {
     status: "OPEN",
@@ -3506,8 +3506,8 @@ const PROGRESS = {
   },
   "M39.6.2.3": {
     status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (automation_paused_told, console.agent_automations, ops.automation_run +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-automation-memory",
-    updated: "2026-10-06",
+    why: "PLAN 2026-10-12: partly built (the paused-automation alert #440, the failure notice #431); needs owner decision 172 on whether a pause also stops the agent's questions (recommendation: no). PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (automation_paused_told, console.agent_automations, ops.automation_run +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-automation-memory",
+    updated: "2026-10-12",
   },
   "M39.8.2": {
     status: "OPEN",
@@ -3983,6 +3983,86 @@ const PROGRESS = {
     status: "OPEN",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (requirement_check_routes); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
+  },
+  "M39.9.1.1": {
+    status: "OPEN",
+    why: "P1, the core of the Knowledge requirement. Today the API lists Knowledge as one of seven workspace tabs (console/workspace.Tab.KNOWLEDGE) and the Profile draws a read-only card of what the agent's rule reaches (AgentCapabilities.tsx KnowledgeCard: M39.2.3.1, .3, .4), but the console's tab strip draws only Conversations, Automations, Memory, Artifacts and Settings, so there is no Knowledge section and no list of items. REUSE: the workspace tab read, brain.knowledge.item (retrievable, badge), console/agent_tabs.KnowledgeScope. REMAINING: a paged read of the items this agent draws on at the reader's reach, and AgentKnowledge.tsx with its empty state. M39.1.2.2 is reopened for the missing tabs.",
+    updated: "2026-10-12",
+  },
+  "M39.9.1.2": {
+    status: "OPEN",
+    why: "P1. DEPENDS on M39.9.1.1 and on the owner's answer to needs item 176 (where an item added from an agent lives; built as recommended, company layer). REUSE: brain.knowledge.uploads.receive_upload, knowledge_intake_routes (POST /knowledge/uploads and the queued door), console/agent_tabs.plan_addition (its `reached` answer). REMAINING: an agent-scoped add route calling the door and returning plan_addition's answer, and the form. Today the card's 'Add a document or a link' only links away to /knowledge. M39.2.3.2 is reopened.",
+    updated: "2026-10-12",
+  },
+  "M39.9.1.3": {
+    status: "OPEN",
+    why: "P1. DEPENDS on M39.9.1.1 and item 176. REUSE: brain.knowledge.uploads.receive_link, POST /knowledge/links (fetched once, the company's own copy), brain.tools.fetch (address checks on every redirect), plan_addition. REMAINING: the agent-scoped add route and form, shared with M39.9.1.2.",
+    updated: "2026-10-12",
+  },
+  "M39.9.1.4": {
+    status: "OPEN",
+    why: "P1. DEPENDS on M39.9.1.2 and M39.9.1.3. REUSE: the 'Widen what it draws on, through a draft' action already on the Knowledge card (onWiden), agents/authoring drafts. REMAINING: name the unreached item beside it and make the one next step a press, never a silent change to every agent (ADDING_AN_ITEM_IS_NOT_THE_SAME_AS_REACHING_IT).",
+    updated: "2026-10-12",
+  },
+  "M39.9.1.5": {
+    status: "OPEN",
+    why: "P2. DEPENDS on M39.9.1.1. REUSE: the knowledge lifecycle on the Knowledge page (review dates, replace, retire) and brain.knowledge.uploads for a refetch. REMAINING: the same affordances from the agent's section, refusing for whoever may not change the item as the Knowledge page does.",
+    updated: "2026-10-12",
+  },
+  "M39.9.1.6": {
+    status: "OPEN",
+    why: "P1, a safety property. DEPENDS on M39.9.1.1. Items the reader may not read are absent with no count of what is hidden (DENIED and ABSENT are indistinguishable), and the agent's run reaches the intersection with the caller. REUSE: brain.knowledge.item.retrievable and the existing E_run machinery; REMAINING: the list read's tests and an install check that a colleague without the grant sees nothing.",
+    updated: "2026-10-12",
+  },
+  "M39.9.1.7": {
+    status: "OPEN",
+    why: "P2. DEPENDS on M39.9.1.1. REUSE: the Capabilities tab's connector rows (M39.2.1.x) and skill chips (M39.2.2.x). REMAINING: show them in the Knowledge section by kind, each linking to the page that owns it, with no second copy of their data.",
+    updated: "2026-10-12",
+  },
+  "M39.9.1.8": {
+    status: "OPEN",
+    why: "P1, the proof the install must show. DEPENDS on M39.9.1.1 to M39.9.1.4 and M39.9.1.6; written as an install check (see .scratch/assign/COMMON.md): reserved people, rolled-back writes, NOT_RUN where no object store is connected.",
+    updated: "2026-10-12",
+  },
+  "M39.9.1.9": {
+    status: "OPEN",
+    why: "P2. The browser proof, DEPENDS on M39.9.1.1 to M39.9.1.4. REUSE: the harness in e2e/ (two-tabs, policy specs) and console/tests/support/pageCases.",
+    updated: "2026-10-12",
+  },
+  "M39.9.2.1": {
+    status: "OPEN",
+    why: "P2. Today an agent's Automations section is a gallery of outcome templates with a one-step install, a list of this agent's automations and per-automation pause, resume, reschedule, remove and run history (M39.6.1.x, automation_gallery_routes, automations_routes, AgentAutomations), and an installed automation runs through the `automation_run` control; there is no way to start a new one that is not a template. REUSE: the gallery and install route (confirmation digest), the automation run store. REMAINING: the New automation entry, a description-in-words path and the create route; DEPENDS on M17.4.2 (outcome templates and stored, versioned workflow data) for anything beyond a template with changed settings.",
+    updated: "2026-10-12",
+  },
+  "M39.9.2.2": {
+    status: "BLOCKED",
+    why: "P2. WAITS ON M17.4.1 (trigger kinds: schedule, connector event, webhook; orchestration.unattended is built but not reachable from the page) and on the condition list, which no task defines yet: the list of named conditions is a decision for needs item 177 if the owner wants it widened beyond what is built. Today a template carries a schedule only.",
+    updated: "2026-10-12",
+  },
+  "M39.9.2.3": {
+    status: "OPEN",
+    why: "P2. DEPENDS on M39.9.2.1. REUSE: the agent's ceiling and leash (gate/leash, runtime side effects held for a person, #466) and the automation principal rule (M39.6.2.1). REMAINING: name the skills and tools an automation may use on its card and refuse an instruction that exceeds the agent's ceiling.",
+    updated: "2026-10-12",
+  },
+  "M39.9.2.4": {
+    status: "OPEN",
+    why: "P2. DEPENDS on M39.9.2.1 and M39.9.2.3. REUSE: the simulate route of gate/leash.govern and the preview step of the gallery install. REMAINING: replay the last few triggers at the owner's reach with every write simulated and nothing sent, and show the result before the switch.",
+    updated: "2026-10-12",
+  },
+  "M39.9.2.5": {
+    status: "BLOCKED",
+    why: "P2. WAITS ON M39.9.2.2 (trigger kinds and conditions) and on M17.4.3 and M17.4.4 (the owner's live entitlements at each run, suspension when they lose one). Written as an install check once those exist.",
+    updated: "2026-10-12",
+  },
+  "M39.9.2.6": {
+    status: "BLOCKED",
+    why: "P3. WAITS ON M39.9.2.1 to M39.9.2.4 and M39.9.2.2; the browser proof of the whole of New automation.",
+    updated: "2026-10-12",
+  },
+  "M39.2.3.2": {
+    status: "OPEN",
+    why: "PLAN 2026-10-12: reopened. The domain code exists (console/agent_tabs.AddRoute and plan_addition) and the Knowledge page takes uploads and links, but nothing adds from the agent: the card links away to /knowledge and `plan_addition` is called only by an install check, so a person is never told whether the agent reaches what they added. The work is M39.9.1.2 to M39.9.1.4.",
+    updated: "2026-10-12",
   },
 };
 

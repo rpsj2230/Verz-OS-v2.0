@@ -18,7 +18,7 @@ REACHED`).
 member of acceptance_b is not offered the acceptance_a agent; after, they are; once it is retired,
 nobody is.
 
-Task ids: M33.1.2.1
+Task ids: M33.1.2.1, M13.8.4
 """
 
 from __future__ import annotations
@@ -47,6 +47,15 @@ NOT_PUBLISHED: Final = "a second person holding the visibility authority could n
 NOT_OFFERED: Final = "a published agent was not offered to a member of another department"
 NOT_RETIRED: Final = "a published agent could not be retired"
 STILL_OFFERED: Final = "a retired agent was still offered to somebody"
+A_DEPARTMENT_ADMIN_PUBLISHED: Final = (
+    "an administrator of one department, or a member, published an agent to the whole company"
+)
+A_DEPARTMENT_ADMIN_RETIRED: Final = (
+    "an administrator of one department, or a member, retired a company-wide agent"
+)
+NOT_OFFERED_IN_EVERY_DEPARTMENT: Final = (
+    "a published company-wide agent was not offered to a person in every department"
+)
 
 
 def _request() -> Any:
@@ -174,3 +183,81 @@ async def a_second_person_publishes_an_agent_company_wide_and_retires_it(h: Harn
         raise CheckFailedError(NOT_RETIRED)
     if await _offered(h, member, agent) or await _offered(h, publisher, agent):
         raise CheckFailedError(STILL_OFFERED)
+
+
+@check(
+    leaves=("M13.8.4",),
+    sentence=(
+        "An administrator of acceptance_a holding the lifecycle authority there and a plain member "
+        "are each refused publishing an acceptance_a agent to the company and retiring it once "
+        "another person published it; the person holding the visibility authority publishes it, "
+        "a member of each department is then offered it, and only that person retires it."
+    ),
+)
+async def only_the_company_visibility_holder_publishes_and_retires(
+    h: Harness,
+) -> None:
+    from brain.agent_lifecycle_routes import (
+        LifecycleStateAsked,
+        PublicationAsked,
+        archive_agent,
+        publish_agent,
+    )
+    from brain.agents.lifecycle import AGENT_LIFECYCLE_CAPABILITY, AGENT_PUBLICATION_CAPABILITY
+    from brain.core.errors import Absent
+    from brain.ops.acceptance_checks_skills import _an_agent
+
+    await h.found_departments()
+    visibility = AGENT_PUBLICATION_CAPABILITY.value
+    lifecycle = AGENT_LIFECYCLE_CAPABILITY.value
+    steward, super_admin = h.principal(A, "steward"), h.principal(A, "super")
+    department_admin, member = h.principal(A, "deptadmin"), h.principal(A, "plain")
+    in_a, in_b = h.principal(A, "colleague"), h.principal(B, "colleague")
+    await h.person(steward, department=A, grants=())
+    await h.person(
+        super_admin,
+        department=A,
+        grants=((visibility, Scope.unrestricted()), (lifecycle, Scope.unrestricted())),
+    )
+    # What a department's administrator holds over their own department, and no visibility grant.
+    await h.person(department_admin, department=A, grants=((lifecycle, Scope.department(A)),))
+    await h.person(member, department=A, grants=())
+    await h.person(in_a, department=A, grants=())
+    await h.person(in_b, department=B, grants=())
+    agent = await _an_agent(h, steward)
+
+    _, request = _request()
+    request.app.state.db_sessions = h.sessions
+    asked = PublicationAsked(expected_level="department")
+    for refused in (department_admin, member):
+        try:
+            status, _ = await _status(
+                await publish_agent(request, agent, asked, await _asking(h, refused))
+            )
+        except Absent:
+            continue
+        if status == 200:
+            raise CheckFailedError(A_DEPARTMENT_ADMIN_PUBLISHED)
+    status, body = await _status(
+        await publish_agent(request, agent, asked, await _asking(h, super_admin))
+    )
+    if status != 200 or body.get("level") != "company":
+        raise CheckFailedError(NOT_PUBLISHED)
+    if not (await _offered(h, in_a, agent) and await _offered(h, in_b, agent)):
+        raise CheckFailedError(NOT_OFFERED_IN_EVERY_DEPARTMENT)
+
+    retiring = LifecycleStateAsked(expected_state=cast(Any, body["state"]))
+    for refused in (department_admin, member):
+        try:
+            status, _ = await _status(
+                await archive_agent(request, agent, retiring, await _asking(h, refused))
+            )
+        except Absent:
+            continue
+        if status == 200:
+            raise CheckFailedError(A_DEPARTMENT_ADMIN_RETIRED)
+    status, body = await _status(
+        await archive_agent(request, agent, retiring, await _asking(h, super_admin))
+    )
+    if status != 200 or body.get("state") != "archived":
+        raise CheckFailedError(NOT_RETIRED)

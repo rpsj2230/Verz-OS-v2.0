@@ -382,3 +382,67 @@ def test_a_database_named_only_by_the_prefixed_variable_is_the_one_alembic_write
         assert sql(scratch, "SELECT version_num FROM alembic_version") == [("0024",)]
     finally:
         drop(name)
+
+
+# ------------------------------------------------ a migration gives up on a lock it cannot get
+def test_the_wait_for_table_locks_is_bounded_after_the_advisory_lock_and_before_the_upgrade() -> (
+    None
+):
+    """The order inside `run_migrations`: the advisory lock first (a replica that lost the race
+    waits for the winner as long as it takes), then the bound on table locks, then the upgrade
+    that asks for them. Read from the source because the failure needs a held lock and a pooler.
+
+    Delete this and the bound can move above the advisory lock, where a waiting replica gives up
+    on the winner, or below the upgrade, where it bounds nothing."""
+    source = (REPO / "src" / "brain" / "migrate.py").read_text(encoding="utf-8")
+    body = source[source.index("def run_migrations") :]
+    # The call expression, not the words: the comment above it quotes the function name.
+    advisory = body.index('conn.execute(text("SELECT pg_advisory_xact_lock(:id)")')
+    bound = body.index("bound_the_wait_for_table_locks(conn)")
+    upgrade = body.index('command.upgrade(cfg, "head")')
+    assert advisory < bound < upgrade
+
+
+@pytest.mark.needs_db
+def test_a_migration_gives_up_on_a_held_table_and_succeeds_once_it_is_free() -> None:
+    """`A_MIGRATION_GIVES_UP_ON_A_LOCK_IT_CANNOT_GET`, against a real server. One connection holds
+    a lock on a table inside an open transaction, as the worker's acceptance run does on
+    `ops.control_run`; with the bound set, another connection's `ALTER TABLE` fails in well under
+    the five seconds it is allowed here rather than queueing, and once the first transaction ends
+    the same statement goes through. Delete this and the bound can be set to nothing, or set on
+    a connection the migration does not use, with every test green.
+    """
+    import time
+
+    import psycopg
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.pool import NullPool
+
+    scratch = fresh("brain_migrate_lock_bound")
+    try:
+        with psycopg.connect(scratch, autocommit=True) as setup:
+            setup.execute("CREATE TABLE public.lock_probe (id int)")
+        holder = psycopg.connect(scratch)
+        try:
+            holder.execute("LOCK TABLE public.lock_probe IN ACCESS SHARE MODE")
+            engine = create_engine(normalise_database_url(scratch), poolclass=NullPool)
+            with engine.connect() as conn:
+                migrate.bound_the_wait_for_table_locks(conn, 300)
+                # A safety net so a missing bound fails this test instead of hanging it for ever.
+                conn.execute(text("SELECT set_config('statement_timeout', '4000ms', true)"))
+                started = time.monotonic()
+                with pytest.raises(OperationalError, match="lock timeout"):
+                    conn.execute(text("ALTER TABLE public.lock_probe ADD COLUMN a int"))
+                assert time.monotonic() - started < 5
+                conn.rollback()
+            holder.rollback()
+            with engine.connect() as conn:
+                migrate.bound_the_wait_for_table_locks(conn, 300)
+                conn.execute(text("ALTER TABLE public.lock_probe ADD COLUMN a int"))
+                conn.commit()
+            engine.dispose()
+        finally:
+            holder.close()
+    finally:
+        drop("brain_migrate_lock_bound")

@@ -13,8 +13,9 @@ depends on into a process that only needs to compare two of its own digests.
 
 **Each check proves what its leaves' own words ask and no more.** The forwarding pointer (M14.1.5)
 is a merge's, and a name too short to match (M14.2.5) is sent to review by the cascade; both are
-proved where those are built. UEN validation (M14.2.6) needs a connected source that keeps a
-registration number, and no shipped connector projects one yet.
+proved where those are built. UEN validation (M14.2.6) needs a source that keeps a
+registration number and no shipped connector projects one, so
+`brain.ops.acceptance_checks_er_proof` proves it over a source declared for the check.
 
 Task ids: M14.1.1, M14.1.2, M14.1.3, M14.1.4, M14.1.6, M14.2.1, M14.2.2, M14.2.3, M14.2.4
 Task ids: M14.6.1, M14.7.3

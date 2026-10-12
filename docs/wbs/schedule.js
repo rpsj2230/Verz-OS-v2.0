@@ -77,7 +77,11 @@ module.exports = {
     "M42.4.1":6, "M42.4.2":6, "M42.4.3":6, "M42.4.4":6, "M42.4.5":6, "M42.4.6":6,
     // Sign in with Lark comes after the staff sync's own accounts: owner, 2026-09-29, item 115
     // ("B now, A next").
-    "M1.1.8":3, "M1.1.9":3
+    "M1.1.8":3, "M1.1.9":3,
+    // Choosing a trigger kind and a condition in New automation waits for the trigger kinds and the
+    // stored, versioned workflow data of M17.4.1 and M17.4.2; the leaves proving the whole of New
+    // automation follow it. The owner's review of the AnyGen workspace, 2026-10-12.
+    "M39.9.2.2":4, "M39.9.2.5":4, "M39.9.2.6":4
   },
   NAMES:{
     0:"Foundation", 1:"The gate", 2:"Data, channels, retrieval",
