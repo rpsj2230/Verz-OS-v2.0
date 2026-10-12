@@ -12,6 +12,7 @@
  * Task ids: M39.9.1.1, M39.9.1.6
  */
 
+import { UPLOADS_API_PATH, uploadPath, type UploadLevel } from "../knowledgeQuery";
 import type { Clause } from "./agentCapabilitiesQuery";
 
 /** How many documents one page asks for. The next page is asked for by offset. */
@@ -20,6 +21,19 @@ export const PAGE_SIZE = 25;
 /** Where one agent's Knowledge section is asked for, under the API base. */
 export function agentKnowledgeApiPath(agentId: string, offset = 0): string {
   return `/agents/${encodeURIComponent(agentId)}/knowledge?limit=${String(PAGE_SIZE)}&offset=${String(offset)}`;
+}
+
+/**
+ * Where a file is added from this page: the Knowledge page's own address and query, under the agent,
+ * so what the query says (closed-list words and a department slug, never a name) has one author.
+ */
+export function agentKnowledgeUploadApiPath(agentId: string, kind: string, level: UploadLevel, department: string): string {
+  return `/agents/${encodeURIComponent(agentId)}/knowledge/uploads${uploadPath(kind, level, department).slice(UPLOADS_API_PATH.length)}`;
+}
+
+/** Where a web page is added from this page. The address travels in the body, never the query. */
+export function agentKnowledgeLinkApiPath(agentId: string): string {
+  return `/agents/${encodeURIComponent(agentId)}/knowledge/links`;
 }
 
 export interface KnowledgeItem {
@@ -43,6 +57,8 @@ export interface AgentKnowledge {
   readonly items: readonly KnowledgeItem[];
   readonly rule: readonly Clause[];
   readonly canAdd: boolean;
+  /** The department the rule already draws on, where an addition lands unless another is chosen. */
+  readonly addInto?: string;
   readonly more: boolean;
   readonly atLeast: boolean;
   /** Set when the API could not say which documents the agent draws on, with an empty list. */
@@ -107,6 +123,45 @@ export function readKnowledgeItem(one: Fields): KnowledgeItem | null {
   };
 }
 
+function readRule(value: unknown): Clause[] {
+  return each(value, (clause) => {
+    const field = said(clause["field"]);
+    const op = said(clause["op"]);
+    const text = said(clause["value"]);
+    return field === undefined || op === undefined || text === undefined ? null : { field, op, value: text };
+  });
+}
+
+/** What adding from this page answers: the document, and whether the agent draws on it. */
+export interface KnowledgeAdded {
+  readonly itemId: string;
+  readonly title: string;
+  readonly route: string;
+  readonly reached: boolean;
+  readonly said: string;
+  readonly blocking: readonly Clause[];
+  readonly canWiden: boolean;
+}
+
+/** The answer to an addition, or null when the body is not one. */
+export function readKnowledgeAdded(payload: unknown): KnowledgeAdded | null {
+  const fields = fieldsOf(payload);
+  const itemId = said(fields?.["item_id"]);
+  const text = said(fields?.["said"]);
+  if (fields === null || itemId === undefined || text === undefined) {
+    return null;
+  }
+  return {
+    itemId,
+    title: said(fields["title"]) ?? itemId,
+    route: said(fields["route"]) ?? "",
+    reached: fields["reached"] === true,
+    said: text,
+    blocking: readRule(fields["blocking"]),
+    canWiden: fields["can_widen"] === true,
+  };
+}
+
 /** The Knowledge section out of a body, or null when the body is not an object at all. */
 export function readAgentKnowledge(payload: unknown): AgentKnowledge | null {
   const fields = fieldsOf(payload);
@@ -114,15 +169,12 @@ export function readAgentKnowledge(payload: unknown): AgentKnowledge | null {
     return null;
   }
   const unread = said(fields["unread"]);
+  const addInto = said(fields["add_into"]);
   return {
     items: each(fields["items"], readKnowledgeItem),
-    rule: each(fields["rule"], (clause) => {
-      const field = said(clause["field"]);
-      const op = said(clause["op"]);
-      const value = said(clause["value"]);
-      return field === undefined || op === undefined || value === undefined ? null : { field, op, value };
-    }),
+    rule: readRule(fields["rule"]),
     canAdd: fields["can_add"] === true,
+    ...(addInto === undefined ? {} : { addInto }),
     more: fields["more"] === true,
     atLeast: fields["at_least"] === true,
     keptRule: said(fields["kept_rule"]) ?? "",
