@@ -3,7 +3,7 @@
 - **Screens:** `/agents`, `/agents/:agentId`, `/agents/:agentId/:tab`, `/agent-templates`, `/agent-templates/:templateId`, `/approvals`, `/approvals/:suspensionId`, `/agents/new`, `/agents/drafts`, `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step`
 - **Tables:** `agent.agent`, `agent.template_instance`, `agent.template_version`, `agent.upgrade_decline`, `agent.leash_change`, `agent.supervised_action`, `agent.action_verdict`, `agent.supervision_pin`, `agent.tool_attachment`, `agent.group_install`, `ops.channel_room`, `agent.browser_envelope`, `gate.suspension`, `agent.manifest_draft`, `agent.manifest_revision`, `agent.manifest_act`, `agent.learning_pause`, `ops.agent_run`
 - **Installation values:** none
-- **Measured here:** 66 routes, 10 called by no screen; 38 write routes, 35 with all three proofs; 4 gaps.
+- **Measured here:** 68 routes, 12 called by no screen; 38 write routes, 35 with all three proofs; 4 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -26,6 +26,7 @@
 | `GET /api/v1/agents/{agent_id}/learning` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/leash` | `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/lifecycle` | `/agents/:agentId/:tab` |
+| `GET /api/v1/agents/{agent_id}/manifest` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/memory` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/publications` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/upgrade` | `/agents/:agentId`, `/agents/:agentId/:tab` |
@@ -35,6 +36,7 @@
 | `GET /api/v1/builder/form` | `/agents/drafts/:draftId` |
 | `GET /api/v1/console/agents/{agent_id}/stats` | `/agents`, `/agents/:agentId` |
 | `POST /api/v1/agent-drafts` | `/agents/:agentId`, `/agents/:agentId/:tab` |
+| `POST /api/v1/agent-drafts/import` | **no screen** |
 | `POST /api/v1/agent-drafts/{draft_id}/approve` | `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step` |
 | `POST /api/v1/agent-drafts/{draft_id}/check` | `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step` |
 | `POST /api/v1/agent-drafts/{draft_id}/decline` | `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step` |
