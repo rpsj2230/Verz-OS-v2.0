@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-12T06:15:35.081463+00:00",
-  "commit": "f37b1d1e",
-  "commit_subject": "The agent page's Knowledge and Automation sections are planned: fifteen new tasks, two reopened, two owner questions (#492)",
+  "generated_at": "2026-10-12T11:16:31.542833+00:00",
+  "commit": "149ad3a1",
+  "commit_subject": "Install checks for the retrieval and embedding caches in the install's own cache, and the agent memory tab's confidence (#491)",
   "total": 1611,
   "done": 831,
   "percent": 51.6,
