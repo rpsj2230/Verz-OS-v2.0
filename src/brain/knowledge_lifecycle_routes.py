@@ -29,6 +29,8 @@ on file. A promotion already waiting, and an act raced by another, are a 409.
   whose read admits that version, redacted by the passage policy every answer is (M7.4.5).
 - `POST .../verification`: verified by the caller now, with the next review date (M7.4.6).
 - `POST .../steward`: handed to another steward, who is told (M7.7.2).
+- `POST .../archive`: withdrawn, with nothing replacing it, by `0220`'s `know.archive_item`; its
+  passages stop being answered from and it stays on file with its history (M27.15.40).
 - `POST .../promotion`: asked for company-wide, which waits on the Approvals screen (M7.4.4).
 - `POST .../versions`: a newer version, read by K1's text path, superseding this one (M7.4.5).
 - `GET /knowledge/tasks` and `POST /knowledge/tasks/{task_id}/done`: what the database opened for
@@ -55,10 +57,12 @@ display names beside their ids, so the console draws names and keeps ids for its
 **No response carries a count of anything the caller was not shown.** Each list is the caller's own
 rows, bounded, and `truncated` says the bound was reached and never by how much.
 
-Rejected: archiving a document from the console in this change. `know.item`'s policy admits only
-live rows, so the update moving one to `archived` is refused under it exactly as a supersession was
-before `0120` wrote `know.supersede_item`; it needs its own write past the policy, which is a
-migration, and this change has no migration number.
+**Archiving is a write past `know.item`'s policy, so it is made by a function.** The policy admits
+only live rows, so the update moving one to `archived` is refused under it exactly as a supersession
+was before `0120` wrote `know.supersede_item`; `0220`'s `know.archive_item` is the same answer. The
+route decides who may by `Authority.may_act`, as every other act here does, and the function repeats
+the reach the session was told as the second wall. Rejected: widening the policy's UPDATE clause,
+which would let a mistaken route archive any row the application role can name.
 
 Task ids: M7.4.4, M7.4.5, M7.4.6, M7.6.2, M7.7.2, M27.15.40, M10.2.7
 """
@@ -97,7 +101,7 @@ from brain.knowledge.document_tools import (
 )
 from brain.knowledge.embed_policy import embedding_revision
 from brain.knowledge.ingest import IngestRefused, ParseFailure, admit_upload, ceiling_for
-from brain.knowledge.item import ITEM_ID_PATTERN, KnowledgeError, KnowledgeItem
+from brain.knowledge.item import ITEM_ID_PATTERN, KnowledgeError, KnowledgeItem, KnowledgeState
 from brain.knowledge.kinds import KIND_LABELS, KindError, KnowledgeKind
 from brain.knowledge.lifecycle import (
     DISMISSABLE,
@@ -135,6 +139,7 @@ from brain.knowledge.lifecycle_store import (
     promotions_asked,
     put_promotion,
     put_solution,
+    record_archive,
     record_decision,
     record_steward,
     record_verification,
@@ -199,6 +204,7 @@ ITEM_PATH: Final = "/knowledge/items/{item_id}"
 PASSAGES_PATH: Final = "/knowledge/items/{item_id}/passages"
 VERIFICATION_PATH: Final = "/knowledge/items/{item_id}/verification"
 STEWARD_PATH: Final = "/knowledge/items/{item_id}/steward"
+ARCHIVE_PATH: Final = "/knowledge/items/{item_id}/archive"
 PROMOTION_PATH: Final = "/knowledge/items/{item_id}/promotion"
 VERSIONS_PATH: Final = "/knowledge/items/{item_id}/versions"
 TASKS_PATH: Final = "/knowledge/tasks"
@@ -326,6 +332,7 @@ class OfferedView(BaseModel):
     new_version: bool = False
     propose: bool = False
     hand_over: bool = False
+    archive: bool = False
 
 
 class DocumentDetailView(BaseModel):
@@ -669,6 +676,7 @@ def offered_on(item: StoredItem, authority: Authority, waiting: bool) -> Offered
         new_version=new_version,
         propose=propose,
         hand_over=item.visibility.level is not Visibility.PERSONAL,
+        archive=True,
     )
 
 
@@ -1041,6 +1049,42 @@ async def hand_over(
         return refused("item", "moved", str(exc), status=409)
     log.info("knowledge.handed_over", principal=authority.principal_id, item=item_id)
     return document_view(item, authority=authority, reader=asked.reach, now=asked.now)
+
+
+@router.post(ARCHIVE_PATH, response_model=DocumentView, responses=LIFECYCLE_RESPONSES)
+async def archive(
+    request: Request, asked: Asked, item_id: Annotated[str, _ID]
+) -> DocumentView | JSONResponse:
+    """Withdrawn with nothing replacing it, by whoever may act on it (M27.15.40).
+
+    The document and its passages stop being answered from in the transaction that archives it, and
+    it stays on file with its history, which then ends with the archived step. A document the caller
+    may not act on, one that does not exist and one already archived are the one 404 with the one
+    sentence. Nothing is asked of the caller but the act: an archive is recorded by the database's
+    own ledger trigger, naming the document and the person, and never why.
+    """
+    authority = await authority_of(request, asked)
+
+    async def act(session: AsyncSession, item: StoredItem) -> None:
+        await record_archive(session, item)
+
+    try:
+        item = await _acted_on(request, asked, authority, item_id, act)
+    except (LifecycleStoreError, DBAPIError):
+        log.warning("knowledge.archive_refused_by_database", item=item_id)
+        return refused(
+            "item",
+            "moved",
+            "the document changed while it was being archived; open it again",
+            status=409,
+        )
+    log.info("knowledge.archived", principal=authority.principal_id, item=item_id)
+    return document_view(
+        replace(item, state=KnowledgeState.ARCHIVED),
+        authority=authority,
+        reader=asked.reach,
+        now=asked.now,
+    )
 
 
 @router.post(

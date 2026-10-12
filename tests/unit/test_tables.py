@@ -135,6 +135,7 @@ MIGRATION_TOOL_CATALOGUE = VERSIONS / "0117_tool_catalogue_and_switch.py"
 MIGRATION_SKILL_CATEGORY = VERSIONS / "0121_skill_sources_versions_and_categories.py"
 MIGRATION_SKILL_INVOCATION = VERSIONS / "0138_skill_invocation.py"
 MIGRATION_KNOWLEDGE_LIFECYCLE = VERSIONS / "0120_knowledge_lifecycle.py"
+MIGRATION_KNOWLEDGE_ARCHIVE = VERSIONS / "0220_knowledge_archive.py"
 MIGRATION_ACCEPTANCE = VERSIONS / "0133_acceptance_result.py"
 MIGRATION_HALT = VERSIONS / "0136_ops_halt.py"
 MIGRATION_BINDING_CODE = VERSIONS / "0118_channel_binding_codes.py"
@@ -2596,6 +2597,30 @@ def test_0113_adds_the_route_columns_nullable_on_0108_and_drops_them_on_the_way_
         assert table("obs.request_telemetry").columns[column].nullable
         assert f"ALTER TABLE obs.request_telemetry DROP COLUMN {column}" in down
     assert check_file(MIGRATION_REQUEST_ROUTE) == []
+
+
+# ------------------------------------------------------------------ 0220, archiving a document
+def test_0220_archives_through_one_definer_function_the_application_may_only_execute() -> None:
+    """The one write past `know.item`'s policy is a function with a pinned search path, granted to
+    the application role for EXECUTE and for nothing else, which restates the reach as a second
+    wall and moves the document's passages with it; the downgrade drops it and the file passes
+    the policy.
+
+    Delete this and the function can lose its pinned search path, be granted wider than EXECUTE, or
+    stop moving the passages, and a withdrawn document goes on being answered from."""
+    archive = migration_module(MIGRATION_KNOWLEDGE_ARCHIVE)
+    assert archive.revision == "0220"
+    up = squash(rendered("upgrade", MIGRATION_KNOWLEDGE_ARCHIVE))
+    down = squash(rendered("downgrade", MIGRATION_KNOWLEDGE_ARCHIVE))
+    assert "CREATE FUNCTION know.archive_item(p_item character varying)" in up
+    assert "SECURITY DEFINER SET search_path = pg_catalog, know" in up
+    assert "UPDATE know.item SET state = 'archived'" in up
+    assert "UPDATE know.chunk SET state = 'archived'" in up
+    assert "v_item.owner_id = v_principal" in up and "= ANY(v_departments)" in up
+    assert "GRANT EXECUTE ON FUNCTION know.archive_item(character varying) TO brain_app" in up
+    assert "DELETE" not in up
+    assert "DROP FUNCTION know.archive_item(character varying)" in down
+    assert check_file(MIGRATION_KNOWLEDGE_ARCHIVE) == []
 
 
 # ------------------------------------------------------------------ 0101, access requests
