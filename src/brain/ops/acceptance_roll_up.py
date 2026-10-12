@@ -28,7 +28,7 @@ composite not run for the same reason, which is what the sweep needs to leave th
 the install's locks for twice as long, and a clause check that needs a switch or a connected store
 would then be asked twice and answered twice, once by each author's reading of the same state.
 
-Task ids: M14.8.1, M16.7.7, M16.7.8
+Task ids: M14.8.1, M16.7.7, M16.7.8, M10.7.3, M1.8.5, M11.8.3
 """
 
 from __future__ import annotations
@@ -67,6 +67,9 @@ A_ROLL_UP_READS_THIS_RUN_AND_NO_OTHER: Final = (
 #: install itself, so it is never counted as the evidence for a requirement.
 ROLL_UP_LEAVES: Final[frozenset[str]] = frozenset(
     {
+        "M1.8.5",
+        "M10.7.3",
+        "M11.8.3",
         "M14.8.1",
         "M14.8.2",
         "M16.7.7",
