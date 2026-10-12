@@ -111,7 +111,9 @@ the steps below and signed in once.**
 7. **Prove it, about five minutes.** Sign out. On the sign-in page press **Lark** and sign in as yourself: you
    land in the console. Then try a Lark account of somebody who is not on the staff list, or a leaver after
    the next staff sync: you are refused and nothing loops. Record both on **Install > Requirement checks**
-   (area Identity) and tell me "197 done"; I then run the install check for it.
+   (area Identity) and tell me "197 done"; I then run the install check for it. If Lark shows an error
+   page instead of its sign-in (it may refuse a permission name or the return address), copy the words on
+   it to me and change nothing: I built this from Lark's published description and have not seen it run.
 
 **One question, with my recommendation.** Lark's own sign-in is not your password and second factor, so a
 person who signs in with Lark is signed in **ordinarily**: they can ask and read, and the console asks them to
