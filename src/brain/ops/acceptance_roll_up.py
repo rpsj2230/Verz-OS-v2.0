@@ -1,11 +1,11 @@
 """What a roll-up check reads: the checks that already proved each clause of a composite leaf.
 
-Fifteen leaves in the work breakdown say a whole area is "proved on an install" (entity
-resolution, memory and context, the learning loop, the evaluation gate) or that "every requirement
-in the register is demonstrated". Each clause of those sentences already has a check, written for
-the narrower leaf it was built under, and none of them names the composite. A composite check that
-asked the same questions again would be the same check twice in one run, holding the ledger's lock
-twice, and the second copy would be one more thing to keep in step with the first.
+Several leaves in the work breakdown say a whole area is "proved on an install" (entity resolution,
+memory and context, the learning loop, the evaluation gate). Each clause of those sentences already
+has a check, written for the narrower leaf it was built under, and none of them names the
+composite. A composite check that asked the same questions again would be the same check twice in
+one run, holding the ledger's lock twice, and the second copy would be one more thing to keep in
+step with the first.
 
 **So a roll-up asks nothing of the install. It reads what the checks that ran earlier in this run
 came to** (`Harness.earlier`) and says whether every clause was shown. The suite runs the modules in
@@ -24,25 +24,16 @@ failed roll-up, so a person looking at the Install page sees one red row for the
 row for the check that went red; a clause that could not be asked on this install leaves the
 composite not run for the same reason, which is what the sweep needs to leave the leaf open.
 
-**The register's rows are read from the register itself.** `requirements_demonstrated` reads
-`docs/requirements/register.json` from the install's own `docs`, the file `brain.docs_routes`
-serves, picks the rows whose proof leaf is the one asked for, and holds each to the same rule:
-at least one check names a leaf the row builds, every such check passed, and none failed. A row
-whose leaves no check names is a requirement nothing demonstrates, and the roll-up is not run with
-its id, so the number of undemonstrated requirements is the number of ids in the reason.
-
 **Rejected:** running the clause checks again from inside the roll-up. It doubles the run, holds
 the install's locks for twice as long, and a clause check that needs a switch or a connected store
 would then be asked twice and answered twice, once by each author's reading of the same state.
 
-Task ids: M14.8.1, M14.8.2, M16.7.7, M16.7.8, M16.7.9, M16.7.11
+Task ids: M14.8.1, M16.7.7, M16.7.8
 """
 
 from __future__ import annotations
 
-import json
 from collections.abc import Iterable, Mapping, Sequence
-from pathlib import Path
 from typing import Final
 
 from brain.ops.acceptance import (
@@ -87,9 +78,6 @@ ROLL_UP_LEAVES: Final[frozenset[str]] = frozenset(
         "M28.5.3",
     }
 )
-
-#: Where the register lives under the install's `docs`, as `brain.requirements` names it.
-REGISTER_IN_DOCS: Final = Path("requirements") / "register.json"
 
 #: How many requirement ids a reason lists before saying how many more there are.
 IDS_IN_A_REASON: Final = 6
@@ -177,68 +165,4 @@ async def clauses_demonstrated(
                 waiting or unshown,
                 "a clause of this leaf was not shown because its check was not run in this run",
             )
-        )
-
-
-def docs_directory() -> Path:
-    """The install's `docs`, where `brain.docs_routes` serves the register from."""
-    from brain.docs_routes import DOCS
-
-    return DOCS
-
-
-def register_rows(
-    proof_leaf: str, *, docs: Path | None = None
-) -> tuple[tuple[str, tuple[str, ...]], ...]:
-    """The register's rows resting on this proof leaf: each requirement id and the leaves it builds.
-
-    Refuses nothing: a missing register is the caller's to say, and raises `FileNotFoundError`.
-    """
-    path = (docs if docs is not None else docs_directory()) / REGISTER_IN_DOCS
-    rows = json.loads(path.read_text(encoding="utf-8"))["requirements"]
-    return tuple(
-        (str(one["id"]), tuple(str(leaf) for leaf in one["leaves"]))
-        for one in rows
-        if proof_leaf in one["proof"]
-    )
-
-
-async def requirements_demonstrated(
-    h: Harness, proof_leaf: str, *, own: str, prefix: str, docs: Path | None = None
-) -> None:
-    """Every requirement resting on `proof_leaf` is demonstrated by the checks named for its leaves.
-
-    A requirement is demonstrated when every leaf it builds under `prefix` has a check naming it,
-    every such check passed in this run and none failed, and at least one check names a leaf of
-    the row at all. Leaves outside `prefix` belong to other areas' roll-ups and are not asked for
-    here. See the module docstring for what is said when it is not.
-    """
-    try:
-        rows = register_rows(proof_leaf, docs=docs)
-    except FileNotFoundError:
-        raise CheckNotRunError(
-            "this install carries no requirements register to read the requirements from"
-        ) from None
-    if not rows:
-        raise CheckNotRunError(f"no requirement in the register rests on {proof_leaf}")
-    failed: list[str] = []
-    gaps: list[str] = []
-    waiting: list[str] = []
-    for requirement, leaves in rows:
-        by_leaf = {leaf: checks_naming(leaf, excluding=own) for leaf in leaves}
-        uncovered, broke, _, shown = _verdicts(h, by_leaf)
-        failed += broke if broke else []
-        if any(leaf.startswith(prefix) for leaf in uncovered) or not shown:
-            gaps.append(requirement)
-        elif any(leaf.startswith(prefix) and leaf not in shown for leaf in leaves):
-            waiting.append(requirement)
-    if failed:
-        raise CheckFailedError(_said(failed, "a check showing a requirement failed"))
-    if gaps:
-        raise CheckNotRunError(
-            _said(gaps, "no check names a leaf these requirements build, so they are not shown")
-        )
-    if waiting:
-        raise CheckNotRunError(
-            _said(waiting, "a check showing these requirements was not run in this run")
         )
