@@ -30,7 +30,7 @@
 | `GET /api/v1/agents/{agent_id}/publications` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/upgrade` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/workspace` | `/agents/:agentId`, `/agents/:agentId/:tab` |
-| `GET /api/v1/approvals` | `/approvals` |
+| `GET /api/v1/approvals` | `/agents/:agentId`, `/approvals` |
 | `GET /api/v1/approvals/{suspension_id}` | `/approvals/:suspensionId` |
 | `GET /api/v1/builder/form` | `/agents/drafts/:draftId` |
 | `GET /api/v1/console/agents/{agent_id}/stats` | `/agents`, `/agents/:agentId` |

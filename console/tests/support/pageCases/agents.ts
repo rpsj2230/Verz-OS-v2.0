@@ -178,6 +178,25 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       },
       "/api/v1/console/agents/quote-helper/stats": AGENT_STATS,
       "/api/v1/agents/quote-helper/automations": AGENT_AUTOMATIONS,
+      // What is waiting on a person for this agent: the Approvals queue narrowed to it (M27.15.30).
+      "/api/v1/approvals": {
+        items: [
+          {
+            suspension_id: "s_1",
+            request: UNBROKEN,
+            runs_as: UNBROKEN,
+            raised_at: "2019-03-04T09:00:00Z",
+            expires_at: "2019-03-04T13:00:00Z",
+            may_take_over: true,
+            unsent_because: "",
+            agent_id: "quote-helper",
+          },
+        ],
+        next_cursor: null,
+        total: null,
+        truncated: false,
+        people: {},
+      },
       // The header badge asks whether a newer template version is on offer; this agent is current.
       "/api/v1/agents/quote-helper/upgrade": {
         agent_id: "quote-helper",

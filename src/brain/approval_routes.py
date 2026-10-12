@@ -357,6 +357,8 @@ class ApprovalCardView(BaseModel):
     may_take_over: bool = False
     #: Why approving this sends nothing, or empty. `Card.unsent_because` (M11.7.3).
     unsent_because: str = ""
+    #: The agent that raised it, which the queue filters by. `Card.agent_id` (M27.15.30).
+    agent_id: str = ""
 
 
 class ApprovalQueue(Page[ApprovalCardView]):
@@ -441,6 +443,7 @@ def card_view(shown: Card) -> ApprovalCardView:
         expires_at=shown.expires_at,
         may_take_over=shown.may_take_over,
         unsent_because=shown.unsent_because,
+        agent_id=shown.agent_id,
     )
 
 
@@ -472,6 +475,7 @@ QUEUE: Final[Listing[ApprovalCardView]] = Listing(
         Column("request", lambda row: row.request, search=True),
         Column("runs_as", lambda row: row.runs_as, search=True, filter=True, sort=True),
         Column("suspension_id", lambda row: row.suspension_id, search=True),
+        Column("agent_id", lambda row: row.agent_id, filter=True),
         Column("raised_at", lambda row: row.raised_at, sort=True),
         Column("expires_at", lambda row: row.expires_at, sort=True),
     ),

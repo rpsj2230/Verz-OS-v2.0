@@ -296,6 +296,18 @@ def test_a_report_is_listed_filtered_and_fetched_only_while_its_requester_holds_
     assert kept is not None and len(fetched.content) == made.bytes_stored
     assert steward.status_code == missing.status_code == narrowed.status_code == 404
     assert steward.json()["message"] == missing.json()["message"] == narrowed.json()["message"]
+    # M27.15.42: the one download that was served left one read and one ledger entry naming the
+    # file and the person who took it, and the three refused ones left none.
+    assert sql(
+        database,
+        "SELECT reader_id, record_kind, record_id FROM ops.sensitive_read"  # noqa: S608
+        f" WHERE record_id = '{made.artifact_id}'",
+    ) == [("u_narrow", "artifact", made.artifact_id)]
+    assert sql(
+        database,
+        "SELECT actor_id, details->>'record_kind' FROM obs.audit_entry"  # noqa: S608
+        f" WHERE action = 'record_read' AND subject = 'entity:{made.artifact_id}'",
+    ) == [("u_narrow", "artifact")]
 
 
 def test_the_steward_supersedes_the_person_archives_and_a_colleague_is_told_who_may(

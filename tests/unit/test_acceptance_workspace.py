@@ -120,6 +120,7 @@ LEAVES = {
         "M39.5.2.5",
         "M39.8.4",
         "M39.8.5",
+        "M27.15.42",
     ),
     "an_agents_leash_moves_on_evidence_and_its_pin_extends": (
         "M39.3.2.1",
@@ -521,6 +522,25 @@ def test_a_download_that_trusts_its_own_person_fails_the_artifact_check(
     assert run_checks(head, (by_name(name),))[name] == (
         FAILED,
         "the steward could fetch a report whose cost they may not read",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_download_that_leaves_no_entry_fails_the_artifact_check(
+    head: str, bucket: FakeS3, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the download's record gone, the file is handed over and nothing says who took it, and
+    the check says so. Delete this and M27.15.42 closes on a route that serves files unrecorded."""
+
+    async def unrecorded(*args: object, **kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr("brain.agent_artifact_routes.record_artifact_download", unrecorded)
+    name = "an_agents_report_holds_what_its_reader_may_see_and_is_rechecked"
+
+    assert run_checks(head, (by_name(name),))[name] == (
+        FAILED,
+        "a download did not leave exactly one entry naming file and reader",
     )
 
 
