@@ -20,7 +20,11 @@
  * may open is shown the same words whether nothing exists or nothing is theirs, and the two ways to
  * add a document are offered only to a reader the API said may add one.
  *
- * Task ids: M39.9.1.1, M39.9.1.6
+ * **A newer version of a document is the Knowledge page's own form** (`NewVersionForm`), drawn under
+ * a document only where the API said this reader may act on it, and sent to the page's own route,
+ * which refuses whoever may not. The new version replaces the old one for every agent and person.
+ *
+ * Task ids: M39.9.1.5, M39.9.1.1, M39.9.1.6
  */
 
 import { FileText, Link2, X } from "lucide-react";
@@ -32,6 +36,7 @@ import { Chip, EmptyState, FailureState, LoadingState, Note, SectionCard } from 
 import { Button } from "../../components/ui/button";
 import { dayWords } from "../access/formParts";
 import { documentAddress, verifiedWords } from "../knowledge/knowledgeDocuments";
+import { NewVersionForm } from "../knowledge/actForms";
 import { AddFileForm, AddLinkForm, type Door } from "../knowledge/addForms";
 import { readUploadOptions, UPLOAD_OPTIONS_API_PATH } from "../knowledgeQuery";
 import { clauseWords } from "./agentCapabilitiesQuery";
@@ -56,11 +61,22 @@ export const NOTHING_YOURS_TO_SEE = "Nothing this agent draws on is yours to see
 export const ADD_A_FILE = "Add a file";
 export const ADD_A_LINK = "Add a web page by its link";
 export const SHOW_MORE = "Show more";
+export const ADD_A_NEWER_VERSION = "Add a newer version";
 export const WIDEN_THROUGH_A_DRAFT = "Widen what it draws on, through a draft";
 export const DOES_NOT_MATCH = "It does not match";
 export const NARROWS_NOTHING_OWN = "It narrows nothing of its own: it draws on whatever you may read.";
 
-function ItemRow({ item }: { readonly item: KnowledgeItem }) {
+function ItemRow({
+  item,
+  replacing,
+  onReplace,
+  onReplaced,
+}: {
+  readonly item: KnowledgeItem;
+  readonly replacing: boolean;
+  readonly onReplace: () => void;
+  readonly onReplaced: () => void;
+}) {
   const addedBy = item.addedByName === "" ? undefined : item.addedByName;
   const day = dayWords(item.addedAt);
   const added = [addedBy === undefined ? null : `added by ${addedBy}`, day === "" ? null : day].filter((one): one is string => one !== null);
@@ -73,6 +89,11 @@ function ItemRow({ item }: { readonly item: KnowledgeItem }) {
         </Link>
         <Chip>{item.kindLabel}</Chip>
         {item.due ? <Chip tone="requested">Due for review</Chip> : null}
+        {item.canReplace ? (
+          <Button variant="ghost" size="xs" className="ml-auto" aria-expanded={replacing} onClick={onReplace}>
+            {ADD_A_NEWER_VERSION}
+          </Button>
+        ) : null}
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-dim">
         {item.place === "" ? null : <span>{`in ${item.place}`}</span>}
@@ -80,6 +101,11 @@ function ItemRow({ item }: { readonly item: KnowledgeItem }) {
         <span data-slot="knowledge-badge">{verifiedWords(item)}</span>
         {item.reviewBy === undefined ? null : <span>{`review by ${dayWords(item.reviewBy)}`}</span>}
       </div>
+      {replacing ? (
+        <div data-slot="knowledge-replace" className="max-w-xl">
+          <NewVersionForm itemId={item.itemId} title={item.title} onDone={onReplaced} />
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -147,6 +173,7 @@ export function AgentKnowledge({ agentId, onWiden }: { readonly agentId: string;
   const [said, setSaid] = useState<string | null>(null);
   const [way, setWay] = useState<Way | null>(null);
   const [added, setAdded] = useState<KnowledgeAdded | null>(null);
+  const [replacing, setReplacing] = useState<string | null>(null);
   const knowledge = first.busy || first.data === null ? null : readAgentKnowledge(first.data);
   // What this person may add and where is the Knowledge page's own question, asked once and only
   // of a reader the section says may add.
@@ -213,7 +240,18 @@ export function AgentKnowledge({ agentId, onWiden }: { readonly agentId: string;
       <>
         <ul data-slot="knowledge-list" className="m-0 flex list-none flex-col p-0">
           {items.map((one) => (
-            <ItemRow key={one.itemId} item={one} />
+            <ItemRow
+              key={one.itemId}
+              item={one}
+              replacing={replacing === one.itemId}
+              onReplace={() => setReplacing((was) => (was === one.itemId ? null : one.itemId))}
+              onReplaced={() => {
+                setReplacing(null);
+                setLater([]);
+                setMore(null);
+                setVersion((count) => count + 1);
+              }}
+            />
           ))}
         </ul>
         {hasMore ? (

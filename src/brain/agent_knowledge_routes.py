@@ -50,7 +50,15 @@ where the rule already reaches. **Nothing is added to the agent's reach by the a
 (`brain.console.agent_tabs.ADDING_AN_ITEM_IS_NOT_THE_SAME_AS_REACHING_IT`): an item outside the
 rule is the company's document and stays unreached until a person changes the rule.
 
-Task ids: M39.9.1.1, M39.9.1.2, M39.9.1.3, M39.9.1.4, M39.9.1.6
+**A document is replaced by a new version through the Knowledge page's own route, and only there.**
+The section only says which documents the reader may replace (`Authority.may_act`, the page's own
+answer: its steward, or an administrator where it sits) and the page's own form posts to
+`POST /knowledge/items/{item_id}/versions`, which refuses whoever may not as it always has. There is
+no second route and no second rule, because a document is the company's and not the agent's: the new
+version supersedes the old one for every agent and every person at once, which is the Knowledge
+page's argument for it.
+
+Task ids: M39.9.1.5, M39.9.1.1, M39.9.1.2, M39.9.1.3, M39.9.1.4, M39.9.1.6
 """
 
 from __future__ import annotations
@@ -172,6 +180,9 @@ class AgentKnowledgeItemView(BaseModel):
     review_by: datetime | None = None
     #: Whether its review date has arrived.
     due: bool = False
+    #: Whether this reader may replace it with a newer version: the Knowledge page's own answer,
+    #: `Authority.may_act`, which is its steward or an administrator where it sits.
+    can_replace: bool = False
     #: Whether this agent's rule reaches it. Every listed item is reached; the field is the
     #: contract the add answer shares, so the page draws one shape for both.
     reached: bool = True
@@ -243,7 +254,9 @@ def place_of(item: StoredItem) -> str:
     return item.visibility.department or COMPANY_PLACE
 
 
-def item_view(one: StoredItem, *, asked: Asking, names: dict[str, str]) -> AgentKnowledgeItemView:
+def item_view(
+    one: StoredItem, *, asked: Asking, names: dict[str, str], can_replace: bool = False
+) -> AgentKnowledgeItemView:
     """One document as this reader is shown it: the badge as they may be told it, never the text."""
     shown = disclose(one, reader=asked.reach, now=asked.now)
     named = shown.verified_by
@@ -262,6 +275,7 @@ def item_view(one: StoredItem, *, asked: Asking, names: dict[str, str]) -> Agent
         verified_at=shown.verified_at,
         review_by=one.review_by,
         due=one.review_by is not None and one.review_by <= asked.now and one.is_retrievable,
+        can_replace=can_replace,
     )
 
 
@@ -385,7 +399,10 @@ async def agent_knowledge(
         )
     return AgentKnowledgeView(
         agent_id=agent_id,
-        items=[item_view(one, asked=asked, names=names) for one in page],
+        items=[
+            item_view(one, asked=asked, names=names, can_replace=authority.may_act(one))
+            for one in page
+        ],
         rule=[
             KnowledgeClauseView(field=clause.field, op=clause.op.value, value=str(clause.value))
             for clause in scope.predicate.clauses

@@ -6,13 +6,14 @@
  * **Mounted through the application's own route table** and answered by a stand-in API that
  * records every request, as `agent-artifacts.test.tsx` mounts the Artifacts section.
  *
- * Task ids: M39.9.1.1, M39.9.1.2, M39.9.1.3, M39.9.1.4, M39.9.1.6
+ * Task ids: M39.9.1.5, M39.9.1.1, M39.9.1.2, M39.9.1.3, M39.9.1.4, M39.9.1.6
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import { DOES_NOT_MATCH, EMPTY_TITLE, NOTHING_YOURS_TO_SEE, SHOW_MORE, WIDEN_THROUGH_A_DRAFT } from "../src/pages/agents/AgentKnowledge";
+import { ADD_VERSION } from "../src/pages/knowledge/formParts";
 import {
   agentKnowledgeApiPath,
   agentKnowledgeLinkApiPath,
@@ -71,6 +72,7 @@ function item(itemId: string, extra: Record<string, unknown> = {}): Record<strin
     verified_at: "2019-03-05T09:00:00Z",
     review_by: "2999-01-01T00:00:00Z",
     due: false,
+    can_replace: false,
     reached: true,
     ...extra,
   };
@@ -275,6 +277,44 @@ describe("adding from the Knowledge section", () => {
     // What breaks if this is deleted: a malformed answer drawn as a blank confirmation.
     expect(readKnowledgeAdded({ item_id: "x" })).toBeNull();
     expect(readKnowledgeAdded(addedWire())?.reached).toBe(true);
+  });
+});
+
+describe("replacing a document", () => {
+  test("a newer version is offered only where the API said the reader may act, through the Knowledge page's own form and route", async () => {
+    // What breaks if this is deleted: M39.9.1.5's replace, offered on a document the page's route
+    // refuses, or sent through a route of the section's own.
+    const { container, idp } = await consoleAt(
+      answers(knowledgeWire({ items: [item("one", { can_replace: true }), item("two")] }), {
+        "POST /api/v1/knowledge/items/one/versions": { status: 201, body: { item_id: "one2", supersedes: "one", title: "T", level: "department", department: "web", passages: 1, found_by: "text search" } },
+      }),
+    );
+    const rowsNow = rows(container);
+    expect([...rowsNow[0]?.querySelectorAll("button") ?? []].map((one) => one.textContent)).toEqual(["Add a newer version"]);
+    expect(rowsNow[1]?.querySelectorAll("button").length).toBe(0);
+    await act(async () => {
+      fireEvent.click(rowsNow[0]?.querySelector("button") as Element);
+    });
+    await waitFor(() => {
+      expect(container.querySelector('[data-slot="knowledge-replace"] form[aria-label="Add a newer version"]')).not.toBeNull();
+    });
+    const file = new File(["# New"], "New.md", { type: "" });
+    fireEvent.change(container.querySelector('[data-slot="knowledge-replace"] input[type="file"]') as HTMLInputElement, { target: { files: [file] } });
+    await act(async () => {
+      fireEvent.submit(container.querySelector('[data-slot="knowledge-replace"] form') as HTMLFormElement);
+    });
+    await waitFor(() => {
+      expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
+    });
+    // Nothing is sent until the replacement is confirmed.
+    expect(posts(idp).filter((one) => one.url.includes("/versions"))).toEqual([]);
+    const confirmButton = [...(document.querySelector('[role="alertdialog"]')?.querySelectorAll("button") ?? [])].find((one) => one.textContent === ADD_VERSION);
+    await act(async () => {
+      fireEvent.click(confirmButton as Element);
+    });
+    await waitFor(() => {
+      expect(posts(idp).some((one) => new URL(one.url, CONSOLE_ORIGIN).pathname === "/api/v1/knowledge/items/one/versions")).toBe(true);
+    });
   });
 });
 

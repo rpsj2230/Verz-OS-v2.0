@@ -101,16 +101,23 @@ def item(
 class Library:
     """What `reader_stored_items` hands the route: the items, and who may open which."""
 
-    def __init__(self, items: list[StoredItem], *, readable: set[str] | None = None) -> None:
+    def __init__(
+        self,
+        items: list[StoredItem],
+        *,
+        readable: set[str] | None = None,
+        adds: tuple[str, ...] = ("web",),
+    ) -> None:
         self.items = items
         self.readable = readable
+        self.adds = adds
 
     async def __call__(
         self, sessions: Any, reach: Any, now: datetime
     ) -> tuple[Authority, tuple[StoredItem, ...], bool]:
         who = reach.principal_id
         reads = Reach(principal_id=who, departments=("web",))
-        adds = Reach(principal_id=who, departments=("web",))
+        adds = Reach(principal_id=who, departments=self.adds)
         authority = Authority(principal_id=who, reads=reads, adds=adds)
         shown = tuple(
             one
@@ -300,3 +307,23 @@ def test_an_agent_whose_rule_reaches_nothing_is_still_answered_with_its_rule_and
     body = AgentKnowledgeView.model_validate(knowledge(client, "u_admin").json())
     assert (body.items, body.more, body.unread) == ([], False, "")
     assert [(one.field, one.value) for one in body.rule] == [("department", "web")]
+
+
+def test_a_document_is_offered_for_replacement_to_the_person_who_may_act_on_it_and_to_nobody_else(
+    served: tuple[TestClient, Stub], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Which documents carry the offer is the Knowledge page's own answer, its steward: the
+    administrator here is the steward of one and not of the other. Delete this and the section can
+    offer a replacement the page's route will then refuse, or offer none to its steward."""
+    client, _ = served
+    mine_and_theirs = [item("web_mine", added=1, owner="u_admin"), item("web_theirs", added=2)]
+    monkeypatch.setattr(routes, "reader_stored_items", Library(mine_and_theirs, adds=()))
+    body = AgentKnowledgeView.model_validate(knowledge(client, "u_admin").json())
+    assert {one.item_id: one.can_replace for one in body.items} == {
+        "web_mine": True,
+        "web_theirs": False,
+    }
+    # An administrator where the documents sit may replace both.
+    monkeypatch.setattr(routes, "reader_stored_items", Library(mine_and_theirs))
+    wider = AgentKnowledgeView.model_validate(knowledge(client, "u_admin").json())
+    assert {one.can_replace for one in wider.items} == {True}

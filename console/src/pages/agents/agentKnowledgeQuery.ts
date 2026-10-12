@@ -50,6 +50,8 @@ export interface KnowledgeItem {
   readonly verifiedAt?: string;
   readonly reviewBy?: string;
   readonly due: boolean;
+  /** Whether this reader may replace it with a newer version, as the Knowledge page decides it. */
+  readonly canReplace: boolean;
   readonly reached: boolean;
 }
 
@@ -117,6 +119,7 @@ export function readKnowledgeItem(one: Fields): KnowledgeItem | null {
     ...optional("verifiedAt", said(one["verified_at"])),
     ...optional("reviewBy", said(one["review_by"])),
     due: one["due"] === true,
+    canReplace: one["can_replace"] === true,
     // Absent means reached: the list is the documents the rule reaches, so a body that omits the
     // field is the list's own contract and not a document left out.
     reached: one["reached"] !== false,
