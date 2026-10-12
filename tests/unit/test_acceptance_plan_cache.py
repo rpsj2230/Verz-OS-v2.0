@@ -215,3 +215,67 @@ def test_an_answer_key_that_ignores_the_source_epochs_fails_the_freshness_check(
     outcome, reason = run_mine(install)[FRESH]
     assert outcome == FAILED
     assert "answer key did not change" in reason
+
+
+class ClientInMemory:
+    """The commands `brain.cache` sends and the three the check adds (`ttl`, `delete`, `close`),
+    over a dictionary, so the checks run through the product's own adapters and serialisation."""
+
+    def __init__(self) -> None:
+        self.data: dict[str, bytes] = {}
+        self.ttls: dict[str, int] = {}
+
+    def get(self, name: str) -> bytes | None:
+        return self.data.get(name)
+
+    def setex(self, name: str, time: int, value: bytes) -> object:
+        self.data[name] = bytes(value)
+        self.ttls[name] = time
+        return True
+
+    def ttl(self, name: str) -> int:
+        return self.ttls.get(name, -2)
+
+    def delete(self, *names: str) -> int:
+        gone = [one for one in names if one in self.data]
+        for one in gone:
+            del self.data[one]
+            del self.ttls[one]
+        return len(gone)
+
+    def close(self) -> None:
+        return None
+
+
+@pytest.mark.needs_db
+def test_both_checks_pass_through_the_products_own_cache_adapters_and_leave_no_key(
+    install: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**The check against `brain.cache`'s real record caches**, over a client in memory: the plan
+    and the epochs reading are written as the product writes them (validated JSON under a
+    lifetime), read back, and every key the check wrote is deleted by name. Delete this and the
+    checks are only ever run over a dictionary that skips the adapters, so a value the real
+    cache would refuse, or a key left behind in the install's cache, goes unseen."""
+    from brain import cache
+
+    client = ClientInMemory()
+    monkeypatch.setattr(cache, "make_client", lambda url, **_: client)
+    from brain.db import normalise_database_url
+
+    settings = settings_from(
+        {"BRAIN_DATABASE_URL": install, "BRAIN_VALKEY_URL": "redis://cache.invalid:6379/0"}
+    )
+    _, results = asyncio.run(
+        acceptance_run.run_acceptance(
+            normalise_database_url(install),
+            settings=settings,
+            commit="abc1234",
+            checks=list(registered((MODULE,))),
+            force=True,
+        )
+    )
+    assert {one.name: (one.outcome, one.reason) for one in results} == {
+        PLAN: (PASSED, ""),
+        FRESH: (PASSED, ""),
+    }
+    assert client.data == {}

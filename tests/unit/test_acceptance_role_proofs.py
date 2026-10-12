@@ -128,3 +128,22 @@ def test_a_source_claiming_what_its_declarations_cannot_support_fails_the_claim_
     outcome, reason = run_mine(install)[CLAIM]
     assert outcome == FAILED
     assert "cannot support" in reason
+
+
+@pytest.mark.needs_db
+def test_an_elevation_chain_the_application_may_edit_fails_the_chain_check(install: str) -> None:
+    """The application's role given the right to update the chain and the trigger that refuses an
+    amendment switched off, which is the two walls the product builds. Delete this and the check
+    closes M33.7.1.3 on a second chain that is a name and not an immutable record."""
+    from tests.fixtures.scratch_postgres import sql
+
+    table = "obs.elevation_entry"
+    sql(install, f"GRANT UPDATE ON {table} TO brain_app")
+    sql(install, f"ALTER TABLE {table} DISABLE TRIGGER elevation_entry_refuses_amendment")
+    try:
+        outcome, reason = run_mine(install)[CHAIN]
+    finally:
+        sql(install, f"ALTER TABLE {table} ENABLE TRIGGER elevation_entry_refuses_amendment")
+        sql(install, f"REVOKE UPDATE ON {table} FROM brain_app")
+    assert outcome == FAILED
+    assert "could be changed or removed" in reason
