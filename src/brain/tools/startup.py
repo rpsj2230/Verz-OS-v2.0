@@ -168,6 +168,7 @@ from brain.knowledge.rows import RowSource, RowTool
 from brain.ops.connector_catalogue import Derived, declarations
 from brain.tools.proposed_writes import register_proposed_writes
 from brain.tools.registry import ResultContract, ToolRegistry
+from brain.tools.skill_tools import SkillTools, register_skill_tools
 from brain.tools.website_check import WebsiteCheckTool, register_website_check
 
 #: Why the document plane is registered on every install that has rows, whatever it reads.
@@ -345,6 +346,7 @@ def build_registry(
     figures: LiveFigures | None = None,
     website: WebsiteCheckTool | None = None,
     caches: KnowledgeCaches | None = None,
+    skills: SkillTools | None = None,
 ) -> ToolRegistry:
     """Every tool this application offers, checked and frozen (M12.1.5).
 
@@ -372,6 +374,10 @@ def build_registry(
     `website` is the website check bound to its transport (`brain.ops.website_probe`). Absent,
     the check is not registered, for the reason a row tool is not registered without a row
     source: a tool in the catalogue that cannot reach a site would tell a person it is down.
+
+    `skills` binds the two tools a run reads a skill with (`brain.tools.skill_tools`): the
+    instructions of an offered skill, and its scripts where the install runs a sandbox. Absent,
+    neither is registered, for the reason the website check is not.
 
     Returns frozen. A caller receiving an unfrozen registry could register into it after the
     whole-registry checks had run, which is the same as not running them.
@@ -438,5 +444,10 @@ def build_registry(
     # source: it reads a site, not a table.
     if website is not None:
         register_website_check(registry, website)
+
+    # A skill's instructions on request, and its scripts through the one execution tool where
+    # there is a sandbox (M12.2.8, M12.2.9). Not tied to a row source either.
+    if skills is not None:
+        register_skill_tools(registry, skills)
 
     return registry.freeze()
