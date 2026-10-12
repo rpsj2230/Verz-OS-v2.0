@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-12T11:16:31.542833+00:00",
-  "commit": "149ad3a1",
-  "commit_subject": "Install checks for the retrieval and embedding caches in the install's own cache, and the agent memory tab's confidence (#491)",
+  "generated_at": "2026-10-12T12:09:36.888332+00:00",
+  "commit": "02b7c166",
+  "commit_subject": "The agent page has a Knowledge section that lists the documents the agent draws on, at the reader's own reach (#494)",
   "total": 1611,
   "done": 831,
   "percent": 51.6,
