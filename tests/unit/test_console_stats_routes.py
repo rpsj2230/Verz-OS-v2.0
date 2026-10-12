@@ -19,13 +19,15 @@ from __future__ import annotations
 import uuid
 from collections.abc import Iterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from decimal import Decimal
+from typing import Any, Final
 
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 from sqlalchemy.sql.selectable import Select
 
+from brain import console_overview_figures_routes as figures_routes
 from brain import console_stats_routes
 from brain.api import API_PREFIX
 from brain.connectors.contract import HealthState
@@ -54,15 +56,17 @@ from brain.core.lane import Lane
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.context import Channel, TrafficClass
 from brain.knowledge.visibility import Visibility
+from brain.models.pricing import Price, stored_of
 from brain.ops.connector_sync import SyncOutcome, SyncState
 from brain.ops.jobs import NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT
+from brain.ops.price_store import price_key
 from brain.ops.telemetry import RequestStatus
 from brain.tables.agent import AgentRow
 from brain.tables.budget import BudgetVersionRow
 from brain.tables.identity import PrincipalRow
 from brain.tables.spend import SpendActualRow
 from tests.fixtures.console_http import Stub, console_client, get
-from tests.fixtures.setting_rows import Result, Row
+from tests.fixtures.setting_rows import Result, Row, SettingRows
 from tests.unit.test_agent_routes import agent_row
 from tests.unit.test_connector_routes import Records, a_connection
 from tests.unit.test_skill_routes import imported
@@ -374,15 +378,47 @@ def held() -> Held:
     return Held()
 
 
+PRICED_IN: Final = "SGD"
+
+
+def prices(currency: str) -> SettingRows:
+    """`ops.setting` holding one model's price in `currency`, as the price store keeps it."""
+    rows = SettingRows()
+    price = Price(input_minor=Decimal(300), output_minor=Decimal(1500), currency=currency)
+    rows.hold(price_key("anthropic"), {"a-model": stored_of(price)}, value_type="json")
+    return rows
+
+
 @pytest.fixture
-def served(held: Held) -> Iterator[tuple[TestClient, Stub]]:
+def served(held: Held, monkeypatch: pytest.MonkeyPatch) -> Iterator[tuple[TestClient, Stub]]:
+    """The routes over an install counting in one currency with a model priced in it, which is
+    what makes a cost something the recorder could have written."""
+    monkeypatch.setattr(figures_routes, "install_currency", lambda: PRICED_IN)
     with console_client(GRANTS, routers=(router,)) as (client, stub):
         stub.answerers.append(held.answer)
+        stub.answerers.append(prices(PRICED_IN).answer)
         state = client.app.state  # type: ignore[attr-defined]
         state.connector_records = Records((a_connection("xero"), a_connection("hubspot")))
         state.connector_sync_records = Sync()
         state.skill_library = Library()
         yield client, stub
+
+
+def test_an_agents_cost_is_not_recorded_where_no_model_is_priced_in_the_install_currency(
+    served: tuple[TestClient, Stub], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nothing is priced in the install's currency, so the recorder wrote no cost and the sum is
+    the absence of rows. The agent's stats say so and carry no cost, no per-person cost and no
+    projection. Delete this and an install with no price shows every agent as having cost nothing,
+    which M27.15.33 exists to refuse."""
+    client, stub = served
+    monkeypatch.setattr(figures_routes, "install_currency", lambda: "NZD")
+    body = AgentStatsView.model_validate(stats(client, "u_admin", "agents", AGENT).json())
+
+    assert all(one.cost_minor is None and one.callers == [] for one in body.periods)
+    assert [one.figure for one in body.unrecorded] == ["model_cost"]
+    assert body.projection is None
+    del stub
 
 
 def stats(client: TestClient, pid: str, module: str, name: str) -> Any:
