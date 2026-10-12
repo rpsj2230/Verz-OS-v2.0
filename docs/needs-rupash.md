@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**53 items are open: 177,** which conditions an automation's trigger may carry, **176,** where a document added from an agent's own page lives, **175,** which tools the part of a model request that everybody shares may hold, **174,** whether a supervised agent's thirty-day review runs on its own each day, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**54 items are open: 178,** whether the chat tools show progress while an answer is made, **177,** which conditions an automation's trigger may carry, **176,** where a document added from an agent's own page lives, **175,** which tools the part of a model request that everybody shares may hold, **174,** whether a supervised agent's thirty-day review runs on its own each day, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,37 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 178. Should the chat tools show progress while an answer is being made?
+
+**In plain terms:** your brief says an answer streams to the person with named steps ("looking in the price
+list", "checking what you may read") and that this holds on each way of asking: the web, Lark, Slack, Teams,
+Telegram, WhatsApp, email and the REST API. Today only the web page streams. On the chat tools the person
+sends a question and sees nothing until the finished answer arrives, because each chat tool's adapter was
+written to send one message, and the three that could edit a message as it grows were left switched off on
+purpose: editing once per word runs into each tool's rate limit and would spend the allowance kept for
+closing the answer. So the sentence "with progress streamed" is not true on any chat channel, and I should not
+write a check that pretends it is.
+
+**Option A: a short, named progress line that is edited in place, a few times per answer.** The chat tool
+gets "Looking in your documents" within a second or two, then the line is edited as each named step
+finishes (at most five edits), and the last edit is the answer. Only where the tool lets a message be edited
+(Lark and Teams today); Slack, Telegram, WhatsApp and email get the one finished answer, with a one-line
+"working on it" first where the tool allows it. Nothing the person may not read is ever in a progress line:
+the steps are the product's own words, never a document name.
+
+**Option B: stream the words as they are written.** What the web does. Rejected for chat: one edit per few
+words against each tool's rate limit, and a half-written answer sitting in a room that a later check might
+withhold.
+
+**Option C: leave chat as it is, and say so.** One finished answer on every chat tool, progress on the web
+only. I would then narrow the sentence in the register and say so on the Channels screen.
+
+**My recommendation:** A. It keeps the rate limits, never shows a half answer, and gives a person the
+reassurance the brief is after. I will build it behind a switch that ships off, and prove it on your install
+by asking a real question in Lark and reading the edits.
+
+**What I need from you:** reply "178: A", "178: B" or "178: C".
 
 ## 177. Which conditions may an automation's trigger carry?
 
