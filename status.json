@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-12T14:39:40.116558+00:00",
-  "commit": "14663b3a",
-  "commit_subject": "Install checks for an agent's Profile and its whole life, the Memory history, the handover description and the money figures; an agent's cost is not nought where nothing is priced (#525)",
+  "generated_at": "2026-10-12T15:09:03.893364+00:00",
+  "commit": "26d51452",
+  "commit_subject": "Google Workspace lands with a check that it is ready for a person and their agent once connected (M11.7.6, M11.9.12) (#522)",
   "total": 1611,
   "done": 831,
   "percent": 51.6,
