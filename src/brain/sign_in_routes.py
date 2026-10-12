@@ -60,12 +60,23 @@ route and no setup code, and it is the shape an operator reaches for, and it mov
 sign-in off the wizard the client is holding onto a shell they may not have, which M42.5.14
 names as the screen that hands them into the console signed in.
 
+**A person the identity provider knows and this system has not linked is told once, by `GET
+/api/v1/sign-in/status`.** The console asks it with the token the API has just refused, so the
+refusal that cannot say why (`brain.identity.oidc.SIGN_IN_PROMPT` says nothing, by design) is
+followed by one question that can: is this account linked, and if not, who can link it. The token
+is held to everything `authenticate` holds it to and the directory is asked last, as the finishing
+screen does. **What it discloses, and to whom**: only to somebody the identity provider has just
+signed in, and only the display names of the people who hold the sign-in authority over everything
+and can themselves sign in, which is who they would be told to ask. See
+`AN_UNLINKED_ACCOUNT_IS_TOLD_WHO_CAN_LINK_IT`. A token the API would refuse for any other reason is
+the 401 every route gives, so this is not a way to ask what is wrong with a token.
+
 Rejected: letting the finishing screen accept a subject in the body, as the administrator's
 route does. It would need no Keycloak round trip, and it would let whoever holds the setup code
 bind any account at all to the widest role, including one they do not control, which the token
 proves they do.
 
-Task ids: M42.5.14, M1.2.2
+Task ids: M42.5.14, M1.2.2, M27.15.4
 """
 
 from __future__ import annotations
@@ -80,6 +91,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from brain.agent_routes import principals_named
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked, wiring_of
 from brain.core.entitlement import EntitlementSet
@@ -95,11 +107,15 @@ from brain.identity.oidc import (
     KeySet,
     TokenRefusal,
     TokenRefusedError,
+    UnmappedSubject,
     VerifiedClaims,
     parse_unverified,
+    principal_for,
     validate_token,
 )
 from brain.identity.sign_in_binding import Binding, BindingRefusal, SignInBindingRefusedError
+from brain.routing_routes import sessions_of
+from brain.session_routes import SignInLinkStore
 from brain.settings import Settings
 from brain.setup_wizard import MAX_ANSWER_CHARS, WizardError, finish
 
@@ -148,6 +164,23 @@ A_CALLER_WITH_NO_SESSION_IS_NOT_A_SIGN_IN: Final = (
     "the widest role in the system a file, which gate.admission refuses the admin verb for."
 )
 
+#: Why an unlinked account is told who can link it, and no more.
+AN_UNLINKED_ACCOUNT_IS_TOLD_WHO_CAN_LINK_IT: Final = (
+    "The refusal an unlinked account gets from every route says nothing, because nothing it could "
+    "say is safe to say to a stranger. This one is asked only with a token the identity provider "
+    "issued for this install, so the person is one the company's own directory vouched for, and "
+    "what they need is the one sentence an administrator would give them: your account has not "
+    "been linked, and these people can link it. Their display names and nothing else: never an "
+    "id, a department or what they hold."
+)
+
+#: What an unlinked account is told, in words a person can act on.
+YOUR_ACCOUNT_IS_NOT_LINKED_YET: Final = (
+    "Your organisation's sign-in knows you, and this system has not been told which person you "
+    "are yet. An administrator who can link sign-ins has to link your account before anything "
+    "here will open. Until then, signing in again will not change this."
+)
+
 # --------------------------------------------------------------------- the figures
 
 #: `SIGN_IN_AUTHORITY`, the capability that binds a sign-in, is imported from
@@ -158,6 +191,7 @@ A_CALLER_WITH_NO_SESSION_IS_NOT_A_SIGN_IN: Final = (
 #: Where the administrator's route and the finishing screen are served.
 SIGN_INS_PATH: Final = f"{API_PREFIX}/sign-ins"
 FINISH_PATH: Final = "/setup/sign-in"
+STATUS_PATH: Final = f"{API_PREFIX}/sign-in/status"
 
 #: The longest subject or principal id accepted. A ceiling on a paste: a Keycloak subject is a
 #: 36-character uuid and a principal id is bounded well below this by its column.
@@ -236,6 +270,19 @@ class SignInView(BaseModel):
 
     principal_id: str
     outcome: SignInOutcome
+
+
+class SignInStatusView(BaseModel):
+    """Whether this token's account is linked to a person here, and if not, who can link it.
+
+    `administrators` is display names only, empty for a linked account, which is told nothing.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    linked: bool
+    told: str | None = None
+    administrators: list[str] = []
 
 
 # ------------------------------------------------------------------------ the decisions
@@ -396,6 +443,36 @@ def _trace_id() -> str:
 
 
 router = APIRouter(tags=["sign-ins"])
+
+
+@router.get(STATUS_PATH, response_model=SignInStatusView, responses=COMMON_RESPONSES)
+async def sign_in_status(request: Request) -> SignInStatusView:
+    """Whether this token's account is linked here, and if not, who can link it (M27.15.4).
+
+    The token is verified without asking who it is, as the finishing screen does, and then the
+    directory is asked. A linked account is told nothing but that it is linked; an unlinked one is
+    told `YOUR_ACCOUNT_IS_NOT_LINKED_YET` and the names of the administrators who can link it.
+    """
+    now = datetime.now(UTC)
+    wiring = wiring_of(request)
+    if wiring is None:
+        raise TokenRefusedError(
+            TokenRefusal.NO_KEYS_AVAILABLE, "no token authority is configured on this process"
+        )
+    claims = await verified_claims(wiring.authority, request.headers.get("authorization"), now=now)
+    found = await principal_for(claims, wiring.authority.directory, now=now)
+    if not isinstance(found, UnmappedSubject):
+        return SignInStatusView(linked=True)
+    names: list[str] = []
+    store = getattr(request.app.state, "sign_in_bindings", None)
+    factory = sessions_of(request)
+    if isinstance(store, SignInLinkStore) and factory is not None:
+        ids = await store.administrators_linked(now)
+        async with factory() as session:
+            rows = (await session.execute(principals_named(sorted(ids)))).scalars().all()
+        names = sorted({row.display_name for row in rows if row.display_name})
+    return SignInStatusView(linked=False, told=YOUR_ACCOUNT_IS_NOT_LINKED_YET, administrators=names)
+
 
 #: A refusal an administrator is told is a 409 carrying the view, not `ErrorBody`.
 _TOLD: Final[dict[int | str, dict[str, object]]] = {

@@ -233,6 +233,48 @@ def finishing(
     return response
 
 
+# --------------------------------------------------------- an account nobody has linked (M27.15.4)
+
+
+def test_an_account_the_directory_does_not_know_is_told_it_is_not_linked(
+    client: TestClient,
+) -> None:
+    """The identity provider's token for a subject nobody bound is answered with the sentence and
+    no name here (this writer lists no administrators), and a linked account is told only that it is
+    linked. Delete this and a person nobody linked is refused everywhere with nothing said, or a
+    linked one is told what only a stranger needs.
+    """
+    from brain.sign_in_routes import STATUS_PATH, YOUR_ACCOUNT_IS_NOT_LINKED_YET
+
+    stranger = client.get(
+        STATUS_PATH,
+        headers={"authorization": f"Bearer {token_for('u_none', claims={'sub': INSTALLER})}"},
+    )
+    linked = client.get(
+        STATUS_PATH,
+        headers={"authorization": f"Bearer {token_for('u_admin', claims=SECOND_FACTOR)}"},
+    )
+
+    assert stranger.status_code == 200
+    assert stranger.json() == {
+        "linked": False,
+        "told": YOUR_ACCOUNT_IS_NOT_LINKED_YET,
+        "administrators": [],
+    }
+    assert linked.json() == {"linked": True, "told": None, "administrators": []}
+
+
+def test_a_token_the_gate_would_refuse_is_not_told_whether_it_is_linked(client: TestClient) -> None:
+    """A forged or foreign token gets the 401 every route gives, so the route cannot be used to
+    ask what is wrong with a token. Delete this and the status route is an oracle for the gate."""
+    from brain.sign_in_routes import STATUS_PATH
+
+    forged = client.get(STATUS_PATH, headers={"authorization": "Bearer not.a.token"})
+    nothing = client.get(STATUS_PATH)
+
+    assert (forged.status_code, nothing.status_code) == (401, 401)
+
+
 # ----------------------------------------------------------------- the administrator's route
 
 

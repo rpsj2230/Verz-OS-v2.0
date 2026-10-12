@@ -21,6 +21,7 @@ RECENT = "an_agents_recent_runs_are_the_ones_its_reader_is_counted_over"
 PERSON = "a_persons_page_lists_what_they_own_and_what_the_ledger_says"
 STOPPED = "adoption_counts_who_stopped_asking_in_the_readers_departments"
 FIGURES = "landing_figures_follow_the_period_and_department_a_reader_reads"
+LINK = "an_account_bound_to_nobody_is_told_who_can_link_it"
 
 
 def test_the_module_declares_the_leaf_each_check_proves() -> None:
@@ -31,8 +32,9 @@ def test_the_module_declares_the_leaf_each_check_proves() -> None:
         PERSON: ("M27.15.18",),
         STOPPED: ("M27.7.17",),
         FIGURES: ("M27.15.17",),
+        LINK: ("M27.15.4",),
     }
-    assert checks_in(MODULE) == [RECENT, PERSON, STOPPED, FIGURES]
+    assert checks_in(MODULE) == [RECENT, PERSON, STOPPED, FIGURES, LINK]
 
 
 @pytest.fixture(scope="module")
@@ -64,6 +66,7 @@ def test_the_checks_pass_on_an_install_and_leave_nothing(install: str) -> None:
         PERSON: (PASSED, ""),
         STOPPED: (PASSED, ""),
         FIGURES: (PASSED, ""),
+        LINK: (PASSED, ""),
     }
     assert counts(install) == before
 
@@ -117,3 +120,19 @@ def test_figures_that_ignore_the_department_fail_the_figures_check(
         lambda since, until, **kwargs: real(since, until, **{**kwargs, "department": None}),
     )
     assert "did not count its people's questions" in _failed(install, FIGURES)
+
+
+@pytest.mark.needs_db
+def test_a_status_that_names_nobody_fails_the_link_check(
+    install: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unlinked account told nobody can link it. Delete this and M27.15.4 closes on a sentence
+    that says an administrator must act and not which.
+    """
+    from brain.identity.sign_in_binding import SignInBindings
+
+    async def nobody(self: object, now: object) -> frozenset[str]:
+        return frozenset()
+
+    monkeypatch.setattr(SignInBindings, "administrators_linked", nobody)
+    assert "who can link it" in _failed(install, LINK)

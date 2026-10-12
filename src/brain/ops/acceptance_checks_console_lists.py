@@ -5,7 +5,7 @@ Each check calls the route the page calls, as the reader that page serves, over 
 transaction. **Every row the checks write is the check's own** (an agent, requests and spend rows
 for reserved people of acceptance_a), so nothing the install holds is changed and nothing is left.
 
-Task ids: M27.15.27, M27.15.18, M27.7.17, M27.15.17
+Task ids: M27.15.27, M27.15.18, M27.7.17, M27.15.17, M27.15.4
 """
 
 from __future__ import annotations
@@ -353,3 +353,46 @@ async def landing_figures_follow_the_period_and_department_a_reader_reads(
         )
     ):
         raise CheckFailedError("a reader of one department was shown another's figures")
+
+
+# ------------------------------------- 5. an account bound to nobody is told once (M27.15.4)
+@check(
+    leaves=("M27.15.4",),
+    sentence=(
+        "A person the identity provider signs in whom nobody has linked is told, by the sign-in "
+        "status route, that an administrator must link their account and by whom, the "
+        "administrators named being people who can sign in themselves; a linked person is told "
+        "only that they are linked; a token the gate would refuse is refused as everywhere."
+    ),
+)
+async def an_account_bound_to_nobody_is_told_who_can_link_it(h: Harness) -> None:
+    from brain.identity.oidc import TokenRefusedError
+    from brain.ops.acceptance_people_signed_in import administrator, console, everywhere
+    from brain.sign_in_routes import YOUR_ACCOUNT_IS_NOT_LINKED_YET, sign_in_status
+
+    await h.found_departments()
+    c = await console(h)
+    admin, member = h.principal(A, "linker"), h.principal(A, "linked")
+    await h.person(admin, department=A, grants=everywhere(*administrator()))
+    await h.person(member, department=A)
+    await c.link(admin)
+    linked_as = await c.link(member)
+    stranger = f"acceptance-{h.run}-stranger"
+
+    unlinked = await sign_in_status(c.request(c.token(stranger, session=c.session())))
+    if unlinked.linked or unlinked.told != YOUR_ACCOUNT_IS_NOT_LINKED_YET:
+        raise CheckFailedError("an account nobody linked was not told it is not linked")
+    if "Acceptance check linker" not in unlinked.administrators:
+        raise CheckFailedError("an unlinked account was not told who can link it")
+    if any(one == "Acceptance check linked" for one in unlinked.administrators):
+        raise CheckFailedError("a person who cannot link accounts was named as able to")
+
+    told = await sign_in_status(c.request(c.token(linked_as, session=c.session())))
+    if not told.linked or told.told is not None or told.administrators:
+        raise CheckFailedError("a linked account was told more than that it is linked")
+    try:
+        await sign_in_status(c.request("not-a-token"))
+    except TokenRefusedError:
+        pass
+    else:
+        raise CheckFailedError("a token the gate would refuse was told whether it is linked")

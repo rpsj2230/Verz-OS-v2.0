@@ -134,6 +134,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/govern/sessions*",
       "/api/v1/govern/sign-ins*",
       "/api/v1/sign-ins",
+      "/api/v1/sign-in/status",
       "/api/v1/govern/data-steward",
       "/api/v1/govern/staff_sources*",
       "/api/v1/govern/packs*",
