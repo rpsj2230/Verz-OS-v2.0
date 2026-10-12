@@ -198,10 +198,12 @@ describe("the skip-to-answer control", () => {
     await answerArrived(container);
 
     const skip = within(page(container)).getByRole("button", { name: SKIP_TO_ANSWER });
-    // The question, the kind it may be narrowed to (M7.6.1), the submit button, then the control.
+    // The question, the kind it may be narrowed to (M7.6.1), the submit button, then the control,
+    // and after it the one that copies the answer (M16.2.2), which comes after what it copies.
     expect(tabStops(page(container)).map((one) => one.tagName)).toEqual([
       "TEXTAREA",
       "SELECT",
+      "BUTTON",
       "BUTTON",
       "BUTTON",
     ]);
