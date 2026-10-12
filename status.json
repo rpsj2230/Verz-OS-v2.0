@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-12T12:09:36.888332+00:00",
-  "commit": "02b7c166",
-  "commit_subject": "The agent page has a Knowledge section that lists the documents the agent draws on, at the reader's own reach (#494)",
+  "generated_at": "2026-10-12T12:54:24.292419+00:00",
+  "commit": "dddc141a",
+  "commit_subject": "Copying an answer is noted as the one positive learning signal, from a button on Ask (#509)",
   "total": 1611,
   "done": 831,
   "percent": 51.6,
