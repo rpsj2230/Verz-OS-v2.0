@@ -50,15 +50,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Final
 
-from brain.identity.lark_sign_in import (
-    ALIAS as LARK_ALIAS,
-)
-from brain.identity.lark_sign_in import (
-    SIGN_IN_SCOPES,
-    TOKEN_PATH,
-    LarkSignInError,
-    authorize_base,
-)
+from brain.identity import lark_sign_in
 
 #: The staff source a Lark broker pairs with, and the one value its location may hold.
 LARK_SOURCE: Final = "lark"
@@ -157,8 +149,8 @@ def lark_entry(*, client_id: str, location: str, origin: str) -> Brokering:
     `A_LARK_SIGN_IN_LINKS_AND_NEVER_CREATES` for why the address is trusted and nobody is made.
     """
     try:
-        page = authorize_base(location)
-    except LarkSignInError:
+        page = lark_sign_in.authorize_base(location)
+    except lark_sign_in.LarkSignInError:
         return Brokering(
             problem=(
                 f"{DIRECTORY_SETTING} is 'lark' and {LOCATION_SETTING} is {location.strip()!r}, "
@@ -175,7 +167,7 @@ def lark_entry(*, client_id: str, location: str, origin: str) -> Brokering:
         )
     return Brokering(
         provider={
-            "alias": LARK_ALIAS,
+            "alias": lark_sign_in.ALIAS,
             "displayName": "Lark",
             "providerId": "oidc",
             "enabled": True,
@@ -188,8 +180,8 @@ def lark_entry(*, client_id: str, location: str, origin: str) -> Brokering:
                 "clientSecret": VAULT_REFERENCE,
                 "clientAuthMethod": "client_secret_post",
                 "authorizationUrl": page,
-                "tokenUrl": f"{origin.rstrip('/')}{TOKEN_PATH}",
-                "defaultScope": SIGN_IN_SCOPES,
+                "tokenUrl": f"{origin.rstrip('/')}{lark_sign_in.TOKEN_PATH}",
+                "defaultScope": lark_sign_in.SIGN_IN_SCOPES,
                 "pkceEnabled": "false",
                 "disableNonce": "true",
                 "disableUserInfo": "true",
