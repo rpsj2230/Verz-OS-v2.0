@@ -43,7 +43,7 @@ import asyncio
 import secrets
 import sys
 import uuid
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final, TextIO
 
@@ -145,11 +145,16 @@ class Harness:
         now: datetime,
         settings: Settings,
         connection: AsyncConnection,
+        earlier: Mapping[str, tuple[str, str]] | None = None,
     ) -> None:
         self.run = run
         self.now = now
         self.settings = settings
         self.connection = connection
+        #: What every check that ran before this one in this run came to, by name: its outcome and
+        #: its stored reason. A roll-up check reads it; no other check has a use for it. See
+        #: `brain.ops.acceptance_roll_up`.
+        self.earlier: Mapping[str, tuple[str, str]] = earlier or {}
         self.sessions: async_sessionmaker[AsyncSession] = async_sessionmaker(
             bind=connection,
             join_transaction_mode="create_savepoint",
@@ -339,11 +344,18 @@ async def run_one(
     settings: Settings,
     stream: TextIO,
     timeout: float = CHECK_TIMEOUT_SECONDS,
+    earlier: Mapping[str, tuple[str, str]] | None = None,
 ) -> tuple[str, str]:
     """One check in its own rolled-back transaction: its outcome and stored reason."""
     async with engine.connect() as connection:
         outer = await connection.begin()
-        harness = Harness(run=run, now=datetime.now(UTC), settings=settings, connection=connection)
+        harness = Harness(
+            run=run,
+            now=datetime.now(UTC),
+            settings=settings,
+            connection=connection,
+            earlier=earlier,
+        )
         try:
             for bound in CONNECTION_BOUNDS:
                 await connection.execute(text(bound))
@@ -387,8 +399,12 @@ async def run_suite(
             for one in checks
         )
     results: list[Result] = []
+    came_to: dict[str, tuple[str, str]] = {}
     for one in checks:
-        outcome, reason = await run_one(engine, one, run=run, settings=settings, stream=stream)
+        outcome, reason = await run_one(
+            engine, one, run=run, settings=settings, stream=stream, earlier=dict(came_to)
+        )
+        came_to[one.name] = (outcome, reason)
         results.append(Result(one.name, one.leaves, outcome, datetime.now(UTC), reason))
     return tuple(results)
 

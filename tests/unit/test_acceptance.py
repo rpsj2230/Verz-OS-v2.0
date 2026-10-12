@@ -713,7 +713,8 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     outcomes = {one.name: (one.outcome, one.reason) for one in waited[1]}
     # Every registered check ran, by name, and nothing else did: derived rather than counted,
     # so a package adding a check changes no line here.
-    suite = [one.name for one in registered()]
+    suite_checks = registered()
+    suite = [one.name for one in suite_checks]
     assert list(outcomes) == suite
     assert outcomes.pop("asking_past_a_window_is_refused_with_a_retry_hint")[0] == NOT_RUN
     # No vault here, so the start signed no built-in template;
@@ -863,6 +864,14 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         "departments_managed_on_people_are_not_the_staff_sync_s",
     ):
         assert outcomes.pop(list_check) == (NOT_RUN, acceptance_checks_people.NO_STAFF_LIST_IS_READ)
+    # A roll-up reads what the checks before it came to, so on an install where some of those are
+    # not run it is not run too, and it is never failed while they pass; each one's own test file
+    # runs the checks it reads (`tests/unit/test_acceptance_roll_up.py`).
+    from brain.ops.acceptance_roll_up import is_roll_up
+
+    for one in suite_checks:
+        if is_roll_up(one):
+            assert outcomes.pop(one.name)[0] in (PASSED, NOT_RUN), one.name
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
     assert after == before
     assert runs == [(2,)] and len(recorded) == 2 * len(suite)

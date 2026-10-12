@@ -1,0 +1,244 @@
+"""What a roll-up check reads: the checks that already proved each clause of a composite leaf.
+
+Fifteen leaves in the work breakdown say a whole area is "proved on an install" (entity
+resolution, memory and context, the learning loop, the evaluation gate) or that "every requirement
+in the register is demonstrated". Each clause of those sentences already has a check, written for
+the narrower leaf it was built under, and none of them names the composite. A composite check that
+asked the same questions again would be the same check twice in one run, holding the ledger's lock
+twice, and the second copy would be one more thing to keep in step with the first.
+
+**So a roll-up asks nothing of the install. It reads what the checks that ran earlier in this run
+came to** (`Harness.earlier`) and says whether every clause was shown. The suite runs the modules in
+`CHECK_ORDER`, and a roll-up sits after every module it reads. If a check it needs has not run, the
+roll-up says so and is not run; it never reads another run's rows, because a composite that read
+the last run's results would pass on the strength of a commit that is no longer serving.
+
+**A clause with no check naming it fails to be demonstrated, and that is said, not skipped.** A
+roll-up whose clause had no check would otherwise pass on the others, which is the one way a
+composite leaf could close on less than its sentence says. `a_clause_with_no_check` is the
+sentence, and the unit test builds a clause nobody covers and shows it.
+
+**A check that is not run holds the roll-up up, and one that failed fails it.** Both are named by
+the check's own name and never by anything it read. A failed clause is the product's fault and is a
+failed roll-up, so a person looking at the Install page sees one red row for the area as well as the
+row for the check that went red; a clause that could not be asked on this install leaves the
+composite not run for the same reason, which is what the sweep needs to leave the leaf open.
+
+**The register's rows are read from the register itself.** `requirements_demonstrated` reads
+`docs/requirements/register.json` from the install's own `docs`, the file `brain.docs_routes`
+serves, picks the rows whose proof leaf is the one asked for, and holds each to the same rule:
+at least one check names a leaf the row builds, every such check passed, and none failed. A row
+whose leaves no check names is a requirement nothing demonstrates, and the roll-up is not run with
+its id, so the number of undemonstrated requirements is the number of ids in the reason.
+
+**Rejected:** running the clause checks again from inside the roll-up. It doubles the run, holds
+the install's locks for twice as long, and a clause check that needs a switch or a connected store
+would then be asked twice and answered twice, once by each author's reading of the same state.
+
+Task ids: M14.8.1, M14.8.2, M16.7.7, M16.7.8, M16.7.9, M16.7.11
+"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Iterable, Mapping, Sequence
+from pathlib import Path
+from typing import Final
+
+from brain.ops.acceptance import (
+    FAILED,
+    NOT_RUN,
+    PASSED,
+    REASON_CHARS,
+    Check,
+    CheckFailedError,
+    CheckNotRunError,
+    registered,
+)
+from brain.ops.acceptance_run import Harness
+
+# ------------------------------------------------------------------ written-down reasons
+#: Why a roll-up that finds a clause with no check names it and does not pass.
+A_CLAUSE_WITH_NO_CHECK_IS_NOT_DEMONSTRATED: Final = (
+    "A composite leaf closes when each clause of its sentence was shown. A clause no check names "
+    "was not shown, and a roll-up that passed on the clauses that were would close the leaf on "
+    "less than it says."
+)
+
+#: Why a roll-up reads this run and no other.
+A_ROLL_UP_READS_THIS_RUN_AND_NO_OTHER: Final = (
+    "The last run's rows belong to a commit that may no longer be serving, so a roll-up that read "
+    "them would pass on a product it is not checking. It reads the checks that ran before it in "
+    "this run."
+)
+
+#: The composite leaves whose checks are roll-ups. A check naming only these asks nothing of the
+#: install itself, so it is never counted as the evidence for a requirement.
+ROLL_UP_LEAVES: Final[frozenset[str]] = frozenset(
+    {
+        "M14.8.1",
+        "M14.8.2",
+        "M16.7.7",
+        "M16.7.8",
+        "M16.7.9",
+        "M16.7.11",
+        "M28.5.1",
+        "M28.5.2",
+        "M28.5.3",
+    }
+)
+
+#: Where the register lives under the install's `docs`, as `brain.requirements` names it.
+REGISTER_IN_DOCS: Final = Path("requirements") / "register.json"
+
+#: How many requirement ids a reason lists before saying how many more there are.
+IDS_IN_A_REASON: Final = 6
+
+
+def is_roll_up(one: Check) -> bool:
+    """Whether a check only reads other checks. See `ROLL_UP_LEAVES`."""
+    return bool(one.leaves) and set(one.leaves) <= ROLL_UP_LEAVES
+
+
+def checks_naming(leaf: str, *, excluding: str) -> tuple[Check, ...]:
+    """Every check that asks something of the install and names this leaf, by name order."""
+    return tuple(
+        sorted(
+            (
+                one
+                for one in registered()
+                if leaf in one.leaves and one.name != excluding and not is_roll_up(one)
+            ),
+            key=lambda one: one.name,
+        )
+    )
+
+
+def _said(names: Iterable[str], what: str) -> str:
+    found = sorted(set(names))
+    shown = ", ".join(found[:IDS_IN_A_REASON])
+    more = len(found) - IDS_IN_A_REASON
+    tail = f" and {more} more" if more > 0 else ""
+    return f"{what}: {shown}{tail}"[:REASON_CHARS]
+
+
+def _verdicts(
+    h: Harness, evidence: Mapping[str, Sequence[Check]]
+) -> tuple[list[str], list[str], list[str], list[str]]:
+    """Which of the keys have a check naming them, and what those checks came to this run.
+
+    Returns the keys with no check, the checks that failed, the checks that were not run (or had
+    not run yet), and the keys with at least one pass.
+    """
+    uncovered: list[str] = []
+    failed: list[str] = []
+    waiting: list[str] = []
+    shown: list[str] = []
+    for key, checks in evidence.items():
+        if not checks:
+            uncovered.append(key)
+            continue
+        passes = 0
+        for one in checks:
+            came_to = h.earlier.get(one.name)
+            if came_to is None or came_to[0] == NOT_RUN:
+                waiting.append(one.name)
+            elif came_to[0] == FAILED:
+                failed.append(one.name)
+            elif came_to[0] == PASSED:
+                passes += 1
+        if passes:
+            shown.append(key)
+    return uncovered, failed, waiting, shown
+
+
+async def clauses_demonstrated(
+    h: Harness, clauses: Mapping[str, Sequence[str]], *, own: str
+) -> None:
+    """Each clause is shown by a check that named one of its leaves and passed in this run.
+
+    `clauses` maps a clause, in a few words, to the leaves whose checks show it. Raises
+    `CheckFailedError` if any such check failed, and `CheckNotRunError` if a clause has no check,
+    or none of its checks passed because they were not run. See the module docstring.
+    """
+    evidence = {
+        clause: tuple(one for leaf in leaves for one in checks_naming(leaf, excluding=own))
+        for clause, leaves in clauses.items()
+    }
+    uncovered, failed, waiting, shown = _verdicts(h, evidence)
+    if failed:
+        raise CheckFailedError(_said(failed, "a check showing a clause of this leaf failed"))
+    if uncovered:
+        raise CheckNotRunError(_said(uncovered, "no check names a clause of this leaf"))
+    unshown = [clause for clause in clauses if clause not in shown]
+    if unshown:
+        raise CheckNotRunError(
+            _said(
+                waiting or unshown,
+                "a clause of this leaf was not shown because its check was not run in this run",
+            )
+        )
+
+
+def docs_directory() -> Path:
+    """The install's `docs`, where `brain.docs_routes` serves the register from."""
+    from brain.docs_routes import DOCS
+
+    return DOCS
+
+
+def register_rows(
+    proof_leaf: str, *, docs: Path | None = None
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """The register's rows resting on this proof leaf: each requirement id and the leaves it builds.
+
+    Refuses nothing: a missing register is the caller's to say, and raises `FileNotFoundError`.
+    """
+    path = (docs if docs is not None else docs_directory()) / REGISTER_IN_DOCS
+    rows = json.loads(path.read_text(encoding="utf-8"))["requirements"]
+    return tuple(
+        (str(one["id"]), tuple(str(leaf) for leaf in one["leaves"]))
+        for one in rows
+        if proof_leaf in one["proof"]
+    )
+
+
+async def requirements_demonstrated(
+    h: Harness, proof_leaf: str, *, own: str, prefix: str, docs: Path | None = None
+) -> None:
+    """Every requirement resting on `proof_leaf` is demonstrated by the checks named for its leaves.
+
+    A requirement is demonstrated when every leaf it builds under `prefix` has a check naming it,
+    every such check passed in this run and none failed, and at least one check names a leaf of
+    the row at all. Leaves outside `prefix` belong to other areas' roll-ups and are not asked for
+    here. See the module docstring for what is said when it is not.
+    """
+    try:
+        rows = register_rows(proof_leaf, docs=docs)
+    except FileNotFoundError:
+        raise CheckNotRunError(
+            "this install carries no requirements register to read the requirements from"
+        ) from None
+    if not rows:
+        raise CheckNotRunError(f"no requirement in the register rests on {proof_leaf}")
+    failed: list[str] = []
+    gaps: list[str] = []
+    waiting: list[str] = []
+    for requirement, leaves in rows:
+        by_leaf = {leaf: checks_naming(leaf, excluding=own) for leaf in leaves}
+        uncovered, broke, _, shown = _verdicts(h, by_leaf)
+        failed += broke if broke else []
+        if any(leaf.startswith(prefix) for leaf in uncovered) or not shown:
+            gaps.append(requirement)
+        elif any(leaf.startswith(prefix) and leaf not in shown for leaf in leaves):
+            waiting.append(requirement)
+    if failed:
+        raise CheckFailedError(_said(failed, "a check showing a requirement failed"))
+    if gaps:
+        raise CheckNotRunError(
+            _said(gaps, "no check names a leaf these requirements build, so they are not shown")
+        )
+    if waiting:
+        raise CheckNotRunError(
+            _said(waiting, "a check showing these requirements was not run in this run")
+        )
