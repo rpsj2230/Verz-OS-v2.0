@@ -1329,6 +1329,7 @@ def report_cells(found: bytes) -> list[list[str]]:
         "M39.5.2.5",
         "M39.8.4",
         "M39.8.5",
+        "M27.7.23",
     ),
     sentence=(
         "A report over an uploaded price list, produced through an agent for two people, holds "
