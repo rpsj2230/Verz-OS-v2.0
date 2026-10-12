@@ -8,7 +8,7 @@
  */
 
 import { ATTACHMENTS_API_PATH } from "../../../src/pages/askAttachQuery";
-import { ANSWER_API_PATH, MARK_API_PATH } from "../../../src/pages/askQuery";
+import { ANSWER_API_PATH, COPIED_API_PATH, MARK_API_PATH } from "../../../src/pages/askQuery";
 import { retrievalUsesPath } from "../../../src/pages/citedDocumentQuery";
 import { uploadPath } from "../../../src/pages/knowledgeQuery";
 import { correctionPath, exportPath } from "../../../src/pages/threadsQuery";
@@ -55,6 +55,7 @@ const A_CONVERSATION_EXPORT_IS_RECORDED = t(
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Ask.tsx ANSWER_API_PATH": [at("POST /api/v1/answer", "ANSWER_API_PATH", ANSWER_API_PATH)],
   "src/pages/Ask.tsx MARK_API_PATH": [at("POST /api/v1/answer/mark", "MARK_API_PATH", MARK_API_PATH)],
+  "src/pages/Ask.tsx COPIED_API_PATH": [at("POST /api/v1/answer/copied", "COPIED_API_PATH", COPIED_API_PATH)],
   "src/pages/CitedDocument.tsx retrievalUsesPath(followed.retrievalId)": [
     at(
       "POST /api/v1/retrievals/{event_id}/uses",
@@ -94,6 +95,17 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     behaviour: t(
       "test_answer_route_memory",
       "test_a_person_marks_an_answer_they_were_given_with_one_action_and_no_words",
+    ),
+  },
+  "POST /api/v1/answer/copied": {
+    row: t("test_acceptance_copied", "test_the_check_passes_on_an_install_and_leaves_nothing", true),
+    audit: {
+      notApplicable:
+        "A copy changes nothing the system does; the signal is its own record, naming which answer was copied and never a word of it.",
+    },
+    behaviour: t(
+      "test_answer_copied",
+      "test_a_copy_of_the_callers_own_answer_is_kept_and_answered_in_one_sentence",
     ),
   },
   "POST /api/v1/threads/attachments": {

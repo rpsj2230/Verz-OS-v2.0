@@ -39,8 +39,11 @@ import {
   ANY_KIND,
   ASK_ADDRESS,
   ASK_HEADING,
+  ANSWER_COPIED,
+  ANSWER_NOT_COPIED,
   ASK_LABEL,
   BASED_ON,
+  COPY_ANSWER,
   HELPFUL,
   KIND_LABEL,
   NOT_HELPFUL,
@@ -79,6 +82,7 @@ import { readConsoleFile } from "./support/repo";
 const CONSOLE_ORIGIN = "https://console.test";
 const ANSWER_API = "/api/v1/answer";
 const MARK_API = "/api/v1/answer/mark";
+const COPIED_API = "/api/v1/answer/copied";
 const ANSWER_ROUTE = "/api/v1/answer";
 const ROSTER_API = "/api/v1/agents";
 const SHEET = "src/styles/app.css";
@@ -846,5 +850,85 @@ describe("marking an answer", () => {
     expect(sent).toEqual([{ trace_id: "trace-ask-1", helpful: false }]);
     expect(page(container).querySelector(`[aria-label="${WAS_IT_HELPFUL}"]`)).toBeNull();
     expect(page(container).textContent).not.toContain(HELPFUL + NOT_HELPFUL);
+  });
+});
+
+describe("copying an answer", () => {
+  /** The page asked about, signed in, with the stand-in API answering a copy as the route does. */
+  async function asked(clipboard: { writeText: (text: string) => Promise<void> } | undefined) {
+    const idp = fakeIdentityProvider({
+      api(url, init) {
+        const path = new URL(url, CONSOLE_ORIGIN).pathname;
+        if (path === ANSWER_API) {
+          return new Response(answerFrames("The balance is 400."), {
+            status: 200,
+            headers: { "content-type": EVENT_STREAM, "x-trace-id": "trace-ask-2" },
+          });
+        }
+        if (path === COPIED_API && init?.method === "POST") {
+          return new Response(JSON.stringify({ told: "Noted." }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return null;
+      },
+    });
+    Object.defineProperty(navigator, "clipboard", { value: clipboard, configurable: true });
+    const loaded = await loadConsole({ idp, path: ASK_ADDRESS });
+    await signIn(loaded);
+    const { routes } = await import("../src/App");
+    const router = createMemoryRouter(routes, { initialEntries: [ASK_ADDRESS] });
+    const { container } = render(<RouterProvider router={router} />);
+    await waitFor(() => {
+      if (!container.querySelector("h1")) {
+        throw new Error("the page has not arrived");
+      }
+    });
+    ask(container, QUESTION);
+    const button = await waitFor(() => {
+      const found = [...page(container).querySelectorAll("button")].find(
+        (one) => one.textContent === COPY_ANSWER,
+      );
+      expect(found).toBeDefined();
+      return found as HTMLButtonElement;
+    });
+    return { idp, container, button };
+  }
+
+  function sent(idp: { calls: readonly { url: string; init?: RequestInit }[] }): unknown[] {
+    return idp.calls
+      .filter((call) => new URL(call.url, CONSOLE_ORIGIN).pathname === COPIED_API)
+      .map((call) => JSON.parse(String(call.init?.body ?? "null")) as unknown);
+  }
+
+  test("an answer is put on the clipboard and noted with its reference and nothing else", async () => {
+    // What breaks if this is deleted: a copy that sends the answer's words, a copy noted when the
+    // browser refused the text, or a button that tells nobody it worked.
+    const written: string[] = [];
+    const { idp, container, button } = await asked({
+      writeText: async (text) => {
+        written.push(text);
+      },
+    });
+    fireEvent.click(button);
+    await waitFor(() => {
+      expect(page(container).textContent).toContain(ANSWER_COPIED);
+    });
+    expect(written).toEqual(["The balance is 400."]);
+    await waitFor(() => {
+      expect(sent(idp)).toEqual([{ trace_id: "trace-ask-2" }]);
+    });
+  });
+
+  test("a browser that will not copy is said so and nothing is noted", async () => {
+    // The sibling: the person copied nothing, so the install is told nothing, and the page says
+    // how to do it by hand instead of claiming it worked.
+    const { idp, container, button } = await asked(undefined);
+    fireEvent.click(button);
+    await waitFor(() => {
+      expect(page(container).textContent).toContain(ANSWER_NOT_COPIED);
+    });
+    expect(sent(idp)).toEqual([]);
   });
 });
