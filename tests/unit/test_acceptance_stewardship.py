@@ -8,7 +8,7 @@ that admits anybody, and a notice list that tells nobody.
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M7.7.2
+Task ids: M7.7.2, M27.5.5
 """
 
 from __future__ import annotations
@@ -33,7 +33,9 @@ NAMED = "a_steward_is_named_and_told_of_access_somebody_gave_themselves"
 def test_the_module_declares_one_check_for_its_one_leaf() -> None:
     """One check, for M7.7.2 alone. Delete this and the check can start claiming the document
     hand-over's leaf, which the document's whole life already proves on its own."""
-    assert [(one.name, one.leaves) for one in registered((MODULE,))] == [(NAMED, ("M7.7.2",))]
+    assert [(one.name, one.leaves) for one in registered((MODULE,))] == [
+        (NAMED, ("M7.7.2", "M27.5.5"))
+    ]
 
 
 def test_the_stewardship_checks_are_listed_in_their_page_order() -> None:
