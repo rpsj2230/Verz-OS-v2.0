@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**58 items are open: 197,** sign in with Lark, what you do and one question, **181,** where the count of redactions on the audit screen should come from, **180,** whether an agent's parts include tools and workflows, and which kinds of memory an agent is told apart by, **179,** what the ceiling is that a leash may not be raised beyond, **178,** who may change which part of an agent, and whether a refusal names the role, **177,** which conditions an automation's trigger may carry, **176,** where a document added from an agent's own page lives, **175,** which tools the part of a model request that everybody shares may hold, **174,** whether a supervised agent's thirty-day review runs on its own each day, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**60 items are open: 199,** whether these are the criteria to hold the Maintenance Agent to, **198,** going live with your real systems, the order and one rule for the recordings, **197,** sign in with Lark, what you do and one question, **181,** where the count of redactions on the audit screen should come from, **180,** whether an agent's parts include tools and workflows, and which kinds of memory an agent is told apart by, **179,** what the ceiling is that a leash may not be raised beyond, **178,** who may change which part of an agent, and whether a refusal names the role, **177,** which conditions an automation's trigger may carry, **176,** where a document added from an agent's own page lives, **175,** which tools the part of a model request that everybody shares may hold, **174,** whether a supervised agent's thirty-day review runs on its own each day, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -12,6 +12,69 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 199. The Maintenance Agent's sign-off: are these the criteria to hold it to?
+
+**In plain terms:** your acceptance of the Maintenance Agent (task M38.5.3, decided in item 83 to come at the
+end of Wave 3) has to be against criteria written before the agent is run, so that "it works" cannot be
+decided after seeing what it did. These are mine. **Nothing is built from them until you say they are right,
+and they depend on item 156** (what your maintenance portal is), because the agent reads your uploaded
+maintenance documents and your Freshdesk ticket desk and, if you choose A or B there, the portal too.
+
+1. **Assembled from the console, with no code and no change on the server.** An administrator builds it on
+   **Agents > New agent** from a template, attaches your uploaded maintenance documents and Freshdesk, and
+   enables it on Lark. Nobody edits a file or runs a command on the server.
+2. **A real question, answered in Lark.** A person bound to Lark asks one real maintenance question in a Lark
+   message. The answer arrives in Lark, names the document and the ticket it used by their own titles and
+   dates, and is the answer a person who knows the work would give. You judge that, and record it.
+3. **The same question from a person who may not read tickets** gets what a missing record gets, with nothing
+   that says tickets exist.
+4. **One workflow, one approval.** The agent runs one workflow that prepares one change (for example a
+   Freshdesk reply) and stops. Nothing is sent until a person you name approves it in the console or on a Lark
+   card; the Audit screen then shows who approved, when, and what was sent, once.
+5. **Slow or unreachable is said, not guessed.** With Freshdesk switched off for a minute the agent says the
+   ticket desk could not be reached, and does not answer as though it had read it.
+6. **You sign it off on Install > Requirement checks (area Agents),** quoting these numbers, and tell me
+   "199 done".
+
+**My recommendation:** use these as they stand. **What I need from you:** reply "199: yes", or change any
+number and I will hold the run to your version.
+
+## 198. Going live with your real systems: the order to do it in, and one rule for the recordings
+
+**In plain terms:** every connector in the Brain was built and tested against recorded answers in each
+vendor's published shape, and none has been connected with your real keys on the live account tier except what
+you have done already (items 127 to 129, 143 to 152). Tasks M38.4.2.1 to M38.4.2.5 and the Wave 5 go-live
+milestone M38.2.2.6 are that step, and each is something only you can do, because each needs a key only you
+hold. This is the whole list, in order, and it makes **no change to any server**: it uses the Connectors screen.
+Do it once per source you want live; Freshdesk is the quickest.
+
+1. **Store the real key (M38.4.2.1).** Open **Connectors**, choose the source, press **Connect**, fill the form
+   and paste the key into the **masked** field. It goes into the vault; I never see it and it never appears in
+   chat. Its details then say a key is held, and when, and never the key.
+2. **Press Test (M38.4.2.2).** It reads one small thing from the live account and shows no business rows. If
+   the live answer has a field the Brain does not expect, or lacks one it does, the source's health says so in
+   words on the next scheduled read: that is the live answer compared with what each connector was built
+   against, and it is the comparison this task asks for.
+3. **Check the ceiling (M38.4.2.3).** On the source's page read **Its ceiling**. In the vendor's own admin page
+   find your account's real limit for the plan you are on. If they differ, tell me both numbers and the plan
+   name, and I correct the Brain's figure and say where I read it.
+4. **First sync (M38.4.2.4).** The Brain reads the source on its own schedule. When the source's page shows a
+   last read that finished, with how many records it holds, pick three records you know and ask about each by name on **Ask**: each answer should name the
+   record and be right. Tell me "198: <source> synced" with the three names (names only, no values).
+5. **The recordings (M38.4.2.5): one decision.** The task says to refresh each connector's recordings from the
+   live account so later work stays faithful. **A recording made from your account would put your real client
+   names and amounts into the product's source code,** which every later company would then receive, and which
+   the rule that no company's details enter the source forbids. **Option A (my recommendation): I refresh the
+   recordings' shapes only,** from what you tell me in step 2 (the field names and types, never a value), keeping
+   the made-up values. **Option B:** leave the recordings as the vendor's documentation describes them and close
+   the task as not wanted. **Option C:** refresh them with your real values, kept out of the product in a
+   private folder of yours; I do not recommend it, because nothing then shows a future change what the answers
+   look like.
+6. **W5 go-live (M38.2.2.6)** is the milestone after steps 1 to 4 for every source you want live and after the
+   browser-task work of Wave 5 is built; I raise it when both are true and do not ask you for anything now.
+
+**What I need from you:** the steps above as you do them, and for step 5 reply "198: A", "198: B" or "198: C".
 
 ## 197. Sign in with Lark: what you do on your install, and one question
 
