@@ -13578,7 +13578,7 @@
    "proof": [
     "M7.7.7"
    ],
-   "decision": null
+   "decision": "needs-rupash 178: open, whether answers keep using the old search index while a new embedding model is built; today search by meaning is off during a rebuild"
   },
   {
    "id": "GAP-04",
