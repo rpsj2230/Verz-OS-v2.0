@@ -745,6 +745,11 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert (
         outcomes.pop("a_departments_head_reads_its_pace_and_its_knowledge_coverage")[0] == NOT_RUN
     )
+    # The same empty currency leaves a cost nothing could record; the console money check's own
+    # test file sets one and runs it.
+    assert (
+        outcomes.pop("an_unrecorded_cost_is_not_nought_and_a_cost_names_its_currency")[0] == NOT_RUN
+    )
     assert outcomes.pop("a_skill_is_imported_from_a_github_commit_and_from_an_address") == (
         NOT_RUN,
         "this install names no public skill to import, so no import from GitHub was asked",

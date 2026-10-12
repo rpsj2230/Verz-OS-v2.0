@@ -141,6 +141,7 @@ from brain.console.workspace import (
     visible_actuals,
     window,
 )
+from brain.console_overview_figures_routes import cost_recorded_in
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Failed
 from brain.core.scope_sql import compile_where
@@ -680,6 +681,7 @@ def agent_period_views(
     cost_basis: Basis,
     names: Mapping[str, str],
     now: datetime,
+    recorded: bool = RUN_SPEND_IS_RECORDED,
 ) -> list[AgentPeriodView]:
     """An agent's figures over each of its four periods, each at the basis its rows are read at.
 
@@ -706,7 +708,7 @@ def agent_period_views(
                 answered=figures.answered,
                 nothing_returned=figures.nothing_returned,
                 p50_latency_ms=figures.p50_latency_ms,
-                cost_minor=cost.spend_minor if RUN_SPEND_IS_RECORDED else None,
+                cost_minor=cost.spend_minor if recorded else None,
                 callers=[
                     CallerSpendView(
                         principal_id=row.principal_id,
@@ -715,7 +717,7 @@ def agent_period_views(
                     )
                     for row in heaviest
                 ]
-                if RUN_SPEND_IS_RECORDED
+                if recorded
                 else [],
             )
         )
@@ -729,6 +731,7 @@ def projection_view(
     spend: Sequence[Actual],
     cost_basis: Basis,
     now: datetime,
+    recorded: bool = RUN_SPEND_IS_RECORDED,
 ) -> ProjectionView | None:
     """The month-end projection against the agent's monthly budget, or None (M39.1.3.4).
 
@@ -736,7 +739,7 @@ def projection_view(
     narrower basis, where `projection` withholds rather than narrows. The month to date is
     everybody's spend, read through `visible_actuals` on the wider basis the projection needs.
     """
-    if ceiling is None or not RUN_SPEND_IS_RECORDED or cost_basis is not Basis.EVERYONE:
+    if ceiling is None or not recorded or cost_basis is not Basis.EVERYONE:
         return None
     since, until = window(Range.MONTH_TO_DATE, now)
     spent = total_minor(
@@ -784,6 +787,11 @@ async def agent_stats(request: Request, agent_id: Named, asked: Asked) -> AgentS
         ceiling = await in_force(
             session, (BudgetLevel.AGENT, agent_id, BudgetPeriod.MONTH), asked.now
         )
+        # A cost nothing could have been written for is not nought. See
+        # `A_COST_OVER_NO_PRICE_IS_NOT_RECORDED_AND_NEVER_NOUGHT`: with no model priced in the
+        # install's currency the recorder writes no cost row, so a sum is the absence of rows.
+        priced, why = await cost_recorded_in(session)
+        recorded = RUN_SPEND_IS_RECORDED and priced is not None
     code, _ = money_and_clock()
     return AgentStatsView(
         agent_id=agent_id,
@@ -803,10 +811,24 @@ async def agent_stats(request: Request, agent_id: Named, asked: Asked) -> AgentS
             cost_basis=cost_basis,
             names=names,
             now=asked.now,
+            recorded=recorded,
         ),
-        unrecorded=_unrecorded(() if RUN_SPEND_IS_RECORDED else (RUN_COST_IS_NOT_RECORDED,)),
+        unrecorded=_unrecorded(
+            ()
+            if recorded
+            else (
+                (RUN_COST_IS_NOT_RECORDED,)
+                if why is None
+                else (Unrecorded(figure=RUN_COST_IS_NOT_RECORDED.figure, why=why.why),)
+            )
+        ),
         projection=projection_view(
-            agent_id, ceiling=ceiling, spend=spend, cost_basis=cost_basis, now=asked.now
+            agent_id,
+            ceiling=ceiling,
+            spend=spend,
+            cost_basis=cost_basis,
+            now=asked.now,
+            recorded=recorded,
         ),
     )
 

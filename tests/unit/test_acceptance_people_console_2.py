@@ -53,7 +53,7 @@ def test_each_check_closes_the_leaves_its_flow_exercises() -> None:
         LEDGER: ("M27.7.13",),
         FIRST: ("M27.9.4",),
         KEYS: ("M27.11.5",),
-        EXPORTS: ("M27.15.21",),
+        EXPORTS: ("M27.15.21", "M27.13.7"),
     }
 
 
