@@ -50,6 +50,7 @@ import {
   type EstateItem,
 } from "../companyQuery";
 import { moneyWords } from "../spendQuery";
+import { CompanyBudgetForm, SET_COMPANY_BUDGET } from "./CompanyBudgetForm";
 
 export const COMPANY_CRUMB = "Whole company";
 
@@ -87,6 +88,7 @@ export const WITHHELD = "Not shown to you";
 export const WITHHELD_MORE =
   "The company's spend is everybody's, and your budget permission covers less than everybody, so no figure is shown rather than a partial one.";
 export const SPENT_LABEL = "Spent";
+export const BUDGET_LABEL = "Monthly budget";
 export const FIGURES_LABEL = "Company consumption";
 export const BY_DEPARTMENT = "By department";
 export const NOTHING_SPENT = "Nothing was spent in this period.";
@@ -385,7 +387,9 @@ export function ActivityPage() {
 
 export function ConsumptionPage() {
   const [days, setDays] = useState<number>(DEFAULT_WINDOW);
-  const answer = useResource<unknown>(consumptionApiPath(days));
+  // Moved after the budget is set, so the same address is asked again and the figure beside it is current.
+  const [saved, setSaved] = useState(0);
+  const answer = useResource<unknown>(consumptionApiPath(days), saved);
   const found = answer.data === null ? null : readConsumption(answer.data);
 
   let content: ReactNode;
@@ -398,11 +402,24 @@ export function ConsumptionPage() {
   } else {
     content = (
       <div className="flex min-w-0 flex-col gap-3">
-        <StatsStrip label={FIGURES_LABEL} busy={false} failure={null} count={1}>
+        <StatsStrip label={FIGURES_LABEL} busy={false} failure={null} count={found.ceilingMinor === null ? 1 : 2}>
           <StatCard label={SPENT_LABEL} value={moneyWords(found.spendMinor, found.currency)} />
+          {found.ceilingMinor === null ? null : (
+            <StatCard label={BUDGET_LABEL} value={moneyWords(found.ceilingMinor, found.currency)} />
+          )}
         </StatsStrip>
         {found.incomplete ? <p className="m-0 text-[12.5px] text-dim">{INCOMPLETE}</p> : null}
         {found.ceilingSet ? null : <p className="m-0 text-[12.5px] text-dim">{NO_CEILING}</p>}
+        {found.maySetBudget ? (
+          <SectionCard title={SET_COMPANY_BUDGET}>
+            <CompanyBudgetForm
+              currency={found.currency}
+              onSaved={() => {
+                setSaved((one) => one + 1);
+              }}
+            />
+          </SectionCard>
+        ) : null}
         <SectionCard title={BY_DEPARTMENT}>
           {found.lines.length === 0 ? (
             <p className="m-0 text-sm text-dim">{NOTHING_SPENT}</p>

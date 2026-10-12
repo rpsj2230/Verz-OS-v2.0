@@ -100,6 +100,9 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   // The Dashboard opens first, and its one form is the monthly budget, drawn for a reader of
   // everybody's spend.
   "src/pages/agents/AgentSpend.tsx": [{ pattern: "/agents/:agentId", index: 0, writes: true }],
+  // The company's monthly budget, drawn for a reader the consumption says may set it, under the
+  // period filter, which is the page's first form.
+  "src/pages/company/CompanyBudgetForm.tsx": [{ pattern: "/company/consumption", index: 1, writes: true }],
   // A model's price opens on its row in the prices card, under the providers and the matrix, which
   // draw no form of their own (M27.12.5).
   "src/components/ModelPrices.tsx": [{ pattern: "/models", opener: "Set price", index: 0, writes: true }],

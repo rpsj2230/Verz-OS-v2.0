@@ -54,6 +54,7 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         by_department: [{ department: UNBROKEN, spend_minor: 700 }],
         incomplete: false,
         ceiling_set: false,
+        may_set_budget: true,
       },
     },
   },

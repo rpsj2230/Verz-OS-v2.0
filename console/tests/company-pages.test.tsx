@@ -20,6 +20,7 @@ import {
   PERSON_FILTER,
   WITHHELD,
 } from "../src/pages/company/CompanyPages";
+import { SET_COMPANY_BUDGET } from "../src/pages/company/CompanyBudgetForm";
 import { readConsumption } from "../src/pages/companyQuery";
 import { fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
 import { COMPANY_CONSOLE, NAVIGATION_ADDRESS, addressesOf } from "./support/navigation";
@@ -261,6 +262,41 @@ describe("Consumption", () => {
       since: "2019-02-02T09:00:00Z",
       until: "2019-03-04T09:00:00Z",
     });
+  });
+
+  test("a company budget in force is drawn beside the spend, and the form is offered only to a reader who may set it", async () => {
+    // What breaks if this is deleted: M33.1.1.3's first half, the budget the company set never
+    // shown beside what it spent, or the form drawn for a reader the API will refuse.
+    const set = await pageAt("/company/consumption", {
+      [CONSUMPTION]: consumption({ ceiling_set: true, ceiling_minor: 200000, may_set_budget: true }),
+    });
+    expect(set.text()).toContain("SGD 2000.00");
+    expect(set.text()).not.toContain(NO_CEILING);
+    expect(set.text()).toContain(SET_COMPANY_BUDGET);
+    expect(set.root().querySelector('[data-slot="company-budget-form"]')).not.toBeNull();
+
+    const reader = await pageAt("/company/consumption", {
+      [CONSUMPTION]: consumption({ ceiling_set: true, ceiling_minor: 200000, may_set_budget: false }),
+    });
+    expect(reader.text()).toContain("SGD 2000.00");
+    expect(reader.root().querySelector('[data-slot="company-budget-form"]')).toBeNull();
+
+    const none = await pageAt("/company/consumption", { [CONSUMPTION]: consumption({ may_set_budget: true }) });
+    expect(none.text()).toContain(NO_CEILING);
+    expect(readConsumption(consumption({ ceiling_minor: 5, may_set_budget: true }))).toMatchObject({
+      ceilingMinor: 5,
+      maySetBudget: true,
+    });
+  });
+
+  test("a withheld figure carries no ceiling and no form, whatever else the body holds", async () => {
+    // The sibling: a ceiling beside a withheld total is the other half of a subtraction.
+    const page = await pageAt("/company/consumption", {
+      [CONSUMPTION]: consumption({ withheld: true, ceiling_set: true, ceiling_minor: 777700, may_set_budget: true }),
+    });
+    expect(page.text()).toContain(WITHHELD);
+    expect(page.text()).not.toContain("7777.00");
+    expect(page.root().querySelector('[data-slot="company-budget-form"]')).toBeNull();
   });
 
   test("a load that came back full is said beside the figure", async () => {
