@@ -114,10 +114,10 @@ class Store:
 # ----------------------------------------------------------------------- suspensions
 
 
-def an_action(department: str) -> Action:
+def an_action(department: str, agent: str = "agent_test") -> Action:
     """One real action on a ticket in one department, so the digest and artefact are the gate's."""
     return Action(
-        agent_id="agent_test",
+        agent_id=agent,
         tool=ToolDefinition(
             name="ticket.update_status",
             description="a tool a test built so that a suspension has something real behind it",
@@ -140,9 +140,10 @@ def a_suspension(
     window: timedelta = timedelta(hours=4),
     state: ApprovalState = ApprovalState.PENDING,
     artefact: str | None = None,
+    agent: str = "agent_test",
 ) -> SuspendedAction:
     """One suspension raised relative to the wall clock, built the way `suspend` builds one."""
-    action = an_action(department)
+    action = an_action(department, agent)
     raised_at = datetime.now(UTC) - raised_ago
     return SuspendedAction(
         id=ident,
@@ -310,6 +311,32 @@ def test_no_queue_answer_carries_a_count_of_anything(
         "truncated",
         "people",
     }
+
+
+def test_a_card_names_the_agent_that_raised_it_and_the_queue_filters_by_it(
+    client: TestClient, source: MemorySource
+) -> None:
+    """**M27.15.30.** Each card carries the agent whose action it is, the queue narrows to one
+    agent's cards, and an agent the reader may decide nothing for gives an empty page that looks
+    like an agent that does not exist. Delete this and an agent's page cannot list its own waiting
+    approvals, or a filter by an agent can say which agents exist.
+    """
+    source.held = [
+        a_suspension("a_1", agent="agent_a"),
+        a_suspension("b_1", agent="agent_b"),
+        a_suspension("f_1", department=FINANCE, agent="agent_a"),
+    ]
+    everything = get(client, "u_narrow", APPROVALS).json()["items"]
+    assert {one["suspension_id"]: one["agent_id"] for one in everything} == {
+        "a_1": "agent_a",
+        "b_1": "agent_b",
+    }
+    only_a = get(client, "u_narrow", f"{APPROVALS}?filter=agent_id:agent_a").json()
+    assert [one["suspension_id"] for one in only_a["items"]] == ["a_1"]
+    nobody = get(client, "u_narrow", f"{APPROVALS}?filter=agent_id:agent_none").json()
+    missing = get(client, "u_none", f"{APPROVALS}?filter=agent_id:agent_a").json()
+    assert nobody["items"] == missing["items"] == []
+    assert nobody == missing
 
 
 def test_the_queue_is_bounded_after_the_reach_filter_and_says_only_that_there_is_more() -> None:

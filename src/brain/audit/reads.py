@@ -4,21 +4,23 @@ Needs Rupash item 45, Option A. On 2026-09-09 he chose to answer "which agents h
 HR record" for a narrow, high-sensitivity set rather than for everything, and this module is
 that set and the three refusals around it.
 
-**The set is his to widen and it starts here.** `WRITTEN_DOWN` holds two entries today,
+**The set is his to widen and it starts here.** `WRITTEN_DOWN` holds three entries today:
 personnel records and anything carrying a salary, which is the recommendation in the item and
-which he did not narrow. It is declared data with an argument per entry rather than a branch,
-for two reasons that pull the same way: widening it later is one `LoggedRead(...)` line
-somebody can review the argument for, and the whole of what is being recorded about everybody
-can be read in one place instead of being distributed over call sites. Option B in that item,
-logging every read of every row, was rejected there, and the shape here is what stops it
-arriving by accretion: there is no wildcard entry, no "or anything classified restricted",
-and **no parameter anywhere by which a call site can widen the set**. `record_read` computes
-membership from this table and refuses a read the table does not cover.
+which he did not narrow, and since 2026-10-12 an artifact download, which is his own requirement
+(M27.15.42) and widens the set by one declared line. It is declared data with an argument per
+entry rather than a branch, for two reasons that pull the same way: widening it later is one
+`LoggedRead(...)` line somebody can review the argument for, and the whole of what is being
+recorded about everybody can be read in one place instead of being distributed over call
+sites. Option B in that item, logging every read of every row, was rejected there, and the
+shape here is what stops it arriving by accretion: there is no wildcard entry, no "or
+anything classified restricted", and **no parameter anywhere by which a call site can widen
+the set**. `record_read` computes membership from this table and refuses a read the table
+does not cover.
 
 **A read log is itself a map of who is interested in whom.** That is the privacy cost item 45
-names, and three decisions follow from it rather than from convenience. The set is two entries.
-The log answers to its own capability and not to the audit trail's, so the people who can
-already read the ledger do not acquire it by default; see
+names, and three decisions follow from it rather than from convenience. The set is three entries,
+each argued. The log answers to its own capability and not to the audit trail's, so the people
+who can already read the ledger do not acquire it by default; see
 `THE_READ_LOG_ANSWERS_TO_ITS_OWN_NOUN_SO_NO_AUDIT_WILDCARD_REACHES_IT`. And its retention is
 shorter than everything else in the ledger, argued below rather than inherited.
 
@@ -65,7 +67,7 @@ Scope: domain logic. Nothing here opens a connection, reads a clock or writes an
 `brain.audit.record.AuditRecorder.record_read` is the one writer and `brain.audit.view` is the
 one reader.
 
-Task ids: M40.4.2.4
+Task ids: M40.4.2.4, M27.15.42
 """
 
 from __future__ import annotations
@@ -248,10 +250,11 @@ class LoggedRead:
         return self.field in disclosed
 
 
-#: The whole of what a read gets written down for. Two entries, which is item 45's
-#: recommendation and which he did not narrow.
+#: The whole of what a read gets written down for. Two entries are item 45's recommendation,
+#: which he did not narrow, and the third is the owner's requirement that every artifact download
+#: leave an entry (M27.15.42).
 #:
-#: **This is the line somebody widens, and it is meant to be reviewable as a line.** A third
+#: **This is the line somebody widens, and it is meant to be reviewable as a line.** A fourth
 #: entry is a `LoggedRead(...)` with its own `because`, and nothing else in the system has to
 #: change: `record_read` reads this tuple, the view's rule is per action rather than per
 #: reason, and the retention is one number for the whole log.
@@ -280,6 +283,21 @@ WRITTEN_DOWN: Final[tuple[LoggedRead, ...]] = (
             "and a record type added next year with a pay column would otherwise be read "
             "with no entry written. A company whose column is named something else declares "
             "that name here, as one more line with its own argument"
+        ),
+    ),
+    LoggedRead(
+        name="artifact_download",
+        entity="artifact",
+        because=(
+            "the owner's own requirement (M27.15.42): every download of an agent's report or file "
+            "leaves an entry naming the file and the person who took it. A download is the one "
+            "act that moves content out of the product, after which no gate narrows it, so it is "
+            "the read most worth being able to ask about afterwards. The unit is the file, not "
+            "its fields: a download either happened or did not, whatever the file held, so the "
+            "entry names the kind of record and the file and says nothing about what one reader "
+            "was shown. The set stays small on purpose, and this is the third line and not the "
+            "first of a family: opening a document in the library or reading a row is not written "
+            "down, and a proposal to write those down is Option B again"
         ),
     ),
 )

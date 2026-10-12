@@ -37,7 +37,7 @@ stored answer and `brain.api_routes.answer` passes `cached=None`, so no cached a
 today. The day the cache is wired, a hit discloses the same records again and has to be written
 down here as a read, and `disclosed_payload` is the one function that has to learn it.
 
-Task ids: M24.3.2
+Task ids: M24.3.2, M27.15.42
 """
 
 from __future__ import annotations
@@ -180,3 +180,42 @@ class SensitiveReadRecorder:
         async with self.sessions() as session, session.begin():
             await session.execute(insert(SensitiveReadRow), [row_values(one) for one in reads])
         log.info("sensitive_read.recorded", trace_id=request.origin.trace_id, reads=len(reads))
+
+
+#: The record kind an artifact download is filed under, and the one field it discloses: the file.
+ARTIFACT_KIND: Final = "artifact"
+ARTIFACT_FILE_FIELD: Final = "file"
+
+
+async def record_artifact_download(
+    sessions: async_sessionmaker[AsyncSession],
+    *,
+    reader_id: str,
+    artifact_id: str,
+    ent_hash: str,
+    trace_id: str,
+) -> None:
+    """Write one artifact download as a read of the declared set, or raise (M27.15.42).
+
+    Asked of `brain.audit.reads.written_down_because` like every other read, so removing the
+    declaration for an artifact makes this refuse instead of writing a row nobody declared. The
+    row is filed under the artifact itself (`entity:<id>`), names the reader as the entry's actor
+    and the reach and trace of the request, and carries nothing of what the file held. A failure to
+    write it fails the download, for `A_SENSITIVE_READ_THAT_CANNOT_BE_WRITTEN_IS_NOT_SHOWN`'s
+    reason: a file taken and not written down is the read nobody can ask about afterwards.
+    """
+    if not written_down_because(ARTIFACT_KIND, (ARTIFACT_FILE_FIELD,)):
+        raise SensitiveReadError("an artifact download is not in the set of reads written down")
+    if not _IDENTIFIER_RE.match(artifact_id):
+        raise SensitiveReadError("an artifact download has no id the ledger can file it under")
+    read = SensitiveRead(
+        reader_id=reader_id,
+        agent_id=None,
+        record_kind=ARTIFACT_KIND,
+        subject_principal=None,
+        record_id=artifact_id,
+        ent_hash=ent_hash,
+        trace_id=trace_id,
+    )
+    async with sessions() as session, session.begin():
+        await session.execute(insert(SensitiveReadRow), [row_values(read)])

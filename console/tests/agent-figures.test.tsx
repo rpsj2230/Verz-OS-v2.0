@@ -441,3 +441,44 @@ describe("the month against the agent's own budget", () => {
     }
   });
 });
+
+// ------------------------------------------------------------------- waiting on a person
+
+function approvalCard(id: string): Record<string, unknown> {
+  return {
+    suspension_id: id,
+    request: `Close ticket ${id}`,
+    runs_as: "p_asker",
+    raised_at: "2019-03-04T09:00:00Z",
+    expires_at: "2019-03-04T13:00:00Z",
+    may_take_over: true,
+    unsent_because: "",
+    agent_id: AGENT,
+  };
+}
+
+describe("waiting on a person (M27.15.30)", () => {
+  test("the cards this reader could decide for the agent are listed, each linking to its own approval", async () => {
+    // What breaks if this is deleted: the agent's page going back to a note that says approvals
+    // carry no agent, so a reader has to find their cards on the company-wide queue.
+    const mounted = await consoleAt(`/agents/${AGENT}`, {
+      ...answers(),
+      "/api/v1/approvals": { body: { items: [approvalCard("s_1"), approvalCard("s_2")], next_cursor: null, total: null, truncated: false, people: {} } },
+    });
+    const section = [...mounted.container.querySelectorAll('[data-slot="section-card"]')].find((one) => one.textContent?.includes("Waiting on a person"));
+    expect(section?.textContent).toContain("Close ticket s_1");
+    expect(section?.textContent).toContain("Close ticket s_2");
+    expect(section?.querySelector('a[href="/approvals/s_1"]')).not.toBeNull();
+    expect(mounted.idp.urls.some((url) => url.includes("/approvals?filter=agent_id%3A" + AGENT))).toBe(true);
+  });
+
+  test("a reader who could decide none of its cards is shown no block at all, never a nought", async () => {
+    // The sibling: an empty page draws nothing, which is what the page for an agent that does not
+    // exist draws too, so the block cannot say which agents have approvals waiting.
+    const mounted = await consoleAt(`/agents/${AGENT}`, {
+      ...answers(),
+      "/api/v1/approvals": { body: { items: [], next_cursor: null, total: null, truncated: false, people: {} } },
+    });
+    expect(mounted.container.textContent).not.toContain("Waiting on a person");
+  });
+});

@@ -598,7 +598,7 @@ describe("the approvals queue", () => {
     // What breaks if this is deleted: the page and the routes drifting apart on a name, or a
     // route that started sending a card's call or state. The card's set is exact.
     const queue = declaredResponseSchema(QUEUE_ROUTE, "get");
-    const card = ["expires_at", "may_take_over", "raised_at", "request", "runs_as", "suspension_id", "unsent_because"];
+    const card = ["agent_id", "expires_at", "may_take_over", "raised_at", "request", "runs_as", "suspension_id", "unsent_because"];
 
     expect(declaredPropertyNames(queue)).toEqual(expect.arrayContaining(["items", "truncated"]));
     expect(declaredPropertyNames(declaredProperty(queue, "items"))).toEqual(card);

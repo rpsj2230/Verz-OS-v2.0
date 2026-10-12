@@ -30,7 +30,7 @@ it is what an agent asks in the middle of a run and its answer goes into what th
 this reader may be told of and the documents their own read of the library returns
 (`brain.agent_capability_routes.reader_items`). Nothing here counts what it withheld.
 
-Task ids: M39.5.1.5, M39.5.2.1, M39.5.2.2, M39.5.2.3, M39.5.2.4, M39.5.2.5, M39.8.5
+Task ids: M27.15.42, M39.5.1.5, M39.5.2.1, M39.5.2.2, M39.5.2.3, M39.5.2.4, M39.5.2.5, M39.8.5
 """
 
 from __future__ import annotations
@@ -78,6 +78,7 @@ from brain.core.errors import Degraded
 from brain.knowledge.lifecycle_store import names_of
 from brain.ops.artifact_store import StoredArtifacts
 from brain.ops.retention import horizon_for
+from brain.ops.sensitive_read_store import record_artifact_download
 from brain.ops.storage import StorageError
 from brain.tables.artifact import ARTIFACT_ID_PATTERN
 from brain.tables.resolution import ENTITY_ID_CHARS
@@ -458,6 +459,16 @@ async def download_agent_artifact(
         body = await store.bytes_of(kept)
     except StorageError as exc:
         raise Degraded(str(exc), public_message=THE_FILE_CANNOT_BE_FETCHED_NOW) from exc
+    # Written once the file is in hand and before it is handed over, so a file nobody could fetch
+    # leaves no entry and a file taken always does: a failure to write it fails the download. See
+    # `brain.ops.sensitive_read_store.record_artifact_download`.
+    await record_artifact_download(
+        factory,
+        reader_id=asked.caller.principal.id,
+        artifact_id=kept.artifact.artifact_id,
+        ent_hash=asked.reach.ent_hash(),
+        trace_id=trace_of_request(),
+    )
     extension = FILE_EXTENSIONS.get(kept.content_type.split(";")[0].strip(), "bin")
     name = f"{kept.artifact.kind.value}-{kept.artifact.artifact_id}.{extension}"
     return Response(
