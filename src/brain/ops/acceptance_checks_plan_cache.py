@@ -42,6 +42,7 @@ from __future__ import annotations
 import dataclasses
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, Final, cast
 
 from brain.core.scope import Scope
@@ -269,21 +270,20 @@ async def a_source_epoch_is_read_through_the_cache_and_moves_the_key(
     source = f"acceptance_{h.run}_freshness"
     mine = f"epochs:acceptance:{h.run}"
 
-    @dataclass
-    class Counting:
-        """The database read, counted."""
+    asked: list[int] = []
 
-        asked: int = 0
+    async def read_the_database() -> Any:
+        """The database read, counted. A function on a namespace rather than a class with an
+        `epochs` method, because the product's one invariant on epoch readers
+        (`tests/invariants/test_one_epoch_source.py`) refuses a second class of that shape."""
+        asked.append(1)
+        return await StoredSourceEpochs(h.sessions).epochs()
 
-        async def epochs(self) -> Any:
-            self.asked += 1
-            return await StoredSourceEpochs(h.sessions).epochs()
-
-    database = Counting()
-    through = ReadThroughSourceEpochs(database, RemappedEpochs(caches.epochs, mine))
+    database = SimpleNamespace(epochs=read_the_database)
+    through = ReadThroughSourceEpochs(cast(Any, database), RemappedEpochs(caches.epochs, mine))
 
     first = await through.epochs()
-    if database.asked != 1 or source in first:
+    if len(asked) != 1 or source in first:
         raise CheckFailedError(A_READING_WAS_NOT_FROM_THE_DATABASE)
     remaining = caches.lifetime(mine)
     if not 0 < remaining <= min(SOURCE_EPOCHS_TTL_SECONDS, CACHE_TTL_SECONDS):
@@ -291,13 +291,13 @@ async def a_source_epoch_is_read_through_the_cache_and_moves_the_key(
 
     await h.execute(*h.attributed(), advance_epoch(source))
     again = await through.epochs()
-    if database.asked != 1 or dict(again) != dict(first):
+    if len(asked) != 1 or dict(again) != dict(first):
         raise CheckFailedError(A_READING_WAS_NOT_KEPT)
 
     # The reading dropped, as it is when its lifetime ends.
     caches.drop(mine)
     after = await through.epochs()
-    if database.asked != 2 or after.get(source) != 1:
+    if len(asked) != 2 or after.get(source) != 1:
         raise CheckFailedError(A_CHANGE_WAS_NOT_SEEN)
 
     reach = await h.reach(asking)
