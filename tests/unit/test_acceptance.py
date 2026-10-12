@@ -728,6 +728,13 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     # `tests/unit/test_acceptance_plan_cache.py` runs them with a dictionary in its place.
     for plan_cache_check in registered(("brain.ops.acceptance_checks_plan_cache",)):
         assert outcomes.pop(plan_cache_check.name)[0] == NOT_RUN, plan_cache_check.name
+    # Nor the retrieval and embedding caches; `tests/unit/test_acceptance_record_caches.py` runs
+    # both with a client in memory standing in the cache's place.
+    assert (
+        outcomes.pop("a_cached_retrieval_is_served_only_to_the_reach_it_was_ranked_for")[0]
+        == NOT_RUN
+    )
+    assert outcomes.pop("an_embedding_is_kept_under_its_content_and_model_alone")[0] == NOT_RUN
     # Nor a cache to keep a conversation's notes in; `tests/unit/test_acceptance_session.py` runs it
     # with a client in memory standing in the cache's place.
     assert outcomes.pop("session_memory_is_one_conversations_own_and_silent")[0] == NOT_RUN
