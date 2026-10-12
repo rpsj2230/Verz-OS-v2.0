@@ -10,16 +10,28 @@ Task ids: M12.3.3, M12.4.10
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 import pytest
 
 from brain.ops.acceptance import FAILED, PASSED, Check, check_modules, registered
-from tests.unit.test_acceptance import checks_in
-from tests.unit.test_acceptance_skill_runs import at_head_laddered, hosted, run_checks  # noqa: F401
+from tests.unit.test_acceptance import at_head, checks_in, counts
+from tests.unit.test_acceptance_skill_runs import hosted, run_checks  # noqa: F401
 
 MODULE = "brain.ops.acceptance_checks_skill_reuse"
 NAME = "a_skill_is_reused_by_two_agents_and_refused_where_unservable"
+
+
+@contextmanager
+def at_head_laddered(name: str) -> Iterator[str]:
+    """PostgreSQL at head with the ladder the setup wizard writes, as the model checks run on."""
+    from tests.unit.test_acceptance_models import laddered
+
+    with at_head(name) as url:
+        laddered(url)
+        yield url
 
 
 def mine() -> dict[str, Check]:
@@ -38,8 +50,6 @@ def test_the_reuse_check_is_listed_with_the_leaves_it_proves() -> None:
 def test_on_a_real_database_one_skill_reaches_two_agents_and_nothing_is_left_behind() -> None:
     """**The check as the worker runs it.** Delete this and the reuse of a skill can stop working
     with nothing on the owner's install saying so."""
-    from tests.unit.test_acceptance import counts
-
     with at_head_laddered("brain_acceptance_skill_reuse") as url:
         before = counts(url)
         outcome = run_checks(url, (mine()[NAME],))

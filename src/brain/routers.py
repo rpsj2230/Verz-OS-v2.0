@@ -452,6 +452,7 @@ from brain.sign_in_routes import router as sign_in_router
 # the procedures the agents a reader may see are pinned to. Its three writes add a skill,
 # decide about one as somebody other than who added it, and assign an approved one through
 # `attach_skill`, each asking its `admin:` authority first. See `brain.skill_routes`.
+from brain.skill_draft_routes import router as skill_draft_router
 from brain.skill_routes import router as skill_router
 
 # The Staff sources screen and the trial run behind it. A router of its own because it

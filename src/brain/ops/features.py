@@ -302,6 +302,26 @@ SKILL_NEEDS: Final = Feature(
     read_by=("brain.skill_routes:assign_skill",),
 )
 
+#: Drafting a skill from a description. Off because it sends a person's words to a model: an install
+#: chooses whether a description of a procedure may leave for the model it has set up. What it
+#: drafts is never more than an import, waiting undecided for a second person (M12.4.14).
+SKILL_DRAFTING: Final = Feature(
+    name="skill_drafting",
+    title="Draft a skill from a description",
+    what=(
+        "An administrator who may add skills describes what a skill should do, and the model "
+        "this install has set up drafts its instructions, the departments whose knowledge it "
+        "needs, the tools it uses and some example tasks. The draft is added to the library "
+        "waiting for review, exactly as a skill imported from a file is, and no agent can read "
+        "it until a second person has approved it."
+    ),
+    while_off=(
+        "Skills are added by pasting or uploading a file, or from a repository or an address. A "
+        "draft made while this was on stays in the library, waiting for review."
+    ),
+    read_by=("brain.skill_draft_routes:draft_skill",),
+)
+
 #: Every feature this product can switch on, in the order the screen lists them.
 FEATURES: Final[tuple[Feature, ...]] = (
     PROMPT_EDITING,
@@ -311,6 +331,7 @@ FEATURES: Final[tuple[Feature, ...]] = (
     BUDGET_ENFORCEMENT,
     SUPERVISION_REVIEW,
     SKILL_NEEDS,
+    SKILL_DRAFTING,
 )
 
 

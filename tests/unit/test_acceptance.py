@@ -779,6 +779,11 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert (
         outcomes.pop("a_skill_is_reused_by_two_agents_and_refused_where_unservable")[0] == NOT_RUN
     )
+    # A skill described in conversation is drafted by a model too;
+    # `tests/unit/test_acceptance_skill_draft.py` runs it.
+    assert (
+        outcomes.pop("a_skill_described_in_conversation_lands_as_an_unreviewed_draft")[0] == NOT_RUN
+    )
     # The co-author asks a model too, with no tools;
     # `tests/unit/test_acceptance_coauthor.py` runs it.
     assert outcomes.pop("the_coauthor_proposes_and_nothing_changes_until_taken")[0] == NOT_RUN

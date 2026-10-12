@@ -101,7 +101,7 @@ Scope: domain logic. Nothing here opens a connection or reads a clock; rows, the
 instant arrive as arguments.
 
 Task ids: M42.6.4, M12.2.2, M12.2.3, M12.2.4, M12.2.6, M12.3.2, M12.4.6, M12.4.13, M27.15.55
-Task ids: M12.3.3, M12.4.10
+Task ids: M12.3.3, M12.4.10, M12.4.14
 Task ids: M12.3.1
 Task ids: M12.2.10
 """
@@ -138,6 +138,7 @@ from brain.gate.catalogue import EmptyCatalogueError, within_ceiling
 from brain.tools.extract import MAX_MEMBERS, _is_regular
 from brain.tools.registry import ToolRegistry
 from brain.tools.review import QueueEntry, pending
+from brain.tools.skill_draft import SkillDraft
 from brain.tools.skill_examples import examples_of
 from brain.tools.skills import (
     MAX_SCRIPT_BYTES,
@@ -364,6 +365,10 @@ MAX_ADDRESS_CHARS: Final = 400
 
 #: The version a procedure's first import is given, and how a later one moves it.
 FIRST_PROCEDURE_VERSION: Final = "1.0.0"
+
+#: The name a drafted skill's upload is kept under, in the archive-member grammar: where it came
+#: from, and nothing about what it says.
+DRAFTED_SOURCE: Final = "described-in-conversation.md"
 
 #: What a procedure's description says. A Word document has no line saying when to use it, and
 #: every skill's description has to open by saying so (M12.4.12).
@@ -1032,6 +1037,32 @@ def procedure_package(procedure: Procedure, library: Iterable[LibrarySkill]) -> 
     except (SkillError, ValueError) as refused:
         raise _refused(f"the procedure could not be written as a skill: {refused}") from None
     return Package(skill=_skill_of(text), source=procedure.source)
+
+
+def drafted_package(draft: SkillDraft, library: Iterable[LibrarySkill]) -> Package:
+    """A skill drafted from a person's description, as a package every way in treats alike.
+
+    The draft's `SKILL.md` is read back through `_skill_of`, the parser a pasted package goes
+    through, and kept as an upload of that text under a name saying where it came from, with the
+    digest of the bytes written: the same source an import is, so the library, the queue and the
+    review cannot tell a drafted skill from a pasted one, which is the point. A name the library
+    already holds is refused, not versioned: a described skill is a new skill, and a second one
+    under a held name would be an edit nobody asked for. See
+    `brain.tools.skill_draft.A_DRAFTED_SKILL_IS_AN_IMPORT_AND_NOTHING_MORE_TRUSTED`.
+    """
+    for one in library:
+        if one.name == draft.skill.name:
+            raise _refused(
+                f"the library already holds a skill named {one.name}; describe this one under "
+                "another name, or edit that one"
+            )
+    text = draft.markdown
+    source = SkillSource(
+        kind=SourceKind.UPLOAD,
+        location=DRAFTED_SOURCE,
+        content_digest=hashlib.sha256(text.encode("utf-8")).hexdigest(),
+    )
+    return Package(skill=_skill_of(text), source=source)
 
 
 def procedure_findings(one: LibrarySkill) -> tuple[Finding, ...]:

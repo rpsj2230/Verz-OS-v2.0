@@ -62,11 +62,11 @@ OTHER_AGENT_LOST_IT: Final = "taking the skill off one agent took it off the oth
 NO_HISTORY: Final = "a detachment was not kept as a row and a ledger entry beside the assignment"
 
 
-async def _needs_switched(h: Harness, *, on: bool) -> None:
-    """The needs rule's switch, set in the check's transaction with the attribution every settings
+async def switched(h: Harness, feature: Any, *, on: bool) -> None:
+    """A feature's switch, set in the check's transaction with the attribution every settings
     write carries, and rolled back with the rest of the check."""
     from brain.ops.acceptance_run import SET_UP_REACH
-    from brain.ops.features import SKILL_NEEDS, switch
+    from brain.ops.features import switch
     from brain.tables.audit import attributed_to
 
     async with h.sessions() as session:
@@ -74,8 +74,15 @@ async def _needs_switched(h: Harness, *, on: bool) -> None:
             actor_id=h.actor, ent_hash=SET_UP_REACH, trace_id=h.trace_id
         ):
             await session.execute(statement)
-        await switch(session, SKILL_NEEDS, on=on, by=h.actor)
+        await switch(session, feature, on=on, by=h.actor)
         await session.commit()
+
+
+async def _needs_switched(h: Harness, *, on: bool) -> None:
+    """The needs rule's switch. See `switched`."""
+    from brain.ops.features import SKILL_NEEDS
+
+    await switched(h, SKILL_NEEDS, on=on)
 
 
 async def _refusal_of(call: Any) -> str | None:
