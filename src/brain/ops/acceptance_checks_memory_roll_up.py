@@ -1,24 +1,24 @@
 """Memory, context and learning proved on an install, rolled up from the checks that prove each
 clause.
 
-M16.7.7 says memory and context are proved on an install, M16.7.8 says the learning loop is, and
-M16.7.9 and M16.7.11 say every learning and every memory requirement in the register is
-demonstrated. M16.3.2, M16.7.3 and M16.7.14 are smaller sentences whose clauses were each shown by
-a check written for a neighbouring leaf: tier one automatic for one person only, a learned rule
-offered for review and applied only after a person approves it, and a promotion that records who
-agreed and takes effect on the next run.
+M16.7.7 says memory and context are proved on an install and M16.7.8 says the learning loop is.
+(That every requirement in the register is demonstrated, M16.7.9 and M16.7.11, is the requirement-
+area checks' own.) M16.3.2, M16.7.3 and M16.7.14 are smaller sentences whose clauses were each
+shown by a check written for a neighbouring leaf: tier one automatic for one person only, a learned
+rule offered for review and applied only after a person approves it, and a promotion that records
+who agreed and takes effect on the next run.
 
-This module holds those six roll-ups and asks nothing of the install: each reads what the clause
-checks came to earlier in this run, through `brain.ops.acceptance_roll_up`, which says why a
-roll-up does not run its clauses again and what it says of a clause nothing proves. **Four of the
-six are not run today, and each names what is missing**: a memory the source contradicts being
-demoted (M16.4.3) and a project's context read from its source (M16.6.2, which waits on
-needs-rupash 137) for memory and context; a failed workflow step and an evaluation opening a
-candidate (M17.6.7, M28.4.1) for the learning loop; and the register's rows whose leaves have no
-check yet. That is the state of the product and not an omission here, and the roll-ups close on the
-day the last clause has a check.
+This module holds those five roll-ups and asks nothing of the install: each reads what the clause
+checks came to earlier in this run, through `brain.ops.acceptance_roll_up`, which says why a roll-
+up does not run its clauses again and what it says of a clause nothing proves. **Three of the five
+are not run today, and each names what is missing**: a memory the source contradicts being demoted
+(M16.4.3) and a project's context read from its source (M16.6.2, which waits on needs-rupash 137)
+for memory and context; a failed workflow step and an evaluation opening a candidate (M17.6.7,
+M28.4.1) for the learning loop; and a tier-three item decided from the console, which no surface
+does, for the promotion. That is the state of the product and not an omission here, and the roll-
+ups close on the day the last clause has a check.
 
-Task ids: M16.3.2, M16.7.3, M16.7.7, M16.7.8, M16.7.9, M16.7.11, M16.7.14
+Task ids: M16.3.2, M16.7.3, M16.7.7, M16.7.8, M16.7.14
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from __future__ import annotations
 from typing import Final
 
 from brain.ops.acceptance import check
-from brain.ops.acceptance_roll_up import clauses_demonstrated, requirements_demonstrated
+from brain.ops.acceptance_roll_up import clauses_demonstrated
 from brain.ops.acceptance_run import Harness
 
 #: Where this module's checks stand on the Install page, after every module they read.
@@ -138,30 +138,4 @@ async def memory_and_context_are_shown_clause_by_clause_in_this_run(h: Harness) 
 async def the_learning_loop_is_shown_clause_by_clause_in_this_run(h: Harness) -> None:
     await clauses_demonstrated(
         h, LEARNING_LOOP, own="the_learning_loop_is_shown_clause_by_clause_in_this_run"
-    )
-
-
-@check(
-    leaves=("M16.7.9",),
-    sentence=(
-        "Every learning requirement in the register that rests on this leaf has a check naming "
-        "each leaf it builds, and every such check passed in this run."
-    ),
-)
-async def every_learning_requirement_is_demonstrated_in_this_run(h: Harness) -> None:
-    await requirements_demonstrated(
-        h, "M16.7.9", own="every_learning_requirement_is_demonstrated_in_this_run", prefix=""
-    )
-
-
-@check(
-    leaves=("M16.7.11",),
-    sentence=(
-        "Every memory requirement in the register that rests on this leaf has a check naming "
-        "each leaf it builds, and every such check passed in this run."
-    ),
-)
-async def every_memory_requirement_is_demonstrated_in_this_run(h: Harness) -> None:
-    await requirements_demonstrated(
-        h, "M16.7.11", own="every_memory_requirement_is_demonstrated_in_this_run", prefix=""
     )

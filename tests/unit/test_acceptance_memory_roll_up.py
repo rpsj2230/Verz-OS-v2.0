@@ -2,7 +2,7 @@
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M16.3.2, M16.7.3, M16.7.7, M16.7.8, M16.7.9, M16.7.11, M16.7.14, M28.5.1, M28.5.2
+Task ids: M16.3.2, M16.7.3, M16.7.7, M16.7.8, M16.7.14, M28.5.1, M28.5.2
 """
 
 from __future__ import annotations
@@ -26,8 +26,6 @@ OFFERED = "a_learned_rule_waits_for_approval_in_this_run"
 PROMOTED = "a_promotion_and_a_gated_decision_record_who_agreed_in_this_run"
 MEMORY_AND_CONTEXT = "memory_and_context_are_shown_clause_by_clause_in_this_run"
 LEARNING = "the_learning_loop_is_shown_clause_by_clause_in_this_run"
-EVERY_LEARNING = "every_learning_requirement_is_demonstrated_in_this_run"
-EVERY_MEMORY = "every_memory_requirement_is_demonstrated_in_this_run"
 REACH = "per_person_reach_is_shown_clause_by_clause_in_this_run"
 GATE = "the_evaluation_gate_is_shown_clause_by_clause_in_this_run"
 
@@ -44,7 +42,7 @@ READ = (
 
 
 def test_each_roll_up_names_the_leaf_it_rolls_up_and_none_is_evidence_for_another() -> None:
-    """Nine roll-ups and one leaf each, and the six proof leaves are the ones no other check may
+    """Seven roll-ups and one leaf each, and the four proof leaves are the ones no other check may
     count a roll-up as evidence for. Delete this and a roll-up can lose its leaf with the page
     showing the same row, or vouch for another."""
     assert [(one.name, one.leaves) for one in registered((MEMORY,))] == [
@@ -53,8 +51,6 @@ def test_each_roll_up_names_the_leaf_it_rolls_up_and_none_is_evidence_for_anothe
         (PROMOTED, ("M16.7.14",)),
         (MEMORY_AND_CONTEXT, ("M16.7.7",)),
         (LEARNING, ("M16.7.8",)),
-        (EVERY_LEARNING, ("M16.7.9",)),
-        (EVERY_MEMORY, ("M16.7.11",)),
     ]
     assert [(one.name, one.leaves) for one in registered((EVALUATION,))] == [
         (REACH, ("M28.5.1",)),
@@ -69,12 +65,10 @@ def test_each_roll_up_names_the_leaf_it_rolls_up_and_none_is_evidence_for_anothe
     assert {one.name for one in proofs if is_roll_up(one)} == {
         MEMORY_AND_CONTEXT,
         LEARNING,
-        EVERY_LEARNING,
-        EVERY_MEMORY,
         REACH,
         GATE,
     }
-    assert {"M16.7.7", "M16.7.8", "M16.7.9", "M16.7.11", "M28.5.1", "M28.5.2"} <= ROLL_UP_LEAVES
+    assert {"M16.7.7", "M16.7.8", "M28.5.1", "M28.5.2"} <= ROLL_UP_LEAVES
 
 
 def test_every_clause_a_roll_up_names_is_a_leaf_of_the_breakdown() -> None:
@@ -130,7 +124,7 @@ def test_the_roll_ups_pass_where_every_clause_is_shown_and_say_what_is_missing_w
 ) -> None:
     """**The roll-ups as the worker runs them**, after the checks they read. Tier one and the
     learned rule's approval are shown by checks that ran in the same run and pass; the promotion
-    roll-up, memory and context, the learning loop and the two register roll-ups are not run, and
+    roll-up, memory and context and the learning loop are not run, and
     each names what nothing proves yet; the evaluation roll-ups likewise. Nothing is left behind.
     Delete this and a roll-up passes on clauses that no check shows, or one that cannot see the
     run's earlier results reaches the owner's server."""
@@ -147,8 +141,6 @@ def test_the_roll_ups_pass_where_every_clause_is_shown_and_say_what_is_missing_w
         outcome, reason = seen[name]
         assert outcome == NOT_RUN, name
         assert missing in reason, (name, reason)
-    assert seen[EVERY_LEARNING][0] == NOT_RUN
-    assert seen[EVERY_MEMORY][0] == NOT_RUN
     assert FAILED not in {outcome for outcome, _ in seen.values()}
     assert counts(install) == before
 
