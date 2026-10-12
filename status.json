@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-12T13:31:00.992904+00:00",
-  "commit": "84ae0a83",
-  "commit_subject": "The company's monthly budget can be set and read beside the spend, a keyboard test for the agent page, and four owner questions (178 to 181) (#514)",
+  "generated_at": "2026-10-12T13:39:33.450392+00:00",
+  "commit": "e4ddae2b",
+  "commit_subject": "The Knowledge section lists the agent's other sources, each by kind and linked to its own page (#505)",
   "total": 1611,
   "done": 831,
   "percent": 51.6,
