@@ -20,10 +20,14 @@
  * may open is shown the same words whether nothing exists or nothing is theirs, and the two ways to
  * add a document are offered only to a reader the API said may add one.
  *
- * Task ids: M39.9.1.1, M39.9.1.6
+ * **Other sources are listed from the workspace the page already read** (`OtherSources`): each
+ * connected source and each pinned skill, named by kind and linking to the page that owns it, so one
+ * place shows the agent's whole context and nothing is copied or asked for twice.
+ *
+ * Task ids: M39.9.1.7, M39.2.3.2, M39.9.1.1, M39.9.1.2, M39.9.1.3, M39.9.1.4, M39.9.1.6
  */
 
-import { FileText, Link2, X } from "lucide-react";
+import { FileText, Link2, Plug, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { request } from "../../api/client";
@@ -32,8 +36,11 @@ import { Chip, EmptyState, FailureState, LoadingState, Note, SectionCard } from 
 import { Button } from "../../components/ui/button";
 import { dayWords } from "../access/formParts";
 import { documentAddress, verifiedWords } from "../knowledge/knowledgeDocuments";
+import type { ConnectorStrip, SkillPin } from "../agentQuery";
+import { connectorAddress } from "../connectors/connectorSources";
 import { AddFileForm, AddLinkForm, type Door } from "../knowledge/addForms";
 import { readUploadOptions, UPLOAD_OPTIONS_API_PATH } from "../knowledgeQuery";
+import { skillAddress } from "../skillsQuery";
 import { clauseWords } from "./agentCapabilitiesQuery";
 import {
   agentKnowledgeApiPath,
@@ -56,6 +63,9 @@ export const NOTHING_YOURS_TO_SEE = "Nothing this agent draws on is yours to see
 export const ADD_A_FILE = "Add a file";
 export const ADD_A_LINK = "Add a web page by its link";
 export const SHOW_MORE = "Show more";
+export const OTHER_SOURCES_HEADING = "Other sources it draws on";
+export const OTHER_SOURCES_LEDE =
+  "Connected sources and the skills it carries, listed by kind. Each is managed on its own page and none is copied here.";
 export const WIDEN_THROUGH_A_DRAFT = "Widen what it draws on, through a draft";
 export const DOES_NOT_MATCH = "It does not match";
 export const NARROWS_NOTHING_OWN = "It narrows nothing of its own: it draws on whatever you may read.";
@@ -138,7 +148,58 @@ function Rule({ knowledge }: { readonly knowledge: Knowledge }) {
   );
 }
 
-export function AgentKnowledge({ agentId, onWiden }: { readonly agentId: string; readonly onWiden?: (() => void) | undefined }) {
+/**
+ * The agent's other sources, from the workspace the page already read: each connected source and
+ * each skill it is pinned to, named by kind and linking to the page that owns it. No second copy of
+ * their data is kept and nothing is asked for, so this can only say what the Profile already says.
+ */
+export function OtherSources({ connectors, skills }: { readonly connectors: ConnectorStrip; readonly skills: readonly SkillPin[] }) {
+  if (connectors.shown.length === 0 && skills.length === 0) {
+    return null;
+  }
+  return (
+    <SectionCard title={OTHER_SOURCES_HEADING} lede={OTHER_SOURCES_LEDE}>
+      <ul data-slot="knowledge-other-sources" className="m-0 flex list-none flex-col gap-2 p-0 text-[13px]">
+        {connectors.shown.map((one) => (
+          <li key={`connector-${one.source}`} className="flex flex-wrap items-center gap-2">
+            <Plug aria-hidden className="size-4 text-dim" />
+            <Chip>Connected source</Chip>
+            <Link to={connectorAddress(one.source)} className="font-medium text-ink underline-offset-4 hover:underline">
+              {one.source}
+            </Link>
+            {one.presence === "attached" ? null : <span className="text-[11.5px] text-dim">{one.presence}</span>}
+          </li>
+        ))}
+        {connectors.overflow > 0 ? (
+          <li key="connectors-more">
+            <Chip tone="requested">{`${String(connectors.overflow)} more connected sources on this agent`}</Chip>
+          </li>
+        ) : null}
+        {skills.map((one) => (
+          <li key={`skill-${one.digest}`} className="flex flex-wrap items-center gap-2">
+            <Sparkles aria-hidden className="size-4 text-dim" />
+            <Chip>Skill</Chip>
+            <Link to={skillAddress(one.name)} className="font-medium text-ink underline-offset-4 hover:underline">
+              {one.name}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </SectionCard>
+  );
+}
+
+export function AgentKnowledge({
+  agentId,
+  onWiden,
+  connectors,
+  skills,
+}: {
+  readonly agentId: string;
+  readonly onWiden?: (() => void) | undefined;
+  readonly connectors?: ConnectorStrip | undefined;
+  readonly skills?: readonly SkillPin[] | undefined;
+}) {
   const [version, setVersion] = useState(0);
   const first = useResource<unknown>(agentKnowledgeApiPath(agentId, 0), version);
   const [later, setLater] = useState<readonly KnowledgeItem[]>([]);
@@ -243,6 +304,7 @@ export function AgentKnowledge({ agentId, onWiden }: { readonly agentId: string;
           {knowledge.keptRule === "" ? null : <Note>{knowledge.keptRule}</Note>}
         </div>
       </SectionCard>
+      <OtherSources connectors={connectors ?? { shown: [], overflow: 0 }} skills={skills ?? []} />
     </div>
   );
 }

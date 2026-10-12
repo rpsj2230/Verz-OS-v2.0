@@ -64,6 +64,7 @@
     "M7.2.4": "passes against an OCR engine made up for the check; no OCR engine is served on the owner's host (needs-rupash 120)",
     "M7.3.4": "passes against an embedding transport made up for the check; it shows the batching and the model recorded on every chunk, and a real server has not yet embedded a batch for the install",
     "M7.7.11": "shows the worker's start-up finding and the request ceiling; the half that parses the largest upload in the layout service's container needs the model server and the owner's choice of upload limit (needs-rupash 119 and 120)",
-    "M32.2.1.2": "passes over entity spans the check made up; GLiNER is not served on the owner's host (needs-rupash 120), and nothing yet sends a text to it"
+    "M32.2.1.2": "passes over entity spans the check made up; GLiNER is not served on the owner's host (needs-rupash 120), and nothing yet sends a text to it",
+    "M15.3.3": "passes over results the check made: nothing on an answer's path links a passage to a record, so no answer draws on a row and a passage stating one claim; held until a source of claims exists and the groups are drawn on an answer (needs-rupash 195)"
   }
 }

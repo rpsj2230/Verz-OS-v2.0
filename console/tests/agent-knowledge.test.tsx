@@ -38,8 +38,8 @@ function workspaceWire(): unknown {
     agent: { agent_id: AGENT, display_name: "Quote Helper", owner_id: "p_steward", created_at: "2019-03-01T09:00:00Z" },
     tabs: ["knowledge", "settings"].map((tab) => ({ tab, label: tab, purpose: "x" })),
     composition: [],
-    skills: [],
-    connectors: { shown: [], overflow: 0 },
+    skills: [{ name: "ssl-renewal-runbook", digest: "a".repeat(64) }],
+    connectors: { shown: [{ source: "ledger", presence: "attached" }, { source: "pricing", presence: "requested" }], overflow: 2 },
     channels: [],
     headline: { basis: "own", range: "30d", spend_minor: 0, runs: 0, recorded: false },
   };
@@ -275,6 +275,24 @@ describe("adding from the Knowledge section", () => {
     // What breaks if this is deleted: a malformed answer drawn as a blank confirmation.
     expect(readKnowledgeAdded({ item_id: "x" })).toBeNull();
     expect(readKnowledgeAdded(addedWire())?.reached).toBe(true);
+  });
+});
+
+describe("the other sources", () => {
+  test("each connected source and skill is named by kind and links to the page that owns it", async () => {
+    // What breaks if this is deleted: M39.9.1.7's one place for the agent's whole context, or a
+    // source listed with no way to the page that manages it.
+    const { container } = await consoleAt(answers());
+    const rowsOf = [...container.querySelectorAll('[data-slot="knowledge-other-sources"] li')];
+    const said = rowsOf.map((one) => one.textContent);
+    expect(said[0]).toContain("Connected source");
+    expect(said[0]).toContain("ledger");
+    expect(said[1]).toContain("requested");
+    expect(said.some((one) => one?.includes("2 more connected sources"))).toBe(true);
+    expect(said.some((one) => one?.includes("Skill") && one.includes("ssl-renewal-runbook"))).toBe(true);
+    const hrefs = [...container.querySelectorAll('[data-slot="knowledge-other-sources"] a')].map((one) => one.getAttribute("href"));
+    expect(hrefs).toContain("/connectors/ledger");
+    expect(hrefs).toContain("/skills/ssl-renewal-runbook");
   });
 });
 
