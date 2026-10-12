@@ -46,6 +46,7 @@
     "M32.1.2.4": "passes against a stand-in the check made (accounts, a roster or a role handed to it); held until the install shows it on its own",
     "M38.2.2.3": "needs a real send or a real question on the install, which the check does not make",
     "M38.2.2.4": "needs a real send or a real question on the install, which the check does not make",
+    "M38.2.2.5": "needs a real send or a real question on the install, which the check does not make",
     "M38.3.3.1": "needs a real send or a real question on the install, which the check does not make",
     "M38.3.3.2": "needs a real send or a real question on the install, which the check does not make",
     "M38.3.3.3": "needs a real send or a real question on the install, which the check does not make",

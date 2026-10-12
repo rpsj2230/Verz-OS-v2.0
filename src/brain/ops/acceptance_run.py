@@ -158,6 +158,7 @@ class Harness:
             sync_session_class=ApplicationRoleSession,
         )
         self._undo: list[Callable[[], object]] = []
+        self._departments_founded = False
 
     # ------------------------------------------------------------------ names
     @property
@@ -198,7 +199,15 @@ class Harness:
         )
 
     async def found_departments(self) -> None:
-        """Found both reserved departments through the product's own structure store."""
+        """Found both reserved departments through the product's own structure store.
+
+        **Founded once per check.** A check that awaits another check's body, as a milestone does
+        to show two proofs hold on one install, finds the departments already founded, and
+        founding them again is refused by the structure store. The harness is one check's, so the
+        flag is as long-lived as its transaction.
+        """
+        if self._departments_founded:
+            return
         from brain.console.organisation import founded
         from brain.identity.organisation_store import Attribution, StoredOrganisation
 
@@ -209,6 +218,7 @@ class Harness:
             done = await store.found_department(department=department, scope=scope, by=by)
             if not isinstance(done, datetime):
                 raise CheckFailedError("a reserved department could not be founded")
+        self._departments_founded = True
 
     async def person(
         self,

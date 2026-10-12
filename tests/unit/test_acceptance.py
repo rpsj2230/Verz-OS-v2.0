@@ -34,6 +34,7 @@ from brain.ops import (
     acceptance_checks_class_pools,
     acceptance_checks_people,
     acceptance_checks_recovery,
+    acceptance_checks_requirement_areas,
     acceptance_checks_services,
     acceptance_checks_starter,
     acceptance_operations_console,
@@ -874,6 +875,13 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         "departments_managed_on_people_are_not_the_staff_sync_s",
     ):
         assert outcomes.pop(list_check) == (NOT_RUN, acceptance_checks_people.NO_STAFF_LIST_IS_READ)
+    # Nobody has recorded a check on the Requirement checks screen here, so each area's leaf says
+    # so; `tests/unit/test_acceptance_checks_requirement_areas.py` records them and it passes.
+    for area_check in registered(("brain.ops.acceptance_checks_requirement_areas",)):
+        assert outcomes.pop(area_check.name) == (
+            NOT_RUN,
+            acceptance_checks_requirement_areas.SOME_REQUIREMENT_HAS_NO_RECORDED_CHECK,
+        )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
     assert after == before
     assert runs == [(2,)] and len(recorded) == 2 * len(suite)
