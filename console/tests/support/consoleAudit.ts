@@ -884,6 +884,8 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
   "POST /api/v1/answer": "The answer lane behind Ask, which writes no row an administrator manages.",
   "POST /api/v1/answer/mark":
     "A person marking an answer they were given helpful or not, one bit against its reference, which no administrator manages and nothing that answers reads.",
+  "POST /api/v1/answer/copied":
+    "A person copying an answer they were given, noted against its reference and nothing it said, which no administrator manages and nothing that answers reads.",
   "mem.mark":
     "The marks people put on their own answers, counted and read by nothing that decides an answer; no administrator manages a person's mark.",
   "mem.signal":
