@@ -477,6 +477,7 @@ async def an_agent_answers_from_a_file_added_on_its_page_and_cites_it(h: Harness
     from brain.ops.acceptance_models import ASKED, asked
     from brain.ops.acceptance_workspace import installed_agent
     from brain.ops.features import AGENT_ITEM_COUNTS, switch
+    from brain.tables.audit import attributed_to
 
     s = await asking_with_a_stand_in(h)
     adder = s.library
@@ -515,7 +516,14 @@ async def an_agent_answers_from_a_file_added_on_its_page_and_cites_it(h: Harness
     view = await _list(h, app, agent_id, s.reader)
     if view.use_figures is not None or any(one.uses is not None for one in view.items):
         raise CheckFailedError("a figure was drawn while nothing is counted")
+    reach = await h.reach(adder)
     async with h.sessions() as session, session.begin():
+        # The switch row is a setting, whose ledger entry names who, at what reach and in which
+        # request; the check writes it as the keeper, so the entry is not a placeholder.
+        for statement in attributed_to(
+            actor_id=adder, ent_hash=reach.ent_hash(), trace_id=h.trace_id
+        ):
+            await session.execute(statement)
         await switch(session, AGENT_ITEM_COUNTS, on=True, by=adder)
     state = SimpleNamespace(db_sessions=h.sessions)
     await counted_citations(state, agent_id, cast(Any, answered), now=datetime.now(UTC))
