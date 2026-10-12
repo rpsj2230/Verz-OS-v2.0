@@ -283,6 +283,25 @@ SUPERVISION_REVIEW: Final = Feature(
     read_by=("brain.ops.supervision_review:review_switch_is_on",),
 )
 
+#: Sharing the start of an agent run's request with everybody. Off because it changes the bytes sent
+#: to the model on every run; the owner decided what it may hold (needs-rupash 175, option A) and
+#: asked that it ship off until proved on his install with two real questions.
+SHARED_TOOL_START: Final = Feature(
+    name="shared_tool_start",
+    title="Share the start of a model request between people",
+    what=(
+        "A run's request to the model begins with the same words for everybody, naming only the "
+        "tools every person in the company already holds, and what is particular to the person "
+        "follows it. A provider charges much less for a start it has seen before, so the second "
+        "question on a day costs less to answer. No tool a person may not use is ever named."
+    ),
+    while_off=(
+        "Each run sends the model its tools in one block, as before, and no start is shared on "
+        "purpose. Nothing a person is shown changes."
+    ),
+    read_by=("brain.ops.shared_start:universal_when_on",),
+)
+
 #: Every feature this product can switch on, in the order the screen lists them.
 FEATURES: Final[tuple[Feature, ...]] = (
     PROMPT_EDITING,
@@ -291,6 +310,7 @@ FEATURES: Final[tuple[Feature, ...]] = (
     UNATTENDED_ENTITY_MERGE,
     BUDGET_ENFORCEMENT,
     SUPERVISION_REVIEW,
+    SHARED_TOOL_START,
 )
 
 

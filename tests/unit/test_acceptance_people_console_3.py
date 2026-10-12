@@ -61,7 +61,7 @@ def test_each_check_closes_the_leaves_its_flow_exercises() -> None:
         ELEVATION: ("M27.7.8",),
         REVIEW: ("M27.7.9",),
         WORKSPACE: ("M27.7.28",),
-        STEWARD: ("M27.9.9",),
+        STEWARD: ("M27.9.9", "M27.15.3"),
     }
 
 

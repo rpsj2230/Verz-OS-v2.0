@@ -295,7 +295,7 @@ async def a_department_admin_grants_within_their_department_only(h: Harness) -> 
 
 # ----------------------------------------------------------- 3. a deputy (M33.2.2.5)
 @check(
-    leaves=("M33.2.2.5",),
+    leaves=("M33.2.2.5", "M27.15.3"),
     sentence=(
         "The admin of acceptance_a appoints an approver there and then a deputy to cover them for "
         "thirty days, through the Roles screen's routes, and the deputy's grant ends thirty days "

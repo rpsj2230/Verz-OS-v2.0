@@ -91,7 +91,16 @@ from brain.agents.attachments import (
 from brain.agents.attachments import (
     connectors_of as agent_connectors,
 )
-from brain.agents.authoring import LiteralKind, scan
+from brain.agents.authoring import (
+    AuthoringError,
+    Decision,
+    Disposition,
+    LiteralKind,
+    author,
+    decide,
+    publish_authored,
+    scan,
+)
 from brain.agents.catalogue import CATALOGUE
 from brain.agents.creation import (
     AGENT_INSTALL_CAPABILITY,
@@ -186,6 +195,9 @@ PUBLISH_PATH: Final = "/agent-drafts/{draft_id}/publish"
 APPROVE_PATH: Final = "/agent-drafts/{draft_id}/approve"
 DECLINE_PATH: Final = "/agent-drafts/{draft_id}/decline"
 EDIT_PATH: Final = "/agents/{agent_id}/drafts"
+#: An agent's effective manifest as a document, and one brought in as a new draft (M27.15.28).
+EXPORT_PATH: Final = "/agents/{agent_id}/manifest"
+IMPORT_PATH: Final = "/agent-drafts/import"
 PUBLICATIONS_PATH: Final = "/agents/{agent_id}/publications"
 
 #: How many hex characters of randomness follow a minted id's stem, as an install mints one.
@@ -420,6 +432,48 @@ class CompanyDetailView(BaseModel):
     kind: str
     text: str
     places: list[str]
+
+
+class RedactedDetailView(BaseModel):
+    """One kind of company detail the export removed, and the places it sat."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: str
+    places: list[str]
+
+
+class ManifestExportView(BaseModel):
+    """An agent's effective manifest as a document, and what was taken out of it.
+
+    `redacted` names the kind of each company detail removed and where it sat, and never the
+    detail: the export is what leaves the install, and a list of what it left out that carried the
+    values would carry them anyway.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    agent_id: str
+    document: dict[str, Any]
+    redacted: list[RedactedDetailView]
+
+
+class ManifestImportAsked(BaseModel):
+    """A manifest document brought in, as the export sends it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    document: dict[str, Any]
+
+
+class ImportedDraftView(AgentDraftView):
+    """The draft an imported document became, and the company details the leak scan found in it.
+
+    A subclass rather than a field on `AgentDraftView`, which every draft route sends: only an
+    import runs the scan over a document the install did not write.
+    """
+
+    company_details: list[CompanyDetailView]
 
 
 class DraftCheckView(BaseModel):
@@ -944,8 +998,12 @@ async def _start(
     base_hash: str | None,
     document: Mapping[str, Any],
     key: str | None,
+    extra: Mapping[str, Any] | None = None,
 ) -> JSONResponse:
-    """Write a new draft and its first revision, which is the document it starts from."""
+    """Write a new draft and its first revision, which is the document it starts from.
+
+    `extra` is what an import adds to the draft's answer, which is the leak scan's findings.
+    """
     draft_id = str(uuid.uuid4())
     me = asked.caller.principal.id
     draft = AgentDraft(
@@ -969,7 +1027,7 @@ async def _start(
     view = _view(
         started, asked, widened=None, key=key, drawable=await _drawable(request, started, asked)
     )
-    return JSONResponse(status_code=201, content=view.model_dump(mode="json"))
+    return JSONResponse(status_code=201, content={**view.model_dump(mode="json"), **(extra or {})})
 
 
 @router.post(DRAFTS_PATH, status_code=201, response_model=AgentDraftView, responses=_TOLD)
@@ -1043,6 +1101,124 @@ async def edit_agent_as_draft(request: Request, agent_id: str, asked: Asked) -> 
         base_hash=found.effective_hash,
         document=document,
         key=template_key_of(request),
+    )
+
+
+#: The two identity fields this install writes itself, which a scan finds shaped (an id, a person's
+#: id) and which are never company details: a redacted id or author is not an id or an author.
+THIS_INSTALL_WRITES: Final = frozenset({"identity.template_id", "identity.published_by"})
+
+#: What an export that cannot redact says. It names no value, because the value is the thing.
+THIS_AGENT_CANNOT_BE_EXPORTED_YET: Final = (
+    "This agent cannot be exported as it is: a company detail sits in a field whose shape does "
+    "not allow it to be taken out. Change that field, then export again. Nothing was exported."
+)
+
+#: What the exporter's own ledger carries nowhere: the signing key of an export is made and thrown
+#: away, as `brain.builder.agent_drafts.carrier` does for a question, so nothing signed here can
+#: be mistaken for something this install published.
+A_KEY_MADE_FOR_ONE_EXPORT_IS_DROPPED: Final = "an export is signed with a key nobody keeps"
+
+
+@router.get(EXPORT_PATH, response_model=ManifestExportView, responses=_TOLD)
+async def export_agent_manifest(request: Request, agent_id: str, asked: Asked) -> JSONResponse:
+    """An agent's effective manifest as a document without the company's details (M27.15.28).
+
+    Asked as Edit as a draft asks, in the same order and with one 404 for all three questions. The
+    document is `brain.agents.authoring.author` over the agent as it is now, which carries nine
+    fields and never an install's answers, with every shaped literal (an address, a link, an
+    amount, a number, a code) redacted. Prose is kept: the persona is the agent. What was redacted
+    is named by kind and place and never by value.
+    """
+    _builds(asked)
+    found = await drafts_of(request).agent(agent_id)
+    if found is None or not visible(found.record, asked):
+        raise _no_draft_here(asked, "agent")
+    if not holds(AGENT_INSTALL_CAPABILITY, found.record, asked):
+        raise _no_draft_here(asked, "scope")
+    if found.install is None:
+        return _not_changed(REFUSED, NO_INSTALL_TO_START_FROM)
+    signed, instance = found.install
+    effective = materialise(signed, instance, audience=found.record.audience)
+    me = asked.caller.principal.id
+    drafted = author(
+        effective,
+        template_id=agent_id,
+        display_name=effective.manifest.identity.display_name,
+        author_id=me,
+        summary=effective.manifest.identity.summary,
+    )
+    # The agent's own connector list, not the manifest's, as Edit as a draft reads it.
+    drafted = replace(
+        drafted,
+        manifest=drafted.manifest.model_copy(
+            update={"connectors": tuple(sorted(agent_connectors(found.record)))}
+        ),
+    )
+    taken: list[RedactedDetailView] = []
+    try:
+        for item in drafted.report.items:
+            shaped = item.kind in SHAPED and not set(item.locations) <= THIS_INSTALL_WRITES
+            drafted = decide(
+                drafted,
+                item.item_id,
+                Decision(
+                    disposition=Disposition.REDACT if shaped else Disposition.ACCEPT,
+                    by=me,
+                    at=asked.now,
+                ),
+            )
+            if shaped:
+                taken.append(RedactedDetailView(kind=item.kind.value, places=list(item.locations)))
+        exported = publish_authored(drafted, key=secrets.token_hex(32), at=asked.now)
+    except AuthoringError:
+        return _not_changed(REFUSED, THIS_AGENT_CANNOT_BE_EXPORTED_YET)
+    view = ManifestExportView(
+        agent_id=agent_id,
+        document=exported.signed.manifest.model_dump(mode="json"),
+        redacted=taken,
+    )
+    return JSONResponse(status_code=200, content=view.model_dump(mode="json"))
+
+
+@router.post(IMPORT_PATH, status_code=201, response_model=ImportedDraftView, responses=_TOLD)
+async def import_agent_manifest(
+    request: Request, body: ManifestImportAsked, asked: Asked
+) -> JSONResponse:
+    """A manifest document brought in as a new agent's draft, after the leak scan (M27.15.28).
+
+    The document lands as a draft under an id minted now and the importer as its author, which
+    publishing makes an agent of its own lineage, and nothing is published or switched on by
+    arriving. **The scan is run and its findings come back with the draft**, so a company detail in
+    a document from somewhere else is in front of the person who is about to publish it. A
+    document the manifest model refuses still lands, with what it refuses listed as the draft's
+    problems, as a saved draft's are.
+    """
+    _builds(asked)
+    store = drafts_of(request)
+    me = asked.caller.principal.id
+    agent_id = mint_agent_id("", suffix=secrets.token_hex(ID_SUFFIX_BYTES))
+    manifest, _ = manifest_of(body.document, agent_id=agent_id, version=FIRST_VERSION, publisher=me)
+    found = (
+        []
+        if manifest is None
+        else [
+            CompanyDetailView(kind=one.kind.value, text=one.text, places=list(one.locations))
+            for one in scan(manifest.document()).items
+            # The agent's own id is the one thing here this install wrote, not the document.
+            if one.kind in SHAPED and not set(one.locations) <= THIS_INSTALL_WRITES
+        ]
+    )
+    return await _start(
+        request,
+        store,
+        asked,
+        agent_id=agent_id,
+        kind=DraftKind.NEW,
+        base_hash=None,
+        document=body.document,
+        key=template_key_of(request),
+        extra={"company_details": [one.model_dump(mode="json") for one in found]},
     )
 
 

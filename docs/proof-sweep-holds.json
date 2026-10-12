@@ -1,6 +1,7 @@
 {
   "_why": "Tasks whose install check passes against something the check made up, so the pass is not yet proof the install reaches the real thing. Read by brain.ops.proof_sweep; see A_RESULT_ON_SOMETHING_MADE_UP_IS_HELD. A task leaves this list when its check runs against the real thing, in the commit that says so.",
   "held": {
+    "M3.7.2": "passes on a scripted model, which shows the shared start holds only what everybody holds and names a person no tool they lack; held until the install shows the saving, a real second question whose start the provider reports as cached input tokens (needs-rupash 175, A)",
     "M1.6.13": "passes against a stand-in the check made (accounts, a roster or a role handed to it); held until the install shows it on its own",
     "M1.6.16": "passes against a stand-in the check made (accounts, a roster or a role handed to it); held until the install shows it on its own",
     "M1.6.17": "passes against a stand-in the check made (accounts, a roster or a role handed to it); held until the install shows it on its own",
@@ -15,6 +16,7 @@
     "M10.5.2": "passes against a channel set up with secrets the check made; held until the install connects the owner's own account (needs-rupash 126)",
     "M10.5.3": "passes against a channel set up with secrets the check made; held until the install connects the owner's own account (needs-rupash 126)",
     "M10.5.4": "passes against a channel set up with secrets the check made; held until the install connects the owner's own account (needs-rupash 126)",
+    "M10.7.3": "passes against a channel set up with secrets the check made; held until the install connects the owner's own account (needs-rupash 126)",
     "M10.6.1": "passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)",
     "M11.1.2": "passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)",
     "M11.1.5": "passes against a vendor account or recorded vendor answers made up for the check; held until the install connects the owner's own account (needs-rupash 126)",
@@ -67,6 +69,7 @@
     "M7.3.4": "passes against an embedding transport made up for the check; it shows the batching and the model recorded on every chunk, and a real server has not yet embedded a batch for the install",
     "M7.7.11": "shows the worker's start-up finding and the request ceiling; the half that parses the largest upload in the layout service's container needs the model server and the owner's choice of upload limit (needs-rupash 119 and 120)",
     "M32.2.1.2": "passes over entity spans the check made up; GLiNER is not served on the owner's host (needs-rupash 120), and nothing yet sends a text to it",
+    "M7.3.5": "passes over a model server the check made (a transport answering as the server's contract says); held until a rebuild has run on an install whose model server answers (needs-rupash 120)",
     "M15.3.3": "passes over results the check made: nothing on an answer's path links a passage to a record, so no answer draws on a row and a passage stating one claim; held until a source of claims exists and the groups are drawn on an answer (needs-rupash 195)"
   }
 }

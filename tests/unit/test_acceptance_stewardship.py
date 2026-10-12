@@ -34,7 +34,7 @@ def test_the_module_declares_one_check_for_its_one_leaf() -> None:
     """One check, for M7.7.2 alone. Delete this and the check can start claiming the document
     hand-over's leaf, which the document's whole life already proves on its own."""
     assert [(one.name, one.leaves) for one in registered((MODULE,))] == [
-        (NAMED, ("M7.7.2", "M27.5.5"))
+        (NAMED, ("M7.7.2", "M27.5.5", "M27.15.3"))
     ]
 
 

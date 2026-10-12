@@ -596,7 +596,7 @@ def _human() -> Any:
 
 # ------------------------------------------------------------- 8. the data steward (M27.9.9)
 @check(
-    leaves=("M27.9.9",),
+    leaves=("M27.9.9", "M27.15.3"),
     sentence=(
         "The data steward is named, through the console where nobody is, and holds the content "
         "plane, the grant authority and every capability each connected source declares, over "

@@ -180,6 +180,7 @@ def test_every_field_an_approver_s_view_carries_is_a_closed_list() -> None:
         "expires_at",
         "may_take_over",
         "unsent_because",
+        "agent_id",
     }
     assert set(ApprovalCardView.model_fields) == {one.name for one in fields(Card)}
     assert {one.name for one in fields(Envelope)} == {

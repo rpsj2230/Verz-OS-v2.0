@@ -98,6 +98,9 @@ const OVERVIEW_CARDS: Readonly<Record<string, string>> = {
   // department, and link to the Departments page, which pages, searches and filters that route.
   "/department/:view": "/departments",
   "/agents/:agentId/:tab": "/routing",
+  // The Dashboard's Waiting on a person is the Approvals queue narrowed to the agent (M27.15.30),
+  // and links to the Approvals page, which pages, searches and filters the same route.
+  "/agents/:agentId": "/approvals",
   // One skill's page reads the Skills page's answer narrowed to its name; the library itself is
   // paged, searched, filtered and ordered on /skills.
   "/skills/:name": "/skills",
@@ -233,6 +236,13 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
     filter: THE_OWNER_DREW_IT_WHOLE,
     sort: CHAIN_IN_ORDER,
     bulk: A_RUNG_IS_SAVED_ONE_AT_A_TIME,
+  },
+  "/agents/:agentId": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    bulk: AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD,
   },
   // The Profile's model card draws the agent's level from the matrix and links to the Routing screen.
   "/agents/:agentId/:tab": {

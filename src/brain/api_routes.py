@@ -262,6 +262,7 @@ from brain.ops.model_service import ModelService
 from brain.ops.retrieval_store import StoredRetrievals
 from brain.ops.sensitive_referral_store import SensitiveReferrals, StoredSensitiveReferrals
 from brain.ops.session_memory_store import SessionRecollection, StoredSessions
+from brain.ops.shared_start import universal_when_on
 from brain.ops.signal_store import StoredSignals
 from brain.ops.slack_messages_live import Alongside
 from brain.ops.trace_sink import CountingTraceSink
@@ -2089,6 +2090,7 @@ def agent_runtime_for(
     leash: Leash | None = None,
     side_effects: SideEffects | None = None,
     skills: Mapping[str, Any] | None = None,
+    universal: frozenset[str] = frozenset(),
 ) -> AgentRuntime | None:
     """The tool loop for this agent and this asker, or None when the passage step serves it.
 
@@ -2128,6 +2130,7 @@ def agent_runtime_for(
         runs=None if sessions is None else StoredAgentRuns(sessions),
         side_effects=side_effects,
         skill_cards=offered_cards([held for _, held in (skills or {}).values()]),
+        universal=universal,
     )
     try:
         invocation = invoke(
@@ -2364,6 +2367,11 @@ async def answered_for(
         # not already read (M13.7.1). See `agent_runtime_for`.
         if model is not None and agent is not None:
             held_leash, effects = await side_effects_for(request, agent=agent, registry=registry)
+            # The tools the shared start of the request may name, none while the install keeps the
+            # switch off (M3.7.2).
+            universal = await universal_when_on(
+                getattr(request.app.state, "db_sessions", None), registry
+            )
             runtime = agent_runtime_for(
                 request,
                 agent=agent,
@@ -2373,6 +2381,7 @@ async def answered_for(
                 leash=held_leash,
                 side_effects=effects,
                 skills=offered_skills_of(model, caller=asking.reach, now=asking.now),
+                universal=universal,
             )
             if runtime is not None:
                 model = replace(model, runtime=runtime)
