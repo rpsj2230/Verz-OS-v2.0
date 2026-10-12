@@ -60,6 +60,7 @@ from brain.models.driver import (
     TokenUsage,
 )
 from brain.models.metering import Meter
+from brain.ops import runtime_scan
 from brain.tools.registry import ToolRegistry
 from tests.unit.test_answer_lane import Sink
 
@@ -432,81 +433,18 @@ def test_an_agent_with_no_tool_to_offer_does_not_ask_a_model() -> None:
 
 
 # ------------------------------------------------------------------ one runtime (M13.7.1)
-#: Modules allowed to call a model at all, each for a reason that is not an agent run.
-CALLS_A_MODEL_WITHOUT_TOOLS: frozenset[str] = frozenset(
-    {
-        "brain.gate.model_lane",
-        "brain.builder.coauthor",
-        "brain.agent_coauthor_routes",
-        "brain.ops.model_probe_run",
-        "brain.provider_routes",
-        "brain.models.adapter",
-    }
-)
-
-#: Modules whose `.complete(` is `brain.ops.connector_sync.ReadState.complete`, which asks whether
-#: a read covered every entity and calls no model. Held to importing nothing that could reach one.
-COMPLETE_THAT_IS_NOT_A_MODEL: frozenset[str] = frozenset(
-    {"brain.ops.connector_sync", "brain.ops.connector_sync_run"}
-)
-
-#: Where a model is reached from: a module importing from one of these could call it.
-MODEL_MODULES: tuple[str, ...] = ("brain.models", "brain.gate.model_lane", "brain.gate.runtime")
-
-#: Names that mean a module holds a tool catalogue or the runtime's protocol.
-TOOL_BEARING: frozenset[str] = frozenset(
-    {"ProjectedCatalogue", "invoke", "project", "ToolProposal", "tools_block", "PROTOCOL"}
-)
-
-
 def _modules() -> dict[str, ast.Module]:
-    found: dict[str, ast.Module] = {}
-    for path in sorted(SRC.rglob("*.py")):
-        module = ".".join(path.relative_to(SRC.parent).with_suffix("").parts)
-        found[module] = ast.parse(path.read_text(encoding="utf-8"))
-    return found
-
-
-def _calls_a_model(tree: ast.Module) -> bool:
-    return any(
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "complete"
-        for node in ast.walk(tree)
-    )
-
-
-def _imported(tree: ast.Module) -> set[str]:
-    names: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom):
-            names.update(alias.name for alias in node.names)
-    return names
+    return runtime_scan.parsed(SRC)
 
 
 def test_only_the_runtime_calls_a_model_while_holding_tools() -> None:
     """**M13.7.1's own sentence: a test fails if a second code path calls a model with tools.**
     Every module that calls `.complete(` is either the runtime or on the short list of callers
     that ask a model with no tools, and none of those imports a projected catalogue, `invoke` or
-    the runtime's protocol. Read from the source. Delete this and a second agent loop can be
+    the runtime's protocol. Read from the source by `brain.ops.runtime_scan`, the function the
+    install's own check asks the deployed code with. Delete this and a second agent loop can be
     written beside the runtime with its own idea of the reach."""
-    modules = _modules()
-    callers = {name for name, tree in modules.items() if _calls_a_model(tree)}
-    for name in COMPLETE_THAT_IS_NOT_A_MODEL:
-        assert name in callers, f"{name} no longer calls .complete(, so it needs no exception"
-        reached = {
-            node.module or ""
-            for node in ast.walk(modules[name])
-            if isinstance(node, ast.ImportFrom)
-        }
-        assert not any(one.startswith(MODEL_MODULES) for one in reached), name
-        assert not (_imported(modules[name]) & TOOL_BEARING), name
-
-    assert callers - CALLS_A_MODEL_WITHOUT_TOOLS - COMPLETE_THAT_IS_NOT_A_MODEL == {
-        "brain.gate.runtime"
-    }
-    for name in callers - {"brain.gate.runtime"}:
-        assert not (_imported(modules[name]) & TOOL_BEARING), name
+    assert runtime_scan.findings(_modules()) == ()
 
 
 def test_the_answer_lane_hands_a_tool_loop_to_the_runtime_and_nothing_else() -> None:
