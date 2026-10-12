@@ -724,6 +724,10 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert outcomes.pop("three_classes_share_one_budget_and_give_way_in_order")[0] == NOT_RUN
     # No cache here either; `tests/unit/test_acceptance_cache.py` runs it with a store in its place.
     assert outcomes.pop("a_cached_answer_reaches_only_the_reach_it_was_computed_for")[0] == NOT_RUN
+    # Nor the plan and freshness checks, which ask the same cache;
+    # `tests/unit/test_acceptance_plan_cache.py` runs them with a dictionary in its place.
+    for plan_cache_check in registered(("brain.ops.acceptance_checks_plan_cache",)):
+        assert outcomes.pop(plan_cache_check.name)[0] == NOT_RUN, plan_cache_check.name
     # Nor a cache to keep a conversation's notes in; `tests/unit/test_acceptance_session.py` runs it
     # with a client in memory standing in the cache's place.
     assert outcomes.pop("session_memory_is_one_conversations_own_and_silent")[0] == NOT_RUN
