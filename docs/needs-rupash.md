@@ -2,11 +2,61 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**47 items are open: 226,** whether a question is estimated before it is answered and refused when the estimate exceeds what is left, **225,** whether two scaling leaves are closed by what they are for (one pass over the screens, and the ledger's partitioning trigger), **224,** whether the sentence a person is refused with names the budget and who can raise it, **220,** which speech service turns dictation into text, **219,** whether an approver may amend an action before approving it, **218,** whether the product may count how often each knowledge item is read, **210,** whether an automation a person wrote in words may call a model with nobody present, **209,** what starts an automation that waits for a change in a source or a call from outside, **202,** three disclosure decisions on screens I built (who the sign-in page names, what the landing figures show a reader without the spend screens, and whether every file download is written down), **201,** who an agent is shared with and whether its page has a browsing switch, **200,** what happens to a person's agents when the person is switched off, **196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **193,** which formats an agent's generated documents start with and which libraries may be added, **192,** whether sensitive actions that cannot be undone need a second person, **191,** whether an agent may ever answer with nothing behind it, **189,** how a team agent may use mail without one person's mail reaching anybody else, **188,** whether five console tasks that ask for what the design does not do are narrowed, **187,** whether the chat tools show progress while an answer is made, **186,** whether answers keep using the old search index while a new embedding model is built, **185,** which person approves the eight starter skills, **184,** which outside AI services are offered first and what they count as, **183,** whether a skill is refused when its agent lacks one of its tools, **182,** what a skill names when it needs knowledge, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **167,** whether a chat room or channel belongs to exactly one agent, **163,** the short list of what stops tasks being proved on your install, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **134,** connecting the Slack channel, **132,** connecting the email channel, **131,** making staff accounts work on your install, **127 and 128,** things for you to do (switch on the Lark chat channel, and connect Xero, HubSpot and Freshdesk), **and 91,** the
+**49 items are open: 228,** how a department's coverage by a connected source is worked out when its records name no department, **227,** how many calls to connected sources may be in flight at once across all of them, **226,** whether a question is estimated before it is answered and refused when the estimate exceeds what is left, **225,** whether two scaling leaves are closed by what they are for (one pass over the screens, and the ledger's partitioning trigger), **224,** whether the sentence a person is refused with names the budget and who can raise it, **220,** which speech service turns dictation into text, **219,** whether an approver may amend an action before approving it, **218,** whether the product may count how often each knowledge item is read, **210,** whether an automation a person wrote in words may call a model with nobody present, **209,** what starts an automation that waits for a change in a source or a call from outside, **202,** three disclosure decisions on screens I built (who the sign-in page names, what the landing figures show a reader without the spend screens, and whether every file download is written down), **201,** who an agent is shared with and whether its page has a browsing switch, **200,** what happens to a person's agents when the person is switched off, **196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **193,** which formats an agent's generated documents start with and which libraries may be added, **192,** whether sensitive actions that cannot be undone need a second person, **191,** whether an agent may ever answer with nothing behind it, **189,** how a team agent may use mail without one person's mail reaching anybody else, **188,** whether five console tasks that ask for what the design does not do are narrowed, **187,** whether the chat tools show progress while an answer is made, **186,** whether answers keep using the old search index while a new embedding model is built, **185,** which person approves the eight starter skills, **184,** which outside AI services are offered first and what they count as, **183,** whether a skill is refused when its agent lacks one of its tools, **182,** what a skill names when it needs knowledge, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **167,** whether a chat room or channel belongs to exactly one agent, **163,** the short list of what stops tasks being proved on your install, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **134,** connecting the Slack channel, **132,** connecting the email channel, **131,** making staff accounts work on your install, **127 and 128,** things for you to do (switch on the Lark chat channel, and connect Xero, HubSpot and Freshdesk), **and 91,** the
 checks only you can do on your install; it waits for the Knowledge upload grants (item 105) to land.
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 228. How should "what does the Brain hold for my department, and when was it last read" be worked out for a connected source?
+
+**In plain terms:** tasks M34.1.1.1 to M34.1.2.3 and M34.2.1.1 want each department to be told, in plain
+words, what the Brain can answer for it: how many records, when they were last read, which question to try
+first, and a short list of what to connect next. The words are written (`adoption.coverage_report` and the
+starter questions) and nothing feeds them, because a connected source's records carry **no department**.
+Who may see a record is decided by a rule the source's description gives (for example "only people in the
+department the record names"), checked when somebody asks, not stored on the record.
+
+**Option A: work it out from the rule.** For each department, count the records the source's own rule would
+show to a person in that department. Nothing new is stored. It is read when the page is opened, over a
+bounded sample, so the count says "at least" for a large source and the date is the last read of the whole
+source, not of the department.
+
+**Option B: store the department on each record when it is read.** Exact counts and dates per department.
+It needs a new column and a migration, and it copies a permission decision onto the row, which this product
+has so far refused to do because the copy goes stale when the rule changes.
+
+**Option C: say it for the whole company only.** Each source is shown with its record count and last read,
+company-wide. Departments are told which sources exist and nothing about how much of them is theirs.
+
+**My recommendation:** A. It keeps the rule in one place and tells a department something true, with
+"at least" where the count is cut off. B can follow if the counts prove too rough.
+
+**What I need from you:** reply "228: A", "228: B" or "228: C".
+
+## 227. How many calls to connected sources may be in flight at once, across all of them?
+
+**In plain terms:** task M36.2.1.3 says that when a question needs several sources at once, each source's
+own limit and the question's total are both respected, and that the company has a single ceiling across all
+sources as well. Each source has its own limit today. Nobody chose a single ceiling: the number that
+applies now is simply every source's limit added together, so with the sources connected today up to the
+sum of them can be in flight at once and nobody decided that figure.
+
+**Option A: keep it as it is.** The total is the sum of each source's limit. The task is closed by what it
+is for: no source is ever over its own limit, which is the thing that protects the sources.
+
+**Option B: you choose a total.** A number for the whole company (I would start at the sum for the sources
+connected on your install) that no more than that many calls ever exceed, whichever sources they go to.
+A question that cannot start all its calls at once waits its turn, so some questions take longer when the
+install is busy.
+
+**Option C: a total per kind of work.** A smaller total for background and scheduled work than for a person
+waiting, so a nightly job cannot use up what an interactive question needs.
+
+**My recommendation:** A now, and C if a busy morning ever shows a person waiting behind a scheduled job.
+A single company-wide number is the one most likely to be wrong the day a source is added.
+
+**What I need from you:** reply "227: A", "227: B" or "227: C".
 
 ## 226. Should a question be estimated before it is answered, and refused when the estimate is more than is left?
 
