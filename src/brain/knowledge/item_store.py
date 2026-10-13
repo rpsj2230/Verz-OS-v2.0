@@ -296,6 +296,10 @@ def row_values(item: KnowledgeItem) -> dict[str, object]:
         # The kind the item was added as (M7.6.1), or NULL for an item added by a path that
         # chooses none; `0115` explains why nothing is backfilled for those.
         "kind": None if item.kind is None else item.kind.value,
+        # How it arrived and, for a link, the address (`0220`). NULL for a document that records
+        # neither, which is what every earlier row holds and what a rewrite of one keeps.
+        "arrived_as": item.arrived_as or None,
+        "source_url": item.source_url or None,
     }
 
 

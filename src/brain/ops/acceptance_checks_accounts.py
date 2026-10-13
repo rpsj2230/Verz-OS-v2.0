@@ -343,7 +343,7 @@ async def the_staff_list_keeps_out_whom_it_names_and_lets_back_its_own(
 
 
 @check(
-    leaves=("M40.7.1",),
+    leaves=("M40.7.1", "M40.1.1.4"),
     sentence=(
         "The sign-in service sends Forgot password through the mail relay saved on "
         "Notifications: the host it reported, when the release last gave it the relay, is the "

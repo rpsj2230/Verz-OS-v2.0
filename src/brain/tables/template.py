@@ -79,6 +79,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    SmallInteger,
     String,
     func,
     text,
@@ -87,7 +88,13 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from brain.agents.model import AGENT_ID_CHARS, OWNER_ID_CHARS
-from brain.agents.template import MANIFEST_PATHS, SEALED_PATHS, SETTABLE_PATHS
+from brain.agents.template import (
+    FIRST_SCHEMA_VERSION,
+    MANIFEST_PATHS,
+    OVERVIEW_PATHS,
+    SEALED_PATHS,
+    SETTABLE_PATHS,
+)
 from brain.audit.ledger import DIGEST_CHARS
 from brain.core.department import SLUG_PATTERN
 from brain.db import Base, TimestampMixin
@@ -214,6 +221,17 @@ class TemplateVersionRow(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
+    #: The schema the manifest was signed under (`0223`, M13.8.17). One for every row published
+    #: before it, and a row signed under one keeps verifying under one: see
+    #: `brain.agents.template.MANIFEST_SCHEMAS`.
+    schema_version: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, server_default=text(str(FIRST_SCHEMA_VERSION))
+    )
+
+    #: Which one manifest path a gallery card shows as the overview, signed with the rest under
+    #: version two and null under version one. Never a path a prompt is built from.
+    overview_path: Mapped[str | None] = mapped_column(String(40), nullable=True)
+
     __table_args__ = (
         CheckConstraint(_slug_grammar("template_id"), name="slug_grammar"),
         CheckConstraint("version >= 1", name="version_is_positive"),
@@ -223,6 +241,14 @@ class TemplateVersionRow(Base):
         CheckConstraint("jsonb_typeof(document) = 'object'", name="document_shape"),
         CheckConstraint(_holds_every_path("document"), name="document_holds_every_path"),
         CheckConstraint(_holds_no_other_path("document"), name="document_holds_no_other_path"),
+        CheckConstraint(
+            "overview_path IS NULL OR schema_version >= 2",
+            name="only_version_two_names_an_overview",
+        ),
+        CheckConstraint(
+            f"overview_path IS NULL OR overview_path = ANY({_array(OVERVIEW_PATHS)})",
+            name="an_overview_is_never_prompt_text",
+        ),
         {"schema": "agent"},
     )
 

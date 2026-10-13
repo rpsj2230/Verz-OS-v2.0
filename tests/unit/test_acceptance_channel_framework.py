@@ -41,6 +41,7 @@ LEAVES = {
         "M10.3.1",
         "M10.3.2",
         "M27.13.1",
+        "M40.1.1.2",
     ),
     "a_new_device_replaces_the_old_and_unbinding_is_recorded": ("M10.3.4",),
     "an_api_key_is_answered_until_it_is_revoked": ("M10.5.7",),
