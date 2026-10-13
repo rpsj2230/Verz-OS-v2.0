@@ -52,7 +52,7 @@ REACH = "an_approval_shows_at_its_approver_s_reach_and_their_press_alone"
 #: Each check and the leaves it proves.
 LEAVES = {
     TYPED: ("M10.7.1", "M10.2.3", "M10.7.4"),
-    PRESSED: ("M10.2.3", "M10.2.4"),
+    PRESSED: ("M10.2.3", "M10.2.4", "M40.6.1.4"),
     POLICY: ("M10.7.4",),
     RAISED: ("M10.2.7", "M10.3.5"),
     REACH: ("M33.8.1",),

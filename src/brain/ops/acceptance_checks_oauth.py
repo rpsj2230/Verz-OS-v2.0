@@ -698,7 +698,7 @@ def consented_personally() -> ConnectorDeclaration:
 
 
 @check(
-    leaves=("M11.8.6",),
+    leaves=("M11.8.6", "M40.5.1.1"),
     sentence=(
         "A source each person connects for their own account, stood up from Xero's declaration: a "
         "person holding its reader capability consents for themselves and their read uses their "

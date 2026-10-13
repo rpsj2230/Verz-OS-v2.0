@@ -35,7 +35,8 @@ export const A_CONFIRMATION_IS_DRAWN_WHERE_THE_THUMB_IS =
   "screen and has a screen reader read it, and only after the API has confirmed the decision.";
 
 export const APPROVALS_HEADING = "Approvals";
-export const APPROVALS_LEDE = "Actions waiting for you to decide, soonest to lapse first.";
+export const APPROVALS_LEDE =
+  "Actions waiting for you to decide, soonest to lapse first. One nobody decides lapses, and nothing is done.";
 export const NO_APPROVALS = "Nothing is waiting for you.";
 export const NO_APPROVALS_MORE = "An approval appears here when an agent asks before acting on something you may decide.";
 export const MORE_APPROVALS = "There are more approvals than this page shows.";
