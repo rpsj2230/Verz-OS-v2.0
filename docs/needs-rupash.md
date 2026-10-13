@@ -2558,6 +2558,27 @@ safe either way: B only ever adds to it.
 
 **Decided 2026-10-13: "121: B".** On an agent's page the owner and administrators also see that other people's conversations happened: who, when, and whether the agent failed, never the question or the answer.
 
+## 233. Four decisions before the server changes you approved can finish - DECIDED 2026-10-13: A
+
+**In plain terms:** you said I may run the five server changes (122, 124, 129, 154 and 157) whenever I like. I prepared them and read the server first, changing nothing. Four things came up that you have not decided. None of them is a secret or a risk to your data; they change what I am allowed to touch and what the canvas costs.
+
+1. **The server's deploy script is out of date.** The copy on your server (from 21 September) does not know the steps for the vault, for the accounts client and for optional services. The product image does not carry the script, so it cannot update itself. Without the update, the sandbox (154) cannot be finished: the console refuses to switch it on until a deploy has reported that gVisor is installed. Updating it is a sixth change you have not approved, and it also starts the always-on connection pools.
+   - **Option A: update the script from the release, once, and keep it current.** What I recommend.
+   - **Option B: not now.** The sandbox stays off and skills with scripts keep being refused.
+2. **The database pooler line (157).** A Coolify redeploy might recreate every container, because Coolify's stored copy is older than Coolify itself. I would instead write the one line through Coolify's own interface, as the 21 September session did, and recreate only the pooler.
+   - **Option A: the narrow way.** What I recommend. Requests wait at the pooler for a few seconds.
+   - **Option B: a full redeploy from Coolify.**
+3. **The automation canvas (124).** It takes about 900 MiB, not 512: the canvas itself 512, its outbound-traffic filter 128, and its own database 256. The host has room for it. It also has no public address, and I will not invent one.
+   - **Option A: switch it on without a public address**, reachable from inside the install only. What I recommend.
+   - **Option B: tell me the address** (and who changes its DNS), and I switch it on with that.
+4. **Object store (122) and canvas (124) survive a deploy only if they are part of the product.** Today there is no release step for either, so a hand-run one would lose its network the next time the app is recreated. I have started the product change (an object store step and a canvas step, a corrected traffic-filter image tag that does not exist today, and a fix so the tracing service does not overwrite the object store's identities).
+   - **Option A: wait for that change, then run both.** What I recommend; one day of delay.
+   - **Option B: run both by hand tonight**, and redo them after the change lands.
+
+**What I need from you:** reply "233: A" for all four recommendations, or the letters you prefer, for example "233: 1A 2A 3A 4B".
+
+**Decided 2026-10-13: "233: A", and the window approved:** the deploy script is updated from the release once and kept current; the pooler line is written narrowly and only the pooler recreated; the canvas is switched on internal-only; the object store and the canvas wait for the product change that gives them a release step, then run. Tonight from 23:00 SGT the order is the sandbox (after the script update), the pooler, then the vault self-open last, because it restarts the app and worker; the object store and canvas follow once their release step has landed.
+
 ## 120. Memory on your server - DECIDED 2026-10-05: A, take down Dify, the old Langfuse and the old v1 worker
 
 **Your answer, 2026-10-05:** "Option A: take down Dify, the old Langfuse and the old v1 worker."
