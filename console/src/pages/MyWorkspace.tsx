@@ -29,7 +29,7 @@
  * The Connected accounts card also lists the sources a person may connect their own account with,
  * and sends them to the vendor to do it (`components/MyAccounts.tsx`, M11.8.6).
  *
- * Task ids: M27.7.28, M16.4.2, M11.8.6
+ * Task ids: M27.7.28, M16.4.2, M11.8.6, M40.4.1.4, M40.5.2.1, M40.5.2.2, M40.5.2.3, M40.5.2.4
  */
 
 import { useCallback, useState } from "react";
@@ -38,6 +38,7 @@ import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
 import { MyAccounts } from "../components/MyAccounts";
 import { MyChannels } from "../components/MyChannels";
+import { MyPreferences } from "../components/MyPreferences";
 import { ConfirmDialog } from "../components/kit";
 import { Button } from "../components/ui/button";
 import { FailureNotice } from "../ui/FailureNotice";
@@ -443,6 +444,7 @@ export function MyWorkspace() {
             <p>{answer.data.can_ask_about}</p>
           </section>
           <MyChannels />
+          <MyPreferences />
         </>
       )}
     </article>

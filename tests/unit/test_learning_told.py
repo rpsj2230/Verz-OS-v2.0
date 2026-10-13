@@ -396,7 +396,14 @@ class Teller:
     answers: dict[str, Sent | None] = field(default_factory=dict)
 
     async def __call__(
-        self, request: Any, person: str, said: str, *, intent_ref: str, now: datetime
+        self,
+        request: Any,
+        person: str,
+        said: str,
+        *,
+        intent_ref: str,
+        now: datetime,
+        kind: Any = None,
     ) -> Sent | None:
         self.told.append((person, said, intent_ref))
         return self.answers.get(person, Sent(DeliveryOutcome.SENT))
@@ -435,6 +442,11 @@ def sending(
     monkeypatch.setattr(learning_told, "notice_is_on", switched)
     monkeypatch.setattr(learning_told, "learnings_since", loaded)
     monkeypatch.setattr(learning_told, "tell", teller)
+
+    async def nobody_is_held(request: Any, person: str, kind: Any, *, now: datetime) -> None:
+        return None
+
+    monkeypatch.setattr(learning_told, "hold_for", nobody_is_held)
     return teller
 
 
@@ -701,3 +713,21 @@ def test_two_web_workers_racing_one_week_send_each_person_one_message(
     assert sent_to == ["UCOL0001", "UME0001"]
     assert sum(one.sent for one in told) == 2
     assert sum(one.already + one.undelivered for one in told) == 2
+
+
+def test_a_digest_held_by_its_person_s_settings_is_counted_held_and_the_week_is_not_finished(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A person in their quiet hours is counted held, nothing is sent them, and the pass that held
+    one does not finish the week, so the next pass asks again. Delete this and a digest held at
+    the moment its week was finished is never sent."""
+    from brain.tell_later import Held
+
+    teller = sending(monkeypatch, LEARNT)
+
+    async def held(request: Any, person: str, kind: Any, *, now: datetime) -> Held:
+        return Held.QUIET_HOURS
+
+    monkeypatch.setattr(learning_told, "hold_for", held)
+    told = send(week=WEEK)
+    assert told.held > 0 and told.sent == 0 and teller.told == []
