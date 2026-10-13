@@ -18,7 +18,7 @@ const AGENT_STATS = {
   currency: "SGD",
   last_active: "2019-03-04T09:42:00Z",
   at_least: false,
-  periods: ["7d", "30d", "90d", "mtd"].map((range) => ({
+  periods: ["7d", "30d", "90d", "mtd", "all"].map((range) => ({
     range,
     since: "2019-02-02T00:00:00Z",
     until: "2019-03-04T12:00:00Z",
