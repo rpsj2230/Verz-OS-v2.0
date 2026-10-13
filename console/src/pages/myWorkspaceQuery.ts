@@ -36,6 +36,9 @@ export const WORKSPACE_API_PATH = "/me/workspace";
 export const FORGET_API_PATH = "/me/memory/forget";
 export const EDIT_API_PATH = "/me/memory/edit";
 
+/** Where a person forgets everything the page shows has been learnt about them, in one press. */
+export const FORGET_ALL_API_PATH = "/me/memory/forget-all";
+
 /** The body a forget sends: the memory's id and nothing else, as `MineMemoryAsked` declares. */
 export function forgetBody(memoryId: string): { readonly memory_id: string } {
   return { memory_id: memoryId };

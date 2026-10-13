@@ -174,6 +174,59 @@ async def a_person_edits_and_forgets_their_own_memory(h: Harness) -> None:
         raise CheckFailedError("an edit or a forget deleted a memory rather than marking it")
 
 
+# ----------------------------------------------------- M40.4.1.2 everything learned, undone at once
+@check(
+    leaves=("M40.4.1.2",),
+    sentence=(
+        "A person with two memories formed from their own words undoes everything learned about "
+        "them in one press: each is marked and none is deleted, nothing is shown or recalled "
+        "afterwards, a colleague's memory is untouched, and a second press changes nothing."
+    ),
+)
+async def a_person_forgets_everything_learned_about_them_in_one_press(h: Harness) -> None:
+    from brain.mine_routes import forgotten_all
+    from brain.ops.memory_store import StoredMemoryRecords
+
+    placed = await people(h)
+    first = await stated_memory(h, placed.member, f"I work from {h.word()} on Fridays", 1)
+    second = await stated_memory(h, placed.member, f"I like {h.word()} summaries", 2)
+    kept = await stated_memory(h, placed.colleague, f"I sit by the {h.word()}", 3)
+    records = StoredMemoryRecords(h.sessions)
+    member = await h.reach(placed.member)
+    colleague = await h.reach(placed.colleague)
+
+    done = await forgotten_all(
+        h.sessions,
+        records,
+        reach=member,
+        ent_hash=member.ent_hash(),
+        trace_id=h.trace_id,
+        now=h.now,
+    )
+    if done is None or {one.memory_id for one in done.changed} != {first, second}:
+        raise CheckFailedError("undo all did not name exactly the memories the person is shown")
+    if not all(one.took_effect for one in done.changed):
+        raise CheckFailedError("a memory was left in use by an undo of everything")
+    if await shown_about(h, placed.member, member, h.now) or await recalled_for(
+        h, member, A, h.now
+    ):
+        raise CheckFailedError("a memory was still shown or used after an undo of everything")
+    if len(await memories_of(h, placed.member)) != 2:
+        raise CheckFailedError("an undo of everything deleted a memory rather than marking it")
+    if not await shown_about(h, placed.colleague, colleague, h.now):
+        raise CheckFailedError("one person's undo of everything reached a colleague's memory")
+    again = await forgotten_all(
+        h.sessions,
+        records,
+        reach=member,
+        ent_hash=member.ent_hash(),
+        trace_id=h.trace_id,
+        now=h.now,
+    )
+    if again is None or again.changed or kept in {one.memory_id for one in again.changed}:
+        raise CheckFailedError("a second undo of everything changed something")
+
+
 # -------------------------------------------------- M16.3.5, M16.3.6 the tier is decided
 @check(
     leaves=("M16.3.5", "M16.3.6"),

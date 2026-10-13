@@ -16,7 +16,7 @@ import {
   shareApiPath,
   unshareApiPath,
 } from "../../../src/pages/myAccountQuery";
-import { EDIT_API_PATH, FORGET_API_PATH } from "../../../src/pages/myWorkspaceQuery";
+import { EDIT_API_PATH, FORGET_ALL_API_PATH, FORGET_API_PATH } from "../../../src/pages/myWorkspaceQuery";
 import { LEARNING_API_PATH, QUIET_API_PATH, REACH_API_PATH } from "../../../src/pages/myPreferencesQuery";
 import { A_BINDING_CHANGE_IS_AUDITED, at, type Proofs, t, type WriteRoute } from "../auditClaims";
 
@@ -53,6 +53,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/pages/MyWorkspace.tsx FORGET_API_PATH": [
     at("POST /api/v1/me/memory/forget", "FORGET_API_PATH", FORGET_API_PATH),
+  ],
+  "src/pages/MyWorkspace.tsx FORGET_ALL_API_PATH": [
+    at("POST /api/v1/me/memory/forget-all", "FORGET_ALL_API_PATH", FORGET_ALL_API_PATH),
   ],
   "src/pages/MyWorkspace.tsx EDIT_API_PATH": [at("POST /api/v1/me/memory/edit", "EDIT_API_PATH", EDIT_API_PATH)],
   "src/pages/LearningUndo.tsx LEARNING_UNDO_API_PATH": [
@@ -154,6 +157,16 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_memory_store", "test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next", true),
     audit: t("test_memory_store", "test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next", true),
     behaviour: t("test_mine_routes", "test_a_member_forgets_a_memory_formed_from_their_own_words"),
+  },
+  // Undo all is that same forget once per memory the page lists, so the same database test follows
+  // it to the row, the ledger and the next recall.
+  "POST /api/v1/me/memory/forget-all": {
+    row: t("test_memory_store", "test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next", true),
+    audit: t("test_memory_store", "test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next", true),
+    behaviour: t(
+      "test_mine_routes",
+      "test_undo_all_forgets_what_the_page_shows_about_the_person_and_nothing_of_anybody_elses",
+    ),
   },
   // The digest's undo is the same forget on the person's sign-in alone, through the same store, so
   // the same database test follows it to the row, the ledger and the next recall.

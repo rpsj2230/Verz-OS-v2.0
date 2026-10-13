@@ -23,9 +23,13 @@ import {
   NO_CEILING,
   READING_WORKSPACE,
   SAVE_LABEL,
+  UNDONE_ALL,
+  UNDO_ALL_CONSEQUENCE,
+  UNDO_ALL_LABEL,
 } from "../src/pages/MyWorkspace";
 import {
   EDIT_API_PATH,
+  FORGET_ALL_API_PATH,
   FORGET_API_PATH,
   spentOf,
   type Workspace,
@@ -258,6 +262,35 @@ describe("forgetting and editing what it learned", () => {
       expect(container.textContent).toContain("FORGOTTEN-SENTENCE");
     });
     expect(posts()).toEqual([[`/api/v1${FORGET_API_PATH}`, { memory_id: "m_1" }]]);
+    await waitFor(() => {
+      expect(reads()).toBeGreaterThan(before);
+    });
+  });
+
+  test("undo all is confirmed in words, keeping it sends nothing, and the page is read again", async () => {
+    // What breaks if this is deleted: an undo of everything with no second step, one that sends a
+    // body naming somebody, or a page that goes on listing memories the next answer no longer uses.
+    const { container, sent, reads } = await acting((path) => {
+      expect(path).toBe(`/api/v1${FORGET_ALL_API_PATH}`);
+      return new Response(JSON.stringify({ changed: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const posts = () => sent.filter((one) => one.method === "POST").map((one) => [one.path, one.body]);
+    const before = reads();
+
+    fireEvent.click(buttonNamed(container, UNDO_ALL_LABEL));
+    expect(dialog().textContent).toContain(UNDO_ALL_CONSEQUENCE);
+    fireEvent.click(buttonNamed(dialog(), KEEP_IT));
+    expect(posts()).toEqual([]);
+
+    fireEvent.click(buttonNamed(container, UNDO_ALL_LABEL));
+    fireEvent.click(buttonNamed(dialog(), UNDO_ALL_LABEL));
+    await waitFor(() => {
+      expect(container.textContent).toContain(UNDONE_ALL);
+    });
+    expect(posts()).toEqual([[`/api/v1${FORGET_ALL_API_PATH}`, null]]);
     await waitFor(() => {
       expect(reads()).toBeGreaterThan(before);
     });
