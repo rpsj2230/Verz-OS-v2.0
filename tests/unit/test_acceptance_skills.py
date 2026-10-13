@@ -15,7 +15,7 @@ answers with a redirect off the list, which fails: the two sides of
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M38.5.1, M27.15.57
+Task ids: M38.5.1, M27.15.57, M12.4.9
 """
 
 from __future__ import annotations
@@ -52,17 +52,20 @@ LEAVES = {
         "M12.2.1",
         "M12.2.4",
         "M12.2.5",
+        "M12.4.9",
         "M12.4.12",
     ),
     "a_skill_is_imported_from_a_github_commit_and_from_an_address": (
         "M12.2.2",
         "M12.2.3",
+        "M12.4.9",
         "M27.15.57",
     ),
     "an_edit_is_a_new_version_and_moves_no_agent_until_reassigned": (
         "M12.2.6",
         "M12.3.2",
         "M12.4.6",
+        "M12.4.9",
     ),
     "categories_are_kept_and_offered_from_what_a_reader_was_shown": ("M12.4.13",),
 }

@@ -39,9 +39,10 @@ NO_CHECK_YET = {
         "idle and absolute session limits",
         "an account bound to nobody is told once",
     },
+    # "embeddings need no outbound call" left this list when the knowledge-models check began to
+    # name M7.3.3; it says NOT_RUN where no inference server answers, and the roll-up reads that.
     LIVE: {
         "a question spanning many records",
-        "embeddings need no outbound call",
     },
 }
 
