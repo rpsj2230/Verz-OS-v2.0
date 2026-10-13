@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-13T16:11:29.353151+00:00",
-  "commit": "b87cebcc",
-  "commit_subject": "The Spend page shows what one answer costs, the dearest question shapes and the stopped budgets; needs items 224 to 226 (#566)",
+  "generated_at": "2026-10-13T16:31:30.891015+00:00",
+  "commit": "e9f54594",
+  "commit_subject": "Plugins can be recorded, switched on and off, upgraded and returned from the Features page, behind a switch that ships off (M29.1.2, M29.1.3, M29.1.4, M29.1.5, M29.1.7, M29.1.12, M29.2.1, M29.2.2, M29.2.3, M29.2.6) (#573)",
   "total": 1625,
   "done": 864,
   "percent": 53.2,
