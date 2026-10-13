@@ -7998,7 +7998,9 @@
     "M39.10.4",
     "M39.10.5",
     "M39.10.6",
-    "M39.10.7"
+    "M39.10.7",
+    "M39.11.1",
+    "M39.11.2"
    ],
    "leaf_texts": [
     "An agent record composes persona, knowledge scope, connectors, skills, tools, workflows, channels, availability, leash, model policy, memory and automations",
@@ -8105,7 +8107,9 @@
     "A person connects their own Google account (mail, calendar, documents) to their personal agent and what it reads is that person's own, and no colleague, administrator or other agent can ask for it",
     "A team agent never reads one person's mailbox for the team: team mail comes only from a shared mailbox an administrator connects, and a person's own mail reaches a team agent only inside that person's private conversation, never in a room, a memory or a knowledge item, as the owner decides in needs item 189",
     "Proved on the install: a reserved person creates a personal agent that a colleague cannot see or ask, a department administrator creates a team agent, and a person without that capability is refused when trying to create one",
-    "Proved in the browser: the create flow offers the kind, shows a person who may only make their own the personal choice alone, and the agent's page names its kind, at desktop and phone widths"
+    "Proved in the browser: the create flow offers the kind, shows a person who may only make their own the personal choice alone, and the agent's page names its kind, at desktop and phone widths",
+    "On an agent's page its steward and a holder of the lifecycle authority over it are also told that other people's conversations with it happened: who, when and whether the agent answered, declined or failed, and never the question or the answer, and a personal agent tells nobody but its owner anything",
+    "Proved on the install: an agent's steward is shown that a colleague's conversation with it happened, with who, when and that it failed, and no word the colleague asked or was answered; the colleague and a person who may not oversee the agent are shown none of it"
    ],
    "leaf_waves": {
     "M39.9.2.2": 4,
