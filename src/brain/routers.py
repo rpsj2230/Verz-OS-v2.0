@@ -326,6 +326,10 @@ from brain.lark_connect_routes import router as lark_connect_router
 # paged, behind `admin:application_log` over everything. See `brain.log_routes`.
 from brain.log_routes import router as log_router
 
+# A member's own account: their devices, who read their record, what agents made for them and what
+# is kept about them. Gated on the member grant. See `brain.member_self_routes`.
+from brain.member_self_routes import router as member_self_router
+
 # A member's artifacts handed to colleagues, and what was handed to them. Gated on the member grant.
 # See `brain.member_share_routes`.
 from brain.member_share_routes import router as member_share_router
