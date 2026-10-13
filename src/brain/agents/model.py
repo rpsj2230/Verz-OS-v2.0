@@ -605,6 +605,30 @@ def records_implied_by(capabilities: tuple[Capability, ...]) -> tuple[Capability
     return tuple(implied)
 
 
+#: Why a team agent never carries a person's own workspace.
+A_TEAM_AGENT_NEVER_CARRIES_A_PERSONS_OWN_WORKSPACE: Final = (
+    "A connector that reads one person's own mail, calendar and documents with that person's own "
+    "consent is bound only into a personal agent's ceiling, which only its owner can ask. A team "
+    "agent is asked by many people and answers in places others read, so naming such a connector "
+    "on one binds nothing: the capability it would open is not in the ceiling. How a team agent "
+    "may use mail at all is needs-rupash 189, and until the owner answers it a team agent carries "
+    "none."
+)
+
+#: The connectors that read a person's own accounts, and so belong to a personal agent alone.
+PERSONS_OWN_CONNECTORS: Final[frozenset[str]] = frozenset({"google_workspace"})
+
+
+def bound_connectors(record: AgentRecord) -> tuple[str, ...]:
+    """The connectors this agent's ceiling is bound to: its own list, less any that read a
+    person's own accounts when the agent is not a personal one. See
+    `A_TEAM_AGENT_NEVER_CARRIES_A_PERSONS_OWN_WORKSPACE`."""
+    named = record.authority.connectors
+    if record.audience.level is Visibility.PERSONAL:
+        return named
+    return tuple(one for one in named if one not in PERSONS_OWN_CONNECTORS)
+
+
 def entitlement_ceiling(record: AgentRecord) -> EntitlementSet:
     """The capability ceiling, in the type `EntitlementSet.intersect` takes.
 
@@ -637,7 +661,7 @@ def entitlement_ceiling(record: AgentRecord) -> EntitlementSet:
     """
     from brain.agents.binding import bound_capabilities
 
-    declared = bound_capabilities(record.authority.capabilities, record.authority.connectors)
+    declared = bound_capabilities(record.authority.capabilities, bound_connectors(record))
     return EntitlementSet(
         principal_id=f"{CEILING_PRINCIPAL_PREFIX}{record.agent_id}",
         grants=tuple(

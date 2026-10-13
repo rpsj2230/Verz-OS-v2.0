@@ -204,6 +204,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from brain.agents.attachments import narrowed
 from brain.agents.catalogue import CATALOGUE
 from brain.agents.install import bind_tools, bound_leash
+from brain.agents.kinds import kind_of
 from brain.agents.leash_moves import LeashMove, effective_leash, held_while_supervised
 from brain.agents.model import (
     AgentAudience,
@@ -493,6 +494,9 @@ class RosterEntry(BaseModel):
     display_name: str
     owner_id: str
     department: str | None = None
+    #: `team` or `personal`, derived from the audience and never stored (M39.10.1). A personal
+    #: agent is on this roster only for its owner, so the word tells nobody anything new.
+    agent_kind: str = "team"
     #: `AgentAuthority.scope`, as `Scope.model_dump` spells it, for a reader who holds the
     #: Agents screen's read. Null for everybody else, and null is the field's absence rather
     #: than an unrestricted ceiling: `Scope()` dumps to a clause list of its own.
@@ -557,6 +561,8 @@ class AgentHeaderView(BaseModel):
     #: The department the audience names, or null for a company agent. Already on the roster entry
     #: every reader of this header is sent, so the header's role line says no more than it.
     department: str | None = None
+    #: `team` or `personal`, derived from the audience (M39.10.1), for all it covers.
+    agent_kind: str = "team"
     #: The template's own name at the pinned version, beside `template_id`, so the lineage reads as
     #: a name rather than a slug. Null exactly when the lineage is.
     template_name: str | None = None
@@ -1062,6 +1068,7 @@ def roster_entry(
         display_name=record.display_name,
         owner_id=record.audience.owner_id,
         department=record.audience.department or None,
+        agent_kind=kind_of(record.audience).value,
         ceiling=record.authority.scope.model_dump(mode="json") if ceilings else None,
         owner_name=owner_name,
         state=None if stated is None else stated.state,
@@ -1612,6 +1619,7 @@ def workspace(
             state=record.state.value if setup is not None else None,
             leash_up_to=None if highest is None else rung_key(highest),
             department=record.audience.department or None,
+            agent_kind=kind_of(record.audience).value,
             template_name=(install.template_name or None) if install is not None else None,
         ),
         tabs=[tab_view(one) for one in strip],

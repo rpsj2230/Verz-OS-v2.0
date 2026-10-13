@@ -193,6 +193,8 @@ export interface Draft {
   readonly channels: readonly ChannelChoice[];
   /** The sentence that an agent with no channel ticked answers nowhere. */
   readonly channelsNote: string;
+  /** The kinds of agent this reader may make: `team`, `personal`, both or none. */
+  readonly agentKinds: readonly string[];
 }
 
 export function readDraft(payload: unknown): Draft | null {
@@ -226,6 +228,7 @@ export function readDraft(payload: unknown): Draft | null {
     ...(publishUnavailable === undefined ? {} : { publishUnavailable }),
     channels: readChannelChoices(fields["channels"]),
     channelsNote: said(fields["channels_note"]) ?? "",
+    agentKinds: words(fields["agent_kinds"]),
   };
 }
 
