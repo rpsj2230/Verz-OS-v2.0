@@ -25,12 +25,14 @@ Task ids: M27.15.10, M27.15.15, M27.15.16, M27.15.2
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Final
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, bound_trace_id
 from brain.api_routes import Asked
@@ -42,6 +44,7 @@ from brain.core.errors import Absent
 from brain.ops.halt import ENFORCED_AXES, Halt, HaltScope, halt_gaps
 from brain.ops.halt_store import HaltRefusedError, may_act, read_state, resume, stop
 from brain.routing_routes import sessions_of
+from brain.tables.agent import AgentRow
 
 #: The addresses, under `API_PREFIX`. The console's query file names the same three.
 HALTS_PATH: Final = "/halts"
@@ -133,6 +136,31 @@ def _view(one: Halt) -> StoppedView:
     )
 
 
+async def agent_departments(request: Request, targets: Iterable[str]) -> dict[str, str]:
+    """The department of each of these agents, looked up now, for the ones that have one.
+
+    An agent with no department, or none that exists, is absent from the answer, so a stop on it
+    stays a company-wide administrator's (needs-rupash 160 A). Read at the moment of the press and
+    never stored on the halt, so an agent moved to another department is judged by where it is.
+    """
+    named = sorted({one for one in targets if one})
+    sessions = sessions_of(request)
+    if not named or sessions is None:
+        return {}
+    async with sessions() as session:
+        found = await session.execute(
+            select(AgentRow.id, AgentRow.department).where(AgentRow.id.in_(named))
+        )
+        return {str(name): str(dept) for name, dept in found.all() if dept}
+
+
+async def _agent_department_of(request: Request, scope: HaltScope, target: str) -> str:
+    """The department of the agent a stop names, or empty for any other axis or an agent without."""
+    if scope is not HaltScope.AGENT:
+        return ""
+    return (await agent_departments(request, [target.strip()])).get(target.strip(), "")
+
+
 def _opened(asked: Asked) -> None:
     """The screen's own read, or the 404 every other refusal here is."""
     if not permitted(screen(HALT_SCREEN).read, asked.reach, asked.now):
@@ -149,7 +177,10 @@ async def halts(request: Request, asked: Asked) -> HaltsView:
     """Everything stopped this reader may see, read fresh, and what cannot be stopped yet."""
     _opened(asked)
     state = await read_state(sessions_of(request))
-    shown = stopped_for(state, asked.reach, asked.now)
+    stopped_agents = [one.target for one in state.halts if one.scope is HaltScope.AGENT]
+    shown = stopped_for(
+        state, asked.reach, asked.now, await agent_departments(request, stopped_agents)
+    )
     return HaltsView(
         known=not stop_is_unknown(state),
         halts=[_view(one) for one in shown],
@@ -163,7 +194,8 @@ async def halts(request: Request, asked: Asked) -> HaltsView:
 async def stop_now(request: Request, asked: Asked, body: StopAsked) -> StoppedView | JSONResponse:
     """Stop something at once. No confirmation, and no reason required."""
     _opened(asked)
-    if not may_act(asked.reach, body.scope, body.target.strip(), asked.now):
+    department = await _agent_department_of(request, body.scope, body.target)
+    if not may_act(asked.reach, body.scope, body.target.strip(), asked.now, department=department):
         raise Absent("no such screen")
     sessions = sessions_of(request)
     if sessions is None:
@@ -177,6 +209,7 @@ async def stop_now(request: Request, asked: Asked, body: StopAsked) -> StoppedVi
             reason=body.reason,
             now=asked.now,
             attributed=of_request(asked),
+            agent_department=department,
         )
     except HaltRefusedError as refused:
         return _refused(request, refused)
@@ -189,7 +222,8 @@ async def resume_now(
 ) -> ResumedView | JSONResponse:
     """Lift a halt, with a written reason, saying whose stop it lifts."""
     _opened(asked)
-    if not may_act(asked.reach, body.scope, body.target.strip(), asked.now):
+    department = await _agent_department_of(request, body.scope, body.target)
+    if not may_act(asked.reach, body.scope, body.target.strip(), asked.now, department=department):
         raise Absent("no such screen")
     sessions = sessions_of(request)
     if sessions is None:
@@ -203,6 +237,7 @@ async def resume_now(
             reason=body.reason,
             now=asked.now,
             attributed=of_request(asked),
+            agent_department=department,
         )
     except HaltRefusedError as refused:
         return _refused(request, refused)

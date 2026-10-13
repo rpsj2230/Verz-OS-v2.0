@@ -62,7 +62,7 @@ table, for `brain.api`'s reason, and a history across every job, which would be 
 screen. A job with no runner says so on its row (`needs`); a pause is an `ops.setting` row, so
 it outlives a restart of either process, which is the rest of the leaf.
 
-Task ids: M27.8.13, M27.15.47
+Task ids: M27.8.13, M27.15.47, M17.1.5
 """
 
 from __future__ import annotations
@@ -86,10 +86,11 @@ from brain.console.govern import NOWHERE, _in_reach
 from brain.console.operate import QUEUE_SCREEN, may_watch_unattended
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
+from brain.gate.context import TrafficClass
 from brain.listing import Column, ListAsked, Listing
 from brain.ops.controls import Control
 from brain.ops.features import SCHEDULE_CONTROL, is_on
-from brain.ops.jobs import JobState
+from brain.ops.jobs import DeadLetter, DeadLetterReason, JobState, may_see
 from brain.ops.retention_store import released_controls
 from brain.ops.schedule import DESTRUCTIVE, Owed, report_only_now, schedulable
 from brain.ops.schedule_control import (
@@ -109,6 +110,7 @@ from brain.ops.schedule_store import last_successes
 from brain.ops.setting_store import SettingState
 from brain.routing_routes import sessions_of
 from brain.tables.audit import attributed_to
+from brain.tables.dead_letter import DeadLetterRow
 from brain.tables.schedule import ControlRunRow
 
 log = structlog.get_logger()
@@ -213,6 +215,32 @@ class JobsPage(BaseModel):
     every_change_is_in_the_audit_trail: bool = True
     #: Display names by principal id for the people named on the rows. Missing where none is known.
     people: dict[str, str] = {}
+
+
+class DeadLetterView(BaseModel):
+    """One job nobody is going to run, as an operator sees it. No arguments and no failure text."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    job_id: str
+    task: str
+    #: A word of `brain.ops.jobs.DeadLetterReason`.
+    reason: str
+    attempts: int
+    set_aside_at: datetime
+    #: Whether what the job refers to is still kept, so it can still be investigated.
+    actionable: bool
+
+
+class DeadLettersPage(BaseModel):
+    """Every job set aside for a person that this reader may see. No count and no placeholder."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    as_of: datetime
+    items: list[DeadLetterView]
+    #: The reason words, so the page names each in words without a copy of the list.
+    reasons: list[str]
 
 
 class JobChanged(BaseModel):
@@ -598,6 +626,75 @@ async def jobs(request: Request, asked: Asked) -> JobsPage:
         controls_switched_on=switched_on,
         may_control=may_control(asked.reach, asked.now),
         people=people,
+    )
+
+
+#: The newest set-aside jobs one read loads. Older ones stay in the table; this bounds the read.
+DEAD_LETTERS_LOADED: Final = 500
+
+
+def dead_letters_shown(
+    entries: Sequence[DeadLetter], reach: EntitlementSet, now: datetime
+) -> list[DeadLetterView]:
+    """The set-aside jobs this reader may be shown, newest first, as the screen draws them.
+
+    **Two ways in, and the second is this screen's own.** The job is the reader's, or a grant
+    covers dead letters in a scope matching it (`brain.ops.jobs.may_see`, the one rule), or the
+    reader holds the queue screen's read over the job's task, which is how this same screen decides
+    which of the install's jobs an administrator sees (`may_see_job`). One pass and one predicate:
+    nothing records what was skipped, so the list a reader gets is the list they would get had the
+    others never been written.
+    """
+    return [
+        DeadLetterView(
+            job_id=one.job_id,
+            task=one.task,
+            reason=one.reason.value,
+            attempts=one.attempts,
+            set_aside_at=one.at,
+            actionable=one.is_actionable(now),
+        )
+        for one in entries
+        if may_see(one, reach, now) or may_see_job(one.task, reach, now)
+    ]
+
+
+@router.get("/jobs/dead", response_model=DeadLettersPage, responses=COMMON_RESPONSES)
+async def dead_letters(request: Request, asked: Asked) -> DeadLettersPage:
+    """Jobs the recovery sweep set aside for a person, which this reader may see (M17.1.5).
+
+    Declared before `/jobs/{name}`, which would answer `dead` as a job it does not know. Read for
+    everybody and narrowed per row, as the list of jobs is.
+    """
+    factory = _require_sessions(request)
+    async with factory() as session:
+        rows = (
+            (
+                await session.execute(
+                    select(DeadLetterRow)
+                    .order_by(DeadLetterRow.set_aside_at.desc(), DeadLetterRow.job_id)
+                    .limit(DEAD_LETTERS_LOADED)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    entries = [
+        DeadLetter(
+            job_id=row.job_id,
+            task=row.task,
+            principal_id=row.principal_id,
+            traffic_class=TrafficClass(row.traffic_class),
+            reason=DeadLetterReason(row.reason),
+            attempts=row.attempts,
+            at=row.set_aside_at,
+        )
+        for row in rows
+    ]
+    return DeadLettersPage(
+        as_of=asked.now,
+        items=dead_letters_shown(entries, asked.reach, asked.now),
+        reasons=[one.value for one in DeadLetterReason],
     )
 
 

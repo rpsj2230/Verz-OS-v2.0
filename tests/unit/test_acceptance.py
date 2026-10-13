@@ -35,6 +35,7 @@ from brain.ops import (
     acceptance_checks_connectors_area,
     acceptance_checks_evaluation,
     acceptance_checks_knowledge_models,
+    acceptance_checks_lark_sign_in,
     acceptance_checks_people,
     acceptance_checks_proof_gaps,
     acceptance_checks_recovery,
@@ -730,6 +731,11 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert outcomes.pop("the_rate_limits_screen_lists_the_windows_refusing_now")[0] == NOT_RUN
     assert outcomes.pop("rate_limits_and_capacity_answer_their_readers")[0] == NOT_RUN
     assert outcomes.pop("three_classes_share_one_budget_and_give_way_in_order")[0] == NOT_RUN
+    # Nothing has furnished this database's Starter pack, which the application does on its first
+    # start; `tests/unit/test_acceptance_checks_joiner_mover_leaver.py` furnishes it and runs it.
+    assert (
+        outcomes.pop("a_joiner_gets_a_department_pack_and_a_mover_or_leaver_loses_it")[0] == NOT_RUN
+    )
     # No cache here either; `tests/unit/test_acceptance_cache.py` runs it with a store in its place.
     assert outcomes.pop("a_cached_answer_reaches_only_the_reach_it_was_computed_for")[0] == NOT_RUN
     # Nor the plan and freshness checks, which ask the same cache;
@@ -905,6 +911,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
             NOT_RUN,
             acceptance_checks_recovery.NO_SCHEDULED_RUN_YET,
         )
+    # No job has been set aside on a new install, so the dead-letter check says so;
+    # `tests/unit/test_acceptance_checks_dead_letter.py` records one and it passes.
+    assert outcomes.pop("a_job_set_aside_is_listed_to_those_who_may_see_it")[0] == NOT_RUN
     # A test image may carry no built console, in which case the shell check says so; the install's
     # own image does, and `tests/unit/test_acceptance_checks_localisation.py` serves a bundle.
     assert outcomes.pop("the_console_is_served_as_an_installable_shell")[0] in (PASSED, NOT_RUN)
@@ -951,6 +960,12 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         "departments_managed_on_people_are_not_the_staff_sync_s",
     ):
         assert outcomes.pop(list_check) == (NOT_RUN, acceptance_checks_people.NO_STAFF_LIST_IS_READ)
+    # No install here brokers sign-in to Lark, so the bridge has nothing at its address to ask;
+    # `tests/unit/test_acceptance_lark_sign_in.py` brokers it and the check passes.
+    assert outcomes.pop("the_lark_bridge_names_the_person_lark_names_and_nobody_else") == (
+        NOT_RUN,
+        acceptance_checks_lark_sign_in.THIS_INSTALL_DOES_NOT_BROKER_SIGN_IN_TO_LARK,
+    )
     # Nobody has recorded a check on the Requirement checks screen here, so each area's leaf says
     # so; `tests/unit/test_acceptance_checks_requirement_areas.py` records them and it passes.
     for area_check in registered(("brain.ops.acceptance_checks_requirement_areas",)):

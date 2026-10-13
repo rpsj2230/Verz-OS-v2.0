@@ -61,6 +61,7 @@ from starlette.requests import Request
 from brain.chat_answer import console_link
 from brain.console.agent_automations import FAILURES_BEFORE_PAUSE, OwnerNotice
 from brain.console.workspace import Tab, deep_link
+from brain.member.connections import NotificationKind
 from brain.ops.automation_run import RUNNER_ACTOR, PausedBecause
 from brain.ops.automation_run_store import RUN_EVERY
 from brain.ops.notices import NoticeKind, notice_is_on
@@ -194,7 +195,12 @@ async def tell_paused_stewards(
     sent = 0
     for one in due:
         delivered = await tell(
-            request, one.steward_id, paused_text(one), intent_ref=intent_ref_for(one), now=now
+            request,
+            one.steward_id,
+            paused_text(one),
+            intent_ref=intent_ref_for(one),
+            now=now,
+            kind=NotificationKind.AUTOMATION,
         )
         # A second pass over the same pause is handed the first's record and issues nothing.
         sent += (
