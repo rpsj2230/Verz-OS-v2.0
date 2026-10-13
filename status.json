@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-13T11:26:21.211342+00:00",
-  "commit": "6e52997d",
-  "commit_subject": "Install checks: automation run reach, outbox delivery, approval resume (7 leaves) (#562)",
+  "generated_at": "2026-10-13T12:08:22.887381+00:00",
+  "commit": "eedba39c",
+  "commit_subject": "My workspace counts the answers a person marked wrong and gains an Undo all control (#561)",
   "total": 1622,
   "done": 864,
   "percent": 53.3,
