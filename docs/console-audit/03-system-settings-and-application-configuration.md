@@ -3,7 +3,7 @@
 - **Screens:** `/install`, `/settings`, `/limits`, `/connections`, `/first-run`, `/first-run/staff-list`
 - **Tables:** `ops.setting`, `ops.budget_version`, `ops.budget_stop`
 - **Installation values:** `INSTALL_LOCALES`, `INSTALL_CURRENCY`, `INSTALL_TIME_ZONE`, `INSTALL_DIGEST_DESTINATION`, `INSTALL_DIGEST_TIME`, `INSTALL_SERVICES`
-- **Measured here:** 15 routes, 1 called by no screen; 8 write routes, 6 with all three proofs; 1 gaps.
+- **Measured here:** 17 routes, 1 called by no screen; 10 write routes, 8 with all three proofs; 1 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -16,6 +16,8 @@
 | `GET /setup/staff-source/registration` | `/first-run` |
 | `POST /api/v1/install/settings/{name}/default` | `/settings` |
 | `POST /setup/appointment` | `/first-run` |
+| `POST /setup/draft` | `/first-run` |
+| `POST /setup/draft/read` | `/first-run` |
 | `POST /setup/sign-in` | `/first-run` |
 | `POST /setup/staff-source/sign-in` | `/first-run` |
 | `POST /setup/staff-source/trial` | `/first-run` |
@@ -31,6 +33,8 @@
 | --- | --- | --- | --- | --- |
 | `POST /api/v1/install/settings/{name}/default` | `/settings` | `test_returning_to_default_retires_the_saved_row_as_the_person_and_the_default_reads_next` in `tests/unit/test_settings_routes.py` | `test_a_value_returned_to_default_is_retired_as_the_app_role_and_the_ledger_names_who` in `tests/unit/test_install_settings.py` (database, in CI) | `test_returning_to_default_retires_the_saved_row_as_the_person_and_the_default_reads_next` in `tests/unit/test_settings_routes.py` |
 | `POST /setup/appointment` | `/first-run` | `test_the_setup_code_holder_appoints_the_first_administrator_and_is_sent_to_finish` in `tests/unit/test_setup_routes.py` | `test_the_first_administrator_is_a_live_person_holding_administration_everywhere` in `tests/unit/test_first_administrator.py` (database, in CI) | `test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_alone` in `tests/unit/test_setup_routes.py` (database, in CI) |
+| `POST /setup/draft` | `/first-run` | Not applicable: It keeps a file of the screens answered so far and writes no row. | Not applicable: A draft is not a change to the install, so nothing is recorded in the ledger. | `test_what_was_answered_is_kept_and_read_back_and_the_next_screen_is_the_first_unanswered` in `tests/unit/test_setup_draft.py` |
+| `POST /setup/draft/read` | `/first-run` | Not applicable: It reads a file and writes nothing. | Not applicable: Nothing changes when a draft is read, so there is nothing to record. | `test_what_was_answered_is_kept_and_read_back_and_the_next_screen_is_the_first_unanswered` in `tests/unit/test_setup_draft.py` |
 | `POST /setup/sign-in` | `/first-run` | `test_the_finishing_screen_binds_the_installers_sign_in_to_the_first_administrator` in `tests/unit/test_sign_in_routes.py` | `test_the_finishing_screen_binds_the_first_administrator_once_against_the_database` in `tests/unit/test_sign_in_routes.py` (database, in CI) | `test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_alone` in `tests/unit/test_setup_routes.py` (database, in CI) |
 | `POST /setup/staff-source/sign-in` | `/first-run` | Not applicable: It answers the directory's own sign-in page for the setup code's holder and writes nothing. | Not applicable: Nothing changes when a sign-in page is asked for, so there is nothing to record. | `test_a_directory_is_chosen_signed_in_to_and_its_list_pulled` in `tests/unit/test_setup_staff_routes.py` |
 | `POST /setup/staff-source/trial` | `/first-run` | `test_a_trial_that_read_the_directory_keeps_its_credential_for_the_nightly_sync` in `tests/unit/test_setup_staff_routes.py` | `test_a_trial_that_read_the_directory_keeps_its_credential_for_the_nightly_sync` in `tests/unit/test_setup_staff_routes.py` | `test_a_directory_is_chosen_signed_in_to_and_its_list_pulled` in `tests/unit/test_setup_staff_routes.py` |
