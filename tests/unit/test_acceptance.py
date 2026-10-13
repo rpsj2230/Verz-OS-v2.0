@@ -745,6 +745,14 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     # The scratch database is not an install started from a release, so no image reference was
     # handed in; `tests/unit/test_acceptance_checks_install_template.py` hands it one.
     assert outcomes.pop("the_install_runs_one_published_image_at_a_named_release")[0] == NOT_RUN
+    # Nor the release check switched on, which no install ships with.
+    assert (
+        outcomes.pop("the_release_this_install_runs_says_what_changed_and_how_urgent")[0] == NOT_RUN
+    )
+    # A scratch database was not set up through the wizard and names no vault;
+    # `tests/unit/test_acceptance_checks_first_run.py` writes the values and answers for the vault.
+    assert outcomes.pop("the_wizard_s_values_are_held_in_the_install_s_settings")[0] == NOT_RUN
+    assert outcomes.pop("a_provider_key_the_wizard_was_given_is_held_in_the_vault")[0] == NOT_RUN
     # No cache here either; `tests/unit/test_acceptance_cache.py` runs it with a store in its place.
     assert outcomes.pop("a_cached_answer_reaches_only_the_reach_it_was_computed_for")[0] == NOT_RUN
     # Nor the plan and freshness checks, which ask the same cache;

@@ -54,6 +54,7 @@ LEAVES = {
         "M12.2.5",
         "M12.4.9",
         "M12.4.12",
+        "M42.6.4",
     ),
     "a_skill_is_imported_from_a_github_commit_and_from_an_address": (
         "M12.2.2",

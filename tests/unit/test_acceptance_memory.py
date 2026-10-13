@@ -11,6 +11,7 @@ what its leaf says.
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
 Task ids: M16.1.2, M16.1.3, M16.1.4, M16.1.5, M16.4.1, M16.4.4, M16.6.3, M16.7.10, M16.7.12
+Task ids: M26.3.4
 """
 
 from __future__ import annotations
@@ -32,7 +33,7 @@ MODULE = "brain.ops.acceptance_checks_memory"
 #: Each memory check and the leaves it proves.
 LEAVES = {
     "a_stated_memory_forms_and_only_its_person_reads_it": ("M16.1.2", "M16.7.12"),
-    "a_memory_is_not_recalled_once_its_grant_goes": ("M16.1.4", "M16.4.4"),
+    "a_memory_is_not_recalled_once_its_grant_goes": ("M16.1.4", "M16.4.4", "M26.3.4"),
     "an_inference_decays_and_a_statement_does_not": ("M16.1.3", "M16.4.1", "M16.7.10"),
     "a_model_sees_the_askers_memory_as_a_hint_only": ("M16.6.3", "M16.1.5"),
 }

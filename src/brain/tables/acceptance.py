@@ -16,6 +16,13 @@ day whether or not the commit is still deployed, so there is nothing for a key t
 outcome is one of three words, and the reason is a sentence the check's source wrote, bounded by
 the column (`brain.ops.acceptance.A_RESULT_NAMES_NO_DATA`).
 
+**`ops.acceptance_run`: the run's own record, so a run can outlive the process that began it.**
+A run takes thirty-five minutes and more and the worker is restarted by every deploy, so rows
+written only when the run ended were never written on a day of frequent merges. A run is now opened
+here before its first check, each check's row is appended as it finishes, and the run is marked
+`complete` only when the last one has. See `brain.ops.acceptance_resume`. **A result row with no
+run row is a complete run**, because every run before this table existed was written whole.
+
 Task ids: M38.5.1
 """
 
@@ -46,6 +53,10 @@ OUTCOMES: Final = ("failed", "not run", "passed")
 
 #: The two reasons a run happens, as `brain.ops.acceptance.Occasion` spells them.
 OCCASIONS: Final = ("deploy", "request")
+
+#: Where a run is: still going, finished with every check recorded, or left behind by a release
+#: that replaced it before it was finished. Alphabetical, as `one_of` is read.
+RUN_STATUSES: Final = ("abandoned", "complete", "running")
 
 #: `brain.ops.acceptance.REASON_CHARS`, held equal by a test.
 REASON_CHARS: Final = 240
@@ -79,5 +90,36 @@ class AcceptanceResultRow(Base):
         CheckConstraint(one_of("outcome", OUTCOMES), name="outcome"),
         CheckConstraint("checked_at >= started_at", name="checked_after_it_started"),
         Index("ix_acceptance_result_commit", "commit", "started_at"),
+        {"schema": "ops"},
+    )
+
+
+class AcceptanceRunRow(Base):
+    """`ops.acceptance_run`. One run of the suite: which commit, why, and whether it finished.
+
+    **Written by the worker, which may update a run that is still `running` and nothing else.**
+    Once a run is `complete` or `abandoned` nothing edits it (the update policy reads only
+    `running` rows), so a finished run stays the fact it was when it finished.
+    """
+
+    __tablename__ = "acceptance_run"
+
+    run_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    commit: Mapped[str] = mapped_column(String(40), nullable=False)
+    occasion: Mapped[str] = mapped_column(String(8), nullable=False)
+    status: Mapped[str] = mapped_column(String(9), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    #: Moved on at the start of every check and when a worker takes the run over. A run whose
+    #: heartbeat is old belongs to a process that is gone.
+    heartbeat_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.statement_timestamp()
+    )
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(f"commit ~ '{COMMIT_PATTERN}'", name="commit_shape"),
+        CheckConstraint(one_of("occasion", OCCASIONS), name="occasion"),
+        CheckConstraint(one_of("status", RUN_STATUSES), name="status"),
+        CheckConstraint("(status = 'running') = (ended_at IS NULL)", name="ended_once_finished"),
         {"schema": "ops"},
     )
