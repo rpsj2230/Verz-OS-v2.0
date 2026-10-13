@@ -2,12 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**44 items are open: 196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **193,** which formats an agent's generated documents start with and which libraries may be added, **192,** whether sensitive actions that cannot be undone need a second person, **191,** whether an agent may ever answer with nothing behind it, **189,** how a team agent may use mail without one person's mail reaching anybody else, **188,** whether five console tasks that ask for what the design does not do are narrowed, **187,** whether the chat tools show progress while an answer is made, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **167,** whether a chat room or channel belongs to exactly one agent, **163,** the short list of what stops tasks being proved on your install, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
-which of your systems holds client projects and their tickets, **136,** whether memory
-disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
-for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
-vault open itself), **121 to 124,** whose conversations an agent's page lists, where uploaded documents are stored, a task
-that names a table library, and the automation canvas, each with my recommendation, **and 91,** the
+**31 items are open: 196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **193,** which formats an agent's generated documents start with and which libraries may be added, **192,** whether sensitive actions that cannot be undone need a second person, **191,** whether an agent may ever answer with nothing behind it, **189,** how a team agent may use mail without one person's mail reaching anybody else, **188,** whether five console tasks that ask for what the design does not do are narrowed, **187,** whether the chat tools show progress while an answer is made, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **167,** whether a chat room or channel belongs to exactly one agent, **163,** the short list of what stops tasks being proved on your install, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **134,** connecting the Slack channel, **132,** connecting the email channel, **131,** making staff accounts work on your install, **127 and 128,** things for you to do (switch on the Lark chat channel, and connect Xero, HubSpot and Freshdesk), **and 91,** the
 checks only you can do on your install; it waits for the Knowledge upload grants (item 105) to land.
 Each says in plain terms what it is, what I recommend, and every step.
 
@@ -391,69 +386,6 @@ everything."
   the asker's own reach when somebody asks, and nothing it reads is kept in the Brain's tables.
 
 My recommendation stands: reply "155: 1A 2A", or tell me what to change.
-## 154. One server change for the sealed sandbox: probably no downtime
-
-**In plain terms:** three things you asked for run code the Brain did not write: scripts inside
-imported skills, the code sandbox, and connectors written as custom code. They must run sealed off,
-with no internet, no access to the Brain's data and hard time and memory limits. The standard way
-to seal them is gVisor, a small program Docker uses to run a container inside its own protective
-layer. Your server does not have it yet (checked read-only on 2026-10-06: Ubuntu 24.04, Docker with
-its standard runtime only).
-
-Installing it is one change no release can make on its own: gVisor is installed on the server and
-added to Docker's settings. Docker can usually take that by **reloading** its settings, which
-restarts nothing, so there is **probably no downtime at all**. Only if the reload does not take it
-does Docker need a full restart, which restarts every container on the server for about a minute,
-the Brain's and your other project's (Activepieces) alike. Nothing is lost either way; they all come
-back by themselves.
-
-**Option A: yes, at a quiet time.** I install gVisor and reload Docker myself (restarting it only if
-the reload is not enough), at a time you name
-(for example a weekday night, Singapore time), then confirm everything is back and run the
-sandbox's own check: a script that tries to reach the internet and is stopped, and one that runs
-past its time and memory limits and is stopped.
-
-**Option B: not now.** The sandbox stays off. Skills with scripts are refused with a sentence saying
-this install runs no sandbox, and custom-code connectors are not offered. Everything else works.
-
-**Memory:** the sandbox is sized at 256 MB a script, so it fits beside the personal-data detector
-and Langfuse (item 120) with about 180 MB to spare. A larger limit per script would need more room.
-
-**My recommendation: A,** at a quiet time you choose.
-
-**What I need from you:** reply "154: A, after 11pm on a weekday" (or whichever time suits), or
-"154: B". Then, on your one visit to **Install, Settings**, **Optional services this server runs**
-becomes `presidio,langfuse,sandbox` instead of `presidio,langfuse`; I tell you when that is ready.
-
-## 153. Questions written in Chinese: how much is hidden before they go to an outside model?
-
-**In plain terms:** your requirement GAP-23 is now built (#344): before a question or passage goes
-to an outside model provider, names, ID numbers, phone numbers and email addresses are replaced
-with placeholders, and put back in the answer for the person who asked. Names written in Chinese
-characters are hard to tell from other Chinese words, so the built-in rules treat any run of two to
-four Chinese characters as a possible name. A question in English with a Chinese name in it works
-well: the name is hidden and the rest is sent. But a question written entirely in Chinese reaches
-the model as nothing but placeholders, and the model cannot answer it.
-
-**Option A: keep it as it is.** Nothing that could be a name leaves your install. Questions written
-in Chinese cannot be answered by an outside model.
-
-**Option B: hide a Chinese run only where it stands alone inside non-Chinese text,** as a name does
-in an English sentence. Questions written in Chinese then go through and are answered, but a
-Chinese name inside Chinese text is sent to the provider as written. Once the personal-data detector
-(item 120, row 1) runs with a Chinese model, it finds those names too and hides them again.
-
-**Option C: answer questions written in Chinese only with a model running on your own server.**
-Nothing leaves, and Chinese questions are answered, but only once such a model runs (it needs the
-model server from item 120, row 2, which does not fit on this server today).
-
-**My recommendation: B,** with the detector's Chinese model added once it is installed. It answers
-the questions your people actually ask, and hides every name written in an English sentence today.
-Until you reply, A holds, because it is the safe side: it only ever hides more.
-
-**What I need from you:** reply "153: A", "153: B" or "153: C". It is worth knowing first whether
-your staff ever ask the Brain in Chinese; if they never do, A costs nothing.
-
 ## 152. Lark Base and Lark Wiki are connected through Connect Lark, not this list
 
 **In plain terms:** these two are not on the Connectors list's Connect buttons, because their records
@@ -739,118 +671,6 @@ In the console open **Channels**, **Microsoft Teams**, **Connect**, which shows 
 
 Tell me "connected Teams" afterwards and I prove it on your install.
 
-## 139. Website widget: should visitors get answers written by the model, or the published passages themselves?
-
-**In plain terms:** the website widget (M10.7.2, #315) lets visitors to your website ask questions,
-and it only ever reads documents an administrator has marked public. Today it answers with the
-matching passages from those documents, word for word. Having the model write a short answer from
-them reads better, but every visitor question then costs a model call, paid by you, asked by people
-who are not your staff and have no budget of their own.
-
-**Option A: passages only, for now.** No model cost, and nothing is ever said that is not already
-in a public document.
-
-**Option B: the model writes the answer** from the public passages only, under a daily spending cap
-for the widget that you set in the console, and the widget falls back to passages once the cap is
-reached.
-
-**My recommendation: A now, B later.** Start with passages, watch what visitors ask for a few weeks,
-and switch on B with a cap if the answers need to read better.
-
-**What I need from you:** reply "139: A" or "139: B".
-
-## 138. Laravel: may each client record be visible to one department, or to several?
-
-**In plain terms:** when you connect your Laravel application's database (its steps come to this page
-when it can read), you write a rule for each view saying who may see its records, for example
-"department = sales": a sales person sees the clients whose department is sales. The Brain keeps one
-such value per record in its small index. A rule naming several departments for one record ("visible
-to sales and operations") cannot be kept that way, so it would have saved and then shown nobody
-anything. It is now refused when you connect, with a sentence saying why.
-
-**Option A: one department per record, for now.** Every client record belongs to one department, and
-people in that department see it (administrators and anyone granted wider reach see more, as
-everywhere else).
-
-**Option B: several departments per record.** The index learns to keep a short list per record, so
-a client shared by sales and operations is seen by both. More work, and it makes the index hold a
-little more about each record.
-
-**My recommendation: A now.** Most client records have one owning department, and B can be added the
-day a real record needs two.
-
-**What I need from you:** reply "138: A" or "138: B".
-
-## 137. Which of your systems holds client projects and their tickets?
-
-**In plain terms:** one memory task (M16.6.2) asks that a question about a client project is
-answered with that project's current picture: the project, its client, its open tickets and its
-recent decisions, read from your systems at the asker's own reach on every question and never kept
-as a memory. For that the Brain has to know which of your systems is the record of a project. I will
-not guess: the Laravel connection reads clients and staff today and nothing else, so nothing the
-Brain reads yet is a project.
-
-**Open tickets come from Freshdesk in every option,** once item 128 connects it, because that is
-where your tickets are. Recent decisions are read from the same place as the project (its notes or
-its status history), so the one choice is where a project lives.
-
-**Option A: a Lark Base.** If your team keeps active projects in a Base, one row per project with
-its client and its status, the Brain reads that table through the Lark Base connector that already
-exists. You choose the Base and the table when you connect it, and nothing changes in Laravel.
-
-**Option B: Laravel, through a new project view.** If projects live in the Laravel application (its
-websites and their maintenance plans, each tied to a client), whoever looks after that database adds
-one read-only view for projects beside the two it has today, and the Brain reads it the way it reads
-clients. I write the view for them; it is one change on their side, and the Brain reads nothing
-beyond what the view shows.
-
-**Option C: Freshdesk alone.** If a project for your team is really the run of support tickets for
-one client, Freshdesk is enough: the Brain reads a client's open tickets live from Freshdesk, and
-there is no project record to connect.
-
-**My recommendation: B, with Freshdesk for the tickets.** The Laravel application is where each
-website and its maintenance plan already sit against the client the Brain reads, so a project view
-joins to that client without matching names across two systems, and Freshdesk holds the tickets.
-Choose A instead if day-to-day project work is tracked in a Base rather than in Laravel, because the
-Brain should read the record your team actually keeps up to date. C is the smallest and answers only
-"what is open for this client", not "where is this project".
-
-**What I need from you:** reply "137: A", "137: B" or "137: C". For A, also tell me the name of the
-Base. For B, tell me who looks after the Laravel database, and I send them the view. After you
-choose, I build it, and it is proved when you ask about a project, change its status in that system,
-and ask again: the second answer shows the change (check 9 in item 91).
-
-## 136. When a memory and a connected system disagree: settled by how memory is built?
-
-**In plain terms:** one memory task (M16.4.3) asks that when something the Brain remembers disagrees
-with one of your connected systems, the system wins at once and the memory is demoted and flagged. I
-recommend we mark it met by how memory is built, rather than build a comparison, and I need your yes
-because that is narrower than what the task literally asks.
-
-**Why the two can never disagree.** The Brain only remembers what a person says about themselves,
-such as "I prefer short answers" or "I work from home on Fridays". It never keeps a value it read
-from a connected system: an invoice total, a ticket's status or a client's renewal date is read from
-that system each time a question needs it and is never written to memory (task M16.7.5, which a test
-value proves on your install). A memory also never answers a question: it shapes how the question is
-looked up and phrased, and the answer always comes from the system. So there is no remembered copy
-of a system's value that could go out of date, and nothing a comparison could find.
-
-**What building it anyway would mean.** A job that reads every memory, works out which record in
-which system it is about, and compares the two. It would have to guess which record a sentence like
-"I look after the retail accounts" is about, and a wrong guess demotes a true memory with nothing to
-show why. I recommend against it.
-
-**The one case to know about.** A person can say something about themselves that a system also
-records, for example "I manage the retail accounts" while your CRM names someone else. The Brain
-keeps it as that person's own note and still answers every question about those accounts from the
-CRM, at that person's reach, so the CRM wins on every answer. When the note stops being true they
-edit or forget it on **My workspace**.
-
-**My recommendation: yes, mark M16.4.3 met by construction.**
-
-**What I need from you:** reply "136: yes", or "136: build the comparison" if you want the job above
-anyway, and I build it.
-
 ## 134. Connect the Slack channel (ready now)
 
 **In plain terms:** people can now ask the Brain in Slack, in a direct message or by naming it in a
@@ -876,24 +696,6 @@ channel, the second channel in item 126's order. Only do this if Verz uses Slack
    answer asks you to link your Slack account to your Brain account.
 
 Tell me "connected Slack" afterwards and I prove it on your install.
-
-## 133. Search Console's indexing issues: counts from the sitemaps, not a page-by-page report
-
-**In plain terms:** your task for Search Console (M11.7.2) asks for a site's indexing issues.
-Google's Search Console API has no Page indexing report: the only way to ask about one page is a
-separate inspection call per page, which is slow and rationed. So the connector reports indexing
-issues as the error and warning counts Google gives for each of the site's sitemaps, and the answer
-says that is what it is. Everything else in the task (queries, pages, clicks and impressions, for
-any range you name) is read in full.
-
-**Option A: accept the sitemap counts,** with the answer naming them as sitemap counts.
-**Option B: also inspect named pages on request,** one call per page, only when somebody asks about
-specific pages, slower and within Google's daily allowance.
-
-**My recommendation: A now.** It answers "is anything wrong with indexing" straight away, and B can
-be added the day someone needs page-by-page detail.
-
-**What I need from you:** reply "133: A" or "133: B".
 
 ## 132. Connect the email channel (ready now, with any mail provider)
 
@@ -972,48 +774,6 @@ Langfuse are started by the updated deploy script after each release, so they wa
 I tell you when both are done and the next staff sync has made the accounts; then you can tell
 people: "Your account is ready. Go to the sign-in page, press Forgot password and enter your work
 email."
-
-## 130. Does a staff list anybody with its link can edit give people sign-in accounts?
-
-**In plain terms:** item 115's B is built: the staff sync gives each active person a sign-in account
-and sends nobody anything. One case I decided the safe way and need you to confirm. A spreadsheet or
-a Google Sheet can be edited by anybody who has its link, so a row somebody adds would become a real
-way into the Brain for whatever address they typed, as long as they can read that mailbox and press
-Forgot password. Lark, Google Workspace, Microsoft Entra and LDAP are changed only by your
-administrators, and they give accounts as you asked.
-
-**Option A: only a company directory gives accounts.** A sheet still lists people, places them in
-departments and marks leavers; it makes no accounts, and the Staff sources page says so. People on a
-sheet are given their sign-in by an administrator in Keycloak, as today.
-
-**Option B: a sheet gives accounts too.** Anybody who can edit the sheet can then let somebody in.
-Only sensible for a sheet you have locked to one or two people.
-
-**My recommendation: A.** It is what is built, and it matches the rule the product already keeps: a
-sheet is trusted to say who exists and nothing more.
-
-**What I need from you:** reply "130: A" or "130: B". Until then A holds, which is the safe side: B
-only adds accounts.
-
-## 129. Let the vault open itself after a restart (item 114's switch, still to do)
-
-**In plain terms:** item 114 decided that the secrets vault opens itself when the server restarts.
-The switch has not been run yet: on 30 September the vault still reported the old kind of lock
-(Shamir), so if the server restarted today the vault would need three of its five key pieces typed
-in before the Brain could read any key again. The pieces are safe in the root-only file the
-2026-09-21 setup wrote, so nothing is lost, but a restart would stop the Brain until someone does it.
-
-**My recommendation: let me run it for you.** It takes about two minutes, during which the vault is
-unavailable, and it keeps a dated copy of the vault's data so it can be put back.
-
-**What you do:**
-
-1. Reply "129: do it". I run the switch over the server connection I already use, check that the
-   vault reports it opens itself, and tell you it is done.
-2. Afterwards, on the server as root: copy `/etc/brain-vault/seal.key` into your password manager as
-   its own entry; move `/etc/brain-vault/recovery.key` into your password manager and delete that
-   file; delete `/root/brain-vault-init-20260921.txt`, whose pieces open nothing after the switch.
-   Keys are yours to hold: I never read or copy them.
 
 ## 128. Connect Xero, HubSpot and Freshdesk (ready now)
 
@@ -1102,80 +862,6 @@ Brain's app will appear.
 **Later, when I tell you approval cards are live (item 117):** in the Lark Admin console confirm that
 two-step verification is required for all members, then in the Brain's console open **Install**,
 **Settings**, the **Lark** section, and set **Approve from Lark cards** to on.
-
-## 124. Switch on the automation canvas?
-
-**In plain terms:** the automation canvas is an optional drawing board for fixed, step-by-step
-automations (a trigger, then set steps, with no model deciding what happens next). It runs in a
-sandboxed container of its own that needs about 512 MiB of memory, and memory on your server is
-the question in item 120. Three install tasks wait on it being switched on (M32.6.1.1, M32.6.1.2
-and M32.6.1.4); everything behind it is built and tested.
-
-**Option A: not now.** Its three install tasks move to Wave 4, and it is switched on once item 120
-leaves room. **Option B: switch it on now**, and it takes 512 MiB from what item 120 is sharing out.
-
-**My recommendation: A.** Nothing you have asked for today needs it, and memory is the scarcest
-thing on the server.
-
-**What I need from you:** reply "124: A" or "124: B".
-
-## 123. May a task that names a table library be marked done by what it is for?
-
-**In plain terms:** task M32.5.2.1 says every grid in the console uses a particular table library
-(TanStack Table) with paging and filtering on the server. The console's own table deliberately
-does not use that library, to keep the pages small and fast, and every list does page and filter
-on the server, which is your requirement GAP2-24 and is tested. The library was a means; the
-paging is the end.
-
-**My recommendation: yes.** The task is marked decided by what it is for, and the requirement it
-serves stays exactly as it is.
-
-**What I need from you:** reply "123: yes", or "123: no" if you want the library used.
-
-## 122. Where are your uploaded documents stored?
-
-**In plain terms:** your requirement LIVE-01 says your install runs an object store: the place
-uploaded files, exports and backups are kept as files. Yours has none yet, so four tasks wait on it
-(M32.3.1.1 to M32.3.2.2), and everything else about it is built and tested. The product supports
-three kinds.
-
-**Option A: on your own server (SeaweedFS).** Your documents never leave your server. It needs
-about 256 MiB of memory, which is part of item 120's picture. **Option B: Cloudflare R2**, a
-bucket in a Cloudflare account, which costs a little each month and uses no memory on your server,
-but your documents are then held by Cloudflare. **Option C: Amazon S3**, the same as B at Amazon.
-
-**My recommendation: A.** The Brain is built so that your data stays on your server, and 256 MiB
-is small beside the rest of item 120.
-
-**What you do:** reply "122: A", and I add it to the server myself over the connection I already
-use, then tell you when the Health page shows it ready. For B or C, reply with the letter and I
-give you the steps to create the bucket and paste its key into the console.
-
-## 121. On an agent's page, whose conversations are listed?
-
-**In plain terms:** each agent's page is getting a Conversations list. Today every conversation
-belongs to one person: the Brain keeps a separate thread for each person, even when several people
-talk to the same agent in one Lark group, and nobody can see anybody else's. Your reference design
-(the AnyGen screenshot, requirement ANY-028) shows the list "narrowed to threads related to me",
-which implies the full list includes other people's conversations too. That would be a privacy
-change, so it is yours to decide.
-
-**Option A: each person sees only their own conversations with the agent.** Exactly how the Brain
-works today. The "related to me" filter is not needed, because everything listed is already yours.
-
-**Option B: the agent's owner and administrators also see that other people's conversations
-happened**: who, when, and whether the agent failed, but never the question or the answer. Useful
-for spotting an agent that keeps failing. The words stay private because another person's answer
-was built from what *they* may see, which may be more than the viewer may.
-
-What is **not** offered: showing other people's questions and answers. It would let anyone who can
-open an agent's page read answers built from somebody else's access, which breaks the rule that
-nobody sees through the Brain what they could not see themselves.
-
-**My recommendation: A now**, and B later if you want owners to watch an agent's failures.
-
-**What I need from you:** reply "121: A" or "121: B". Until then the list is built as A, which is
-safe either way: B only ever adds to it.
 
 ## 91. Checks only you can do on your install (about 75 minutes, one sitting)
 
@@ -1995,6 +1681,341 @@ so one change in Laravel adds both views.
 **What I need from you:** reply "156: A", "156: B (the portal's name)" or "156: C".
 
 **Decided 2026-10-12: "156: A".** The maintenance portal is the Laravel portal: it holds the clients that have a maintenance plan with you, some expired and some still active, so the Brain reads one more read-only view beside the clients and staff views to say which websites are still under maintenance. Freshdesk is the ticket system, and every ticket and piece of work comes from there. Your question on matching the same client across systems is answered under item 155.
+
+## 154. One server change for the sealed sandbox: probably no downtime - DECIDED 2026-10-13: A, after 11pm on a weekday
+
+**In plain terms:** three things you asked for run code the Brain did not write: scripts inside
+imported skills, the code sandbox, and connectors written as custom code. They must run sealed off,
+with no internet, no access to the Brain's data and hard time and memory limits. The standard way
+to seal them is gVisor, a small program Docker uses to run a container inside its own protective
+layer. Your server does not have it yet (checked read-only on 2026-10-06: Ubuntu 24.04, Docker with
+its standard runtime only).
+
+Installing it is one change no release can make on its own: gVisor is installed on the server and
+added to Docker's settings. Docker can usually take that by **reloading** its settings, which
+restarts nothing, so there is **probably no downtime at all**. Only if the reload does not take it
+does Docker need a full restart, which restarts every container on the server for about a minute,
+the Brain's and your other project's (Activepieces) alike. Nothing is lost either way; they all come
+back by themselves.
+
+**Option A: yes, at a quiet time.** I install gVisor and reload Docker myself (restarting it only if
+the reload is not enough), at a time you name
+(for example a weekday night, Singapore time), then confirm everything is back and run the
+sandbox's own check: a script that tries to reach the internet and is stopped, and one that runs
+past its time and memory limits and is stopped.
+
+**Option B: not now.** The sandbox stays off. Skills with scripts are refused with a sentence saying
+this install runs no sandbox, and custom-code connectors are not offered. Everything else works.
+
+**Memory:** the sandbox is sized at 256 MB a script, so it fits beside the personal-data detector
+and Langfuse (item 120) with about 180 MB to spare. A larger limit per script would need more room.
+
+**My recommendation: A,** at a quiet time you choose.
+
+**What I need from you:** reply "154: A, after 11pm on a weekday" (or whichever time suits), or
+"154: B". Then, on your one visit to **Install, Settings**, **Optional services this server runs**
+becomes `presidio,langfuse,sandbox` instead of `presidio,langfuse`; I tell you when that is ready.
+
+**Decided 2026-10-13: "154: A, after 11pm on a weekday".** gVisor is installed and Docker reloaded (restarted only if it must be), after 11pm on a weekday, so the sealed script sandbox can be switched on. The server change is not yet made.
+
+## 153. Questions written in Chinese: how much is hidden before they go to an outside model? - DECIDED 2026-10-13: B
+
+**In plain terms:** your requirement GAP-23 is now built (#344): before a question or passage goes
+to an outside model provider, names, ID numbers, phone numbers and email addresses are replaced
+with placeholders, and put back in the answer for the person who asked. Names written in Chinese
+characters are hard to tell from other Chinese words, so the built-in rules treat any run of two to
+four Chinese characters as a possible name. A question in English with a Chinese name in it works
+well: the name is hidden and the rest is sent. But a question written entirely in Chinese reaches
+the model as nothing but placeholders, and the model cannot answer it.
+
+**Option A: keep it as it is.** Nothing that could be a name leaves your install. Questions written
+in Chinese cannot be answered by an outside model.
+
+**Option B: hide a Chinese run only where it stands alone inside non-Chinese text,** as a name does
+in an English sentence. Questions written in Chinese then go through and are answered, but a
+Chinese name inside Chinese text is sent to the provider as written. Once the personal-data detector
+(item 120, row 1) runs with a Chinese model, it finds those names too and hides them again.
+
+**Option C: answer questions written in Chinese only with a model running on your own server.**
+Nothing leaves, and Chinese questions are answered, but only once such a model runs (it needs the
+model server from item 120, row 2, which does not fit on this server today).
+
+**My recommendation: B,** with the detector's Chinese model added once it is installed. It answers
+the questions your people actually ask, and hides every name written in an English sentence today.
+Until you reply, A holds, because it is the safe side: it only ever hides more.
+
+**What I need from you:** reply "153: A", "153: B" or "153: C". It is worth knowing first whether
+your staff ever ask the Brain in Chinese; if they never do, A costs nothing.
+
+**Decided 2026-10-13: "153: B".** A Chinese run is hidden only where it stands alone inside non-Chinese text, as a name does in an English sentence; questions written in Chinese then go through. The detector's Chinese model is added once it is installed.
+
+## 139. Website widget: should visitors get answers written by the model, or the published passages themselves? - DECIDED 2026-10-13: B
+
+**In plain terms:** the website widget (M10.7.2, #315) lets visitors to your website ask questions,
+and it only ever reads documents an administrator has marked public. Today it answers with the
+matching passages from those documents, word for word. Having the model write a short answer from
+them reads better, but every visitor question then costs a model call, paid by you, asked by people
+who are not your staff and have no budget of their own.
+
+**Option A: passages only, for now.** No model cost, and nothing is ever said that is not already
+in a public document.
+
+**Option B: the model writes the answer** from the public passages only, under a daily spending cap
+for the widget that you set in the console, and the widget falls back to passages once the cap is
+reached.
+
+**My recommendation: A now, B later.** Start with passages, watch what visitors ask for a few weeks,
+and switch on B with a cap if the answers need to read better.
+
+**What I need from you:** reply "139: A" or "139: B".
+
+**Decided 2026-10-13: "139: B".** The website widget's model writes the answer from the public passages only, under a daily spending cap you set in the console for the widget, and it falls back to the passages once the cap is reached.
+
+## 138. Laravel: may each client record be visible to one department, or to several? - DECIDED 2026-10-13: A
+
+**In plain terms:** when you connect your Laravel application's database (its steps come to this page
+when it can read), you write a rule for each view saying who may see its records, for example
+"department = sales": a sales person sees the clients whose department is sales. The Brain keeps one
+such value per record in its small index. A rule naming several departments for one record ("visible
+to sales and operations") cannot be kept that way, so it would have saved and then shown nobody
+anything. It is now refused when you connect, with a sentence saying why.
+
+**Option A: one department per record, for now.** Every client record belongs to one department, and
+people in that department see it (administrators and anyone granted wider reach see more, as
+everywhere else).
+
+**Option B: several departments per record.** The index learns to keep a short list per record, so
+a client shared by sales and operations is seen by both. More work, and it makes the index hold a
+little more about each record.
+
+**My recommendation: A now.** Most client records have one owning department, and B can be added the
+day a real record needs two.
+
+**What I need from you:** reply "138: A" or "138: B".
+
+**Decided 2026-10-13: "138: A".** One department per client record for now. Most client records have one owning department, and several departments per record can be added the day a real record needs two.
+
+## 137. Which of your systems holds client projects and their tickets? - DECIDED 2026-10-13: a mix
+
+**In plain terms:** one memory task (M16.6.2) asks that a question about a client project is
+answered with that project's current picture: the project, its client, its open tickets and its
+recent decisions, read from your systems at the asker's own reach on every question and never kept
+as a memory. For that the Brain has to know which of your systems is the record of a project. I will
+not guess: the Laravel connection reads clients and staff today and nothing else, so nothing the
+Brain reads yet is a project.
+
+**Open tickets come from Freshdesk in every option,** once item 128 connects it, because that is
+where your tickets are. Recent decisions are read from the same place as the project (its notes or
+its status history), so the one choice is where a project lives.
+
+**Option A: a Lark Base.** If your team keeps active projects in a Base, one row per project with
+its client and its status, the Brain reads that table through the Lark Base connector that already
+exists. You choose the Base and the table when you connect it, and nothing changes in Laravel.
+
+**Option B: Laravel, through a new project view.** If projects live in the Laravel application (its
+websites and their maintenance plans, each tied to a client), whoever looks after that database adds
+one read-only view for projects beside the two it has today, and the Brain reads it the way it reads
+clients. I write the view for them; it is one change on their side, and the Brain reads nothing
+beyond what the view shows.
+
+**Option C: Freshdesk alone.** If a project for your team is really the run of support tickets for
+one client, Freshdesk is enough: the Brain reads a client's open tickets live from Freshdesk, and
+there is no project record to connect.
+
+**My recommendation: B, with Freshdesk for the tickets.** The Laravel application is where each
+website and its maintenance plan already sit against the client the Brain reads, so a project view
+joins to that client without matching names across two systems, and Freshdesk holds the tickets.
+Choose A instead if day-to-day project work is tracked in a Base rather than in Laravel, because the
+Brain should read the record your team actually keeps up to date. C is the smallest and answers only
+"what is open for this client", not "where is this project".
+
+**What I need from you:** reply "137: A", "137: B" or "137: C". For A, also tell me the name of the
+Base. For B, tell me who looks after the Laravel database, and I send them the view. After you
+choose, I build it, and it is proved when you ask about a project, change its status in that system,
+and ask again: the second answer shows the change (check 9 in item 91).
+
+**Decided 2026-10-13: "137: a mix".** Tickets come from Freshdesk. Domain and hosting information comes from a Lark Base (you choose the Base and table when you connect it in the console). Whether a website's maintenance is active or expired comes from the Laravel portal, through one more read-only view. Nothing is copied: each is read live when somebody asks.
+
+## 136. When a memory and a connected system disagree: settled by how memory is built? - DECIDED 2026-10-13: yes
+
+**In plain terms:** one memory task (M16.4.3) asks that when something the Brain remembers disagrees
+with one of your connected systems, the system wins at once and the memory is demoted and flagged. I
+recommend we mark it met by how memory is built, rather than build a comparison, and I need your yes
+because that is narrower than what the task literally asks.
+
+**Why the two can never disagree.** The Brain only remembers what a person says about themselves,
+such as "I prefer short answers" or "I work from home on Fridays". It never keeps a value it read
+from a connected system: an invoice total, a ticket's status or a client's renewal date is read from
+that system each time a question needs it and is never written to memory (task M16.7.5, which a test
+value proves on your install). A memory also never answers a question: it shapes how the question is
+looked up and phrased, and the answer always comes from the system. So there is no remembered copy
+of a system's value that could go out of date, and nothing a comparison could find.
+
+**What building it anyway would mean.** A job that reads every memory, works out which record in
+which system it is about, and compares the two. It would have to guess which record a sentence like
+"I look after the retail accounts" is about, and a wrong guess demotes a true memory with nothing to
+show why. I recommend against it.
+
+**The one case to know about.** A person can say something about themselves that a system also
+records, for example "I manage the retail accounts" while your CRM names someone else. The Brain
+keeps it as that person's own note and still answers every question about those accounts from the
+CRM, at that person's reach, so the CRM wins on every answer. When the note stops being true they
+edit or forget it on **My workspace**.
+
+**My recommendation: yes, mark M16.4.3 met by construction.**
+
+**What I need from you:** reply "136: yes", or "136: build the comparison" if you want the job above
+anyway, and I build it.
+
+**Decided 2026-10-13: "136: yes".** M16.4.3 is marked met by construction: memory is never trusted over a connected system, because a question about a client is answered from the system itself at the asker's reach.
+
+## 133. Search Console's indexing issues: counts from the sitemaps, not a page-by-page report - DECIDED 2026-10-13: A
+
+**In plain terms:** your task for Search Console (M11.7.2) asks for a site's indexing issues.
+Google's Search Console API has no Page indexing report: the only way to ask about one page is a
+separate inspection call per page, which is slow and rationed. So the connector reports indexing
+issues as the error and warning counts Google gives for each of the site's sitemaps, and the answer
+says that is what it is. Everything else in the task (queries, pages, clicks and impressions, for
+any range you name) is read in full.
+
+**Option A: accept the sitemap counts,** with the answer naming them as sitemap counts.
+**Option B: also inspect named pages on request,** one call per page, only when somebody asks about
+specific pages, slower and within Google's daily allowance.
+
+**My recommendation: A now.** It answers "is anything wrong with indexing" straight away, and B can
+be added the day someone needs page-by-page detail.
+
+**What I need from you:** reply "133: A" or "133: B".
+
+**Decided 2026-10-13: "133: A".** Search Console's indexing issues are the sitemap counts, and the answer names them as sitemap counts.
+
+## 130. Does a staff list anybody with its link can edit give people sign-in accounts? - DECIDED 2026-10-13: A
+
+**In plain terms:** item 115's B is built: the staff sync gives each active person a sign-in account
+and sends nobody anything. One case I decided the safe way and need you to confirm. A spreadsheet or
+a Google Sheet can be edited by anybody who has its link, so a row somebody adds would become a real
+way into the Brain for whatever address they typed, as long as they can read that mailbox and press
+Forgot password. Lark, Google Workspace, Microsoft Entra and LDAP are changed only by your
+administrators, and they give accounts as you asked.
+
+**Option A: only a company directory gives accounts.** A sheet still lists people, places them in
+departments and marks leavers; it makes no accounts, and the Staff sources page says so. People on a
+sheet are given their sign-in by an administrator in Keycloak, as today.
+
+**Option B: a sheet gives accounts too.** Anybody who can edit the sheet can then let somebody in.
+Only sensible for a sheet you have locked to one or two people.
+
+**My recommendation: A.** It is what is built, and it matches the rule the product already keeps: a
+sheet is trusted to say who exists and nothing more.
+
+**What I need from you:** reply "130: A" or "130: B". Until then A holds, which is the safe side: B
+only adds accounts.
+
+**Decided 2026-10-13: "130: A".** Only a company directory gives sign-in accounts; a staff sheet still lists and places people but never lets anybody in.
+
+## 129. Let the vault open itself after a restart (item 114's switch, still to do) - DECIDED 2026-10-13: do it
+
+**In plain terms:** item 114 decided that the secrets vault opens itself when the server restarts.
+The switch has not been run yet: on 30 September the vault still reported the old kind of lock
+(Shamir), so if the server restarted today the vault would need three of its five key pieces typed
+in before the Brain could read any key again. The pieces are safe in the root-only file the
+2026-09-21 setup wrote, so nothing is lost, but a restart would stop the Brain until someone does it.
+
+**My recommendation: let me run it for you.** It takes about two minutes, during which the vault is
+unavailable, and it keeps a dated copy of the vault's data so it can be put back.
+
+**What you do:**
+
+1. Reply "129: do it". I run the switch over the server connection I already use, check that the
+   vault reports it opens itself, and tell you it is done.
+2. Afterwards, on the server as root: copy `/etc/brain-vault/seal.key` into your password manager as
+   its own entry; move `/etc/brain-vault/recovery.key` into your password manager and delete that
+   file; delete `/root/brain-vault-init-20260921.txt`, whose pieces open nothing after the switch.
+   Keys are yours to hold: I never read or copy them.
+
+**Decided 2026-10-13: "129: do it".** The vault is switched to open itself after a restart, by me over the server connection, with a dated copy of the vault's data first. Not yet done: it is a server change, and moving the keys into your password manager afterwards stays yours.
+
+## 124. Switch on the automation canvas? - DECIDED 2026-10-13: B
+
+**In plain terms:** the automation canvas is an optional drawing board for fixed, step-by-step
+automations (a trigger, then set steps, with no model deciding what happens next). It runs in a
+sandboxed container of its own that needs about 512 MiB of memory, and memory on your server is
+the question in item 120. Three install tasks wait on it being switched on (M32.6.1.1, M32.6.1.2
+and M32.6.1.4); everything behind it is built and tested.
+
+**Option A: not now.** Its three install tasks move to Wave 4, and it is switched on once item 120
+leaves room. **Option B: switch it on now**, and it takes 512 MiB from what item 120 is sharing out.
+
+**My recommendation: A.** Nothing you have asked for today needs it, and memory is the scarcest
+thing on the server.
+
+**What I need from you:** reply "124: A" or "124: B".
+
+**Decided 2026-10-13: "124: B".** The automation canvas is switched on now, taking 512 MiB from what item 120 is sharing out. Not yet done on the server.
+
+## 123. May a task that names a table library be marked done by what it is for? - DECIDED 2026-10-13: yes
+
+**In plain terms:** task M32.5.2.1 says every grid in the console uses a particular table library
+(TanStack Table) with paging and filtering on the server. The console's own table deliberately
+does not use that library, to keep the pages small and fast, and every list does page and filter
+on the server, which is your requirement GAP2-24 and is tested. The library was a means; the
+paging is the end.
+
+**My recommendation: yes.** The task is marked decided by what it is for, and the requirement it
+serves stays exactly as it is.
+
+**What I need from you:** reply "123: yes", or "123: no" if you want the library used.
+
+**Decided 2026-10-13: "123: yes".** A task that names a table library is marked decided by what it is for.
+
+## 122. Where are your uploaded documents stored? - DECIDED 2026-10-13: A
+
+**In plain terms:** your requirement LIVE-01 says your install runs an object store: the place
+uploaded files, exports and backups are kept as files. Yours has none yet, so four tasks wait on it
+(M32.3.1.1 to M32.3.2.2), and everything else about it is built and tested. The product supports
+three kinds.
+
+**Option A: on your own server (SeaweedFS).** Your documents never leave your server. It needs
+about 256 MiB of memory, which is part of item 120's picture. **Option B: Cloudflare R2**, a
+bucket in a Cloudflare account, which costs a little each month and uses no memory on your server,
+but your documents are then held by Cloudflare. **Option C: Amazon S3**, the same as B at Amazon.
+
+**My recommendation: A.** The Brain is built so that your data stays on your server, and 256 MiB
+is small beside the rest of item 120.
+
+**What you do:** reply "122: A", and I add it to the server myself over the connection I already
+use, then tell you when the Health page shows it ready. For B or C, reply with the letter and I
+give you the steps to create the bucket and paste its key into the console.
+
+**Decided 2026-10-13: "122: A".** Uploaded documents are stored on your own server (SeaweedFS), about 256 MiB. Not yet added on the server.
+
+## 121. On an agent's page, whose conversations are listed? - DECIDED 2026-10-13: B
+
+**In plain terms:** each agent's page is getting a Conversations list. Today every conversation
+belongs to one person: the Brain keeps a separate thread for each person, even when several people
+talk to the same agent in one Lark group, and nobody can see anybody else's. Your reference design
+(the AnyGen screenshot, requirement ANY-028) shows the list "narrowed to threads related to me",
+which implies the full list includes other people's conversations too. That would be a privacy
+change, so it is yours to decide.
+
+**Option A: each person sees only their own conversations with the agent.** Exactly how the Brain
+works today. The "related to me" filter is not needed, because everything listed is already yours.
+
+**Option B: the agent's owner and administrators also see that other people's conversations
+happened**: who, when, and whether the agent failed, but never the question or the answer. Useful
+for spotting an agent that keeps failing. The words stay private because another person's answer
+was built from what *they* may see, which may be more than the viewer may.
+
+What is **not** offered: showing other people's questions and answers. It would let anyone who can
+open an agent's page read answers built from somebody else's access, which breaks the rule that
+nobody sees through the Brain what they could not see themselves.
+
+**My recommendation: A now**, and B later if you want owners to watch an agent's failures.
+
+**What I need from you:** reply "121: A" or "121: B". Until then the list is built as A, which is
+safe either way: B only ever adds to it.
+
+**Decided 2026-10-13: "121: B".** On an agent's page the owner and administrators also see that other people's conversations happened: who, when, and whether the agent failed, never the question or the answer.
 
 ## 120. Memory on your server - DECIDED 2026-10-05: A, take down Dify, the old Langfuse and the old v1 worker
 
