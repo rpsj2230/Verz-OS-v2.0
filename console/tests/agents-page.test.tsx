@@ -463,6 +463,7 @@ describe("what an entry becomes", () => {
     expect(declaredPropertyNames(roster)).toEqual(expect.arrayContaining(["items", "truncated"]));
     expect(declaredPropertyNames(declaredProperty(roster, "items"))).toEqual([
       "agent_id",
+      "agent_kind",
       "ceiling",
       "department",
       "display_name",

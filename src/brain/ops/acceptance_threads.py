@@ -34,6 +34,12 @@ if TYPE_CHECKING:
 #: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
 CHECK_ORDER: Final = 190
 
+#: What My workspace says beside the questions figure before a person marks an answer wrong, and
+#: after they mark one. Restated here and not read from the route, so a route that says one thing
+#: for every count fails the check and does not move it.
+NONE_MARKED_WRONG: Final = "You have not marked an answer wrong this month."
+ONE_MARKED_WRONG: Final = "You marked 1 answer wrong this month."
+
 A, B = RESERVED_DEPARTMENTS
 
 #: What a check says when a person's thread held other than the exchanges asked in it.
@@ -301,19 +307,23 @@ async def a_follow_up_is_answered_from_what_its_thread_cited(h: Harness) -> None
 
 # ------------------------------------------------------------- 4. a correction (M9.2.4)
 @check(
-    leaves=("M9.2.4",),
+    leaves=("M9.2.4", "M40.2.1.1"),
     sentence=(
         "A member of acceptance_a marks the latest answer in their thread as a wrong fact: it is "
         "kept as a note in the thread naming the kind and the records the answer used, and read "
         "by the learning signal as one contradiction; nobody else can mark it, and a thread with "
-        "no answer cannot be marked."
+        "no answer cannot be marked. My workspace then says they marked one answer wrong this "
+        "month, and says none before they did."
     ),
 )
 async def a_wrong_answer_is_kept_as_a_signal_and_no_words_with_it(h: Harness) -> None:
     from brain.chat.thread_store import CORRECTION_PREFIX, StoredThreads
     from brain.chat.turns import CorrectionKind
+    from brain.console.own_things import own_scope
     from brain.core.errors import Absent
+    from brain.identity.sign_in_binding import MEMBER_SURFACE
     from brain.memory.signals import Signal
+    from brain.mine_routes import workspace
     from brain.ops.acceptance_checks import _in
     from brain.ops.acceptance_checks_chat import uploaded
     from brain.tables.chat import MessageRole
@@ -322,12 +332,20 @@ async def a_wrong_answer_is_kept_as_a_signal_and_no_words_with_it(h: Harness) ->
     await h.found_departments()
     table = await uploaded(h)
     member, other = h.principal(A, "member"), h.principal(B, "member")
-    await h.person(member, department=A, grants=table.reads(A, held=False))
+    # The member surface a sign-in writes, so the person may open their own workspace.
+    await h.person(
+        member,
+        department=A,
+        grants=(*table.reads(A, held=False), (MEMBER_SURFACE.value, own_scope(member))),
+    )
     await h.person(other, department=B, grants=_in(B, "read:knowledge"))
     app = await _web(h)
     _, thread = await asked_on_the_web(h, app, member, table.asking(table.open_column), None, 1)
     if thread is None:
         raise CheckFailedError("an answered question was kept in no thread")
+    before = await workspace(_request(app), await _asking(h, member))
+    if before.asked.corrections != NONE_MARKED_WRONG:
+        raise CheckFailedError("My workspace counted a correction before one was made")
 
     asked = CorrectionAsked(kind=CorrectionKind.WRONG_FACT)
     try:
@@ -353,6 +371,9 @@ async def a_wrong_answer_is_kept_as_a_signal_and_no_words_with_it(h: Harness) ->
         )
     if await StoredThreads(h.sessions).corrections(other):
         raise CheckFailedError("the learning signal read one person's correction as another's")
+    after = await workspace(_request(app), await _asking(h, member))
+    if after.asked.corrections != ONE_MARKED_WRONG:
+        raise CheckFailedError("My workspace did not say how many answers the person marked wrong")
 
 
 # ------------------------------------------- 5. an agent's conversations (M39.8.9)
