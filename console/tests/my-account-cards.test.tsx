@@ -183,3 +183,41 @@ describe("sharing a file with a colleague", () => {
     });
   });
 });
+
+describe("asking for an agent", () => {
+  test("an agent already asked for shows as asked and has no button, and asking sends nothing but the agent", async () => {
+    // What breaks if this is deleted: a second ask offered for an agent already asked for, or an
+    // ask that sends a body naming somebody.
+    const sent: { path: string; body: unknown }[] = [];
+    const idp = fakeIdentityProvider({
+      api(url, init) {
+        const path = new URL(url, ORIGIN).pathname;
+        if ((init?.method ?? "GET").toUpperCase() === "POST") {
+          sent.push({ path, body: typeof init?.body === "string" ? (JSON.parse(init.body) as unknown) : null });
+          return json({});
+        }
+        return path === "/api/v1/me/agents/requestable"
+          ? json({
+              agents: [
+                { agent_id: "a_new", display_name: "Quoting", asked: false },
+                { agent_id: "a_old", display_name: "Billing", asked: true },
+              ],
+            })
+          : null;
+      },
+    });
+    const loaded = await loadConsole({ idp });
+    await signIn(loaded);
+    const { MyRequestableAgents } = await import("../src/components/MyAccountCards");
+    const { container } = render(<MyRequestableAgents />);
+    await waitFor(() => {
+      expect(container.textContent).toContain("Quoting");
+    });
+    expect(container.querySelectorAll("button").length).toBe(1);
+    expect(container.textContent).toContain("Asked");
+    fireEvent.click(buttonNamed(container, "Ask for it: a_new"));
+    await waitFor(() => {
+      expect(sent).toEqual([{ path: "/api/v1/me/agents/a_new/request", body: null }]);
+    });
+  });
+});

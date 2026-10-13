@@ -10,7 +10,12 @@
 import { myCodeApiPath, myUnbindApiPath } from "../../../src/pages/channelsQuery";
 import { myConsentPath } from "../../../src/pages/connectors/consentAtVendor";
 import { LEARNING_UNDO_API_PATH } from "../../../src/pages/learningUndoQuery";
-import { END_MY_DEVICE_API_PATH, shareApiPath, unshareApiPath } from "../../../src/pages/myAccountQuery";
+import {
+  END_MY_DEVICE_API_PATH,
+  askForAgentApiPath,
+  shareApiPath,
+  unshareApiPath,
+} from "../../../src/pages/myAccountQuery";
 import { EDIT_API_PATH, FORGET_API_PATH } from "../../../src/pages/myWorkspaceQuery";
 import { LEARNING_API_PATH, QUIET_API_PATH, REACH_API_PATH } from "../../../src/pages/myPreferencesQuery";
 import { A_BINDING_CHANGE_IS_AUDITED, at, type Proofs, t, type WriteRoute } from "../auditClaims";
@@ -39,6 +44,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/components/MyAccountCards.tsx unshareApiPath(artifactId)": [
     at("POST /api/v1/me/artifacts/{artifact_id}/unshare", "unshareApiPath", unshareApiPath("art_1")),
+  ],
+  "src/components/MyAccountCards.tsx askForAgentApiPath(agentId)": [
+    at("POST /api/v1/me/agents/{agent_id}/request", "askForAgentApiPath", askForAgentApiPath("a_1")),
   ],
   "src/components/MyAccountCards.tsx END_MY_DEVICE_API_PATH": [
     at("POST /api/v1/me/devices/end", "END_MY_DEVICE_API_PATH", END_MY_DEVICE_API_PATH),
@@ -123,6 +131,13 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_acceptance_checks_member_share", "test_the_share_check_passes_on_an_install_and_leaves_nothing", true),
     audit: { notApplicable: "Taking a share back changes nobody's access; it only removes a row that admitted nobody." },
     behaviour: t("test_acceptance_checks_member_share", "test_the_share_check_passes_on_an_install_and_leaves_nothing", true),
+  },
+  // A request is a row the asker writes once and nobody updates, and what it does is tell the
+  // department's lead, so the install check follows it from the row to the message.
+  "POST /api/v1/me/agents/{agent_id}/request": {
+    row: t("test_acceptance_checks_member_agent_request", "test_the_request_check_passes_on_an_install_and_leaves_nothing", true),
+    audit: { notApplicable: "A request changes nobody's access; what a department decides is written where audiences are changed." },
+    behaviour: t("test_acceptance_checks_member_agent_request", "test_a_lead_told_every_time_fails_the_check", true),
   },
   "POST /api/v1/me/devices/end": {
     row: t("test_session_store", "test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request", true),

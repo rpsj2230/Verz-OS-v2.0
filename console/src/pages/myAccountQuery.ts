@@ -22,6 +22,14 @@ export const MY_READS_API_PATH = "/me/reads";
 export const MY_ARTIFACTS_API_PATH = "/me/artifacts";
 export const MY_STORED_API_PATH = "/me/stored";
 export const MY_SHARES_API_PATH = "/me/shares";
+export const REQUESTABLE_API_PATH = "/me/agents/requestable";
+
+export type RequestableBody = components["schemas"]["RequestablePage"];
+
+/** Where an agent is asked for, under the API base. */
+export function askForAgentApiPath(agentId: string): string {
+  return `/me/agents/${encodeURIComponent(agentId)}/request`;
+}
 export const SHARED_WITH_ME_API_PATH = "/me/shared";
 
 export type MySharesBody = components["schemas"]["SharesView"];

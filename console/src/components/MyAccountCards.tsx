@@ -21,6 +21,9 @@ import {
   MY_DEVICES_API_PATH,
   MY_READS_API_PATH,
   MY_SHARES_API_PATH,
+  REQUESTABLE_API_PATH,
+  askForAgentApiPath,
+  type RequestableBody,
   MY_STORED_API_PATH,
   SHARED_WITH_ME_API_PATH,
   colleagueBody,
@@ -51,6 +54,10 @@ export const END_DEVICE_CONSEQUENCE =
   "ledger.";
 export const NO_READS = "Nobody has read your record.";
 export const NO_ARTIFACTS = "No agent has made anything for you.";
+export const ASK_LABEL = "Ask for it";
+export const ASKED = "Asked";
+export const REQUESTABLE_CAPTION = "Agents I can ask for";
+export const NOTHING_REQUESTABLE = "There is no agent you can see and cannot run.";
 export const SHARE_LABEL = "Share";
 export const TAKE_BACK_LABEL = "Take back";
 export const OPEN_LABEL = "Download";
@@ -370,6 +377,60 @@ export function MyShared() {
               >
                 {TAKE_BACK_LABEL}
               </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+export function MyRequestableAgents() {
+  const [version, setVersion] = useState(0);
+  const answer = useResource<RequestableBody>(REQUESTABLE_API_PATH, version);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+
+  const ask = useCallback((agentId: string) => {
+    setFailure(null);
+    void (async () => {
+      const result = await request<unknown>(askForAgentApiPath(agentId), { method: "POST" });
+      if (result.ok) {
+        setVersion((current) => current + 1);
+        return;
+      }
+      setFailure(result.failure);
+    })();
+  }, []);
+
+  return (
+    <section className="card">
+      <h2>{REQUESTABLE_CAPTION}</h2>
+      {failure === null ? null : <FailureNotice failure={failure} />}
+      {answer.failure ? (
+        <FailureNotice failure={answer.failure} />
+      ) : answer.data === null ? (
+        <Reading what="the agents you can ask for" />
+      ) : answer.data.agents.length === 0 ? (
+        <p className="note">{NOTHING_REQUESTABLE}</p>
+      ) : (
+        <ul aria-label={REQUESTABLE_CAPTION}>
+          {answer.data.agents.map((one) => (
+            <li key={one.agent_id}>
+              {`${one.display_name} `}
+              {one.asked ? (
+                <strong>{ASKED}</strong>
+              ) : (
+                <button
+                  type="button"
+                  className="button"
+                  aria-label={`${ASK_LABEL}: ${one.agent_id}`}
+                  onClick={() => {
+                    ask(one.agent_id);
+                  }}
+                >
+                  {ASK_LABEL}
+                </button>
+              )}
             </li>
           ))}
         </ul>
