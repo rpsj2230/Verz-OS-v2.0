@@ -464,6 +464,9 @@ async def the_form_is_the_manifest_and_a_template_installs_in_one_press(h: Harne
     # The served form against the generator run over the manifest's schema as it is now: a form
     # kept by hand, or cut from an older schema, differs from it.
     form = _body(await builder_form(await _asking(h, builder)))
+    # Beside the form the answer names the parts the builder links to and does not hold
+    # (needs-rupash 170 A); they are not the manifest's, so the comparison is over the form.
+    form.pop("set_elsewhere", None)
     if not form.get("sections") or form != form_document(TemplateManifest.model_json_schema()):
         raise CheckFailedError(NOT_THE_SCHEMA)
     stranger = h.principal(A, "stranger")
