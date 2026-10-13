@@ -39,7 +39,7 @@
  */
 
 import { config } from "../config";
-import { accessToken, forgetSession, sessionAccepted } from "../auth/session";
+import { accessToken, forgetSession, refusedAsUnlinked, sessionAccepted } from "../auth/session";
 import { failureFrom, transportFailure, type ApiFailure } from "./errors";
 import { EVENT_STREAM, eventsOf, type AnswerEvent } from "./events";
 
@@ -99,6 +99,54 @@ function urlFor(path: string, atRoot: boolean): string {
   return `${base}${path}`;
 }
 
+/** Where the API says whether the account behind a token is linked to a person here. */
+export const SIGN_IN_STATUS_PATH = "/sign-in/status";
+
+/**
+ * The API refused a token the console believed was current. Asks once whether that is because the
+ * account is not linked to anybody here (M27.15.4), and if so stops with the API's own sentence and
+ * the names it gives, which is what keeps the console from signing the person in again for ever.
+ * Anything else, including a failure of this very question, is the old answer: forget the session
+ * and let the loop guard decide. Returns whether it stopped.
+ */
+async function explainedAsUnlinked(token: string | null | undefined): Promise<boolean> {
+  if (!token) {
+    return false;
+  }
+  try {
+    const response = await fetch(urlFor(SIGN_IN_STATUS_PATH, false), {
+      method: "GET",
+      headers: { accept: "application/json", authorization: `Bearer ${token}` },
+      credentials: "omit",
+    });
+    if (!response.ok) {
+      return false;
+    }
+    const body = (await response.json().catch(() => null)) as {
+      linked?: unknown;
+      told?: unknown;
+      administrators?: unknown;
+    } | null;
+    if (body === null || body.linked !== false || typeof body.told !== "string") {
+      return false;
+    }
+    const names = Array.isArray(body.administrators)
+      ? (body.administrators as unknown[]).filter((one): one is string => typeof one === "string" && one !== "")
+      : [];
+    refusedAsUnlinked(body.told, names);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The one answer to a 401: explain it if it is an unlinked account, and forget the session if not. */
+async function refusedToken(token: string | null | undefined): Promise<void> {
+  if (!(await explainedAsUnlinked(token))) {
+    forgetSession();
+  }
+}
+
 export async function request<T>(
   path: string,
   options: RequestOptions = {},
@@ -141,7 +189,7 @@ export async function request<T>(
     // audience the API does not accept, the clock may be wrong. Forgetting it lets the
     // guard start a fresh sign-in, and the attempt counter turns a permanent cause into a
     // readable message rather than a redirect loop.
-    forgetSession();
+    await refusedToken(token);
   } else if (token && response.ok) {
     sessionAccepted();
   }
@@ -238,7 +286,7 @@ export async function openStream(
   }
 
   if (response.status === 401) {
-    forgetSession();
+    await refusedToken(token);
   }
 
   if (!response.ok) {
@@ -284,7 +332,7 @@ export async function requestFile(path: string): Promise<FileResult> {
     return { ok: false, failure: transportFailure(error), body: null };
   }
   if (response.status === 401) {
-    forgetSession();
+    await refusedToken(token);
   } else if (token && response.ok) {
     sessionAccepted();
   }

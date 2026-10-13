@@ -440,18 +440,23 @@ def parse_unverified(compact: str) -> RawToken:
     if len(parts) != 3:
         raise _refuse(TokenRefusal.MALFORMED, f"expected 3 segments, got {len(parts)}")
     header_raw, payload_raw, signature_raw = parts
+    # A ValueError, which is what JSON that is not JSON, bytes that are not text and base64 that is
+    # not base64 each are: a token made of words ("not.a.token") decodes to bytes that are none of
+    # them, and was a 500 on every route until 2026-10-12 because only the first was caught.
     try:
         header = json.loads(_b64url(header_raw))
         payload = json.loads(_b64url(payload_raw))
-    except json.JSONDecodeError as exc:
+        signature = _b64url(signature_raw)
+        signing_input = f"{header_raw}.{payload_raw}".encode("ascii")
+    except ValueError as exc:
         raise _refuse(TokenRefusal.MALFORMED, "header or payload is not JSON") from exc
     if not isinstance(header, dict) or not isinstance(payload, dict):
         raise _refuse(TokenRefusal.MALFORMED, "header and payload must be JSON objects")
     return RawToken(
         header=header,
         payload=payload,
-        signing_input=f"{header_raw}.{payload_raw}".encode("ascii"),
-        signature=_b64url(signature_raw),
+        signing_input=signing_input,
+        signature=signature,
     )
 
 

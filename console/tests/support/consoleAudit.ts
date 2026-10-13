@@ -123,6 +123,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     routes: [
       "/api/v1/me",
       "/api/v1/console/navigation",
+      "/api/v1/console/search",
       "/api/v1/govern/people",
       "/api/v1/govern/directory*",
       "/api/v1/govern/roles",
@@ -134,6 +135,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/govern/sessions*",
       "/api/v1/govern/sign-ins*",
       "/api/v1/sign-ins",
+      "/api/v1/sign-in/status",
       "/api/v1/govern/data-steward",
       "/api/v1/govern/staff_sources*",
       "/api/v1/govern/packs*",

@@ -53,6 +53,7 @@ from brain.adoption import (
     questions_in_reach,
     shopping_list,
     starter_questions,
+    stopped_by_department,
     verification_targets,
     visibility_summary,
 )
@@ -920,3 +921,24 @@ def test_department_lines_refuse_a_question_that_was_not_chosen_for_the_reach() 
         DepartmentAdoption("alpha", questions=2, people=2),
         DepartmentAdoption("gamma", questions=0, people=0),
     )
+
+
+def test_people_who_asked_in_the_window_before_and_not_in_this_one_have_stopped() -> None:
+    """**M27.7.17.** Two people asked last week and one of them this week: one has stopped. A
+    person who asked in both, a person new this week, a machine and a department outside the
+    reach are none of them counted, and a department with nobody who stopped is a zero line.
+
+    Delete this and "who has stopped" is the page's guess from a department whose figure went down.
+    """
+    before = START - timedelta(days=3)
+    records = [
+        asked("a1", principal="p_gone", at=before),
+        asked("a2", principal="p_kept", at=before),
+        asked("a3", principal="p_kept", at=MIDWEEK),
+        asked("a4", principal="p_new", at=MIDWEEK),
+        asked("a5", principal="p_robot", kind=PrincipalKind.SERVICE, at=before),
+        asked("b1", principal="p_far", department="beta", at=before),
+    ]
+    reach = frozenset({"alpha", "gamma"})
+    assert stopped_by_department(records, reach, start=START, end=END) == {"alpha": 1, "gamma": 0}
+    assert stopped_by_department(records, frozenset(), start=START, end=END) == {}

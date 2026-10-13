@@ -90,6 +90,13 @@ export const COLUMNS: readonly EntityColumn<AdoptionLineRow>[] = [
   { id: "department", header: "Department", hideable: false, cell: (row) => row.department, text: (row) => row.department },
   { id: "questions", header: "Questions", align: "end", cell: (row) => countWords(row.questions), text: (row) => String(row.questions) },
   { id: "people", header: "People", align: "end", cell: (row) => countWords(row.people), text: (row) => String(row.people) },
+  {
+    id: "stopped",
+    header: "Stopped asking",
+    align: "end",
+    cell: (row) => countWords(row.stopped ?? 0),
+    text: (row) => String(row.stopped ?? 0),
+  },
 ];
 
 function Figures({ usage }: { readonly usage: UsageBody }) {

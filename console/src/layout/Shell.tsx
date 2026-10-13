@@ -66,6 +66,7 @@ import { StopControl } from "../pages/operations/StopControl";
 import { OWN_WORK } from "../routes/registry";
 import { Chip } from "../ui/Chip";
 import { ConsoleSidebar, MenuButton, type MenuState } from "./ConsoleSidebar";
+import { GlobalSearch } from "./GlobalSearch";
 import { ModuleTabs } from "./ModuleTabs";
 import { NAVIGATION_API_PATH, menuFor, readNavigation } from "./navigationQuery";
 import { SignInStrength } from "./SignInStrength";
@@ -92,6 +93,7 @@ export function Shell() {
           <div className="shell__header-start">
             <MenuButton />
             {departments.length > 0 ? <Chip label={departments.join(", ")} /> : null}
+            <GlobalSearch />
           </div>
           <div className="shell__header-actions">
             <StopControl stop={given?.stop ?? ""} departments={departments} />

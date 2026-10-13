@@ -9,10 +9,11 @@
  * figures are is said under each, because a reader shown their own runs would otherwise read them as
  * the agent's.
  *
- * **One block says what the page is not sent yet, rather than drawing an example.** No route lists
- * one agent's runs, so "Recent runs" is a note. "Waiting on a person" is the Approvals queue narrowed
- * to this agent (`AgentWaiting.tsx`, M27.15.30): the cards this reader could decide, and no block at
- * all for a reader who could decide none.
+ * **Recent runs and Waiting on a person are lists the API sends.** "Recent runs" is the stats route's
+ * newest runs the reader is counted over (M27.15.27): who asked, how it ended and how long it took,
+ * and for a reader of their own usage only their own. "Waiting on a person" is the Approvals queue
+ * narrowed to this agent (`AgentWaiting.tsx`, M27.15.30): the cards this reader could decide, and
+ * no block at all for a reader who could decide none.
  *
  * **Automations are live.** A reader of the Automations tab sees this agent's automations with the
  * start and stop the API offers, which is `components/AgentAutomations.tsx` unchanged, and a link to
@@ -24,7 +25,7 @@
  * Profile and back keeps it (M39.1.2.3). Under the strips, the cost per person and the month against
  * the agent's own budget, from `AgentSpend.tsx`.
  *
- * Task ids: M27.10.2, M39.6.1.3, M39.1.2.3, M39.1.3.1, M39.1.3.2
+ * Task ids: M27.10.2, M39.6.1.3, M39.1.2.3, M39.1.3.1, M39.1.3.2, M27.15.27, M27.15.30
  */
 
 import { ArrowUpRight } from "lucide-react";
@@ -48,6 +49,7 @@ import {
   periodOf,
   rangeWords,
   readAgentStats,
+  type RecentRun,
   unrecordedWhy,
   whenWords,
 } from "./agentStats";
@@ -69,7 +71,13 @@ export const LAST_ACTIVE_LABEL = "Last active";
 export const NOTHING_RETURNED_SUB = "refused or no answer, as one figure";
 
 export const RECENT_RUNS = "Recent runs";
-export const RECENT_RUNS_NOT_YET = "a list of this agent's own runs. Its figures above are counted from them.";
+export const NO_RECENT_RUNS = "No runs to list.";
+export const RUN_STATUS_WORDS: Readonly<Record<string, string>> = {
+  answered: "Answered",
+  nothing_returned: "Nothing returned",
+  failed: "Failed",
+};
+export const BY_AN_AUTOMATION = "automation";
 export const AUTOMATIONS_HEADING = "Automations";
 export const OPEN_GALLERY = "Browse automations to install";
 
@@ -100,6 +108,27 @@ function PeriodSwitch({ period, onChange }: { readonly period: string; readonly 
 export function usePeriod(): readonly [string, (period: string) => void] {
   const [period, setPeriod] = useState<string>(FIRST_PERIOD);
   return [period, setPeriod] as const;
+}
+
+function RecentRuns({ runs, busy }: { readonly runs: readonly RecentRun[]; readonly busy: boolean }) {
+  if (runs.length === 0) {
+    return <p className="m-0 text-[13px] text-ink-3">{busy ? "Loading." : NO_RECENT_RUNS}</p>;
+  }
+  return (
+    <ul data-slot="recent-runs" className="m-0 flex list-none flex-col gap-1.5 p-0">
+      {runs.map((run) => (
+        <li key={`${run.at}-${run.who}`} className="flex flex-wrap items-baseline justify-between gap-2 text-[13px] text-ink">
+          <span>
+            {run.who}
+            {run.byAPerson ? "" : ` (${BY_AN_AUTOMATION})`}
+          </span>
+          <span className="text-ink-3">
+            {RUN_STATUS_WORDS[run.status] ?? run.status} · {latencyWords(run.durationMs)} · {whenWords(run.at)}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 export function AgentDashboard({
@@ -164,8 +193,8 @@ export function AgentDashboard({
       </div>
 
       <div className="mt-1 [display:grid] min-w-0 gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <SectionCard title={RECENT_RUNS} lede="Who asked, what happened and what it cost, newest first.">
-          <Note kind="not-yet">{RECENT_RUNS_NOT_YET}</Note>
+        <SectionCard title={RECENT_RUNS} lede="Who asked, how it ended and how long it took, newest first.">
+          <RecentRuns runs={read?.recent ?? []} busy={stats.busy} />
         </SectionCard>
 
         <div className="flex min-w-0 flex-col gap-4">

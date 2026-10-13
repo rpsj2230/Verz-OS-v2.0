@@ -127,7 +127,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from brain.adoption import DepartmentAdoption
 from brain.api import API_PREFIX, COMMON_RESPONSES, Page
 from brain.api_routes import Asked, row_readers
-from brain.console.adoption_view import adoption_for_reader
+from brain.console.adoption_view import adoption_for_reader, stopped_for_reader
 from brain.console.agent_profile import RUN_SPEND_IS_RECORDED
 from brain.console.quality_view import (
     CANARY_CONTROL,
@@ -408,6 +408,9 @@ class AdoptionLineView(BaseModel):
     department: str
     questions: int
     people: int
+    #: People who asked in the window before and have not asked in this one (M27.7.17), over the
+    #: people the line itself counts. Never beside a total or a share.
+    stopped: int = 0
 
 
 class AdoptionPage(Page[AdoptionLineView]):
@@ -750,10 +753,13 @@ async def cost_unrecorded(session: AsyncSession, code: str) -> FigureNotRecorded
     return None
 
 
-def adoption_view_of(line: DepartmentAdoption) -> AdoptionLineView:
-    """One adoption line, copied field by field."""
+def adoption_view_of(line: DepartmentAdoption, stopped: int = 0) -> AdoptionLineView:
+    """One adoption line, copied field by field, with who stopped over the window before."""
     return AdoptionLineView(
-        department=line.department, questions=line.questions, people=line.people
+        department=line.department,
+        questions=line.questions,
+        people=line.people,
+        stopped=stopped,
     )
 
 
@@ -941,6 +947,7 @@ ADOPTION: Final[Listing[AdoptionLineView]] = Listing(
         Column("department", lambda row: row.department, search=True, filter=True, sort=True),
         Column("questions", lambda row: row.questions, sort=True),
         Column("people", lambda row: row.people, sort=True),
+        Column("stopped", lambda row: row.stopped, sort=True),
     ),
     key=lambda row: row.department,
     order="department",
@@ -973,7 +980,8 @@ async def adoption(
     start = asked.now - timedelta(days=days)
     async with factory() as session:
         departments = list((await session.execute(live_departments())).scalars().all())
-        questions = await asked_between(session, start=start, end=asked.now)
+        # One window further back, so who stopped is read from the same rows as who asked.
+        questions = await asked_between(session, start=start - (asked.now - start), end=asked.now)
     lines = adoption_for_reader(
         questions,
         departments,
@@ -982,7 +990,10 @@ async def adoption(
         end=asked.now,
         now=asked.now,
     )
-    page = plan.page([adoption_view_of(one) for one in lines])
+    gone = stopped_for_reader(
+        questions, departments, asked.reach, start=start, end=asked.now, now=asked.now
+    )
+    page = plan.page([adoption_view_of(one, gone.get(one.department, 0)) for one in lines])
     return AdoptionPage(
         items=list(page.items),
         next_cursor=page.next_cursor,

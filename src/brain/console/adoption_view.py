@@ -20,7 +20,7 @@ a schedule in it, and none to a department whose people asked nothing, which is 
 disclosure the zero lines exist to prevent. See
 `THE_DEPARTMENTS_ARE_THE_DIRECTORYS_AND_NOT_WHATEVER_WAS_RECORDED`.
 
-Task ids: M37.3.2.4
+Task ids: M37.3.2.4, M27.7.17
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from collections.abc import Iterable, Sequence
 from datetime import datetime
 from typing import Final
 
-from brain.adoption import Asked, DepartmentAdoption, adoption_by_department
+from brain.adoption import Asked, DepartmentAdoption, adoption_by_department, stopped_by_department
 from brain.console.spend_view import may_read_spend
 from brain.core.entitlement import EntitlementSet
 
@@ -81,3 +81,21 @@ def adoption_for_reader(
     """
     reachable = reachable_departments(departments, entitlement, now=now)
     return adoption_by_department(asked, reachable, start=start, end=end)
+
+
+def stopped_for_reader(
+    asked: Sequence[Asked],
+    departments: Iterable[str],
+    entitlement: EntitlementSet,
+    *,
+    start: datetime,
+    end: datetime,
+    now: datetime,
+) -> dict[str, int]:
+    """How many people stopped asking, per department this reader's usage grant admits (M27.7.17).
+
+    The same reach as `adoption_for_reader`, from the same function, so a department has a line
+    and a figure under exactly the same grant. `asked` must reach back one window before `start`.
+    """
+    reachable = reachable_departments(departments, entitlement, now=now)
+    return stopped_by_department(asked, reachable, start=start, end=end)
