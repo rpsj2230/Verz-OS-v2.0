@@ -90,7 +90,7 @@ and not on `AgentAuthority` because switching a channel on reaches nothing a run
 `max_turns` and `max_tool_calls` are stored here for the runtime that bounds a run (M13.7.2) and
 are decided nowhere in this module.
 
-Task ids: M13.1.1, M13.1.2, M13.1.3, M13.8.1, M13.7.4, M13.7.2
+Task ids: M13.1.1, M13.1.2, M13.1.3, M13.8.1, M13.7.4, M13.7.2, M13.8.19
 """
 
 from __future__ import annotations
@@ -103,6 +103,7 @@ from typing import Annotated, Final
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_validator
 
+from brain.agents.memory_kinds import ALL_KINDS, memory_kinds_of
 from brain.core.department import SLUG_PATTERN
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import SideEffect
@@ -275,8 +276,25 @@ class AgentAudience(BaseModel):
     #: agent is a field that reads as an audience and is not one, and the first query to
     #: filter on it would be filtering on a fact nobody set deliberately.
     department: str = Field(default="", max_length=DEPARTMENT_CHARS)
+    #: Departments and people who may also **find** this agent, beside its level (M13.8.19). They
+    #: widen who is offered the agent and nothing else: `audience_scope` does not read them, so
+    #: they are never part of a predicate a run is narrowed by, and `visible_to` is the one
+    #: function that does. See `AN_ADDED_AUDIENCE_GAINS_DISCOVERY_AND_NEVER_REACH`.
+    extra_departments: tuple[str, ...] = ()
+    extra_people: tuple[str, ...] = ()
+
+    @field_validator("extra_departments", "extra_people")
+    @classmethod
+    def _sorted_unique(cls, v: tuple[str, ...]) -> tuple[str, ...]:
+        if any(not one.strip() for one in v):
+            msg = "an added department or person names somebody; an empty one names everybody"
+            raise ValueError(msg)
+        return tuple(sorted(set(v)))
 
     def model_post_init(self, _context: object, /) -> None:
+        if self.level is Visibility.COMPANY and (self.extra_departments or self.extra_people):
+            msg = "a company audience already includes everybody, so it names nobody beside it"
+            raise ValueError(msg)
         if self.level is Visibility.DEPARTMENT and not self.department:
             msg = (
                 "a department audience needs a department; without one the level's "
@@ -390,6 +408,11 @@ class AgentRecord(BaseModel):
     #: a run reaches. Empty answers nowhere. See
     #: `AN_AGENT_ANSWERS_ONLY_ON_THE_CHANNELS_ENABLED_FOR_IT`.
     channels: tuple[str, ...] = ()
+    #: The kinds of memory this agent may read and write (M39.7.1), sorted and without repeats: the
+    #: conversation, the task, the project, the person and its own. All five unless somebody left
+    #: one out. Reachability and not authority, like the channels: it narrows what a run is shown,
+    #: never what a caller may reach. See `brain.agents.memory_kinds`.
+    memory_kinds: tuple[str, ...] = ALL_KINDS
     #: The most turns one run may take, or None for the product's default. Not authority either:
     #: a bound on how long a run goes on says nothing about what it may reach.
     max_turns: Annotated[int, Field(ge=1, le=MAX_TURNS_CAP)] | None = None
@@ -411,6 +434,13 @@ class AgentRecord(BaseModel):
         their being told.
         """
         return enabled_channels(v)
+
+    @field_validator("memory_kinds", mode="before")
+    @classmethod
+    def _kinds_in_one_order(cls, v: object) -> tuple[str, ...]:
+        """Any collection of kind names, as one sorted tuple without repeats, for `_one_order`'s
+        reason: a record is hashed, and a set would iterate differently on each replica."""
+        return memory_kinds_of(v)
 
     @field_validator("tier")
     @classmethod
@@ -477,6 +507,15 @@ class AgentRecord(BaseModel):
 
 
 # ---------------------------------------------------------------- audience, and only audience
+#: Why an added department or person is discovery and never reach.
+AN_ADDED_AUDIENCE_GAINS_DISCOVERY_AND_NEVER_REACH: Final = (
+    "Naming a department or a person beside an agent's level offers them the agent in a picker. It "
+    "adds no row to any scope and no grant to any set: what a run reaches is still "
+    "E(caller) n agent_ceiling, so a person added to a finance agent can start it and read what "
+    "their own grants already let them read through it, which is nothing more than before."
+)
+
+
 def audience_scope(audience: AgentAudience) -> Scope:
     """The predicate a level means, built by `brain.knowledge.visibility.scope_for` (M13.1.2).
 
@@ -508,7 +547,12 @@ def visible_to(audience: AgentAudience, viewer: AgentViewer) -> bool:
     broken.
     """
     scope = audience_scope(audience)
-    return any(scope.matches(row) for row in _viewer_rows(viewer))
+    if any(scope.matches(row) for row in _viewer_rows(viewer)):
+        return True
+    # Beside the level: found, and nothing more. `audience_scope` above is untouched by these.
+    return viewer.principal_id in audience.extra_people or bool(
+        viewer.departments & set(audience.extra_departments)
+    )
 
 
 def visible_agent_ids(records: Iterable[AgentRecord], viewer: AgentViewer) -> frozenset[str]:
@@ -536,6 +580,12 @@ def runnable_agent_ids(records: Iterable[AgentRecord], viewer: AgentViewer) -> f
     return frozenset(
         r.agent_id for r in records if r.is_selectable and visible_to(r.audience, viewer)
     )
+
+
+def remembering(record: AgentRecord, kinds: Iterable[str]) -> AgentRecord:
+    """The record set up to read and write exactly these kinds of memory, validated again."""
+    fields = {name: getattr(record, name) for name in type(record).model_fields}
+    return AgentRecord.model_validate({**fields, "memory_kinds": tuple(kinds)})
 
 
 def answering_on(record: AgentRecord, channels: Iterable[str]) -> AgentRecord:

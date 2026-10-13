@@ -36,7 +36,7 @@ def test_the_oauth_check_is_registered_with_the_leaf_it_proves() -> None:
     has."""
     assert {name: one.leaves for name, one in mine().items()} == {
         NAME: ("M11.8.6",),
-        OWN: ("M11.8.6",),
+        OWN: ("M11.8.6", "M40.5.1.1"),
     }
     wbs = json.loads((ROOT / "docs" / "wbs.json").read_text(encoding="utf-8"))
     leaves = {one for module in wbs["modules"] for one in module["leaf_ids"]}

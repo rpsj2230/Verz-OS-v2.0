@@ -40,6 +40,15 @@ with one of `WHEN_OPENINGS`. See `A_DESCRIPTION_OPENS_BY_SAYING_WHEN_THE_SKILL_I
 rule about the file and not about the type, so a `Skill` built in code is not held to it; every
 path a file takes into the library goes through `skill_from_markdown`.
 
+**A skill may name the knowledge it needs, as departments, and that is a need and never a grant
+(M12.3.3).** `knowledge` lists the departments whose documents the skill's procedure reads, because
+a department is the one thing an agent's knowledge is cut by (needs-rupash 178). Like `tools` it is
+a list of names the reviewer reads, and an assignment is checked against it
+(`brain.console.skill_library.missing_for`): an agent whose scope does not cover a named department
+is refused with that department named. It is inside the digest when declared and absent from it
+when not, so every skill written before it digests as it did. See
+`A_SKILL_NAMES_THE_KNOWLEDGE_IT_NEEDS_AND_GRANTS_NONE`.
+
 **A skill may say when its question goes to a person, and only when nothing answered it (M8.3.1).**
 `escalate_to` names a queue, `escalation_needs` says in the author's words what would unblock the
 question, and `escalate_within` how many hours a person has before the asker is told nobody picked
@@ -49,7 +58,7 @@ system's own outcome triggers it, and no model decides that a person should be i
 person, so a file from outside the company names nobody; who answers for a queue is named on the
 install (`brain.ops.escalation_store`). See `AN_ESCALATION_IS_AUTHORED_AND_FIRES_ON_AN_ABSTENTION`.
 
-Task ids: M12.2.1, M12.2.4, M12.2.5, M12.2.6, M12.2.7, M12.2.8, M12.2.9, M12.4.12, M8.3.1
+Task ids: M12.2.1, M12.2.4, M12.2.5, M12.2.6, M12.2.7, M12.2.8, M12.2.9, M12.3.3, M12.4.12, M8.3.1
 """
 
 from __future__ import annotations
@@ -63,6 +72,7 @@ from typing import Final, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from brain.core.department import SLUG_RE as DEPARTMENT_SLUG_RE
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.gate.catalogue import AgentCeiling, project
 from brain.tools.registry import RUN_SKILL_SCRIPT, TOOL_NAME_RE, ToolRegistry
@@ -135,6 +145,7 @@ FRONTMATTER_KEYS: Final[frozenset[str]] = frozenset(
         "description",
         "version",
         "tools",
+        "knowledge",
         "scripts",
         "escalate_to",
         "escalation_needs",
@@ -160,6 +171,14 @@ AN_ESCALATION_IS_AUTHORED_AND_FIRES_ON_AN_ABSTENTION: Final = (
     "own abstention is what sends it there. No model decides a person should be involved, so an "
     "operator can read the file and say when it fires, and a queue is a name rather than a "
     "person, so a file from outside the company names nobody."
+)
+
+#: Why a skill's knowledge is a list of departments it needs and not a scope it holds.
+A_SKILL_NAMES_THE_KNOWLEDGE_IT_NEEDS_AND_GRANTS_NONE: Final = (
+    "A skill arrives from outside the company, so nothing it says may widen what an agent reads. "
+    "`knowledge` names departments the way `tools` names tools: a need a reviewer reads and an "
+    "assignment is checked against, with no scope, no capability and no document in it. An agent "
+    "whose knowledge does not cover a need is refused the skill, and never given the knowledge."
 )
 
 #: Keys that are refused with an explanation rather than as merely unknown. Every one of
@@ -480,6 +499,11 @@ class Skill(BaseModel):
     #: Tool names, sorted and deduplicated so that reordering the line does not change the
     #: digest and therefore does not void an approval.
     tools: tuple[str, ...] = ()
+    #: The departments whose knowledge this skill needs, sorted and deduplicated, or empty for a
+    #: skill that needs none. A need and never a grant: it is what an assignment is checked against,
+    #: and nothing here reaches a document. See
+    #: `A_SKILL_NAMES_THE_KNOWLEDGE_IT_NEEDS_AND_GRANTS_NONE`.
+    knowledge: tuple[str, ...] = ()
     #: Scripts inside the folder, run through one tool and no other. See `execution_tool`.
     scripts: tuple[str, ...] = ()
     #: Each script's path and the sha256 of its bytes, sorted by path, or empty for a skill read
@@ -525,6 +549,20 @@ class Skill(BaseModel):
         bad = sorted(name for name in v if not TOOL_NAME_RE.match(name))
         if bad:
             msg = f"skill names tools that are not source.verb_noun: {bad}"
+            raise ValueError(msg)
+        return tuple(sorted(set(v)))
+
+    @field_validator("knowledge")
+    @classmethod
+    def _knowledge_is_named_by_department(cls, v: tuple[str, ...]) -> tuple[str, ...]:
+        """Every need is a department slug, the one thing an agent's knowledge is cut by.
+
+        Refused rather than dropped, so a skill naming `Finance Notes` is told it names nothing an
+        agent's scope could be compared with, and not left to need nothing in silence.
+        """
+        bad = sorted(name for name in v if not DEPARTMENT_SLUG_RE.match(name))
+        if bad:
+            msg = f"skill names knowledge that is not a department slug: {bad}"
             raise ValueError(msg)
         return tuple(sorted(set(v)))
 
@@ -602,6 +640,9 @@ class Skill(BaseModel):
             *self.tools,
             *self.scripts,
         ]
+        # Only when declared, so every skill written before knowledge needs digests as it did and
+        # no approval is voided. Tagged with a colon, which no tool or script name can hold.
+        parts += [f"knowledge:{one}" for one in self.knowledge]
         # Only when hashed, so a skill read from its `SKILL.md` alone digests as it always did.
         # Tagged with a colon, which no script name can hold, so a hash cannot be read as a name.
         parts += [f"sha256:{path}:{sha}" for path, sha in self.script_sha256]
@@ -664,6 +705,8 @@ def markdown_of(skill: Skill) -> str:
     ]
     if skill.tools:
         lines.append(f"tools: [{', '.join(skill.tools)}]")
+    if skill.knowledge:
+        lines.append(f"knowledge: [{', '.join(skill.knowledge)}]")
     if skill.scripts:
         lines.append(f"scripts: [{', '.join(skill.scripts)}]")
     if skill.escalate_to:
@@ -726,6 +769,7 @@ def _skill_from_text(text: str) -> Skill:
             description=scalar("description"),
             version=scalar("version", "0.0.0"),
             tools=listed("tools"),
+            knowledge=listed("knowledge"),
             scripts=listed("scripts"),
             body=body,
             escalate_to=scalar("escalate_to"),

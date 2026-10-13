@@ -186,6 +186,11 @@ class SkillRow(Base):
     )
     #: Hours a person has to pick it up, or null for the product default. `0168`.
     escalate_within: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    #: The departments whose knowledge the skill needs, sorted, or an empty list. Names and never
+    #: a scope or a grant. `0214`, M12.3.3.
+    knowledge: Mapped[list[Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
 
     __table_args__ = (
         CheckConstraint(f"digest ~ '{DIGEST}'", name="digest_shape"),
@@ -193,6 +198,7 @@ class SkillRow(Base):
         CheckConstraint(f"version ~ '{VERSION_PATTERN}'", name="version_shape"),
         CheckConstraint("length(btrim(description)) > 0", name="description_present"),
         CheckConstraint("jsonb_typeof(tools) = 'array'", name="tools_are_a_list"),
+        CheckConstraint("jsonb_typeof(knowledge) = 'array'", name="knowledge_is_a_list"),
         # `0056`'s name, and `0121`'s wider predicate; see the module docstring.
         CheckConstraint(SOURCE_KIND_CHECK, name="source_is_an_upload"),
         CheckConstraint("length(btrim(source_location)) > 0", name="source_location_present"),

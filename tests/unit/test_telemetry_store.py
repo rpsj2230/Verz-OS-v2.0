@@ -448,6 +448,9 @@ def built(database: str) -> Iterator[str]:
         migrate(database, "upgrade", "0100")
         migrate(database, "stamp", "0108")
         migrate(database, "upgrade", "0113")
+        # 0215 adds the reasoning tokens and the time spent in each gate step (M27.15.6).
+        migrate(database, "stamp", "0214")
+        migrate(database, "upgrade", "0215")
         yield scratch
     finally:
         drop(database)

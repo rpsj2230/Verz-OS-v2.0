@@ -137,7 +137,7 @@ from brain.api_routes import Asked
 from brain.audit.ledger import AuditChain, AuditEntry
 from brain.audit.record import ApprovalVerdict, AuditRecorder
 from brain.connectors.declaration import WriteGrant
-from brain.console.approvals import ApprovalError, Card, Decided, card, decide
+from brain.console.approvals import ApprovalError, Card, Decided, Endorsed, card, decide, endorse
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, BrainError, Failed
 from brain.credential_routes import credentials_of
@@ -304,6 +304,11 @@ class HeldSuspensions(Protocol):
         """The suspension, held until the transaction ends, or None."""
         ...
 
+    async def endorse(self, endorsed: SuspendedAction) -> bool:
+        """Write a first approval over a pending two-person row, leaving it pending. False when no
+        row changed (M13.7.7)."""
+        ...
+
     async def record(self, decided: SuspendedAction, entry: AuditEntry) -> AuditEntry | None:
         """Write a decided suspension over its pending row, with the entry `decide` drafted.
 
@@ -359,6 +364,10 @@ class ApprovalCardView(BaseModel):
     unsent_because: str = ""
     #: The agent that raised it, which the queue filters by. `Card.agent_id` (M27.15.30).
     agent_id: str = ""
+    #: The action needs two different people. `Card.needs_second` (M13.7.7).
+    needs_second: bool = False
+    #: The first approval has been given, so this one is the second. `Card.first_approved`.
+    first_approved: bool = False
 
 
 class ApprovalQueue(Page[ApprovalCardView]):
@@ -428,6 +437,9 @@ class ApprovalDecisionView(BaseModel):
 
     suspension_id: str
     verdict: DecidableVerdict
+    #: The approval was the first of two, so the action has not run and waits for another person
+    #: (M13.7.7). False for every decision that decided something.
+    awaiting_second: bool = False
 
 
 # ------------------------------------------------------------------ the decisions
@@ -444,6 +456,8 @@ def card_view(shown: Card) -> ApprovalCardView:
         may_take_over=shown.may_take_over,
         unsent_because=shown.unsent_because,
         agent_id=shown.agent_id,
+        needs_second=shown.needs_second,
+        first_approved=shown.first_approved,
     )
 
 
@@ -516,8 +530,11 @@ async def decide_once(
     *,
     asked: DecisionAsked,
     now: datetime,
-) -> Decided | None:
+) -> Decided | Endorsed | None:
     """Decide one held suspension and write the decision, or None when this reach may not.
+
+    An approval of an action that needs two people and has had no first approval is that first
+    approval: it returns `Endorsed` and decides nothing.
 
     None for every reason there is no card, which `card` already makes one reason. See
     `A_DECISION_IS_TAKEN_ON_A_HELD_ROW_AND_WRITTEN_ONCE` for the order. `recorder` drafts the
@@ -551,7 +568,7 @@ async def close_as_no_longer_applying(
     gone from this reach meanwhile, decided by somebody else, which is answered as every other
     card that is not theirs. See `A_REQUEST_THAT_NO_LONGER_APPLIES_IS_CLOSED_AND_SAID_SO`.
     """
-    return await _decided_once(
+    closed = await _decided_once(
         held,
         suspension_id,
         reach,
@@ -560,6 +577,8 @@ async def close_as_no_longer_applying(
         reason_code=NO_LONGER_APPLIES,
         now=now,
     )
+    # A rejection is never a first approval, so this is `Decided` or nothing.
+    return closed if isinstance(closed, Decided) else None
 
 
 async def _decided_once(
@@ -571,11 +590,17 @@ async def _decided_once(
     verdict: ApprovalVerdict,
     reason_code: str,
     now: datetime,
-) -> Decided | None:
+) -> Decided | Endorsed | None:
     found = await held.lock(suspension_id)
     shown = None if found is None else shown_card(found, reach, now)
     if found is None or shown is None:
         return None
+    if verdict is ApprovalVerdict.APPROVED and found.two_person and not found.endorsed_by:
+        first = endorse(found, reach, now=now)
+        if not await held.endorse(first.suspension):
+            msg = f"suspension {suspension_id!r} was held and its first approval was not written"
+            raise Failed(msg)
+        return first
     if verdict is ApprovalVerdict.TAKEN_OVER and not shown.may_take_over:
         # Said only here, after the card is known to be this approver's to decide.
         raise Absent(
@@ -748,7 +773,11 @@ async def decide_approval(
     decided = await take_decision(
         store, suspension_id, asked.reach, decision, trace_id=trace_id, now=asked.now
     )
-    return ApprovalDecisionView(suspension_id=decided.suspension.id, verdict=decision.verdict)
+    return ApprovalDecisionView(
+        suspension_id=decided.suspension.id,
+        verdict=decision.verdict,
+        awaiting_second=isinstance(decided, Endorsed),
+    )
 
 
 async def take_decision(
@@ -759,7 +788,7 @@ async def take_decision(
     *,
     trace_id: str,
     now: datetime,
-) -> Decided:
+) -> Decided | Endorsed:
     """The decision route's work once it has a store: the decision taken, or the route's answer.
 
     Raises `_no_approval_here` for every reason there is no card, the answer
