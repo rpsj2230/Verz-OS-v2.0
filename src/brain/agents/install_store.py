@@ -195,6 +195,7 @@ def agent_values(record: AgentRecord) -> dict[str, Any]:
         "disabled_at": record.disabled_at,
         "archived_at": record.archived_at,
         "channels": list(record.channels),
+        "memory_kinds": list(record.memory_kinds),
         "max_turns": record.max_turns,
         "max_tool_calls": record.max_tool_calls,
     }

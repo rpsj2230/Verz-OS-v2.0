@@ -103,6 +103,7 @@ from typing import Annotated, Final
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_validator
 
+from brain.agents.memory_kinds import ALL_KINDS, memory_kinds_of
 from brain.core.department import SLUG_PATTERN
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import SideEffect
@@ -407,6 +408,11 @@ class AgentRecord(BaseModel):
     #: a run reaches. Empty answers nowhere. See
     #: `AN_AGENT_ANSWERS_ONLY_ON_THE_CHANNELS_ENABLED_FOR_IT`.
     channels: tuple[str, ...] = ()
+    #: The kinds of memory this agent may read and write (M39.7.1), sorted and without repeats: the
+    #: conversation, the task, the project, the person and its own. All five unless somebody left
+    #: one out. Reachability and not authority, like the channels: it narrows what a run is shown,
+    #: never what a caller may reach. See `brain.agents.memory_kinds`.
+    memory_kinds: tuple[str, ...] = ALL_KINDS
     #: The most turns one run may take, or None for the product's default. Not authority either:
     #: a bound on how long a run goes on says nothing about what it may reach.
     max_turns: Annotated[int, Field(ge=1, le=MAX_TURNS_CAP)] | None = None
@@ -428,6 +434,13 @@ class AgentRecord(BaseModel):
         their being told.
         """
         return enabled_channels(v)
+
+    @field_validator("memory_kinds", mode="before")
+    @classmethod
+    def _kinds_in_one_order(cls, v: object) -> tuple[str, ...]:
+        """Any collection of kind names, as one sorted tuple without repeats, for `_one_order`'s
+        reason: a record is hashed, and a set would iterate differently on each replica."""
+        return memory_kinds_of(v)
 
     @field_validator("tier")
     @classmethod
@@ -567,6 +580,12 @@ def runnable_agent_ids(records: Iterable[AgentRecord], viewer: AgentViewer) -> f
     return frozenset(
         r.agent_id for r in records if r.is_selectable and visible_to(r.audience, viewer)
     )
+
+
+def remembering(record: AgentRecord, kinds: Iterable[str]) -> AgentRecord:
+    """The record set up to read and write exactly these kinds of memory, validated again."""
+    fields = {name: getattr(record, name) for name in type(record).model_fields}
+    return AgentRecord.model_validate({**fields, "memory_kinds": tuple(kinds)})
 
 
 def answering_on(record: AgentRecord, channels: Iterable[str]) -> AgentRecord:

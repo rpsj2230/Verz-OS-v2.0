@@ -206,6 +206,7 @@ from brain.agents.audience_store import Extras, extras_of
 from brain.agents.catalogue import CATALOGUE
 from brain.agents.install import bind_tools, bound_leash
 from brain.agents.leash_moves import LeashMove, effective_leash, held_while_supervised
+from brain.agents.memory_kinds import ALL_KINDS
 from brain.agents.model import (
     AgentAudience,
     AgentAuthority,
@@ -910,6 +911,9 @@ def record_of(row: AgentRow, extras: Extras | None = None) -> AgentRecord | None
             # A row built in memory and never flushed holds None for a column it was not
             # given, where the database would have written the empty default.
             channels=tuple(row.channels or ()),
+            memory_kinds=tuple(row.memory_kinds or ())
+            if row.memory_kinds is not None
+            else ALL_KINDS,
             max_turns=row.max_turns,
             max_tool_calls=row.max_tool_calls,
         )
