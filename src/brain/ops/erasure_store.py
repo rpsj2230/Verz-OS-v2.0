@@ -254,6 +254,12 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         # A setting a person keeps about themselves (`0229`): whether they learn, where they are
         # reached and when not. Theirs, and the application may delete it, so an erasure removes it.
         "auth.member_preference": "principal_id",
+        # An artifact the person handed to a colleague (`0230`), theirs as the act is. The colleague
+        # is named on it as the one it was made out to; the sharer may withdraw it and so an erasure
+        # removes it. A request for an agent the person asked to run (`0230`) grants no way for a
+        # row to leave, so an erasure keeps it and reports it kept.
+        "agent.artifact_share": "shared_by",
+        "agent.agent_request": "requested_by",
         # What an agent produced, for the person it was produced for. `0058` grants no way for a
         # row to leave, so an erasure keeps these and reports them kept.
         "agent.artifact": "caller_id",
