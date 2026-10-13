@@ -78,6 +78,7 @@ function automationWire(extra: Record<string, unknown> = {}): Record<string, unk
     start_becomes: "2999-01-07T08:00:00Z",
     stop_confirmation: null,
     cannot_start: null,
+    authored: null,
     ...extra,
   };
 }

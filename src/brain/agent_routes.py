@@ -202,9 +202,11 @@ from sqlalchemy import Select, and_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.agents.attachments import narrowed
+from brain.agents.audience_store import Extras, extras_of
 from brain.agents.catalogue import CATALOGUE
 from brain.agents.install import bind_tools, bound_leash
 from brain.agents.leash_moves import LeashMove, effective_leash, held_while_supervised
+from brain.agents.memory_kinds import ALL_KINDS
 from brain.agents.model import (
     AgentAudience,
     AgentAuthority,
@@ -213,12 +215,12 @@ from brain.agents.model import (
     visible_agent_ids,
 )
 from brain.agents.template import (
-    MANIFEST_PATHS,
     FieldOwner,
     SignedManifest,
     TemplateError,
     TemplateInstance,
     TemplateManifest,
+    manifest_from_document,
     materialise,
 )
 from brain.api import API_PREFIX, COMMON_RESPONSES, Page
@@ -866,8 +868,12 @@ class TemplateGallery(Page[TemplateEntry]):
 # ------------------------------------------------------------------ rows to records
 
 
-def record_of(row: AgentRow) -> AgentRecord | None:
+def record_of(row: AgentRow, extras: Extras | None = None) -> AgentRecord | None:
     """The stored agent as the domain type, or None when it does not construct.
+
+    `extras` are the departments and people the agent is also offered to
+    (`brain.agents.audience_store.extras_of`), which widen discovery and nothing else. Left out,
+    the audience is the level alone, which is every caller that has not read them (M13.8.19).
 
     Every validator in `brain.agents.model` runs, including the tool ceiling's, because the
     audience cannot be trusted off a row the record refuses. See
@@ -888,6 +894,8 @@ def record_of(row: AgentRow) -> AgentRecord | None:
                 level=Visibility(row.visibility),
                 owner_id=row.owner_id,
                 department=row.department or "",
+                extra_departments=() if extras is None else extras.departments,
+                extra_people=() if extras is None else extras.people,
             ),
             authority=AgentAuthority(
                 scope=Scope.model_validate(row.scope),
@@ -903,6 +911,9 @@ def record_of(row: AgentRow) -> AgentRecord | None:
             # A row built in memory and never flushed holds None for a column it was not
             # given, where the database would have written the empty default.
             channels=tuple(row.channels or ()),
+            memory_kinds=tuple(row.memory_kinds or ())
+            if row.memory_kinds is not None
+            else ALL_KINDS,
             max_turns=row.max_turns,
             max_tool_calls=row.max_tool_calls,
         )
@@ -921,14 +932,7 @@ def manifest_of(document: Mapping[str, Any]) -> TemplateManifest:
     because `SignedManifest` does: it recomputes the digest from the rebuilt body and refuses
     a mismatch, so a reconstruction that lost or moved a value cannot be signed-for.
     """
-    nested: dict[str, Any] = {}
-    for path in MANIFEST_PATHS:
-        head, _, tail = path.partition(".")
-        if tail:
-            nested.setdefault(head, {})[tail] = document[path]
-        else:
-            nested[head] = document[path]
-    return TemplateManifest.model_validate(nested)
+    return manifest_from_document(document)
 
 
 @dataclass(frozen=True)
@@ -970,6 +974,8 @@ def install_of(
             signature=version_row.signature,
             signed_by=version_row.signed_by,
             signed_at=version_row.signed_at,
+            schema_version=version_row.schema_version or 1,
+            overview_path=version_row.overview_path or "",
         )
         instance = TemplateInstance(
             instance_id=instance_row.id,
@@ -1655,10 +1661,11 @@ async def read_stored_agents(session: AsyncSession) -> StoredAgents:
     and by the install checks, so the roster a check reads is the one a question reads.
     """
     rows = (await session.execute(every_agent_with_install_hash())).all()
+    offered = await extras_of(session)
     records: list[AgentRecord] = []
     hashes: dict[str, str] = {}
     for row, install_hash in rows:
-        record = record_of(row)
+        record = record_of(row, offered.get(row.id))
         if record is None:
             continue
         records.append(record)
@@ -1807,7 +1814,11 @@ async def _visible_record(
     date is read here, after the audience has admitted the caller, like everything else.
     """
     row = (await session.execute(one_agent(agent_id))).scalar_one_or_none()
-    record = record_of(row) if row is not None else None
+    # Read whether or not the agent exists: asked only for a row that was found, the extra read
+    # would be a statement a missing slug never causes, and the difference is the timing that
+    # says which agents exist.
+    offered = await extras_of(session)
+    record = record_of(row, offered.get(agent_id)) if row is not None else None
     if (
         row is None
         or record is None
@@ -1835,7 +1846,12 @@ async def agents(request: Request, asked: Asked, listed: RosterQuery) -> RosterP
     stated: dict[str, Stated] = {}
     async with factory() as session:
         rows = (await session.execute(every_agent())).scalars().all()
-        records = [record for record in (record_of(row) for row in rows) if record is not None]
+        offered = await extras_of(session)
+        records = [
+            record
+            for record in (record_of(row, offered.get(row.id)) for row in rows)
+            if record is not None
+        ]
         # Only the agents the audience admitted are read about any further, so nothing about an
         # agent this caller may not see is fetched on their behalf, the workspace's own order.
         visible = visible_agent_ids(records, viewer)

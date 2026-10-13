@@ -95,6 +95,7 @@ from brain.models.routing import DEFAULT_TIER
 from brain.ops.jobs import NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT, hidden_count_fields
 from brain.tables.agent import AgentRow
 from brain.tables.attachment import ToolAttachmentRow
+from brain.tables.audience_extra import AudienceExtraRow
 from brain.tables.identity import PrincipalRow
 from brain.tables.leash import LeashChangeRow, SupervisionPinRow
 from brain.tables.spend import SpendActualRow
@@ -420,6 +421,9 @@ class StubSession(AsyncSession):
             return StubResult(list(_STORED.versions))
         if entity in (LeashChangeRow, SupervisionPinRow):
             # Nothing moved and nobody pinned: the install's own leash, as the tests above expect.
+            return StubResult([])
+        if entity is AudienceExtraRow:
+            # Nobody offered beyond the level: the audience is the level alone, as above.
             return StubResult([])
         if entity is ToolAttachmentRow:
             # Nothing attached or detached: the manifest's own tools, as the tests above expect.
@@ -845,7 +849,15 @@ def test_the_install_of_an_agent_the_caller_may_not_see_is_never_read(
     stored.installs["their_notes"] = (instance_row, version_row)
 
     def tables() -> list[str]:
-        return [str(one.column_descriptions[-1]["entity"].__name__) for one in stored.statements]
+        # Who an agent is also offered to is part of deciding its audience, so it is read with the
+        # agents and is not the install this test is about.
+        return [
+            name
+            for name in (
+                str(one.column_descriptions[-1]["entity"].__name__) for one in stored.statements
+            )
+            if name != "AudienceExtraRow"
+        ]
 
     assert workspace_of(client, "u_narrow", "their_notes").status_code == 404
     assert tables() == ["AgentRow"]

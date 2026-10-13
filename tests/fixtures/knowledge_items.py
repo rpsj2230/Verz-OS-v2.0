@@ -93,6 +93,31 @@ def add_item_public(url: str) -> None:
         sql(url, f"ALTER TABLE know.item ADD CONSTRAINT ck_item_{name} CHECK ({check})")
 
 
+#: The migration adding how a document arrived and a link's address. Its constants are read.
+SOURCE_MIGRATION = ROOT / "migrations" / "versions" / "0220_knowledge_item_source.py"
+
+
+def add_item_source(url: str) -> None:
+    """`know.item.arrived_as` and `source_url` and their checks, as `0220` adds them.
+
+    From `0220`'s own constants, for `add_item_kind`'s reason, and because `put_item` writes both
+    columns so without them every write here fails. That this builds what the model declares is held
+    by `tests/unit/test_item_store.py`'s comparison of `know.item` against the model; that `0220`
+    itself builds the same is a database taken to head.
+    """
+    spec = importlib.util.spec_from_file_location("migration_0220_source", SOURCE_MIGRATION)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    sql(url, "ALTER TABLE know.item ADD COLUMN arrived_as VARCHAR(8)")
+    sql(url, "ALTER TABLE know.item ADD COLUMN source_url TEXT")
+    for name, check in (
+        ("arrived_as_a_file_or_link", module.ARRIVED_AS_A_FILE_OR_LINK),
+        ("an_address_belongs_to_a_link", module.AN_ADDRESS_BELONGS_TO_A_LINK),
+    ):
+        sql(url, f"ALTER TABLE know.item ADD CONSTRAINT ck_item_{name} CHECK ({check})")
+
+
 @contextmanager
 def knowledge_items(database: str) -> Iterator[str]:
     """A fresh database holding the grant tables, the outbox, the run table and `know.item`."""
@@ -110,6 +135,7 @@ def knowledge_items(database: str) -> Iterator[str]:
         migrate(database, "upgrade", "0040")
         add_item_kind(scratch)
         add_item_public(scratch)
+        add_item_source(scratch)
         # `ops.setting`, which `0004` builds and this chain stamps past: the sweep asks whether an
         # administrator switched the request off before it records anything.
         add_modelled(scratch, SCHEDULE_CONTROL_TABLES)

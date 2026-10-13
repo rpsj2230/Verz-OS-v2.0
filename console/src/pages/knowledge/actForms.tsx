@@ -1,10 +1,12 @@
 /**
- * The four acts on a document, each drawn in a drawer from its page's header: verify, add a newer
- * version, ask for the whole company, and hand to another steward (M7.4.4, M7.4.5, M7.4.6, M7.7.2).
+ * The five acts on a document, each drawn in a drawer from its page's header: verify, add a newer
+ * version, ask for the whole company, hand to another steward and archive (M7.4.4, M7.4.5, M7.4.6,
+ * M7.7.2, M27.15.40).
  *
- * **A write that replaces something is confirmed first, in a sentence about what it replaces.** A
- * newer version replaces the one answers are drawn from, and a hand-over replaces the steward, so
- * both open `kit/ConfirmDialog` and send from its confirmation. Verifying and asking for the whole
+ * **A write that replaces or ends something is confirmed first, in a sentence about what it
+ * changes.** A newer version replaces the one answers are drawn from, a hand-over replaces the
+ * steward and an archive stops answers using the document, so each opens `kit/ConfirmDialog` and
+ * sends from its confirmation. Verifying and asking for the whole
  * company end nothing and send from the form (`tests/destructive-confirmed.test.ts`).
  *
  * **Nothing here decides who may do what.** A form is drawn only for an act the API offered on this
@@ -21,6 +23,7 @@ import { Input } from "../../components/ui/input";
 import { Textarea } from "../../components/ui/textarea";
 import { FailureNotice } from "../../ui/FailureNotice";
 import {
+  archivePath,
   defaultReviewDay,
   instantOf,
   LIFECYCLE_FIELDS,
@@ -31,6 +34,8 @@ import {
 } from "../knowledgeLifecycleQuery";
 import {
   ADD_VERSION,
+  ARCHIVE,
+  ARCHIVE_CONSEQUENCE,
   ASK_COMPANY,
   Field,
   FILE_LABEL,
@@ -295,3 +300,49 @@ export function HandOverForm({ itemId, title, onDone }: { readonly itemId: strin
   );
 }
 
+/** Archive the document, confirmed first (M27.15.40). Nothing is asked of the caller but the act. */
+export function ArchiveForm({ itemId, title, onDone }: { readonly itemId: string; readonly title: string; readonly onDone: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setConfirming(true);
+  };
+
+  const send = () => {
+    setBusy(true);
+    void (async () => {
+      const result = await request<unknown>(archivePath(itemId), { method: "POST" });
+      setBusy(false);
+      setConfirming(false);
+      setFailure(result.ok ? null : result.failure);
+      if (result.ok) {
+        onDone();
+      }
+    })();
+  };
+
+  return (
+    <>
+      <form className={FORM} aria-label="Archive this document" onSubmit={onSubmit} noValidate>
+        {failure === null ? null : <FailureNotice failure={failure} fields={LIFECYCLE_FIELDS} />}
+        <p className="m-0 text-[12.5px] leading-snug text-dim">{ARCHIVE_CONSEQUENCE}</p>
+        <Submit label={ARCHIVE} busy={busy} />
+      </form>
+      <ConfirmDialog
+        open={confirming}
+        question={`Archive ${title}?`}
+        consequence={ARCHIVE_CONSEQUENCE}
+        confirmLabel={ARCHIVE}
+        cancelLabel="Keep it as it is"
+        busy={busy}
+        onConfirm={send}
+        onCancel={() => {
+          setConfirming(false);
+        }}
+      />
+    </>
+  );
+}

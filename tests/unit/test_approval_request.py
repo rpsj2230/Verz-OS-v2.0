@@ -181,6 +181,10 @@ def test_every_field_an_approver_s_view_carries_is_a_closed_list() -> None:
         "may_take_over",
         "unsent_because",
         "agent_id",
+        # Two booleans (M13.7.7): that the action needs two different people, and that the first
+        # has approved. Neither can carry a tool call, which `card_gaps` holds.
+        "needs_second",
+        "first_approved",
     }
     assert set(ApprovalCardView.model_fields) == {one.name for one in fields(Card)}
     assert {one.name for one in fields(Envelope)} == {

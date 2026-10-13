@@ -54,12 +54,16 @@ T0 = datetime(2999, 1, 1, 12, 0, tzinfo=UTC)
 TRACE = "a" * 32
 
 
-def response(model: str, tokens_in: int, tokens_out: int) -> DriverResponse:
+def response(
+    model: str, tokens_in: int, tokens_out: int, reasoning_tokens: int = 0
+) -> DriverResponse:
     return DriverResponse(
         deployment_id=f"{model}-global",
         model=model,
         text="ready",
-        usage=TokenUsage(input_tokens=tokens_in, output_tokens=tokens_out),
+        usage=TokenUsage(
+            input_tokens=tokens_in, output_tokens=tokens_out, reasoning_tokens=reasoning_tokens
+        ),
         finish_reason="stop",
     )
 
@@ -112,6 +116,38 @@ def test_tokens_are_summed_over_answers_and_a_failed_attempt_counts_as_a_call_an
             ),
         ),
     )
+
+
+def test_reasoning_tokens_are_summed_as_a_part_of_the_output_and_never_beyond_it() -> None:
+    """M27.15.6. Two answers' reasoning is summed and read out of their output, and a provider
+    that reports more reasoning than output is held to the output so the request's own usage
+    still builds when it finishes.
+
+    Delete this and reasoning is dropped from the row, added on top of the output it is a part
+    of, or a provider's odd count makes the whole request's record refuse to exist."""
+    meter = Meter()
+    meter.attempted()
+    meter.answered(
+        response("claude-sonnet-5", 10, 50, 30), provider="anthropic", agent_version=None
+    )
+    meter.attempted()
+    meter.answered(response("claude-sonnet-5", 10, 5, 99), provider="anthropic", agent_version=None)
+
+    usage = meter.usage()
+    assert usage is not None
+    assert (usage.tokens_out, usage.reasoning_tokens) == (55, 35)
+    with pytest.raises(MeteringError):
+        ModelUsage(
+            calls=1,
+            tokens_in=1,
+            tokens_out=5,
+            model=None,
+            provider=None,
+            agent_version=None,
+            fallback_count=0,
+            retry_count=0,
+            reasoning_tokens=6,
+        )
 
 
 def test_a_request_answered_by_two_models_sums_their_tokens_and_names_neither() -> None:
@@ -240,6 +276,7 @@ def test_a_metered_request_fills_the_seven_model_fields_of_its_ledger_row() -> N
         agent_version="2.4.1",
         fallback_count=1,
         retry_count=1,
+        reasoning_tokens=40,
     )
 
     row = request_telemetry_of(finished(ModelCallOutcome(answered=True), usage))
@@ -252,6 +289,7 @@ def test_a_metered_request_fills_the_seven_model_fields_of_its_ledger_row() -> N
         "tokens_out": 88,
         "fallback_count": 1,
         "retry_count": 1,
+        "reasoning_tokens": 40,
     }
     assert row.status is RequestStatus.ANSWERED
     assert row.cache_hit is False

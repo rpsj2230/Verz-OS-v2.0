@@ -387,6 +387,7 @@ def checked_elsewhere() -> tuple[tuple[Capability, str], ...]:
     from brain.ops.google_workspace_live import READ_WORKSPACE
     from brain.ops.jobs import DEAD_LETTER_CAPABILITY
     from brain.ops.slack_messages_live import READ_MESSAGE
+    from brain.quality_routes import DECIDES_CANDIDATES
     from brain.tools.own_results import SCRIPT_OUTPUT_CAPABILITY
     from brain.tools.run_skill import SCRIPT_CAPABILITY
     from brain.tools.skill_tools import INSTRUCTIONS_CAPABILITY
@@ -413,6 +414,11 @@ def checked_elsewhere() -> tuple[tuple[Capability, str], ...]:
         (VERIFIER_CAPABILITY, "Shows who verified a knowledge item on its badge."),
         (OPAQUE_CAPABILITY, "Reads what an opaque tool returns, which no field policy classifies."),
         (FLAG_CAPABILITY, "Flags an answer as wrong."),
+        (
+            DECIDES_CANDIDATES,
+            "Approves or declines a failed case's candidate for the evaluation set, over the "
+            "whole installation. Neither changes an agent.",
+        ),
         (
             READ_FILE,
             "Reads a connected Google Drive folder's files, their words read live, in the "

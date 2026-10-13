@@ -912,8 +912,15 @@ class SuspendedAction(BaseModel):
     state: ApprovalState = ApprovalState.PENDING
     decided_by: str = ""
     decided_at: datetime | None = None
+    #: Whether this action needs two different people, fixed when it was raised (M13.7.7). Set by
+    #: `brain.gate.suspension_store.put_suspension`, never by a caller, and false for every
+    #: action raised before the feature existed.
+    two_person: bool = False
+    #: The first approver of a two-person action, who did not decide it, and when.
+    endorsed_by: str = ""
+    endorsed_at: datetime | None = None
 
-    @field_validator("raised_at", "expires_at", "decided_at")
+    @field_validator("raised_at", "expires_at", "decided_at", "endorsed_at")
     @classmethod
     def _tz_aware(cls, v: datetime | None) -> datetime | None:
         if v is not None and v.tzinfo is None:
@@ -928,6 +935,25 @@ class SuspendedAction(BaseModel):
         # and a row that grants itself a year must not be loadable.
         if self.expires_at <= self.raised_at:
             msg = "an approval that expires before it was raised can never be granted"
+            raise ValueError(msg)
+        if bool(self.endorsed_by) != (self.endorsed_at is not None):
+            msg = "an endorsement names who and when together, or neither"
+            raise ValueError(msg)
+        if self.endorsed_by and not self.two_person:
+            msg = "only an action that needs two people is endorsed"
+            raise ValueError(msg)
+        if self.endorsed_by == self.principal_id and self.endorsed_by:
+            msg = "the person an action runs as does not endorse it"
+            raise ValueError(msg)
+        if (
+            self.two_person
+            and self.state is ApprovalState.APPROVED
+            and (not self.endorsed_by or self.decided_by in {self.endorsed_by, self.principal_id})
+        ):
+            msg = (
+                "an action that needs two people is approved only by somebody who is neither its "
+                "first approver nor the person it runs as, after a first approval"
+            )
             raise ValueError(msg)
         if self.expires_at - self.raised_at > MAX_APPROVAL_WINDOW:
             msg = (
@@ -956,7 +982,29 @@ class SuspendedAction(BaseModel):
     def approved_by(self, who: str, at: datetime) -> Self:
         """A new artefact carrying the approval. The original is not mutated, so what was
         shown and what was decided are two records rather than one overwritten one."""
+        if self.two_person and (
+            not self.endorsed_by or who in {self.endorsed_by, self.principal_id}
+        ):
+            msg = (
+                f"suspension {self.id} needs two people: a first approval, then a different one "
+                "who is not the person it runs as"
+            )
+            raise ValueError(msg)
         return self._decided(ApprovalState.APPROVED, who, at)
+
+    def endorsed(self, who: str, at: datetime) -> Self:
+        """A new artefact carrying the first approval of a two-person action, still pending.
+
+        Refused for an action that needs one person, for one already endorsed, and for the person
+        it runs as, so the second approver cannot be the first and the asker is neither.
+        """
+        if not self.two_person or self.endorsed_by or who == self.principal_id:
+            msg = f"suspension {self.id} is not one this person may give a first approval to"
+            raise ValueError(msg)
+        if not self.is_open(at):
+            msg = f"suspension {self.id} is not open at {at.isoformat()}"
+            raise ValueError(msg)
+        return self.model_copy(update={"endorsed_by": who, "endorsed_at": at})
 
     def rejected_by(self, who: str, at: datetime) -> Self:
         return self._decided(ApprovalState.REJECTED, who, at)

@@ -1,9 +1,9 @@
 ### Connectors and third-party integrations
 
 - **Screens:** `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`, `/channels`, `/channels/:name`, `/channels/:name/:view`, `/connector-consent`, `/connectors/new-api`, `/incidents`
-- **Tables:** `auth.binding_code`, `ops.channel`, `ops.channel_delivery`, `ops.connector_connection`, `ops.connector_sync`, `ops.oauth_consent`, `ops.custom_connector`, `proj.record`, `proj.record_retired`, `proj.source_epoch`, `er.alias`, `er.canonical`, `er.identifier`, `er.link`
+- **Tables:** `auth.binding_code`, `ops.channel`, `ops.channel_delivery`, `ops.connector_connection`, `ops.connector_sync`, `ops.alert_acknowledgement`, `ops.oauth_consent`, `ops.custom_connector`, `proj.record`, `proj.record_retired`, `proj.source_epoch`, `er.alias`, `er.canonical`, `er.identifier`, `er.link`
 - **Installation values:** `INSTALL_LARK_USES`, `INSTALL_LARK_PLATFORM`, `INSTALL_LARK_BASE`, `INSTALL_LARK_CARD_APPROVALS`
-- **Measured here:** 45 routes, 5 called by no screen; 21 write routes, 16 with all three proofs; 4 gaps.
+- **Measured here:** 47 routes, 6 called by no screen; 22 write routes, 17 with all three proofs; 4 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -26,6 +26,7 @@
 | `GET /api/v1/console/connectors/{connector}/probe` | `/connectors/:connector`, `/connectors/:connector/:view` |
 | `GET /api/v1/console/connectors/{connector}/stats` | `/connectors`, `/connectors/:connector` |
 | `GET /api/v1/console/incidents` | `/incidents` |
+| `GET /api/v1/console/system-health` | `/incidents` |
 | `GET /api/v1/custom-connectors` | `/connectors/new-api` |
 | `GET /api/v1/me/accounts` | `/me` |
 | `GET /api/v1/me/channels` | `/me` |
@@ -45,6 +46,7 @@
 | `POST /api/v1/connectors/{connector}/key` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`, `/staff_sources` |
 | `POST /api/v1/connectors/{connector}/probe` | `/connectors/:connector`, `/connectors/:connector/:view` |
 | `POST /api/v1/connectors/{connector}/steward` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`, `/staff_sources` |
+| `POST /api/v1/console/incidents/acknowledgement` | **no screen** |
 | `POST /api/v1/custom-connectors` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view` |
 | `POST /api/v1/custom-connectors/{name}` | **no screen** |
 | `POST /api/v1/custom-connectors/{name}/review` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view` |
@@ -77,6 +79,7 @@
 | `POST /api/v1/connectors/{connector}/key` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`, `/staff_sources` | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_a_replaced_key_is_a_credential_write_and_changes_no_connection` in `tests/unit/test_connector_routes.py` |
 | `POST /api/v1/connectors/{connector}/probe` | `/connectors/:connector`, `/connectors/:connector/:view` | `test_a_test_asked_for_is_made_once_with_the_workers_key_and_keeps_nothing` in `tests/unit/test_connector_probe_run.py` (database, in CI) | `test_a_press_is_on_the_ledger_and_a_test_survives_the_downgrade` in `tests/unit/test_connector_probe_run.py` (database, in CI) | `test_a_declined_key_is_recorded_on_the_sources_health_and_the_schedule_is_unmoved` in `tests/unit/test_connector_probe_run.py` (database, in CI) |
 | `POST /api/v1/connectors/{connector}/steward` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`, `/staff_sources` | `test_naming_a_steward_writes_the_row_and_its_ledger_entry_and_is_read_back` in `tests/unit/test_stewardship_store.py` (database, in CI) | `test_naming_a_steward_writes_the_row_and_its_ledger_entry_and_is_read_back` in `tests/unit/test_stewardship_store.py` (database, in CI) | `test_a_sources_steward_is_named_by_its_administrator_and_must_be_able_to_reach_it` in `tests/unit/test_stewardship_routes_db.py` (database, in CI) |
+| `POST /api/v1/console/incidents/acknowledgement` | **no screen** | `test_the_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_alert_ack.py` (database, in CI) | Not applicable: An acknowledgement changes nobody's access and no configuration, so it has no ledger entry of its own: the ops.alert_acknowledgement row, written once in the presser's own name and refused any rewrite, is the record of who and when. | `test_a_press_open_to_a_reader_of_one_department_fails_the_check` in `tests/unit/test_acceptance_checks_alert_ack.py` (database, in CI) |
 | `POST /api/v1/custom-connectors` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view` | `test_a_definition_is_kept_waiting_reviewed_by_a_second_person_and_written_to_the_ledger` in `tests/unit/test_custom_connector_store.py` (database, in CI) | `test_a_definition_is_kept_waiting_reviewed_by_a_second_person_and_written_to_the_ledger` in `tests/unit/test_custom_connector_store.py` (database, in CI) | `test_a_caller_without_the_connect_authority_is_refused_and_one_with_it_is_kept` in `tests/unit/test_custom_connector_routes.py` |
 | `POST /api/v1/custom-connectors/{name}/review` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view` | `test_a_definition_is_kept_waiting_reviewed_by_a_second_person_and_written_to_the_ledger` in `tests/unit/test_custom_connector_store.py` (database, in CI) | `test_a_definition_is_kept_waiting_reviewed_by_a_second_person_and_written_to_the_ledger` in `tests/unit/test_custom_connector_store.py` (database, in CI) | `test_a_submitter_is_told_in_words_that_they_cannot_approve_their_own` in `tests/unit/test_custom_connector_routes.py` |
 | `POST /api/v1/me/accounts/{connector}/consent` | `/me` | `test_a_consent_is_answered_as_the_kind_it_was_started_as_and_the_kind_never_changes` in `tests/unit/test_connector_consent.py` (database, in CI) | Not applicable: Starting a person's own consent keeps no credential and changes no connection: it holds one ops.oauth_consent row for that person, which only they can take, once. The ledger entry is the refresh token's credential write when the vendor answers, which test_connector_consent_routes holds. | `test_a_reader_starts_their_own_consent_and_a_person_without_the_capability_is_refused_alike` in `tests/unit/test_connector_consent_routes.py` |
