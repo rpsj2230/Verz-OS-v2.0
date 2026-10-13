@@ -343,3 +343,66 @@ def test_the_nightly_suite_is_the_pull_requests_shards_with_no_base_and_holds_th
     body = "\n".join(str(one.get("run", "")) for one in floor["steps"])
     assert "uv run coverage report" in body and "--fail-under" not in body
     assert "grep -lx 'mode=full'" in body and "exit 1" in body
+
+
+def _run_mode_step(
+    tmp_path: Path, job: str, workflow_name: str, modes: list[str]
+) -> tuple[int, str]:
+    """Run the coverage job's "which mode" step as the runner's bash would (`-eo pipefail`), over
+    plan files written for these modes, and return its exit status and what it wrote to
+    `$GITHUB_OUTPUT`."""
+    steps = workflow(workflow_name)["jobs"][job]["steps"]
+    step = next(one for one in steps if "plan-shard-*.txt" in str(one.get("run", "")))
+    temp = tmp_path / "runner-temp"
+    data = temp / "plan-data"
+    data.mkdir(parents=True)
+    for number, mode in enumerate(modes, start=1):
+        (data / f"plan-shard-{number}.txt").write_text(f"mode={mode}\n", encoding="utf-8")
+    output = tmp_path / "output.txt"
+    output.touch()
+    script = str(step["run"]).replace("${{ runner.temp }}", str(temp))
+    done = subprocess.run(
+        ["bash", "-eo", "pipefail", "-c", script],
+        env={"GITHUB_OUTPUT": str(output), "PATH": "/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return done.returncode, output.read_text(encoding="utf-8")
+
+
+def test_the_coverage_job_reads_the_plans_as_the_runner_would_in_every_case(
+    tmp_path: Path,
+) -> None:
+    """**The shell logic of the floor job, run.** Every shard full holds the floor; a selected
+    run (any shard selected) skips it without failing, which `grep` finding nothing under
+    `pipefail` once made a failure; and no plan at all fails. The first run of this change went red
+    because the plan files were downloaded into the workspace, which the checkout after them
+    deletes, so the directory is under the runner's temp. Delete this and either the required
+    check fails every selected pull request, or it passes with nothing said about what ran."""
+    for index, (modes, wanted) in enumerate(
+        [
+            (["full"] * 8, "full=true"),
+            (["selected"] * 8, "full=false"),
+            (["full", "selected", "full"], "full=false"),
+        ]
+    ):
+        status, written = _run_mode_step(tmp_path / str(index), "coverage", "ci.yml", modes)
+        assert status == 0 and wanted in written.splitlines(), (modes, written)
+    status, written = _run_mode_step(tmp_path / "none", "coverage", "ci.yml", [])
+    assert status != 0 and "full=" not in written
+
+
+def test_the_plan_files_are_downloaded_where_the_checkout_cannot_delete_them() -> None:
+    """The artifact is downloaded before `actions/checkout`, which cleans the workspace, so the
+    path must be outside it. Delete this and the plan download goes back into the workspace and
+    the floor job fails on every run with a missing directory, as the first run here did."""
+    for name in ("ci.yml", "nightly-suite.yml"):
+        steps = workflow(name)["jobs"]["coverage"]["steps"]
+        plans = next(
+            one
+            for one in steps
+            if str(one.get("uses", "")).startswith("actions/download-artifact")
+            and str(one["with"]["pattern"]).startswith("plan-shard")
+        )
+        assert plans["with"]["path"].startswith("${{ runner.temp }}/"), name

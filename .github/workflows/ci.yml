@@ -400,15 +400,15 @@ jobs:
         if: ${{ needs.changes.outputs.tasks_only != 'true' }}
         with:
           pattern: plan-shard-*
-          path: plan-data
+          path: ${{ runner.temp }}/plan-data
           merge-multiple: true
       - name: Did every shard run the whole suite
         id: mode
         if: ${{ needs.changes.outputs.tasks_only != 'true' }}
         run: |
-          total=$(find plan-data -name 'plan-shard-*.txt' 2>/dev/null | wc -l | tr -d '[:space:]')
+          total=$(find "${{ runner.temp }}/plan-data" -name 'plan-shard-*.txt' 2>/dev/null | wc -l | tr -d '[:space:]')
           [ "$total" -gt 0 ] || { echo "::error::no shard left a plan, so nothing says what ran"; exit 1; }
-          full=$(grep -lx 'mode=full' plan-data/plan-shard-*.txt | wc -l | tr -d '[:space:]')
+          full=$({ grep -lx 'mode=full' "${{ runner.temp }}/plan-data"/plan-shard-*.txt || true; } | wc -l | tr -d '[:space:]')
           if [ "$full" = "$total" ]; then
             echo "full=true" >> "$GITHUB_OUTPUT"
             echo "every one of $total shards ran the whole suite, so the coverage floor is held here"
@@ -438,7 +438,7 @@ jobs:
         # the one nobody raises. Every shard that ran the whole suite left data, so a shard
         # missing from it is a floor over less than the suite.
         run: |
-          plans=$(find plan-data -name 'plan-shard-*.txt' | wc -l | tr -d '[:space:]')
+          plans=$(find "${{ runner.temp }}/plan-data" -name 'plan-shard-*.txt' | wc -l | tr -d '[:space:]')
           data=$(find coverage-data -name 'coverage-shard-*' | wc -l | tr -d '[:space:]')
           [ "$plans" = "$data" ] || { echo "::error::$plans shards ran and $data left coverage data"; exit 1; }
           uv run coverage combine coverage-data/coverage-shard-*

@@ -174,12 +174,12 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           pattern: plan-shard-*
-          path: plan-data
+          path: ${{ runner.temp }}/plan-data
           merge-multiple: true
       - name: Every shard ran the whole suite
         run: |
-          total=$(find plan-data -name 'plan-shard-*.txt' | wc -l | tr -d '[:space:]')
-          full=$(grep -lx 'mode=full' plan-data/plan-shard-*.txt | wc -l | tr -d '[:space:]')
+          total=$(find "${{ runner.temp }}/plan-data" -name 'plan-shard-*.txt' | wc -l | tr -d '[:space:]')
+          full=$({ grep -lx 'mode=full' "${{ runner.temp }}/plan-data"/plan-shard-*.txt || true; } | wc -l | tr -d '[:space:]')
           [ "$total" -gt 0 ] && [ "$full" = "$total" ] || { echo "::error::$full of $total shards ran the whole suite, and the nightly must run all of it"; exit 1; }
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -194,7 +194,7 @@ jobs:
           merge-multiple: true
       - name: Coverage floor over the whole suite
         run: |
-          plans=$(find plan-data -name 'plan-shard-*.txt' | wc -l | tr -d '[:space:]')
+          plans=$(find "${{ runner.temp }}/plan-data" -name 'plan-shard-*.txt' | wc -l | tr -d '[:space:]')
           data=$(find coverage-data -name 'coverage-shard-*' | wc -l | tr -d '[:space:]')
           [ "$plans" = "$data" ] || { echo "::error::$plans shards ran and $data left coverage data"; exit 1; }
           uv run coverage combine coverage-data/coverage-shard-*
