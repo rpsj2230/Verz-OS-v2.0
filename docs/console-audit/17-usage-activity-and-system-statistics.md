@@ -3,17 +3,17 @@
 - **Screens:** `/usage`, `/adoption`, `/spend`, `/questions`, `/quality`, `/service-levels`, `/me`, `/company/estate`, `/company/activity`, `/company/consumption`
 - **Tables:** `ops.question_asked`, `ops.question_gap`, `ops.report_refresh`, `ops.spend_actual`, `obs.request_telemetry`, `ops.answer_flag`, `ops.regression_case`, `ops.quality_reading`, `ops.quality_annotation`, `ops.golden_score`, `ops.evaluation_candidate`, `ops.positive_example`, `ops.tier_decision`
 - **Installation values:** none
-- **Measured here:** 23 routes, 12 called by no screen; 2 write routes, 2 with all three proofs; 1 gaps.
+- **Measured here:** 23 routes, 8 called by no screen; 2 write routes, 2 with all three proofs; 1 gaps.
 
 | Route | Called by |
 | --- | --- |
 | `GET /api/v1/company/activity` | `/company/activity` |
 | `GET /api/v1/company/consumption` | `/company/consumption` |
 | `GET /api/v1/company/estate` | `/company/estate` |
-| `GET /api/v1/me/artifacts` | **no screen** |
-| `GET /api/v1/me/devices` | **no screen** |
-| `GET /api/v1/me/reads` | **no screen** |
-| `GET /api/v1/me/stored` | **no screen** |
+| `GET /api/v1/me/artifacts` | `/me` |
+| `GET /api/v1/me/devices` | `/me` |
+| `GET /api/v1/me/reads` | `/me` |
+| `GET /api/v1/me/stored` | `/me` |
 | `GET /api/v1/me/workspace` | `/me` |
 | `GET /api/v1/quality/candidates` | **no screen** |
 | `GET /api/v1/quality/flags` | **no screen** |
