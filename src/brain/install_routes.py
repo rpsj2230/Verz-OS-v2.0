@@ -210,6 +210,7 @@ from brain.ops.retention import BACKUP_RETENTION_DAYS
 from brain.ops.storage import StoreUnansweredError
 from brain.ops.tuning import budget_knob, configured_budgets
 from brain.ops.volume_store import PrincipalVolume, StoredVolumes
+from brain.ops.wiring import budget_breaches
 from brain.settings import Settings
 
 log = structlog.get_logger()
@@ -1052,6 +1053,105 @@ def capacity_plan() -> tuple[list[SizingView], str]:
     return sizings, FIRST_BOTTLENECK_AT_SCALE
 
 
+class MoveView(BaseModel):
+    """One scaling move, what would make it due, and whether this install is past that.
+
+    `due` is None, never false, where nothing on this install measures what the move waits on:
+    a move reading "not due" because nobody looked is the reading `report_is_due` refuses to give
+    for an unmeasured report, carried to the wire. `said` is the sentence a person reads beside
+    it, and it says which of the three it is (M36.1.1.4, M36.1.2.4, M36.1.3.3, M36.1.4.3).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    move: str
+    observable: str
+    unit: str
+    #: The number the observable is compared with, or None where nothing here derives one.
+    threshold: float | None
+    #: What was measured, or None where nothing measures it here.
+    measured: float | None
+    due: bool | None
+    said: str
+
+
+#: What a move says when what it waits on is not measured on this install. Literal sentences,
+#: so none is built from a value and each can be held by a test.
+NOT_MEASURED_READS_IN_FLIGHT: Final = (
+    "Nothing on this install counts console reads in flight, so whether they exceed this "
+    "headroom is not measured here."
+)
+NOT_MEASURED_REPORT_LATENCY: Final = (
+    "Nothing on this install times a report screen, so whether one is slower than this is not "
+    "measured here."
+)
+A_DECISION_NOT_A_MEASUREMENT: Final = (
+    "Whether one machine failing may take the whole system with it is a decision for the "
+    "company, and nothing here measures it."
+)
+DUE_NOW: Final = "Due now."
+NOT_DUE: Final = "Not due."
+
+
+def scaling_moves(profile: str) -> list[MoveView]:
+    """Every scaling trigger asked of this install, as `brain.ops.scaling` decides it.
+
+    The decisions are `partitioning_is_due`, `replica_headroom` and `host_split_is_due`, called
+    here rather than restated, so the screen cannot say a move is due on a figure the trigger
+    table does not use. A trigger whose input nothing measures is served as not measured.
+    """
+    from brain.ops.class_pools import POOLS
+    from brain.ops.retention import METADATA_LEDGER_RETENTION_DAYS
+    from brain.ops.scaling import (
+        PARTITION_ANCHOR,
+        TRIGGERS,
+        ScalingObservable,
+        host_split_is_due,
+        partitioning_is_due,
+        replica_headroom,
+    )
+
+    breaches = len(budget_breaches(profile))
+    sized = next((one for one in seed_profiles() if one.name == profile), None)
+    moves: list[MoveView] = []
+    for trigger in TRIGGERS:
+        threshold = trigger.threshold
+        measured: float | None = None
+        due: bool | None = None
+        said = A_DECISION_NOT_A_MEASUREMENT
+        match trigger.observable:
+            case ScalingObservable.RETAINED_WINDOW_DAYS:
+                measured = float(METADATA_LEDGER_RETENTION_DAYS)
+                due = partitioning_is_due(
+                    retained_window_days=METADATA_LEDGER_RETENTION_DAYS,
+                    interval_days=int(PARTITION_ANCHOR.value),
+                )
+                said = DUE_NOW if due else NOT_DUE
+            case ScalingObservable.CONSOLE_READS_IN_FLIGHT:
+                threshold = None if sized is None else float(replica_headroom(sized, POOLS))
+                said = NOT_MEASURED_READS_IN_FLIGHT
+            case ScalingObservable.REPORT_P95_MS:
+                said = NOT_MEASURED_REPORT_LATENCY
+            case ScalingObservable.PROFILE_DOES_NOT_FIT:
+                measured = float(breaches)
+                due = host_split_is_due(profile)
+                said = DUE_NOW if due else NOT_DUE
+            case ScalingObservable.SINGLE_HOST_FAILURE_IS_ACCEPTABLE:
+                pass
+        moves.append(
+            MoveView(
+                move=trigger.move.value,
+                observable=trigger.observable.value,
+                unit=trigger.unit,
+                threshold=threshold,
+                measured=measured,
+                due=due,
+                said=said,
+            )
+        )
+    return moves
+
+
 class CapacityView(BaseModel):
     """Memory and connections, from `brain.ops.wiring`, `brain.ops.compose` and
     `brain.ops.connections`, and the sizings and first limit from `brain.ops.admission`.
@@ -1069,6 +1169,9 @@ class CapacityView(BaseModel):
     sizings: list[SizingView] = []
     #: The documented first limit reached at ten and at a hundred times today's volume (M22.3.4).
     first_limit: str = ""
+    #: Each scaling move, what makes it due and whether this install is past that, with the
+    #: ones nothing measures served as not measured (M36.1.1.4, M36.1.2.4, M36.1.3.3, M36.1.4.3).
+    moves: list[MoveView] = []
 
 
 # ---------------------------------------------------------------------- the projections
@@ -1572,4 +1675,5 @@ async def capacity(request: Request, asked: Asked) -> CapacityView:
         connections=[connection_view(one) for one in connection_capacity()],
         sizings=sizings,
         first_limit=first_limit,
+        moves=scaling_moves(settings_of(request).profile),
     )
