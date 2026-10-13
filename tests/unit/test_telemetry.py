@@ -17,7 +17,7 @@ import re
 import uuid
 from collections.abc import Callable
 from dataclasses import MISSING, asdict, dataclass, fields
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -27,7 +27,7 @@ from brain.audit.ledger import IDENTIFIER, TRACE_ID
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, Degraded, Denied, Failed, Outcome, Unresolved
 from brain.core.lane import Lane
-from brain.gate.context import Channel, TrafficClass, traffic_class_for
+from brain.gate.context import Channel, GateStep, TrafficClass, open_trace, traffic_class_for
 from brain.identity.roles import Role
 from brain.ops.limits import source_ceilings
 from brain.ops.retention import HORIZONS, DataClass, horizon_for
@@ -36,10 +36,12 @@ from brain.ops.telemetry import (
     _DURATION_FIELDS,
     _FLAG_FIELDS,
     _NAME_FIELDS,
+    _STAGE_MAP_FIELDS,
     COMPLETION_FIELDS,
     FILLED_BY_A_MODEL_CALL,
     FILLED_BY_A_ROUTED_CALL,
     FILLED_BY_A_SOURCE_READ,
+    FILLED_BY_A_TIMED_RECORDER,
     FILLED_BY_THE_FRONT_HALF,
     FILLED_BY_THE_REDACTOR,
     FRONT_HALF_FIELDS,
@@ -47,6 +49,8 @@ from brain.ops.telemetry import (
     LEDGER_RETENTION_DAYS,
     REQUEST_FIELDS,
     ROUTE_FIELDS,
+    STAGE_FIELDS,
+    STAGE_NAMES,
     TELEMETRY_FIELDS,
     UNFILLABLE_TODAY,
     Ingress,
@@ -98,6 +102,7 @@ KIND_GROUPS = (
     ("counts", _COUNT_FIELDS),
     ("durations", _DURATION_FIELDS),
     ("flags", _FLAG_FIELDS),
+    ("stage maps", _STAGE_MAP_FIELDS),
 )
 
 
@@ -370,12 +375,17 @@ def test_the_record_carries_exactly_the_fields_the_leaf_names() -> None:
     without_units = tuple(one.removesuffix("_ms") for one in REQUEST_FIELDS)
     assert without_units == LEAF_FIELDS
 
-    assert (*REQUEST_FIELDS, *COMPLETION_FIELDS, *FRONT_HALF_FIELDS, *ROUTE_FIELDS) == (
-        TELEMETRY_FIELDS
-    )
+    assert (
+        *REQUEST_FIELDS,
+        *COMPLETION_FIELDS,
+        *FRONT_HALF_FIELDS,
+        *ROUTE_FIELDS,
+        *STAGE_FIELDS,
+    ) == TELEMETRY_FIELDS
     assert not {one.removesuffix("_ms") for one in COMPLETION_FIELDS} & set(LEAF_FIELDS)
     assert not set(FRONT_HALF_FIELDS) & set(LEAF_FIELDS)
     assert not set(ROUTE_FIELDS) & set(LEAF_FIELDS)
+    assert not set(STAGE_FIELDS) & set(LEAF_FIELDS)
 
     on_record = tuple(declared.name for declared in fields(RequestTelemetry))
     assert on_record == ("ingress", *TELEMETRY_FIELDS)
@@ -437,6 +447,7 @@ def test_the_fields_nothing_can_fill_today_are_exactly_the_optional_ones() -> No
         FILLED_BY_A_ROUTED_CALL,
         FILLED_BY_A_SOURCE_READ,
         FILLED_BY_THE_REDACTOR,
+        FILLED_BY_A_TIMED_RECORDER,
     )
     assert sum(len(one) for one in mappings) == len(set[str]().union(*mappings)), "a field twice"
     assert set[str]().union(*mappings) == optional
@@ -452,7 +463,9 @@ def test_the_fields_nothing_can_fill_today_are_exactly_the_optional_ones() -> No
         "tokens_out",
         "fallback_count",
         "retry_count",
+        "reasoning_tokens",
     }
+    assert set(FILLED_BY_A_TIMED_RECORDER) == {"stage_ms"}
     for name, because in FILLED_BY_A_MODEL_CALL.items():
         assert because.strip(), f"{name} says nothing about why it may be None"
     assert set(TELEMETRY_FIELDS) - optional == {
@@ -594,6 +607,7 @@ def test_a_fillable_field_has_no_default_at_all() -> None:
             or declared.name in FILLED_BY_A_ROUTED_CALL
             or declared.name in FILLED_BY_A_SOURCE_READ
             or declared.name in FILLED_BY_THE_REDACTOR
+            or declared.name in FILLED_BY_A_TIMED_RECORDER
         ):
             assert declared.default is None, declared.name
         else:
@@ -629,6 +643,53 @@ def test_a_principal_the_audit_chain_would_admit_can_still_be_refused_here() -> 
     assert re.fullmatch(IDENTIFIER, "wei.ling@example.com")
     assert _refuses(principal="U_WeiLing")
     assert _refuses(principal="wei.ling@example.com")
+
+
+# ------------------------------------------------- reasoning and stages (M27.15.6)
+def test_a_stage_map_names_only_the_gates_own_steps_and_never_a_negative_time() -> None:
+    """`stage_ms` is keyed by `GateStep` names and holds times that are not negative, and the
+    record is the guard: a key from anywhere else is a value the request carried into a ledger
+    kept for years. The positive case sits beside the refusals so a record that refuses every
+    map does not pass.
+
+    Delete this and a step name can be invented, or a clock that ran backwards stored as a
+    measurement."""
+    assert {"record", "identify", "entitle", "invoke", "compose"} <= STAGE_NAMES
+    assert not _refuses(stage_ms={"identify": 1.5, "entitle": 0.0})
+    assert _refuses(stage_ms={"somebody-asked-this": 1.0})
+    assert _refuses(stage_ms={"identify": -0.1})
+
+
+def test_a_stage_map_reaches_the_ledger_row_as_a_plain_mapping() -> None:
+    """The row carries the map the driver can serialise, and `reasoning_tokens` beside it.
+
+    Delete this and the row holds a read-only view the JSON column cannot encode, so every
+    timed request fails to be recorded at all."""
+    row = _record(stage_ms={"identify": 2.0}, reasoning_tokens=40).ledger_row()
+    assert type(row["stage_ms"]) is dict
+    assert row["stage_ms"] == {"identify": 2.0}
+    assert row["reasoning_tokens"] == 40
+    plain = _record().ledger_row()
+    assert plain["stage_ms"] is None
+    assert plain["reasoning_tokens"] is None
+
+
+def test_a_recorder_with_a_clock_times_each_step_and_one_without_times_none() -> None:
+    """A step runs from its entry to the next step's entry and the last to the finish; a step
+    never entered is absent, not zero, and a recorder with no clock names no time at all.
+
+    Delete this and a step's time can be measured to the wrong neighbour, a skipped step claimed
+    as quick, or a figure invented where nothing was timed."""
+    ticks = iter(NOW + timedelta(milliseconds=ms) for ms in (0, 10, 40))
+    timed = open_trace("t-timed", NOW, Channel.API, clock=lambda: next(ticks))
+    timed.enter(GateStep.IDENTIFY)
+    timed.enter(GateStep.ENTITLE)
+    assert timed.stage_ms(NOW + timedelta(milliseconds=150)) == {
+        "record": 10.0,
+        "identify": 30.0,
+        "entitle": 110.0,
+    }
+    assert open_trace("t-untimed", NOW, Channel.API).stage_ms(NOW + timedelta(seconds=1)) is None
 
 
 # ------------------------------------------------------------ the status vocabulary

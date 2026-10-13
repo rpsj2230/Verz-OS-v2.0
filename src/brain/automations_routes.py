@@ -64,6 +64,7 @@ from brain.automation_schedule_routes import (
     NotChangedView,
 )
 from brain.console.agent_automations import automations_for, history, schedule_basis
+from brain.console.automation_authoring import NOTHING_FIRES_THIS_YET
 from brain.console.automation_gallery import WEEKDAYS, Cadence, Every, may_open_gallery
 from brain.console.automation_schedule import cannot_start_because
 from brain.console.automations import (
@@ -456,7 +457,11 @@ def row_view(listed: Listed, agent: AgentRecord, asked: Asking) -> AutomationRow
         agent_name=agent.display_name,
         owner_name=_owner_name(listed),
         owner_id=one.runs_as.id,
-        schedule="" if listed.cadence is None else listed.cadence.words(),
+        schedule=(
+            listed.cadence.words()
+            if listed.cadence is not None
+            else ("" if listed.authored is None else listed.authored.trigger.words())
+        ),
         state=_state(listed, asked.now),
         next_run_at=one.next_run_at,
         last_run_at=None if last is None else last.finished_at,
@@ -541,6 +546,8 @@ def detail_view(detailed: Detailed, agent: AgentRecord, asked: Asking) -> Automa
     cannot_run = None
     if one.paused and not listed.removed:
         cannot_run = cannot_start_because(one, agent, asked.now)
+        if cannot_run is None and cadence is None and listed.authored is not None:
+            cannot_run = NOTHING_FIRES_THIS_YET
     return AutomationDetailView(
         automation=row_view(listed, agent, asked),
         guards=listed.guards,

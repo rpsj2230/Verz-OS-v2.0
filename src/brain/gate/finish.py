@@ -125,12 +125,13 @@ the source the lane's readers read, one name or None, counted by the wrapper tha
 reads; `brain.ops.usage_store` and `brain.ops.telemetry` are their readers.
 
 Task ids: M37.3.2.4, M30.5.2, M21.3.4, M27.7.14, M24.3.2, M3.4.2, M3.6.3, M27.15.9, M27.1.5
+Task ids: M27.15.6
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import KW_ONLY, dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Final, Protocol
@@ -357,6 +358,10 @@ class Finished:
     #: None when it walked none (needs-rupash 181 A). A count in the object an auditor reads,
     #: never in a payload.
     redaction_count: int | None = None
+    #: Milliseconds the request spent in each gate step it entered, keyed by the step's lower-case
+    #: name, or None when its recorder had no clock (M27.15.6). A name and a duration, never
+    #: anything a step handled.
+    stage_ms: Mapping[str, float] | None = None
 
     def __post_init__(self) -> None:
         if self.at.tzinfo is None:

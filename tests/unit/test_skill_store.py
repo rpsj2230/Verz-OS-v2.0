@@ -571,7 +571,8 @@ def test_the_database_refuses_an_unsaid_self_decision_and_an_assignment_nobody_a
             conn.execute(
                 f"INSERT INTO agent.skill ({columns}) VALUES ({marks})",  # noqa: S608
                 tuple(
-                    psycopg.types.json.Jsonb(v) if k == "tools" else v for k, v in values.items()
+                    psycopg.types.json.Jsonb(v) if k in ("tools", "knowledge") else v
+                    for k, v in values.items()
                 ),
             )
             with pytest.raises(psycopg.errors.CheckViolation):
@@ -949,7 +950,10 @@ def test_the_tables_refuse_a_source_or_a_decision_that_does_not_say_what_it_is()
         marks = ", ".join(["%s"] * len(row))
         return (
             f"INSERT INTO agent.skill ({columns}) VALUES ({marks})",  # noqa: S608
-            tuple(psycopg.types.json.Jsonb(v) if k == "tools" else v for k, v in row.items()),
+            tuple(
+                psycopg.types.json.Jsonb(v) if k in ("tools", "knowledge") else v
+                for k, v in row.items()
+            ),
         )
 
     with through_0121("brain_skill_library_0121_refusals") as url:

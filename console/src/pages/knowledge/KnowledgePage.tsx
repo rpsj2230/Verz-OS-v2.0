@@ -48,8 +48,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
 import { Input } from "../../components/ui/input";
@@ -285,12 +283,6 @@ function RowMenu({ row }: { readonly row: DocRow }) {
       <DropdownMenuContent align="end" className="w-72">
         <DropdownMenuItem asChild>
           <Link to={documentAddress(row.itemId)}>Open</Link>
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-[11px] font-normal text-dim">Coming soon</DropdownMenuLabel>
-        <DropdownMenuItem disabled className="flex-col items-start gap-0.5">
-          <span>Archive</span>
-          <span className="text-[11px] leading-snug text-dim">{UNAVAILABLE.archive.reason}</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

@@ -13,6 +13,7 @@ import {
   automationInstallApiPath,
   automationPreviewApiPath,
 } from "../../../src/pages/automationGalleryQuery";
+import { authoringCreateApiPath, authoringOptionsApiPath, authoringPreviewApiPath } from "../../../src/pages/automationAuthoringQuery";
 import { modelPinApiPath } from "../../../src/pages/agentModelPinQuery";
 import { agentBudgetApiPath } from "../../../src/pages/agents/AgentSpend";
 import { memoryDeletionApiPath, memoryEditApiPath, promotionApiPath } from "../../../src/pages/agents/agentMemoryQuery";
@@ -22,6 +23,7 @@ import { agentAttachmentsApiPath } from "../../../src/pages/agents/AgentTools";
 import { UNDO_API_PATH } from "../../../src/pages/learningQuery";
 import { agentPreviewApiPath, skillAssignApiPath, skillDetachApiPath } from "../../../src/pages/agents/agentCapabilitiesQuery";
 import { agentChannelsApiPath, agentMoveApiPath } from "../../../src/pages/agentLifecycleQuery";
+import { agentMemoryKindsApiPath } from "../../../src/pages/agents/AgentMemoryKinds";
 import { agentUpgradeAcceptApiPath, agentUpgradeDeclineApiPath } from "../../../src/pages/agents/agentUpgradeQuery";
 import { agentGroupRemovalApiPath, agentGroupsApiPath } from "../../../src/pages/agents/agentGroupsQuery";
 import { suggestApiPath, takeApiPath } from "../../../src/pages/agents/agentCoauthorQuery";
@@ -33,6 +35,12 @@ import { at, type Proofs, type ReadAfterAnAction, t, type WriteRoute } from "../
 const GROUP_INSTALLED = t(
   "test_group_install",
   "test_a_steward_installs_their_agent_in_a_chat_the_bot_is_in_and_takes_it_out",
+  true,
+);
+
+const MEMORY_KINDS_PRESSED = t(
+  "test_agent_memory_kinds_store",
+  "test_leaving_a_kind_out_reaches_the_row_and_the_ledger_and_a_stale_page_writes_neither",
   true,
 );
 
@@ -85,6 +93,12 @@ const DRAFT_DECLINED_PRESSED = t(
 );
 
 export const READ_AFTER_AN_ACTION: Readonly<Record<string, ReadAfterAnAction>> = {
+  // New automation's options are read when a person opens the Automations section, with the gallery.
+  "GET /api/v1/agents/{agent_id}/automation-authoring": {
+    screen: "/agents/:agentId/:tab",
+    spelled: "authoringOptionsApiPath",
+    built: authoringOptionsApiPath("quote-helper"),
+  },
   // The gallery is read when a person opens an agent's Automations section, not when its page opens.
   "GET /api/v1/agents/{agent_id}/automation-templates": {
     screen: "/agents/:agentId/:tab",
@@ -159,6 +173,12 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/components/AutomationGallery.tsx automationInstallApiPath(agentId)": [
     at("POST /api/v1/agents/{agent_id}/automations", "automationInstallApiPath", automationInstallApiPath("quote-helper")),
   ],
+  "src/pages/agents/AutomationAuthoring.tsx authoringPreviewApiPath(agentId)": [
+    at("POST /api/v1/agents/{agent_id}/automation-authoring/preview", "authoringPreviewApiPath", authoringPreviewApiPath("quote-helper")),
+  ],
+  "src/pages/agents/AutomationAuthoring.tsx authoringCreateApiPath(agentId)": [
+    at("POST /api/v1/agents/{agent_id}/automations/authored", "authoringCreateApiPath", authoringCreateApiPath("quote-helper")),
+  ],
   "src/components/AgentAutomations.tsx path": [
     at(
       "POST /api/v1/agents/{agent_id}/automations/{automation_id}/start",
@@ -212,6 +232,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/pages/agents/AgentChannels.tsx agentChannelsApiPath(drawn.agentId)": [
     at("POST /api/v1/agents/{agent_id}/channels", "agentChannelsApiPath", agentChannelsApiPath("quote-helper")),
+  ],
+  "src/pages/agents/AgentMemoryKinds.tsx agentMemoryKindsApiPath(drawn.agentId)": [
+    at("POST /api/v1/agents/{agent_id}/memory-kinds", "agentMemoryKindsApiPath", agentMemoryKindsApiPath("quote-helper")),
   ],
 };
 
@@ -432,6 +455,11 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     audit: CHANNELS_PRESSED,
     behaviour: t("test_agent_lifecycle_routes", "test_an_administrator_over_the_row_switches_an_agent_s_channels"),
   },
+  "POST /api/v1/agents/{agent_id}/memory-kinds": {
+    row: MEMORY_KINDS_PRESSED,
+    audit: MEMORY_KINDS_PRESSED,
+    behaviour: t("test_agent_memory_kinds_routes", "test_an_agents_steward_leaves_a_kind_out_and_the_store_is_told_who_did_it"),
+  },
   "POST /api/v1/agents/{agent_id}/upgrade/accept": {
     row: UPGRADE_PRESSED,
     audit: UPGRADE_PRESSED,
@@ -451,6 +479,20 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_automation_gallery_routes", "test_one_confirmed_request_writes_the_automation_its_registry_entry_and_its_audit_context"),
     audit: t("test_agent_automation_store", "test_an_install_writes_one_row_one_ledger_entry_and_a_second_install_writes_neither", true),
     behaviour: t("test_automation_gallery_routes", "test_one_confirmed_request_writes_the_automation_its_registry_entry_and_its_audit_context"),
+  },
+  "POST /api/v1/agents/{agent_id}/automation-authoring/preview": {
+    row: { notApplicable: "A preview writes no row: it shows what saving would store and what it would have done, and keeps nothing." },
+    audit: { notApplicable: "A preview changes nothing, so there is nothing for the ledger to record." },
+    behaviour: t("test_automation_authoring_routes", "test_the_preview_shows_the_terms_the_rehearsal_and_a_digest_and_writes_nothing"),
+  },
+  "POST /api/v1/agents/{agent_id}/automations/authored": {
+    row: t("test_automation_authoring_routes", "test_one_confirmed_request_writes_one_paused_automation_as_the_caller"),
+    audit: t(
+      "test_automation_authoring_store",
+      "test_a_written_automation_reads_back_arrives_in_the_ledger_and_install_is_still_once",
+      true,
+    ),
+    behaviour: t("test_automation_authoring_routes", "test_a_confirmation_for_other_words_is_refused_and_writes_nothing"),
   },
   "POST /api/v1/agents/{agent_id}/automations/{automation_id}/start": {
     row: t("test_automation_run_store", "test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who", true),

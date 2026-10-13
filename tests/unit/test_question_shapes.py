@@ -484,6 +484,9 @@ def database() -> Iterator[str]:
         migrate(DATABASE, "upgrade", "0100")
         migrate(DATABASE, "stamp", "0108")
         migrate(DATABASE, "upgrade", "0113")
+        # 0215 adds the reasoning tokens and the time spent in each gate step (M27.15.6).
+        migrate(DATABASE, "stamp", "0214")
+        migrate(DATABASE, "upgrade", "0215")
         yield scratch
     finally:
         drop(DATABASE)

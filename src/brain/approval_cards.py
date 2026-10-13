@@ -140,7 +140,7 @@ from brain.channels.inbound import (
 )
 from brain.channels.outbound import Delivered, Outgoing
 from brain.chat_answer import People, console_link, people_of
-from brain.console.approvals import Card
+from brain.console.approvals import Card, Endorsed
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.gate.admission import admit_card_press, verbs_for_channel
@@ -238,6 +238,13 @@ DECIDED_TOLD: Final[Mapping[ApprovalState, str]] = {
     ApprovalState.APPROVED: "Approved. It is recorded under your name.",
     ApprovalState.REJECTED: "Rejected. It is recorded under your name, with your reason.",
 }
+
+#: What a first approval of an action that needs two people is told (M13.7.7). Said instead of a
+#: decision, because nothing was decided: the action waits for somebody else.
+FIRST_OF_TWO_TOLD: Final = (
+    "Approved, and it is recorded under your name. This needs a second person to approve it "
+    "before it runs, and it has not run."
+)
 
 #: What the reject control says before a reason is chosen.
 REJECT_PROMPT: Final = "Reject because..."
@@ -691,6 +698,9 @@ class ApprovalCards:
             return Pressed(told=told, closed=CLOSED_TOLD)
         except Failed:
             return Pressed(told=PRESS_NOT_TAKEN_TOLD)
+        if isinstance(decided, Endorsed):
+            log.info("first approval of two given on a card")
+            return Pressed(told=FIRST_OF_TWO_TOLD)
         log.info("approval decided on a card", verdict=asked.verdict.value)
         return await self._closing(
             found,

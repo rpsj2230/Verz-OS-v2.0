@@ -541,6 +541,28 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # request that found it used up and of the people told: actors, and a stop is the budget's
         # period rather than anybody's record (`0211`).
         "ops.budget_stop",
+        # How many answers of an agent cited a document on a day (`0213`): no question, no
+        # principal and no text, so a count is about the agent's use of a document and nobody's.
+        "ops.agent_item_use",
+        # An alert acknowledgement names a source and an instant, and the person who pressed: an
+        # actor and not an owner, and `0217` grants no way for a row to leave (M27.15.45).
+        "ops.alert_acknowledgement",
+        # What a lead flagged, what was read of answers, how golden questions scored and who agreed
+        # to a change: each names an actor and a reference and is a fact about a moment, not
+        # anybody's record, and `0222` grants no way for a row to leave.
+        "ops.answer_flag",
+        "ops.regression_case",
+        "ops.quality_reading",
+        "ops.quality_annotation",
+        "ops.golden_score",
+        "ops.evaluation_candidate",
+        "ops.positive_example",
+        "ops.tier_decision",
+        # A template draft is its author's own work, kept and never deleted by an application role
+        # (`0223` grants no DELETE), and an audience offer names an agent and the person who made
+        # it: neither is anybody's record to erase, and an erasure reports both kept.
+        "agent.template_draft",
+        "agent.audience_extra",
         "ops.retention_release",
         "ops.retention_report",
         "ops.routing_change",

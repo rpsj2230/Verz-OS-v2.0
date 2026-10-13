@@ -592,6 +592,7 @@ async def answer_lane(
                 skills=calls.skills,
                 connector=calls.connector,
                 redaction_count=calls.redactions,
+                stage_ms=None if recorder is None else recorder.stage_ms(completed_at),
             ),
         )
 

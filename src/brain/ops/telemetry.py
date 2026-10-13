@@ -189,7 +189,7 @@ the order `read_payload_with_role` states; `brain.ops.trace_sink` still drops wh
 it, because that reference is not the trace id and the store is keyed by the trace.
 
 Task ids: M27.1.1, M27.1.2, M27.1.3, M27.1.4, M27.1.5, M27.1.6, M30.5.2, M21.3.4, M3.4.2
-Task ids: M3.6.3
+Task ids: M3.6.3, M27.15.6
 """
 
 from __future__ import annotations
@@ -208,7 +208,7 @@ from brain.audit.ledger import ENT_HASH, TRACE_ID
 from brain.core.errors import Outcome
 from brain.core.lane import Lane
 from brain.gate.classify import LaneBasis
-from brain.gate.context import TrafficClass, traffic_class_for
+from brain.gate.context import GateStep, TrafficClass, traffic_class_for
 
 # At run time, unlike `Finished` below: `status_of_finished` branches on this type, and a branch
 # is behaviour rather than an annotation.
@@ -570,12 +570,21 @@ FRONT_HALF_FIELDS: Final[tuple[str, ...]] = (
 #: where no call was classified (`brain.gate.answer.route_of`).
 ROUTE_FIELDS: Final[tuple[str, ...]] = ("routed_tier", "tier_basis")
 
+#: What a reasoning model spent thinking and where a request's time went (M27.15.6).
+#:
+#: Their own slice for `COMPLETION_FIELDS`'s reason: M27.1.5 names neither. `reasoning_tokens` is
+#: a part of `tokens_out`, which the provider counts it inside, so it is read out of that figure
+#: and never added to it. `stage_ms` is the milliseconds the request spent in each gate step it
+#: entered, from the recorder's own clock, keyed by the step's lower-case name.
+STAGE_FIELDS: Final[tuple[str, ...]] = ("reasoning_tokens", "stage_ms")
+
 #: Every field a request record declares, in the order the record declares them.
 TELEMETRY_FIELDS: Final[tuple[str, ...]] = (
     *REQUEST_FIELDS,
     *COMPLETION_FIELDS,
     *FRONT_HALF_FIELDS,
     *ROUTE_FIELDS,
+    *STAGE_FIELDS,
 )
 
 #: The fields holding a name, an identifier or a hash. Checked against `tracing.mask` before
@@ -610,6 +619,7 @@ _COUNT_FIELDS: Final[frozenset[str]] = frozenset(
         "redaction_count",
         "fallback_count",
         "retry_count",
+        "reasoning_tokens",
         # A score rather than a count, kept here because it shares the rule that matters: a
         # whole number that is never negative. It scores the question, never anything withheld.
         "risk_score",
@@ -620,6 +630,13 @@ _COUNT_FIELDS: Final[frozenset[str]] = frozenset(
 _DURATION_FIELDS: Final[frozenset[str]] = frozenset(
     {"time_to_first_token_ms", "tool_latency_ms", "duration_ms"}
 )
+
+#: The one field holding durations by step: a closed vocabulary of gate step names, each with a
+#: millisecond figure that is never negative. Checked by `RequestTelemetry.__post_init__`.
+_STAGE_MAP_FIELDS: Final[frozenset[str]] = frozenset({"stage_ms"})
+
+#: The only keys `stage_ms` may carry: the gate's own step names, lower case.
+STAGE_NAMES: Final[frozenset[str]] = frozenset(step.name.lower() for step in GateStep)
 
 #: The one field holding a flag.
 _FLAG_FIELDS: Final[frozenset[str]] = frozenset({"cache_hit"})
@@ -675,6 +692,10 @@ FILLED_BY_A_MODEL_CALL: Final[Mapping[str, str]] = MappingProxyType(
         "tokens_out": "this request called no model, so no provider counted any tokens for it",
         "fallback_count": "this request called no model, so no chain was walked",
         "retry_count": "this request called no model, so no rung was tried twice",
+        "reasoning_tokens": (
+            "this request called no model, so no provider counted any tokens for it; a model that "
+            "did not reason reports none, which is recorded as zero and not as absent"
+        ),
     }
 )
 
@@ -705,6 +726,20 @@ FILLED_BY_THE_REDACTOR: Final[Mapping[str, str]] = MappingProxyType(
         "redaction_count": (
             "this request's answer was never walked by the redactor, such as a refusal before "
             "any read, a cache hit or an automation's tool call"
+        ),
+    }
+)
+
+
+#: The field only a request whose recorder had a clock fills, and why it is None otherwise. Its
+#: own mapping for `FILLED_BY_A_MODEL_CALL`'s reason: None here is neither unmeasured nor a
+#: model's absence, it is a request opened without a clock to time its steps by.
+FILLED_BY_A_TIMED_RECORDER: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "stage_ms": (
+            "this request's recorder was opened without a clock, as an install check's or an "
+            "automation's is, so no step was timed and a figure here would be invented; a step "
+            "the request never entered is absent from the map rather than zero in it"
         ),
     }
 )
@@ -799,8 +834,22 @@ class RequestTelemetry:
     #: step of `brain.models.routing.classify_tier` that settled it (M3.6.3).
     routed_tier: Tier | None = None
     tier_basis: TierBasis | None = None
+    #: The part of `tokens_out` the model spent reasoning, as the provider counted it (M27.15.6).
+    reasoning_tokens: int | None = None
+    #: Milliseconds spent in each gate step the request entered, keyed by the step's lower-case
+    #: name (M27.15.6). A step the request never entered is absent, not zero.
+    stage_ms: Mapping[str, float] | None = None
 
     def __post_init__(self) -> None:
+        if self.stage_ms is not None:
+            unknown = sorted(set(self.stage_ms) - STAGE_NAMES)
+            if unknown or any(one < 0 for one in self.stage_ms.values()):
+                msg = (
+                    "stage_ms names a step the gate does not have, or a negative time in one, "
+                    "which is a clock that ran backwards rather than a measurement"
+                )
+                raise TelemetryError(msg)
+            object.__setattr__(self, "stage_ms", MappingProxyType(dict(self.stage_ms)))
         for name in sorted(_NAME_FIELDS):
             value = getattr(self, name)
             if value is None:
@@ -848,6 +897,9 @@ class RequestTelemetry:
         }
         for name in TELEMETRY_FIELDS:
             row[name] = getattr(self, name)
+        if self.stage_ms is not None:
+            # The driver serialises a plain mapping and has no idea what a read-only view is.
+            row["stage_ms"] = dict(self.stage_ms)
         return MappingProxyType(row)
 
 
@@ -973,6 +1025,8 @@ def request_telemetry_of(finished: Finished) -> RequestTelemetry:
         tokens_out=None if usage is None else usage.tokens_out,
         fallback_count=None if usage is None else usage.fallback_count,
         retry_count=None if usage is None else usage.retry_count,
+        reasoning_tokens=None if usage is None else usage.reasoning_tokens,
+        stage_ms=finished.stage_ms,
         status=status_of_finished(finished),
         duration_ms=micros / _MICROSECONDS_PER_MS,
         risk_score=None if front is None else front.risk_score,

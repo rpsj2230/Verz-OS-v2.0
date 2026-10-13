@@ -65,7 +65,7 @@ from brain.tables.agent import AgentRow
 from brain.tables.budget import BudgetVersionRow
 from brain.tables.identity import PrincipalRow
 from brain.tables.spend import SpendActualRow
-from tests.fixtures.console_http import Stub, console_client, get
+from tests.fixtures.console_http import Stub, console_client, get, no_audience_extras
 from tests.fixtures.setting_rows import Result, Row, SettingRows
 from tests.unit.test_agent_routes import agent_row
 from tests.unit.test_connector_routes import Records, a_connection
@@ -395,6 +395,7 @@ def served(held: Held, monkeypatch: pytest.MonkeyPatch) -> Iterator[tuple[TestCl
     what makes a cost something the recorder could have written."""
     monkeypatch.setattr(figures_routes, "install_currency", lambda: PRICED_IN)
     with console_client(GRANTS, routers=(router,)) as (client, stub):
+        stub.answerers.append(no_audience_extras)
         stub.answerers.append(held.answer)
         stub.answerers.append(prices(PRICED_IN).answer)
         state = client.app.state  # type: ignore[attr-defined]
