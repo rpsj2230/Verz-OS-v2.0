@@ -1206,6 +1206,24 @@ def publish_authored(
     )
 
 
+def hoisted_document(draft: AuthoredDraft) -> dict[str, JsonValue]:
+    """The draft's body with every literal it asks about hoisted out, for a person to review.
+
+    Each item's text is replaced by a token naming the item (`{{item_id}}`), at every place it
+    occurs, and the literals the scanner classified are left exactly as they are, as in a
+    publish. What a reviewer reads is therefore the shape of the template with nothing from
+    the agent it came from left in the places a decision is about, and the items beside it say
+    what each token stands for (M13.8.15).
+    """
+    report = draft.report
+    substitutions = {item.text: f"{{{{{item.item_id}}}}}" for item in report.items}
+    untouched = frozenset(literal.location for literal in report.passed)
+    body = draft.document
+    return {
+        path: _substituted(body[path], path, substitutions, untouched) for path in MANIFEST_PATHS
+    }
+
+
 def set_visibility(authored: AuthoredTemplate, visibility: TemplateVisibility) -> AuthoredTemplate:
     """Move a published template between the three levels (M13.6.6).
 

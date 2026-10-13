@@ -128,13 +128,26 @@ def test_0190_replaces_the_last_definition_and_what_replaces_it_since_starts_fro
         or "AGENT_TRIGGER_FUNCTION" in path.read_text(encoding="utf-8")
     )
 
-    assert defining == ["0137", "0190", "0196"]
+    assert defining == ["0137", "0190", "0196", "0225"]
     # `0196` is the one later definition, and it starts from `0190`'s result rather than `0137`'s.
     channels = migration_module(MIGRATION.with_name("0190_agent_channels_audited.py"))
     attachments = migration_module(MIGRATION.with_name("0196_tool_attachments.py"))
     as_0190 = channels.replaced(migration_module(MIGRATION).AGENT_TRIGGER_FUNCTION)
     assert as_0190 == attachments.AS_SHIPPED_BEFORE
     assert attachments.with_connectors(as_0190) == attachments.AGENT_TRIGGER_FUNCTION
+    kinds = migration_module(MIGRATION.with_name("0225_agent_memory_kinds.py"))
+    built = kinds.function_with_memory()
+    assert built.replace("CREATE OR REPLACE FUNCTION", "CREATE FUNCTION", 1) != (
+        attachments.AGENT_TRIGGER_FUNCTION
+    )
+    # Every line `0196` writes is still written, in its order, and the memory branch is the extra.
+    before = [one for one in attachments.AGENT_TRIGGER_FUNCTION.splitlines() if one.strip()][1:]
+    after = built.splitlines()
+    place = 0
+    for line in before:
+        place = after.index(line, place) + 1
+    assert "OLD.memory_kinds IS DISTINCT FROM NEW.memory_kinds" in built
+    assert "'part', 'memory'" in built
 
 
 def test_an_insert_is_attributed_to_its_builder_and_an_update_to_the_person_the_route_named() -> (

@@ -50,9 +50,15 @@ a response for any other model (`brain.models.adapter`), and a provider's echo o
 would otherwise miss a price the administrator set against the name the ladder shows them. The
 sums on the row are these calls' sums, and `ModelUsage` refuses a pair that disagree.
 
+**Reasoning tokens are recorded beside the output they are a part of (M27.15.6).** A provider that
+reports them counts them inside `completion_tokens`, so the row's `reasoning_tokens` is read out of
+`tokens_out` and never added to it. They are kept apart because a reasoning model's cost is mostly
+the part nobody reads, and a usage screen that shows one figure cannot tell a long answer from a
+long think.
+
 Scope: pure. Nothing here performs I/O or reads a clock.
 
-Task ids: M27.7.14, M27.1.5, M3.6.3, M27.12.5
+Task ids: M27.7.14, M27.1.5, M3.6.3, M27.12.5, M27.15.6
 """
 
 from __future__ import annotations
@@ -114,17 +120,25 @@ class ModelUsage:
     agent_version: str | None
     fallback_count: int
     retry_count: int
+    #: The part of `tokens_out` the models spent reasoning (M27.15.6): a part of it, never added.
+    reasoning_tokens: int = 0
     #: Each call that came back, in the order it did. Empty on a usage built without them, which
     #: prices nothing; see the module docstring.
     answered: tuple[AnsweredCall, ...] = ()
 
     def __post_init__(self) -> None:
         counts = (self.calls, self.tokens_in, self.tokens_out, self.fallback_count)
-        if any(one < 0 for one in (*counts, self.retry_count)):
+        if any(one < 0 for one in (*counts, self.retry_count, self.reasoning_tokens)):
             msg = f"a model usage with a negative count is a subtraction that went wrong: {self}"
             raise MeteringError(msg)
         if self.calls < 1:
             msg = "a usage with no call is a request that called no model, which carries none"
+            raise MeteringError(msg)
+        if self.reasoning_tokens > self.tokens_out:
+            msg = (
+                "reasoning tokens are a part of the output tokens, so more of them than the "
+                "output is a count that was added to it rather than read out of it"
+            )
             raise MeteringError(msg)
         if self.fallback_count + self.retry_count > self.calls - 1:
             msg = (
@@ -169,6 +183,7 @@ class Meter:
         self._fallbacks = 0
         self._tokens_in = 0
         self._tokens_out = 0
+        self._reasoning = 0
         self._models: list[str | None] = []
         self._providers: list[str | None] = []
         self._agents: list[str | None] = []
@@ -222,6 +237,9 @@ class Meter:
             raise MeteringError(msg)
         self._tokens_in += response.usage.input_tokens
         self._tokens_out += response.usage.output_tokens
+        # Held to the output it is a part of, so a provider that reports more reasoning than
+        # output cannot make the request's own usage refuse to build when it finishes.
+        self._reasoning += min(response.usage.reasoning_tokens, response.usage.output_tokens)
         self._models.append(response.model)
         self._providers.append(provider)
         self._agents.append(agent_version)
@@ -247,5 +265,6 @@ class Meter:
             agent_version=_agreed(self._agents),
             fallback_count=self._fallbacks,
             retry_count=self._retries,
+            reasoning_tokens=self._reasoning,
             answered=tuple(self._answered),
         )

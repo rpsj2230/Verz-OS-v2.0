@@ -119,6 +119,7 @@ from brain.tools.skills import (
     SourceKind,
 )
 from tests.fixtures.http_client import Response
+from tests.fixtures.setting_rows import SettingRows
 from tests.fixtures.skill_sources import (
     COMMIT,
     FOLDER,
@@ -519,6 +520,11 @@ class StubResult:
         return list(self._rows)
 
 
+#: The install's feature switches, held in memory. Empty unless a test holds one, which is every
+#: feature off, as a fresh install has them.
+_SWITCHES = SettingRows()
+
+
 class StubSession(AsyncSession):
     """An `AsyncSession` answering the two statements this router makes, and no other.
 
@@ -531,11 +537,16 @@ class StubSession(AsyncSession):
 
     async def execute(self, statement: Any, *args: Any, **kwargs: Any) -> Any:
         _STORED.statements.append(statement)
+        switches = _SWITCHES.answer(statement)
+        if switches is not None:
+            return switches
         if len(statement.column_descriptions) == 2:
             asked = set(statement.whereclause.right.value)
             return StubResult(
                 [_STORED.installs[key] for key in sorted(asked & set(_STORED.installs))]
             )
+        if statement.column_descriptions[0].get("name") == "slug":
+            return StubResult(["finance", "web"])
         if statement.column_descriptions[0].get("entity") is PrincipalRow:
             named = set(statement.whereclause.right.value)
             return StubResult(
@@ -556,6 +567,7 @@ def stored() -> Iterator[Stored]:
     """A fresh store per test, so one test's rows are never another's evidence."""
     global _STORED
     _STORED = Stored()
+    _SWITCHES.rows.clear()
     yield _STORED
 
 
@@ -811,6 +823,9 @@ def test_an_install_belonging_to_an_agent_outside_the_audience_is_dropped_by_the
     class GenerousSession(StubSession):
         async def execute(self, statement: Any, *args: Any, **kwargs: Any) -> Any:
             _STORED.statements.append(statement)
+            switches = _SWITCHES.answer(statement)
+            if switches is not None:
+                return switches
             if len(statement.column_descriptions) == 2:
                 return StubResult([_STORED.installs[key] for key in sorted(_STORED.installs)])
             return StubResult([_STORED.agents[key] for key in sorted(_STORED.agents)])
@@ -1045,17 +1060,17 @@ def test_a_queue_entry_carries_no_body_and_no_reviewer() -> None:
 # --------------------------------------------------------------- what it will not say
 
 
-def test_the_writes_are_twelve_posts_and_no_read_answers_one_skill_by_name(
+def test_the_writes_are_thirteen_posts_and_no_read_answers_one_skill_by_name(
     client: TestClient,
 ) -> None:
-    """Under `/skills` there are two GETs, neither taking a path parameter, and twelve POSTs: add a
-    package, import from a repository or an address, import a written procedure (M12.2.10), save
-    an edit as a version, set categories, decide about one, assign one, retire and reinstate a
-    version, detach one from an agent, export an approved version (M12.3.1), a POST because it
-    records who took it, and rehearse a version's examples (M12.3.4). Read off the application's
-    own document.
+    """Under `/skills` there are two GETs, neither taking a path parameter, and thirteen POSTs: add
+    a package, draft one from a description (M12.4.14), import from a repository or an address,
+    import a written procedure (M12.2.10), save an edit as a version, set categories, decide about
+    one, assign one, retire and reinstate a version, detach one from an agent, export an approved
+    version (M12.3.1), a POST because it records who took it, and rehearse a version's examples
+    (M12.3.4). Read off the application's own document.
 
-    Delete this and a thirteenth write, an approval folded into an import say, or a GET answering
+    Delete this and a fourteenth write, an approval folded into an import say, or a GET answering
     one skill by name, can arrive without anybody arguing for it."""
     paths = client.app.openapi()["paths"]  # type: ignore[attr-defined]
     mine = {path: set(operations) for path, operations in paths.items() if path.startswith(SKILLS)}
@@ -1065,6 +1080,7 @@ def test_the_writes_are_twelve_posts_and_no_read_answers_one_skill_by_name(
         f"{SKILLS}/library": {"get"},
         f"{SKILLS}/imports": {"post"},
         f"{SKILLS}/procedures": {"post"},
+        f"{SKILLS}/drafts": {"post"},
         f"{SKILLS}/{{digest}}/versions": {"post"},
         f"{SKILLS}/{{digest}}/categories": {"post"},
         f"{SKILLS}/{{digest}}/review": {"post"},
@@ -1452,6 +1468,38 @@ def test_a_rejected_skill_is_refused_assignment_and_nothing_is_written(
     assert "cannot be pinned" in refused.json()["message"]
     assert stored.library.assigned == []
     assert stored.installs["company_desk"][0].effective_hash == before
+
+
+def test_a_skill_the_agent_cannot_use_is_refused_only_while_the_switch_is_on(
+    client: TestClient, stored: Stored
+) -> None:
+    """The skill names a tool the agent is not allowed. With the install's `skill_needs` switch off
+    it is assigned and the screen shows what the agent reaches; with it on the same assignment is
+    refused with the tool named, and nothing is written.
+
+    Delete this and the rule is a function nobody asks: an install switches it on and every skill
+    is still assigned, or it cannot be switched off and an administrator cannot assign a skill
+    whose tools they mean to widen the agent for afterwards."""
+    an_assignable_agent(stored)
+    digest = post(client, "u_admin", SKILLS, a_package()).json()["digest"]
+    post(client, "u_wide", f"{SKILLS}/{digest}/review", {"decision": "approve"})
+    _SWITCHES.hold("feature.skill_needs", True, value_type="boolean")
+
+    refused = post(
+        client, "u_admin", f"{SKILLS}/{digest}/assignments", {"agent_id": "company_desk"}
+    )
+
+    assert refused.status_code == 404, refused.text
+    assert "nothing was assigned" in refused.json()["message"]
+    assert "desk.read_ticket" in refused.json()["message"]
+    assert "crm.read_client" not in refused.json()["message"]
+    assert stored.library.assigned == []
+
+    _SWITCHES.rows.clear()
+    allowed = post(
+        client, "u_admin", f"{SKILLS}/{digest}/assignments", {"agent_id": "company_desk"}
+    )
+    assert allowed.status_code == 201, allowed.text
 
 
 def test_an_agent_outside_the_audience_or_the_authority_is_refused_as_one_that_does_not_exist(
@@ -1975,3 +2023,102 @@ def test_a_skill_with_scripts_is_added_only_where_the_install_runs_a_sandbox(
     assert accepted.status_code == 201, accepted.text
     (held,) = stored.library.skills.values()
     assert [path for path, _ in held.imported.skill.script_sha256] == ["scripts/check.py"]
+
+
+# ------------------------------------------------- a skill described in conversation (M12.4.14)
+DRAFTS = f"{SKILLS}/drafts"
+
+
+class DraftingModel:
+    """What `app.state.coauthor_calls` is: it answers the one call with a reply and keeps what it
+    was sent."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.sent: list[tuple[Any, ...]] = []
+
+    async def complete(self, messages: Any, **kwargs: Any) -> Any:
+        self.sent.append(tuple(messages))
+        return SimpleNamespace(text=self.text)
+
+
+def a_drafted_reply(**overrides: Any) -> str:
+    import json
+
+    found: dict[str, Any] = {
+        "name": "renewal-check",
+        "description": "Use when a client asks whether their domain is close to renewal",
+        "instructions": "Look up the client.\nSay when it renews.",
+        "tools": ["crm.read_client", "mail.send_everything"],
+        "knowledge": ["finance"],
+        "examples": [{"task": "When does acme renew", "tools": ["crm.read_client"]}],
+    }
+    found.update(overrides)
+    return json.dumps(found)
+
+
+def test_a_described_skill_lands_undecided_and_is_refused_every_assignment(
+    client: TestClient, stored: Stored
+) -> None:
+    """With drafting switched on, a description becomes a skill waiting for review: undecided, its
+    invented tool left out and said so, no agent able to take it, and the model sent the person's
+    words and the install's own names.
+
+    Delete this and a drafted skill can arrive approved, or executable, or carrying a tool nobody
+    registered, with the person told none of it."""
+    an_assignable_agent(stored)
+    model = DraftingModel(a_drafted_reply())
+    client.app.state.coauthor_calls = model  # type: ignore[attr-defined]
+    _SWITCHES.hold("feature.skill_drafting", True, value_type="boolean")
+
+    drafted = post(
+        client, "u_admin", DRAFTS, {"description": "Tell a client when their domain renews"}
+    )
+
+    assert drafted.status_code == 201, drafted.text
+    body = drafted.json()
+    assert body["skill"]["name"] == "renewal-check"
+    assert body["skill"]["review"] == "pending"
+    assert [one["what"] for one in body["findings"]] == ["mail.send_everything"]
+    assert "waiting for review" in body["note"]
+    sent = " ".join(one.content for one in model.sent[0])
+    assert "Tell a client when their domain renews" in sent and "crm.read_client" in sent
+    refused = post(
+        client,
+        "u_admin",
+        f"{SKILLS}/{body['skill']['digest']}/assignments",
+        {"agent_id": "company_desk"},
+    )
+    assert refused.status_code == 404
+    assert "cannot be pinned" in refused.json()["message"]
+    assert stored.library.assigned == []
+
+
+def test_a_description_is_refused_without_the_authority_the_switch_or_a_readable_reply(
+    client: TestClient, stored: Stored
+) -> None:
+    """A caller who may not add skills is the screen's one refusal with no model asked, an install
+    with the switch off says so and asks no model, a reply that is not a skill adds nothing, and a
+    name the library already holds is refused.
+
+    Delete this and drafting spends a model call for a caller who may not add, or adds a skill the
+    model did not write, or a second under a held name."""
+    model = DraftingModel("here is a skill")
+    client.app.state.coauthor_calls = model  # type: ignore[attr-defined]
+    ask = {"description": "Tell a client when their domain renews"}
+
+    off = post(client, "u_admin", DRAFTS, ask)
+    _SWITCHES.hold("feature.skill_drafting", True, value_type="boolean")
+    outsider = post(client, "u_narrow", DRAFTS, ask)
+    unreadable = post(client, "u_admin", DRAFTS, ask)
+    model.text = a_drafted_reply()
+    first = post(client, "u_admin", DRAFTS, ask)
+    held = post(client, "u_admin", DRAFTS, ask)
+
+    assert off.status_code == 404 and "switched off" in off.json()["message"]
+    assert outsider.status_code == 404
+    assert outsider.json()["message"] == screen_refusal(client)
+    assert unreadable.status_code == 404 and "nothing was drafted" in unreadable.json()["message"]
+    assert first.status_code == 201
+    assert held.status_code == 404 and "already holds" in held.json()["message"]
+    assert len(model.sent) == 3

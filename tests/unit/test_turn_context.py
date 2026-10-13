@@ -18,6 +18,7 @@ from typing import cast
 
 from brain.core.redaction import ChannelPayload
 from brain.gate import model_lane, turn_context
+from brain.gate import runtime as runtime_module
 from brain.gate.model_lane import FixedHints, prompt_for, prompt_of
 from brain.gate.turn_context import (
     INCLUDED_ATTRIBUTE,
@@ -184,12 +185,21 @@ def _empty() -> Passages:
     return Passages()
 
 
+#: The one caller of `assemble` that is not an answer path: the install check for an agent's
+#: kinds of memory, which asks the real assembler what it obeys (M39.7.1) rather than restating it.
+AN_INSTALL_CHECK_ASKS_THE_ASSEMBLER = (
+    "ops.acceptance_checks_agent_memory_kinds."
+    "an_agent_leaves_out_a_kind_of_memory_and_no_run_is_shown_it"
+)
+
+
 def test_only_the_assembler_reads_a_turns_recollections_and_only_prompt_of_builds_a_prompt() -> (
     None
 ):
     """`ONE_PLACE_ASSEMBLES_WHAT_A_MODEL_IS_SHOWN`, held to the source: nothing under `src/brain`
     calls `prompt_for` but `prompt_of`, nothing calls `assemble` but the two answer paths (the
-    model lane's `draft` and the agent runtime's loop), and `draft` reads no recollection itself.
+    model lane's `draft` and the agent runtime's loop) and the one install check that asks the real
+    assembler what it obeys, and `draft` reads no recollection itself.
 
     Delete this and a second assembler can be written beside the first, with the trace naming
     the parts of one and the model shown the parts of the other."""
@@ -224,7 +234,13 @@ def test_only_the_assembler_reads_a_turns_recollections_and_only_prompt_of_build
                     callers[name].add(f"{module.removeprefix('brain.')}.{function.name}")
 
     assert callers["prompt_for"] == {"gate.model_lane.prompt_of"}
-    assert callers["assemble"] == {"gate.model_lane.draft", "gate.runtime._loop"}
+    assert callers["assemble"] == {
+        "gate.model_lane.draft",
+        "gate.runtime._loop",
+        # An install check handing the run's own assembler an agent's stored kinds, to see what
+        # the assembler obeys. It calls the one assembler and assembles nothing itself.
+        AN_INSTALL_CHECK_ASKS_THE_ASSEMBLER,
+    }
     drafted = ast.unparse(ast.parse(inspect.getsource(model_lane.draft)))
     assert ".hints()" not in drafted
     assert turn_context.ONE_PLACE_ASSEMBLES_WHAT_A_MODEL_IS_SHOWN
@@ -298,3 +314,124 @@ def test_the_agent_runtime_is_shown_the_same_assembled_parts_and_names_them() ->
     assert drafted.context is not None
     assert drafted.context.included == (Part.CONVERSATION, Part.SESSION, Part.ASKER_MEMORY)
     assert (Part.KNOWLEDGE, LeftOut.BY_TOOLS) in drafted.context.left_out
+
+
+# --------------------------------------------------------- the kinds of memory (M39.7.1)
+class _Counted:
+    def __init__(self, said: tuple[str, ...]) -> None:
+        self.said = said
+        self.calls = 0
+
+    async def hints(self) -> tuple[str, ...]:
+        self.calls += 1
+        return self.said
+
+
+def test_a_kind_of_memory_an_agent_leaves_out_is_never_read_and_is_named_as_configured_out() -> (
+    None
+):
+    """With the person's memory left out of the configuration the asker's reader is not called at
+    all, the part is absent from the prompt, and the trace names it as left out by configuration
+    and not as nothing coming back.
+
+    Delete this and a run can be shown what its agent was configured not to read, or a configured
+    absence can read as the asker having nothing to remember."""
+    session, asker = _Counted(("for now, in euros",)), _Counted(("I prefer the figure first",))
+
+    parts = asyncio.run(
+        assemble(
+            "q",
+            conversation=("before",),
+            session=session,
+            asker=asker,
+            kinds=("conversation", "task", "project", "own"),
+        )
+    )
+
+    assert asker.calls == 0
+    assert parts.asker_memory == ()
+    assert session.calls == 1
+    assert (parts.conversation, parts.session) == (("before",), ("for now, in euros",))
+    assert dict(parts.note().left_out)[Part.ASKER_MEMORY] is LeftOut.NOT_CONFIGURED
+
+
+def test_the_conversation_kind_covers_both_the_earlier_questions_and_what_was_said_for_now() -> (
+    None
+):
+    """Leaving the conversation out leaves out the thread's earlier questions and the session's
+    statements together, and leaves the person's memory and the task as they were.
+
+    Delete this and one of the two halves of the conversation can be read while the setting says
+    the conversation is not."""
+    session, asker = _Counted(("for now",)), _Counted(("a habit",))
+
+    parts = asyncio.run(
+        assemble(
+            "q",
+            conversation=("before",),
+            session=session,
+            asker=asker,
+            kinds=("person", "task", "project", "own"),
+        )
+    )
+
+    assert (parts.conversation, parts.session) == ((), ())
+    assert session.calls == 0
+    assert parts.asker_memory == ("a habit",)
+    left = dict(parts.note().left_out)
+    assert left[Part.CONVERSATION] is left[Part.SESSION] is LeftOut.NOT_CONFIGURED
+
+
+def test_a_turn_with_no_setting_reads_every_kind_as_it_always_did() -> None:
+    """The positive case: no kinds named is all five, so a caller that does not know about the
+    setting behaves exactly as before.
+
+    Delete this and a default of none can silence every agent's memory with every refusal test
+    above still green."""
+    session, asker = _Counted(("for now",)), _Counted(("a habit",))
+
+    parts = asyncio.run(assemble("q", conversation=("before",), session=session, asker=asker))
+
+    assert (parts.conversation, parts.session, parts.asker_memory) == (
+        ("before",),
+        ("for now",),
+        ("a habit",),
+    )
+    assert parts.configured_out == frozenset()
+
+
+def test_every_part_that_is_memory_names_the_kind_it_is_and_knowledge_names_none() -> None:
+    """The map from a part to its kind, asserted against the five kinds written out here: the
+    conversation, the task, the project, the person and the agent's own, and no kind for knowledge.
+
+    Delete this and a part can be added that no setting can leave out, or a kind names nothing."""
+    from brain.agents.memory_kinds import MemoryKind
+
+    assert {one.value for one in MemoryKind} == {"conversation", "task", "project", "person", "own"}
+    assert set(turn_context.KIND_OF_PART.values()) == set(MemoryKind)
+    assert Part.KNOWLEDGE not in turn_context.KIND_OF_PART
+    assert set(turn_context.KIND_OF_PART) | {Part.KNOWLEDGE} == set(Part)
+
+
+def test_both_answer_paths_hand_the_assembler_the_agents_memory_kinds() -> None:
+    """The setting is enforced in one place and only if both callers give it: the model lane's
+    `draft` and the runtime's loop each pass `kinds=` the agent's own, read off the record, in the
+    full call expression and not in a comment beside it.
+
+    Delete this and one path can stop passing the setting, so an agent left without a kind is shown
+    it by whichever path forgot, with `assemble` itself still correct."""
+    found: dict[str, str] = {}
+    for module in (model_lane, runtime_module):
+        tree = ast.parse(inspect.getsource(module))
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "assemble"
+            ):
+                keywords = {one.arg: ast.unparse(one.value) for one in node.keywords}
+                found[module.__name__] = keywords.get("kinds", "")
+    assert found == {
+        "brain.gate.model_lane": "None if agent is None else agent.record.memory_kinds",
+        "brain.gate.runtime": "self.record.memory_kinds",
+    }

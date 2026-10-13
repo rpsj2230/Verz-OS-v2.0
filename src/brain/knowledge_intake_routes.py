@@ -53,7 +53,7 @@ from __future__ import annotations
 
 import asyncio
 import math
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Any, Final, Protocol
 from urllib.parse import unquote
 
@@ -275,9 +275,19 @@ def make_resolver() -> Resolver:
     return SystemResolver()
 
 
-def _read_link(
-    page: FetchedPage, *, kind: KnowledgeKind, placement: KnowledgeVisibility, asked: Asking
+def read_link_for(
+    page: FetchedPage,
+    *,
+    kind: KnowledgeKind,
+    placement: KnowledgeVisibility,
+    owner_id: str,
+    taken_on: date,
 ) -> ReadUpload | ParseFailure:
+    """A fetched page read into an item, under the one parse lock, in the thread it runs in.
+
+    Shared by the link door and by a refetch of a link already added (M39.9.1.5), so a page is
+    scanned, parsed and bounded the same way whichever asked.
+    """
     # The upload route's lock, not a second one: the parse budget sizes one parse per process, and
     # a lock of this route's own would let a link and an upload each spend all of it at once.
     with _ONE_PARSE_AT_A_TIME:
@@ -285,12 +295,24 @@ def _read_link(
             page,
             kind=kind,
             placement=placement,
-            owner_id=asked.caller.principal.id,
-            taken_on=asked.now.date(),
+            owner_id=owner_id,
+            taken_on=taken_on,
             # Read in the application container, so against its budget: see
             # `brain.knowledge.app_parse_budget`.
             budget_bytes=app_parse_budget_bytes(),
         )
+
+
+def _read_link(
+    page: FetchedPage, *, kind: KnowledgeKind, placement: KnowledgeVisibility, asked: Asking
+) -> ReadUpload | ParseFailure:
+    return read_link_for(
+        page,
+        kind=kind,
+        placement=placement,
+        owner_id=asked.caller.principal.id,
+        taken_on=asked.now.date(),
+    )
 
 
 @router.post(LINKS_PATH, status_code=201, response_model=UploadedView, responses=REFUSALS)

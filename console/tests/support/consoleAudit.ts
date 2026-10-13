@@ -320,6 +320,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents/{agent_id}/transfer",
       "/api/v1/agents/{agent_id}/duplicate",
       "/api/v1/agents/{agent_id}/channels",
+      "/api/v1/agents/{agent_id}/memory-kinds",
       "/api/v1/agents/{agent_id}/upgrade*",
       "/api/v1/agents/{agent_id}/groups*",
       "/api/v1/agents/{agent_id}/learning",
@@ -358,12 +359,15 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.agent",
       "agent.template_instance",
       "agent.template_version",
+      "agent.template_draft",
+      "agent.audience_extra",
       "agent.upgrade_decline",
       "agent.leash_change",
       "agent.supervised_action",
       "agent.action_verdict",
       "agent.supervision_pin",
       "agent.tool_attachment",
+      "ops.agent_item_use",
       "agent.group_install",
       "ops.channel_room",
       "agent.browser_envelope",
@@ -402,6 +406,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/skills/library",
       "/api/v1/skills/imports",
       "/api/v1/skills/procedures",
+      "/api/v1/skills/drafts",
       "/api/v1/skills/{digest}/versions",
       "/api/v1/skills/{digest}/categories",
       "/api/v1/skills/{digest}/review",
@@ -445,6 +450,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
     screens: ["/agents/:agentId/:tab", "/automations", "/automations/:automationId", "/automations/:automationId/:view"],
     routes: [
       "/api/v1/agents/{agent_id}/automation-templates*",
+      "/api/v1/agents/{agent_id}/automation-authoring*",
+      "/api/v1/agents/{agent_id}/automations/authored",
       "/api/v1/agents/{agent_id}/automations",
       "/api/v1/agents/{agent_id}/automations/{automation_id}/start",
       "/api/v1/agents/{agent_id}/automations/{automation_id}/stop",
@@ -505,6 +512,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/connectors/{connector}/steward",
       "/api/v1/console/connectors",
       "/api/v1/console/incidents",
+      "/api/v1/console/incidents/acknowledgement",
       "/api/v1/console/system-health",
       "/api/v1/console/connectors/{connector}",
       "/api/v1/console/connectors/{connector}/export",
@@ -529,6 +537,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "ops.channel_delivery",
       "ops.connector_connection",
       "ops.connector_sync",
+      // Who acknowledged an incident, and when (M27.15.45).
+      "ops.alert_acknowledgement",
       // A consent started at a vendor, held until it is answered once (M11.8.6).
       "ops.oauth_consent",
       // A connector for a new API, as submitted, and who reviewed it (M11.7.8).
@@ -778,16 +788,33 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/company/activity",
       "/company/consumption",
     ],
-    routes: ["/api/v1/report/*", "/api/v1/me/workspace", "/api/v1/company/*"],
+    routes: ["/api/v1/report/*", "/api/v1/me/workspace", "/api/v1/company/*", "/api/v1/quality/*"],
     tables: [
       "ops.question_asked",
       "ops.question_gap",
       "ops.report_refresh",
       "ops.spend_actual",
       "obs.request_telemetry",
+      // What a lead flagged and the case it became, what the machines and the people read of
+      // answers, how the golden questions scored by release, and what a failed case proposed.
+      "ops.answer_flag",
+      "ops.regression_case",
+      "ops.quality_reading",
+      "ops.quality_annotation",
+      "ops.golden_score",
+      "ops.evaluation_candidate",
+      // An example approved unchanged, and who agreed to a change that needed a person.
+      "ops.positive_example",
+      "ops.tier_decision",
     ],
     installation: [],
-    gaps: [],
+    gaps: [
+      {
+        what: "Flagging an answer, annotating a day's sample and deciding a candidate have no screen: the Quality screen draws the canary run and not the findings.",
+        because:
+          "brain.quality_routes serves each as a door and no page presses them yet (M28.3.1, M28.3.3, M28.4.1); a captured case, a golden score and an example are stored and read by the install checks only.",
+      },
+    ],
   },
   "Logs and errors": {
     screens: ["/errors", "/logs"],

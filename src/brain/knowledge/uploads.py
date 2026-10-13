@@ -105,7 +105,7 @@ from brain.knowledge.ingest import (
     ceiling_for,
     sniff,
 )
-from brain.knowledge.item import KnowledgeItem, KnowledgeState
+from brain.knowledge.item import ARRIVED_AS_FILE, ARRIVED_AS_LINK, KnowledgeItem, KnowledgeState
 from brain.knowledge.kinds import KnowledgeKind, assert_kind_holds, assert_uploadable
 from brain.knowledge.scanners import configured_scanner
 from brain.knowledge.scanning import (
@@ -482,6 +482,8 @@ class FetchedPage:
     received: ReceivedUpload
     #: `brain.knowledge.web_page.source_of` the address it finally answered from.
     source: str
+    #: The address the person gave, before any redirect, which is what a refetch asks again.
+    requested: str = ""
 
 
 def receive_page(url: str, *, fetcher: Fetcher, resolver: Resolver) -> FetchedPage:
@@ -509,7 +511,9 @@ def receive_page(url: str, *, fetcher: Fetcher, resolver: Resolver) -> FetchedPa
         filename=link_filename(final), declared_type=media_type.value, content=fetched.body
     )
     return FetchedPage(
-        received=ReceivedUpload(upload=upload, body=fetched.body), source=source_of(final)
+        received=ReceivedUpload(upload=upload, body=fetched.body),
+        source=source_of(final),
+        requested=url,
     )
 
 
@@ -1000,6 +1004,7 @@ def read_for_text_path(
         parser=parser or TextPathParser(),
         budget_bytes=budget_bytes,
         tables_visible=TABLES_ARE_VISIBLE,
+        arrived_as=ARRIVED_AS_FILE,
     )
 
 
@@ -1030,6 +1035,8 @@ def read_for_link(
         budget_bytes=budget_bytes,
         tables_visible=LINK_TABLES_ARE_VISIBLE,
         title_of=page_title,
+        arrived_as=ARRIVED_AS_LINK,
+        source_url=page.requested,
     )
 
 
@@ -1044,6 +1051,8 @@ def _read(
     budget_bytes: int | None,
     tables_visible: Mapping[MediaType, bool],
     title_of: Callable[[ScannedContent], str] | None = None,
+    arrived_as: str = "",
+    source_url: str = "",
 ) -> ReadUpload | ParseFailure:
     """The one read both paths take. A type the reader has no table answer for is unsupported."""
     assert_uploadable(kind)
@@ -1075,5 +1084,7 @@ def _read(
         owner_id=owner_id,
         state=KnowledgeState.PUBLISHED,
         kind=kind,
+        arrived_as=arrived_as,
+        source_url=source_url,
     )
     return ReadUpload(item=item, blocks=parsed.blocks)

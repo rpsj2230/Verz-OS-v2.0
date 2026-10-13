@@ -8,9 +8,15 @@
  * Task ids: none
  */
 
-import { agentKnowledgeLinkApiPath, agentKnowledgeUploadApiPath } from "../../../src/pages/agents/agentKnowledgeQuery";
+import {
+  agentKnowledgeLinkApiPath,
+  agentKnowledgeRefetchApiPath,
+  agentKnowledgeRetireApiPath,
+  agentKnowledgeUploadApiPath,
+} from "../../../src/pages/agents/agentKnowledgeQuery";
 import { uploadPath } from "../../../src/pages/knowledgeQuery";
 import {
+  archivePath,
   correctionDecisionPath,
   newVersionPath,
   passagesPath,
@@ -30,6 +36,13 @@ import { at, type Proof, type Proofs, type ReadAfterAnAction, t, type WriteRoute
 function lifecycle(name: string): Proof {
   return t("test_knowledge_lifecycle_db", name, true);
 }
+
+/** `tests/unit/test_knowledge_documents_db.py`, which presses the archive route against PostgreSQL. */
+const LIFECYCLE_ARCHIVED = t(
+  "test_knowledge_documents_db",
+  "test_a_document_is_archived_by_whoever_may_act_on_it_and_then_nothing_answers_from_it",
+  true,
+);
 
 const LIFECYCLE_SUPERSEDED = lifecycle(
   "test_a_newer_version_supersedes_the_older_which_stays_readable_and_answers_use_the_newer",
@@ -125,6 +138,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/knowledge/actForms.tsx stewardPath(itemId)": [
     at("POST /api/v1/knowledge/items/{item_id}/steward", "stewardPath", stewardPath("upload.x")),
   ],
+  "src/pages/knowledge/actForms.tsx archivePath(itemId)": [
+    at("POST /api/v1/knowledge/items/{item_id}/archive", "archivePath", archivePath("upload.x")),
+  ],
   "src/pages/knowledge/SolutionsPage.tsx SOLUTIONS_API_PATH": [
     at("POST /api/v1/knowledge/solutions", "SOLUTIONS_API_PATH", SOLUTIONS_API_PATH),
   ],
@@ -146,6 +162,20 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/knowledge/links", "LINKS_API_PATH", LINKS_API_PATH),
     at("POST /api/v1/agents/{agent_id}/knowledge/links", "door?.link", agentKnowledgeLinkApiPath("quote-helper")),
   ],
+  "src/pages/agents/AgentKnowledgeActs.tsx agentKnowledgeRetireApiPath(agentId, item.itemId)": [
+    at(
+      "POST /api/v1/agents/{agent_id}/knowledge/{item_id}/retire",
+      "agentKnowledgeRetireApiPath",
+      agentKnowledgeRetireApiPath("quote-helper", "upload.x"),
+    ),
+  ],
+  "src/pages/agents/AgentKnowledgeActs.tsx agentKnowledgeRefetchApiPath(agentId, item.itemId)": [
+    at(
+      "POST /api/v1/agents/{agent_id}/knowledge/{item_id}/refetch",
+      "agentKnowledgeRefetchApiPath",
+      agentKnowledgeRefetchApiPath("quote-helper", "upload.x"),
+    ),
+  ],
   "src/pages/knowledge/addForms.tsx queuedPath(place.kind, place.level, place.department)": [
     at(
       "POST /api/v1/knowledge/uploads/queued",
@@ -159,7 +189,23 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
 const THE_DOOR_IS_PRESSED_ELSEWHERE =
   "This address calls the Knowledge page's own door function with the same request, and that door's row and ledger entry are followed by its own database tests; no database test presses this address yet. The install check for the agent's Knowledge section (M39.9.1.8) does.";
 
+/** `tests/unit/test_agent_knowledge_finish_db.py`, which presses the section's routes against PostgreSQL. */
+function finishing(name: string): Proof {
+  return t("test_agent_knowledge_finish_db", name, true);
+}
+
+const RETIRED = finishing("test_a_retired_document_leaves_the_section_and_every_search_at_once_and_stays_on_file");
+const FETCHED_AGAIN = finishing(
+  "test_a_link_is_fetched_again_only_when_a_person_asks_and_the_newer_page_replaces_the_old",
+);
+
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/agents/{agent_id}/knowledge/{item_id}/retire": { row: RETIRED, audit: RETIRED, behaviour: RETIRED },
+  "POST /api/v1/agents/{agent_id}/knowledge/{item_id}/refetch": {
+    row: FETCHED_AGAIN,
+    audit: FETCHED_AGAIN,
+    behaviour: FETCHED_AGAIN,
+  },
   "POST /api/v1/agents/{agent_id}/knowledge/uploads": {
     row: { none: THE_DOOR_IS_PRESSED_ELSEWHERE, leaf: "M39.9.1.8" },
     audit: { none: THE_DOOR_IS_PRESSED_ELSEWHERE, leaf: "M39.9.1.8" },
@@ -203,6 +249,11 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: LIFECYCLE_PROMOTED,
     audit: LIFECYCLE_PROMOTED,
     behaviour: LIFECYCLE_PROMOTED,
+  },
+  "POST /api/v1/knowledge/items/{item_id}/archive": {
+    row: LIFECYCLE_ARCHIVED,
+    audit: LIFECYCLE_ARCHIVED,
+    behaviour: LIFECYCLE_ARCHIVED,
   },
   "POST /api/v1/knowledge/items/{item_id}/steward": {
     row: LIFECYCLE_HANDED_OVER,
