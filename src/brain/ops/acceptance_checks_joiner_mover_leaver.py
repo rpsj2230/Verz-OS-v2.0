@@ -21,7 +21,7 @@ Rejected: one check walking a person through all three, which would be one red r
 The starter-pack check is one flow (join, move, leave) because each step is the previous one's
 state; the disable, the agent and the automation are each their own.
 
-Task ids: M26.1.2, M26.1.3, M26.2.1, M26.2.4, M26.2.6, M26.3.1, M26.3.2, M26.3.3, M26.3.4
+Task ids: M26.1.2, M26.1.3, M26.2.1, M26.2.4, M26.2.6, M26.3.1, M26.3.2, M26.3.3, M26.3.4, M26.1.4
 """
 
 from __future__ import annotations
@@ -462,3 +462,36 @@ async def a_leaver_s_personal_document_stays_and_nobody_else_reaches_it(h: Harne
         raise CheckFailedError(
             "the product's policy for a leaver's personal knowledge is not to keep it"
         )
+
+
+@check(
+    leaves=("M26.1.4",),
+    sentence=(
+        "A person signed in with the Starter pack's reads over their own department is offered "
+        "three starter questions naming that department by the welcome route and no other "
+        "department; a person holding nothing is offered none, and the two answers carry no count."
+    ),
+)
+async def a_new_person_is_offered_three_questions_for_their_own_department(h: Harness) -> None:
+    from brain.identity.lifecycle import STARTER_PACK, WELCOME_QUESTIONS
+    from brain.ops.acceptance_checks import _in
+    from brain.ops.acceptance_people_signed_in import console
+    from brain.welcome_routes import welcome
+
+    await h.found_departments()
+    c = await console(h)
+    joiner, nobody = h.principal(A, "joiner"), h.principal(B, "nobody")
+    reads = tuple(one.value for one in STARTER_PACK.capabilities)
+    await h.person(joiner, department=A, grants=_in(A, *reads))
+    await h.person(nobody, department=B)
+    with c.as_route():
+        told = await welcome(await c.asked(joiner))
+        none = await welcome(await c.asked(nobody))
+    if len(told.questions) != WELCOME_QUESTIONS:
+        raise CheckFailedError("a person with the starter pack was not offered three questions")
+    if not all(A in one for one in told.questions):
+        raise CheckFailedError("an offered question does not name the person's own department")
+    if any(B in one for one in told.questions):
+        raise CheckFailedError("an offered question names another department")
+    if none.questions or set(told.model_dump()) != {"questions"}:
+        raise CheckFailedError("a person holding nothing was offered a question, or a count")

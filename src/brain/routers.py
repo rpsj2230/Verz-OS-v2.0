@@ -536,6 +536,10 @@ from brain.vault_routes import router as vault_router
 # secret. See `brain.webhook_routes`.
 from brain.webhook_routes import router as webhook_router
 
+# The starter questions a new person is offered for their own department on the empty Ask page,
+# kept to what their admitted reach lets them ask. See `brain.welcome_routes`.
+from brain.welcome_routes import router as welcome_router
+
 # The website widget's front door: a stranger's browser is handed a session, or told why not, and
 # its questions are answered from knowledge marked public alone, with no sign-in and the origin
 # proved instead. See `brain.widget_routes`.

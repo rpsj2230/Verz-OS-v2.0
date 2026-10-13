@@ -936,6 +936,8 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
   "/signed-out": "The page a person lands on after signing out, which asks nothing and manages nothing.",
   "/*": "The page drawn for an address the console does not have, which manages nothing.",
   "POST /api/v1/answer": "The answer lane behind Ask, which writes no row an administrator manages.",
+  "GET /api/v1/welcome":
+    "The starter questions a person is offered on their first visit to Ask, for their own department and kept to what they may ask; it reads nothing an administrator manages and writes nothing.",
   "POST /api/v1/answer/mark":
     "A person marking an answer they were given helpful or not, one bit against its reference, which no administrator manages and nothing that answers reads.",
   "POST /api/v1/answer/copied":
