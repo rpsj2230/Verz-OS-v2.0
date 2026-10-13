@@ -117,6 +117,7 @@ def test_every_declared_reader_asks_about_its_feature_and_nothing_else_asks() ->
         "brain.skill_draft_routes",
         "brain.automation_authoring_routes",
         "brain.ops.starter_skill_store",
+        "brain.plugin_routes",
         "brain.browsing.driver",
     }
 
@@ -244,6 +245,7 @@ def test_switching_a_feature_on_writes_its_row_and_the_next_read_sees_it(
         "skill_drafting": False,
         "automation_authoring": False,
         "starter_skills": False,
+        "plugin_registry": False,
         "browser_runs": False,
     }
 
