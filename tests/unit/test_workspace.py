@@ -197,12 +197,12 @@ def an_allowance(*, spent: int, ceiling: int = 10_000) -> Allowance:
 
 
 def test_an_agent_is_composed_of_the_ten_parts_the_work_breakdown_names() -> None:
-    """**M39.1.1.1.** The ten are the list the workspace is arranged by: a part nothing
+    """**M39.1.1.1.** The twelve are the list the workspace is arranged by: a part nothing
     enumerates has no tab, no diff row and no divergence flag, and it goes missing without
     anything failing.
 
     Asserted on the member values rather than on the count alone, because a count is satisfied
-    by any ten names and the interesting failure is a part quietly renamed into something the
+    by any twelve names and the interesting failure is a part quietly renamed into something the
     rest of the console does not recognise.
 
     Delete this and `Part` can lose `memory` to a refactor that tidies the enum, and the
@@ -212,6 +212,8 @@ def test_an_agent_is_composed_of_the_ten_parts_the_work_breakdown_names() -> Non
         "knowledge",
         "connectors",
         "skills",
+        "tools",
+        "workflows",
         "channels",
         "availability",
         "leash",
@@ -226,7 +228,7 @@ def test_every_part_says_how_it_reaches_the_agent_so_the_pinnable_ones_are_deriv
     accident, because `Attachment` decides from `PINNED_PARTS` and that set is derived from
     `SUPPLY`.
 
-    The positive half names the five that can be attached, so a supply changed from `COLUMN`
+    The positive half names the seven that can be attached, so a supply changed from `COLUMN`
     to `PINNED` fails here rather than quietly letting somebody attach a second persona.
 
     Delete this and `SUPPLY` can lose a part, `PINNED_PARTS` silently shrinks, and attaching a
@@ -235,6 +237,8 @@ def test_every_part_says_how_it_reaches_the_agent_so_the_pinnable_ones_are_deriv
     assert set(PINNED_PARTS) == {
         Part.CONNECTORS,
         Part.SKILLS,
+        Part.TOOLS,
+        Part.WORKFLOWS,
         Part.CHANNELS,
         Part.MEMORY,
         Part.AUTOMATIONS,
@@ -484,15 +488,18 @@ def test_the_leash_is_supplied_by_a_template_and_still_cannot_diverge() -> None:
     }
 
 
-def test_five_of_the_ten_parts_are_not_in_a_template_at_all() -> None:
-    """Channels, memory, automations, availability and the knowledge predicate are decided by
-    the install, so there is nothing for an instance to disagree with. Stating it as a derived
-    set is what stops a reader assuming the divergence flag covers the whole composition.
+def test_seven_of_the_twelve_parts_are_not_in_a_template_at_all() -> None:
+    """Tools, workflows, channels, memory, automations, availability and the knowledge predicate
+    are decided by the install, so there is nothing for an instance to disagree with. Stating it
+    as a derived set is what stops a reader assuming the divergence flag covers the whole
+    composition.
 
     Delete this and somebody adds `channels` to `PART_OF_PATH` on the reasonable-sounding
     grounds that a template ought to name channels, and the mapping then names a path the
     manifest does not have."""
     assert set(PARTS_NO_TEMPLATE_SUPPLIES) == {
+        Part.TOOLS,
+        Part.WORKFLOWS,
         Part.CHANNELS,
         Part.MEMORY,
         Part.AUTOMATIONS,

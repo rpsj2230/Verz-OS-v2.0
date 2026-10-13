@@ -1,11 +1,11 @@
-"""The test selection's shadow: what it would run, how a miss is recorded, and that it decides
-nothing.
+"""The test selection and the plan that runs it: what it reaches, that it fails safe, and that
+the nightly suite still runs everything.
 
-The selection is not switched on. These tests hold the three things the week of shadow records
-depends on: the selection reaches the tests the import graph says it reaches and falls back to
-the full suite where the graph is blind; a failure the shards found outside the selection is
-recorded as a miss; and the job that records it can never fail a run or gate a deploy, while the
-nightly suite runs every file exactly as a pull request's shards do.
+The selection is switched on for pull requests (2026-10-13) at depth 1. These tests hold what that
+depends on: the selection reaches the tests the import graph, the readers of a file and the tree
+walkers say it reaches; it falls back to the full suite wherever it cannot be sure; the shards'
+shares between them are exactly the selection; a selected run never judges the coverage floor; and
+the nightly suite runs every file exactly as a pull request's shards do, with no base commit.
 
 Task ids: none
 """
@@ -21,6 +21,8 @@ from typing import Any
 import pytest
 import yaml
 
+from brain.ops import test_plan
+from brain.ops.test_plan import PLAN_DEPTH, plan
 from brain.ops.test_selection import (
     ALWAYS,
     DEPTHS,
@@ -28,10 +30,12 @@ from brain.ops.test_selection import (
     MAY_BE_ABSENT,
     failed_files,
     main,
+    readers_of,
     record,
+    scanners,
     select,
 )
-from brain.ops.test_shards import collected
+from brain.ops.test_shards import ShardError, collected, partition
 
 REPO = Path(__file__).resolve().parents[2]
 SUITE = collected()
@@ -142,39 +146,263 @@ def test_the_shadow_writes_its_record_and_never_fails(tmp_path: Path) -> None:
     assert written["would_have_missed"] == dict.fromkeys(map(str, DEPTHS), False)
 
 
-def test_the_shadow_job_decides_nothing_and_every_shard_still_runs_every_file() -> None:
-    """The job cannot fail a run, nothing waits on it, it never runs on main, and each shard
-    writes the report it reads whatever the tests did. Delete this and the shadow can quietly
-    become the selection, or starve itself of the red shards it exists to measure."""
+SHARDS = 8
+
+
+def _live(step: dict[Any, Any]) -> str:
+    return "\n".join(
+        line for line in str(step.get("run", "")).splitlines() if not line.strip().startswith("#")
+    )
+
+
+def _shard_step(job: dict[Any, Any]) -> dict[Any, Any]:
+    return next(one for one in job["steps"] if "brain.ops.test_plan" in str(one.get("run", "")))
+
+
+def test_the_selection_depth_is_the_conservative_one_the_record_measured() -> None:
+    """Depths 0, 1 and 2 all missed nothing in the seven records; one is the middle, and a
+    selection at depth 0 is a subset of it. Delete this and the plan can be narrowed to the
+    module's own importers, or widened past what was measured, with every other test green."""
+    assert PLAN_DEPTH == 1 and PLAN_DEPTH in DEPTHS
+    shallow = select(["src/brain/ops/limits.py"], depth=0, suite=SUITE)
+    chosen = select(["src/brain/ops/limits.py"], depth=PLAN_DEPTH, suite=SUITE)
+    assert set(shallow.files) <= set(chosen.files) and not chosen.full
+
+
+def test_a_changed_document_selects_the_tests_that_name_its_directory() -> None:
+    """The import graph cannot see a test that reads `docs/architecture.html`, so a changed file
+    that is not a source module selects the tests naming its directory. Delete this and a pull
+    request that changes only a document merges green over the test that reads it, and the
+    nightly is the first thing to say so."""
+    readers = readers_of("docs/architecture.html", SUITE)
+    assert "tests/unit/test_architecture_doc.py" in readers
+    chosen = select(["docs/architecture.html"], depth=PLAN_DEPTH, suite=SUITE)
+    assert readers <= set(chosen.files) and not chosen.full
+    assert len(chosen.files) < len(SUITE)
+
+
+def test_a_source_change_also_selects_the_tests_that_walk_the_tree() -> None:
+    """A test that refuses a shape anywhere under `src/brain` is linked to no module by an
+    import. Delete this and a new function with a forbidden name passes every selected file
+    and fails only the night after it merges."""
+    walkers = scanners(SUITE)
+    assert "tests/unit/test_installation.py" in walkers
+    chosen = select(["src/brain/ops/limits.py"], depth=PLAN_DEPTH, suite=SUITE)
+    assert walkers <= set(chosen.files)
+    only_a_test = select(["tests/unit/test_limits.py"], depth=PLAN_DEPTH, suite=SUITE)
+    assert not walkers <= set(only_a_test.files)
+
+
+def test_a_deleted_source_module_runs_the_full_suite() -> None:
+    """The graph is read from files that exist, so a removed module has no importers to ask and
+    an importer the diff did not touch is the test that breaks. Delete this and removing a
+    module selects nothing but the invariants. The sibling shows a deleted test does not."""
+    assert select(["src/brain/ops/no_such_module_anywhere.py"], depth=1, suite=SUITE).full
+    assert not select(["tests/unit/test_no_such_test_anywhere.py"], depth=1, suite=SUITE).full
+
+
+def test_the_shares_between_them_are_exactly_the_selection_and_the_full_suite_in_full() -> None:
+    """**The property that makes a split safe, for a selection.** Every selected file in
+    exactly one share, none outside it; and with nothing selected-against, every file. Delete
+    this and a partition bug drops a selected file from every shard, with every shard green."""
+    changed = ["src/brain/ops/limits.py"]
+    shares = [plan(n, SHARDS, base="x", head="HEAD", changed=changed) for n in range(1, SHARDS + 1)]
+    listed = [name for one in shares for name in one.files]
+    expected = select(changed, depth=PLAN_DEPTH, suite=SUITE).files
+    assert not any(one.full for one in shares)
+    assert sorted(listed) == sorted(expected) and len(listed) == len(set(listed))
+    assert 0 < len(listed) < len(SUITE)
+    whole = [plan(n, SHARDS, base="", head="HEAD") for n in range(1, SHARDS + 1)]
+    assert all(one.full for one in whole)
+    assert sorted(name for one in whole for name in one.files) == sorted(SUITE)
+
+
+@pytest.mark.parametrize(
+    "base",
+    ["", "0000000000000000000000000000000000000000", "deadbeef" * 5],
+)
+def test_a_missing_or_unknown_base_commit_runs_the_whole_share(base: str) -> None:
+    """Fail safe, first way: the base cannot be established (a push, a shallow clone, a force
+    push that moved it). Delete this and such a run selects nothing, or crashes. The positive
+    sibling is the test above, where a known diff selects fewer files than the suite."""
+    made = plan(1, SHARDS, base=base, head="HEAD")
+    assert made.full and made.files
+
+
+def test_an_empty_diff_and_a_diff_the_graph_cannot_see_run_the_whole_share() -> None:
+    """Fail safe, second and third ways: nothing to select from, and a conftest-like change.
+    Delete this and an empty diff is read as a change that reaches no test."""
+    assert plan(1, SHARDS, base="x", head="HEAD", changed=[]).full
+    assert plan(2, SHARDS, base="x", head="HEAD", changed=["pyproject.toml"]).full
+
+
+def test_an_error_in_the_selection_runs_the_whole_share_and_says_why(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fail safe, last way: the planner raises. It must neither fail the pull request's tests
+    nor run none of them. Delete this and a bug in `covering_tests` turns into a red shard on
+    every pull request, or into a green one that ran nothing."""
+
+    def broken(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("the graph fell over")
+
+    monkeypatch.setattr(test_plan, "select", broken)
+    made = plan(1, SHARDS, base="x", head="HEAD", changed=["src/brain/ops/limits.py"])
+    assert made.full and made.files and "RuntimeError" in made.reason
+
+
+def test_a_shard_with_nothing_selected_is_an_empty_pass_and_the_suite_never_is() -> None:
+    """A selection may leave a shard empty and then nothing is run; the whole suite may not,
+    because pytest given no file runs everything. Delete this and eight shards fail with "has no
+    test files" the day the always-run set is narrowed, or the refusal for the full suite goes."""
+    groups = partition({"a.py": 1, "b.py": 1}, 4, allow_empty=True)
+    assert sorted(len(one) for one in groups) == [0, 0, 1, 1]
+    with pytest.raises(ShardError):
+        partition({"a.py": 1, "b.py": 1}, 4)
+    step = _live(_shard_step(workflow("ci.yml")["jobs"]["tests"]))
+    assert "has nothing to run" in step and "grep -q '^mode=selected$'" in step
+    assert 'echo "ran=false"' in step and "exit 0" in step
+
+
+def test_every_selected_run_gives_every_shard_a_file() -> None:
+    """The invariants directory is always selected and has more files than there are shards, so
+    no shard of a selection is empty today. Delete this and narrowing `ALWAYS` silently makes
+    shards empty, which the workflow handles but which wastes a runner for each."""
+    always = [one for one in SUITE if one.startswith(ALWAYS)]
+    assert len(always) >= SHARDS
+    smallest = select(["README.md"], depth=PLAN_DEPTH, suite=SUITE)
+    assert not smallest.full
+    for number in range(1, SHARDS + 1):
+        assert plan(number, SHARDS, base="x", head="HEAD", changed=["README.md"]).files
+
+
+def test_the_shard_job_selects_for_a_pull_request_and_falls_back_to_the_whole_share() -> None:
+    """The workflow half. The job knows the pull request's base, the step asks the plan and, when
+    the plan cannot run, asks `test_shards` for the whole share. Delete this and the switch can
+    be turned off by an edit that still looks like it selects, or the fallback can be dropped so
+    a planner failure fails every pull request."""
+    job = workflow("ci.yml")["jobs"]["tests"]
+    assert job["env"]["TEST_SELECTION_BASE"] == "${{ github.event.pull_request.base.sha }}"
+    step = _live(_shard_step(job))
+    assert '--base "$TEST_SELECTION_BASE" --head "$GITHUB_SHA"' in step
+    assert "|| {" in step and "brain.ops.test_shards" in step
+    assert 'echo "mode=full" > "$mode_file"' in step
+    names = {str(one.get("with", {}).get("name", "")) for one in job["steps"]}
+    assert "plan-shard-${{ matrix.shard }}" in names
+
+
+def test_the_shadow_job_is_retired_because_a_selected_run_cannot_observe_a_miss() -> None:
+    """Once a shard runs only the selected files a failure outside them is never seen, so the
+    shadow could only say "no miss". The nightly is the measurement now. Delete this and the job
+    can come back as a runner spent on a number that cannot be anything but zero."""
     jobs = workflow("ci.yml")["jobs"]
-    shadow = jobs["selection_shadow"]
-    assert shadow["continue-on-error"] is True
-    assert "github.event_name == 'pull_request'" in shadow["if"]
-    assert "!cancelled()" in shadow["if"]
-    assert "tests" in shadow["needs"]
+    assert "selection_shadow" not in jobs
     assert not [
         name
         for name, job in jobs.items()
         if "selection_shadow"
         in ([job["needs"]] if isinstance(job.get("needs"), str) else job.get("needs", []))
     ]
-    steps = jobs["tests"]["steps"]
-    shard = next(one for one in steps if "brain.ops.test_shards" in str(one.get("run", "")))
-    assert '--junitxml="$GITHUB_WORKSPACE/junit/shard-${{ matrix.shard }}.xml"' in shard["run"]
-    kept = next(
-        one for one in steps if str(one.get("with", {}).get("name", "")).startswith("junit-shard")
-    )
-    assert kept["if"] == "${{ always() }}"
+    assert not [
+        one for one in jobs["tests"]["steps"] if "junit" in str(one.get("with", {}).get("name", ""))
+    ]
 
 
-def test_the_nightly_suite_is_the_pull_requests_shards_step_for_step() -> None:
-    """The floor that keeps every file running once a day when the selection is switched on.
-    Delete this and the nightly copy can drift from the shards, or deploy: Deploy listens for CI,
-    and this workflow must never be CI."""
+def test_a_selected_run_never_judges_the_coverage_floor_and_a_full_one_always_does() -> None:
+    """A selected run covers a fraction of the code, so the floor is held only when every shard's
+    plan says full, never inferred from a missing file, and the floor step reads the data of every
+    shard that ran. Delete this and either every small change fails the floor, or a selected run
+    passes it by skipping it, and no job is left holding the floor."""
+    job = workflow("ci.yml")["jobs"]["coverage"]
+    assert job["name"] == "Unit tests and coverage"
+    steps = {str(one.get("name", one.get("uses", ""))): one for one in job["steps"]}
+    decide = _live(steps["Did every shard run the whole suite"])
+    assert "no shard left a plan" in decide and "grep -lx 'mode=full'" in decide
+    floor = steps["Coverage floor over the whole suite"]
+    assert floor["if"] == "${{ steps.mode.outputs.full == 'true' }}"
+    assert "uv run coverage report" in floor["run"]
+    assert "--fail-under" not in floor["run"]
+
+
+def test_the_nightly_suite_is_the_pull_requests_shards_with_no_base_and_holds_the_floor() -> None:
+    """The floor under the selection: every file every night, the same steps as the shards, no
+    base commit (so the plan is the whole suite), and the coverage floor judged over all of it.
+    Delete this and the nightly can drift from the shards, start selecting, skip the floor, or
+    deploy: Deploy listens for CI, and this workflow must never be CI."""
     ci, nightly = workflow("ci.yml"), workflow("nightly-suite.yml")
     assert nightly["name"] != ci["name"] == "CI"
     ours, theirs = nightly["jobs"]["tests"], ci["jobs"]["tests"]
     assert ours["steps"] == theirs["steps"]
     assert ours["strategy"] == theirs["strategy"] and ours["services"] == theirs["services"]
+    assert "TEST_SELECTION_BASE" in theirs["env"] and "TEST_SELECTION_BASE" not in ours["env"]
+    assert {k: v for k, v in theirs["env"].items() if k != "TEST_SELECTION_BASE"} == ours["env"]
     assert "needs" not in ours and "if" not in ours
     assert nightly[True]["schedule"]
+    floor = nightly["jobs"]["coverage"]
+    assert floor["name"] == "Unit tests and coverage" and floor["needs"] == "tests"
+    body = "\n".join(str(one.get("run", "")) for one in floor["steps"])
+    assert "uv run coverage report" in body and "--fail-under" not in body
+    assert "grep -lx 'mode=full'" in body and "exit 1" in body
+
+
+def _run_mode_step(
+    tmp_path: Path, job: str, workflow_name: str, modes: list[str]
+) -> tuple[int, str]:
+    """Run the coverage job's "which mode" step as the runner's bash would (`-eo pipefail`), over
+    plan files written for these modes, and return its exit status and what it wrote to
+    `$GITHUB_OUTPUT`."""
+    steps = workflow(workflow_name)["jobs"][job]["steps"]
+    step = next(one for one in steps if "plan-shard-*.txt" in str(one.get("run", "")))
+    temp = tmp_path / "runner-temp"
+    data = temp / "plan-data"
+    data.mkdir(parents=True)
+    for number, mode in enumerate(modes, start=1):
+        (data / f"plan-shard-{number}.txt").write_text(f"mode={mode}\n", encoding="utf-8")
+    output = tmp_path / "output.txt"
+    output.touch()
+    script = str(step["run"]).replace("${{ runner.temp }}", str(temp))
+    done = subprocess.run(
+        ["bash", "-eo", "pipefail", "-c", script],
+        env={"GITHUB_OUTPUT": str(output), "PATH": "/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return done.returncode, output.read_text(encoding="utf-8")
+
+
+def test_the_coverage_job_reads_the_plans_as_the_runner_would_in_every_case(
+    tmp_path: Path,
+) -> None:
+    """**The shell logic of the floor job, run.** Every shard full holds the floor; a selected
+    run (any shard selected) skips it without failing, which `grep` finding nothing under
+    `pipefail` once made a failure; and no plan at all fails. The first run of this change went red
+    because the plan files were downloaded into the workspace, which the checkout after them
+    deletes, so the directory is under the runner's temp. Delete this and either the required
+    check fails every selected pull request, or it passes with nothing said about what ran."""
+    for index, (modes, wanted) in enumerate(
+        [
+            (["full"] * 8, "full=true"),
+            (["selected"] * 8, "full=false"),
+            (["full", "selected", "full"], "full=false"),
+        ]
+    ):
+        status, written = _run_mode_step(tmp_path / str(index), "coverage", "ci.yml", modes)
+        assert status == 0 and wanted in written.splitlines(), (modes, written)
+    status, written = _run_mode_step(tmp_path / "none", "coverage", "ci.yml", [])
+    assert status != 0 and "full=" not in written
+
+
+def test_the_plan_files_are_downloaded_where_the_checkout_cannot_delete_them() -> None:
+    """The artifact is downloaded before `actions/checkout`, which cleans the workspace, so the
+    path must be outside it. Delete this and the plan download goes back into the workspace and
+    the floor job fails on every run with a missing directory, as the first run here did."""
+    for name in ("ci.yml", "nightly-suite.yml"):
+        steps = workflow(name)["jobs"]["coverage"]["steps"]
+        plans = next(
+            one
+            for one in steps
+            if str(one.get("uses", "")).startswith("actions/download-artifact")
+            and str(one["with"]["pattern"]).startswith("plan-shard")
+        )
+        assert plans["with"]["path"].startswith("${{ runner.temp }}/"), name
