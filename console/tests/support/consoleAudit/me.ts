@@ -10,6 +10,7 @@
 import { myCodeApiPath, myUnbindApiPath } from "../../../src/pages/channelsQuery";
 import { myConsentPath } from "../../../src/pages/connectors/consentAtVendor";
 import { LEARNING_UNDO_API_PATH } from "../../../src/pages/learningUndoQuery";
+import { END_MY_DEVICE_API_PATH } from "../../../src/pages/myAccountQuery";
 import { EDIT_API_PATH, FORGET_API_PATH } from "../../../src/pages/myWorkspaceQuery";
 import { A_BINDING_CHANGE_IS_AUDITED, at, type Proofs, t, type WriteRoute } from "../auditClaims";
 
@@ -22,6 +23,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/components/MyAccounts.tsx myConsentPath(row.connector)": [
     at("POST /api/v1/me/accounts/{connector}/consent", "myConsentPath", myConsentPath("xero")),
+  ],
+  "src/components/MyAccountCards.tsx END_MY_DEVICE_API_PATH": [
+    at("POST /api/v1/me/devices/end", "END_MY_DEVICE_API_PATH", END_MY_DEVICE_API_PATH),
   ],
   "src/pages/MyWorkspace.tsx FORGET_API_PATH": [
     at("POST /api/v1/me/memory/forget", "FORGET_API_PATH", FORGET_API_PATH),
@@ -68,6 +72,18 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: A_BINDING_CHANGE_IS_AUDITED,
     audit: A_BINDING_CHANGE_IS_AUDITED,
     behaviour: t("test_channel_binding", "test_a_person_unbinds_their_own_chat_and_it_is_recorded_as_theirs"),
+  },
+  // A member ending their own sign-in is the Sessions screen's ending through the same store, with
+  // the ownership question asked under the row's lock, so its database proof follows the row and the
+  // ledger entry; the install check follows the route itself.
+  "POST /api/v1/me/devices/end": {
+    row: t("test_session_store", "test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request", true),
+    audit: t("test_session_store", "test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request", true),
+    behaviour: t(
+      "test_acceptance_checks_member_account",
+      "test_every_member_account_check_passes_on_an_install_and_leaves_nothing",
+      true,
+    ),
   },
   // A forget is the Learning screen's undo written for the person the memory is about, through the
   // same store, so the same database test follows it to the row, the ledger and the next recall.
