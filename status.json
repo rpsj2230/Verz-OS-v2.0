@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-10-12T16:43:54.159644+00:00",
-  "commit": "8c724bda",
-  "commit_subject": "An agent's manifest exports without its company details and comes back as a draft after the leak scan (M27.15.28) (#531)",
-  "total": 1611,
+  "generated_at": "2026-10-13T01:51:56.009280+00:00",
+  "commit": "236d7190",
+  "commit_subject": "The owner's answers to needs items 156 to 181 are recorded (#537)",
+  "total": 1618,
   "done": 831,
-  "percent": 51.6,
+  "percent": 51.4,
   "acts": 47,
   "decided": 131,
   "current_wave": 1,
@@ -51,13 +51,13 @@
     {
       "wave": 3,
       "name": "Agents, knowledge, console",
-      "total": 590,
+      "total": 597,
       "done": 335,
-      "percent": 56.8,
+      "percent": 56.1,
       "in_progress": 1,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 254,
+      "open": 261,
       "acts": 1,
       "decided": 56
     },
@@ -457,7 +457,7 @@
       "module": "M39",
       "name": "Agent workspace, the inside-an-agent surface",
       "wave": 3,
-      "total": 96,
+      "total": 103,
       "done": 54,
       "acts": 0,
       "decided": 2
@@ -3710,6 +3710,41 @@
     "M39.9.2.6": {
       "status": "BLOCKED",
       "why": "P3. WAITS ON M39.9.2.1 to M39.9.2.4 and M39.9.2.2; the browser proof of the whole of New automation.",
+      "updated": "2026-10-12"
+    },
+    "M39.10.1": {
+      "status": "OPEN",
+      "why": "P1. Partly built: agents/model.py has Visibility (GLOBAL, DEPARTMENT, PERSONAL) with an owner_id, and the agent page shows its audience. What is missing is the kind named as a choice at creation and on the page. REUSE agents.model.AgentAudience, agents.creation, agent_routes.",
+      "updated": "2026-10-12"
+    },
+    "M39.10.2": {
+      "status": "OPEN",
+      "why": "P1. Partly built: agents/creation.py makes a personal agent for its maker (AgentAudience PERSONAL, owner_id) and brain.member_activity.build_personal_agent materialises one. What is missing is the builder's own flow for a person to make one and the capability rule that only an administrator may make a team agent. REUSE agents.creation, agents.authoring, member_activity.",
+      "updated": "2026-10-12"
+    },
+    "M39.10.3": {
+      "status": "OPEN",
+      "why": "P1. DEPENDS on M39.10.1. Audience scope for PERSONAL is the owner (agents/model.py scope_for); check that every list, the gallery and the oversight view follow it, with no count of hidden agents.",
+      "updated": "2026-10-12"
+    },
+    "M39.10.4": {
+      "status": "OPEN",
+      "why": "P1. DEPENDS on M11.7.6 and needs item 173's steps done by the owner. Google Workspace is read per person with that person's own token (brain.connectors, My workspace); what is missing is attaching that connection to a personal agent and refusing anyone else.",
+      "updated": "2026-10-12"
+    },
+    "M39.10.5": {
+      "status": "OPEN",
+      "why": "P2. DEPENDS on the owner's answer to needs item 189 (recommended C, built as A first). A team agent has no personal Google connection; a shared mailbox is a connection an administrator makes; a person's own mail in a private conversation only, never a room, memory or knowledge item.",
+      "updated": "2026-10-12"
+    },
+    "M39.10.6": {
+      "status": "OPEN",
+      "why": "P1. Install check for the first, second and third leaves, with reserved people; held if it uses a made-up mailbox.",
+      "updated": "2026-10-12"
+    },
+    "M39.10.7": {
+      "status": "OPEN",
+      "why": "P2. Browser proof of the create flow's kind choice.",
       "updated": "2026-10-12"
     },
     "M40.1.1.1": {
