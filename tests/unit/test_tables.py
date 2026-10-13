@@ -172,6 +172,7 @@ MIGRATION_ELEVATION_CHAIN = VERSIONS / "0209_elevation_chain.py"
 MIGRATION_BUDGET_STOP = VERSIONS / "0211_budget_stop.py"
 MIGRATION_AGENT_ITEM_USE = VERSIONS / "0213_agent_item_use.py"
 MIGRATION_ALERT_ACKNOWLEDGEMENT = VERSIONS / "0217_alert_acknowledgement.py"
+MIGRATION_QUALITY = VERSIONS / "0222_quality_and_learning.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -498,6 +499,18 @@ BUDGET_STOP_TABLES: tuple[str, ...] = ("ops.budget_stop",)
 AGENT_ITEM_USE_TABLES: tuple[str, ...] = ("ops.agent_item_use",)
 #: And the one 0217 adds: who acknowledged an incident, and when (M27.15.45).
 ALERT_ACKNOWLEDGEMENT_TABLES: tuple[str, ...] = ("ops.alert_acknowledgement",)
+#: And the eight 0222 adds: flags and their cases, the two tiers of reading, golden scores, a failed
+#: case's candidate, the positive examples and who agreed to a change that needed a person.
+QUALITY_TABLES: tuple[str, ...] = (
+    "ops.answer_flag",
+    "ops.regression_case",
+    "ops.quality_reading",
+    "ops.quality_annotation",
+    "ops.golden_score",
+    "ops.evaluation_candidate",
+    "ops.positive_example",
+    "ops.tier_decision",
+)
 
 ALL_TABLES = (
     CORE_TABLES
@@ -593,6 +606,7 @@ ALL_TABLES = (
     + BUDGET_STOP_TABLES
     + AGENT_ITEM_USE_TABLES
     + ALERT_ACKNOWLEDGEMENT_TABLES
+    + QUALITY_TABLES
 )
 
 
@@ -1467,6 +1481,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert agent_item_use.TABLES == AGENT_ITEM_USE_TABLES
     alert_acknowledgement = migration_module(MIGRATION_ALERT_ACKNOWLEDGEMENT)
     assert alert_acknowledgement.TABLES == ALERT_ACKNOWLEDGEMENT_TABLES
+    quality = migration_module(MIGRATION_QUALITY)
+    assert quality.TABLES == QUALITY_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1584,6 +1600,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(budget_stop.TABLES)
         + tuple(agent_item_use.TABLES)
         + tuple(alert_acknowledgement.TABLES)
+        + tuple(quality.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1682,6 +1699,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(budget_stop.TABLES),
         set(agent_item_use.TABLES),
         set(alert_acknowledgement.TABLES),
+        set(quality.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

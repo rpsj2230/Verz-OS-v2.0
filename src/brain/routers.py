@@ -381,6 +381,10 @@ from brain.provider_registry_routes import router as provider_registry_router
 # rung's measured health, and a metered check. See `brain.provider_routes`.
 from brain.provider_routes import router as provider_router
 
+# Quality from the console: flagging an answer, turning the flag into a regression case, a day's
+# annotation queue and the candidates a failed case opened. See `brain.quality_routes`.
+from brain.quality_routes import router as quality_router
+
 # Who can see a record, for somebody who can already see it. See `brain.record_access_routes`.
 from brain.record_access_routes import router as record_access_router
 
