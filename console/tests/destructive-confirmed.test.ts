@@ -39,6 +39,13 @@ import { CONTROL_DIRECTORIES, everyConfirmation, everyWrite } from "./support/wr
  * why each one is not destructive.
  */
 const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
+  "src/pages/install/PluginsPanel.tsx PLUGINS_API_PATH":
+    "Recording a plugin writes a switched-off record and loads or runs nothing: brain.plugin_routes.install_plugin " +
+    "arrives installed and is behind the plugin_registry switch, and enabling it is a separate act.",
+  "src/pages/install/PluginsPanel.tsx verbPath(row.plugin_id, verb)":
+    "Switching a plugin on or off and removing a disabled one change a record and nothing that runs, because no " +
+    "runner exists for the points that take code; a removed plugin is a retired row that keeps every version it " +
+    "ran, so recording its manifest again brings it back, which tests/unit/test_acceptance_checks_plugin_registry.py holds.",
   "src/pages/agents/AutomationAuthoring.tsx authoringPreviewApiPath(agentId)":
     "Reviewing a new automation writes nothing: brain.automation_authoring_routes.authoring_preview " +
     "returns what saving would store and what it would have done, keeps no row, and the save is a " +
