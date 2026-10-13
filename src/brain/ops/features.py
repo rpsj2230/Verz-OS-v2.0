@@ -420,6 +420,25 @@ TWO_PERSON_APPROVAL: Final = Feature(
     read_by=("brain.gate.suspension_store:put_suspension",),
 )
 
+#: Letting an agent run a browser. Off because it starts a container that opens pages on the
+#: install's behalf: the sandbox, the launcher and the runner image have been specified and tested
+#: as decisions and have not run on a host, and `brain.browsing.driver` is the first thing that
+#: sends a run to one. A run that needs a person's approval still waits for it with this on.
+BROWSER_RUNS: Final = Feature(
+    name="browser_runs",
+    title="Let agents run a browser",
+    what=(
+        "An agent whose ceiling holds the browser tools may have a page opened for it in a "
+        "sandbox of its own, on the websites its target declares and nowhere else. A write "
+        "waits for a person to approve the whole run first, and every run is recorded."
+    ),
+    while_off=(
+        "No browser is started. A website check still reads a page over a plain request, as "
+        "before. A run that started while this was on is stopped by the halt, not by this."
+    ),
+    read_by=("brain.browsing.driver:browser_runs_are_on",),
+)
+
 #: Every feature this product can switch on, in the order the screen lists them.
 FEATURES: Final[tuple[Feature, ...]] = (
     PROMPT_EDITING,
@@ -435,6 +454,7 @@ FEATURES: Final[tuple[Feature, ...]] = (
     SKILL_DRAFTING,
     AUTOMATION_AUTHORING,
     STARTER_SKILLS_SWITCH,
+    BROWSER_RUNS,
 )
 
 

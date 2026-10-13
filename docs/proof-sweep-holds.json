@@ -73,6 +73,7 @@
     "M7.3.5": "passes over a model server the check made (a transport answering as the server's contract says); held until a rebuild has run on an install whose model server answers (needs-rupash 120)",
     "M15.3.3": "passes over results the check made: nothing on an answer's path links a passage to a record, so no answer draws on a row and a passage stating one claim; held until a source of claims exists and the groups are drawn on an answer (needs-rupash 195)",
     "M39.9.1.3": "passes against a web page the check holds and fetches through the door's own address rule; held until an install shows a link fetched from a real site",
-    "M39.9.1.5": "the refetch passes over a page the check holds (a stand-in transport and resolver, so no real site is asked), so it shows the route, the address rule and the supersession and not a fetch over a real connection; held until an install fetches a real page again on a person's asking"
+    "M39.9.1.5": "the refetch passes over a page the check holds (a stand-in transport and resolver, so no real site is asked), so it shows the route, the address rule and the supersession and not a fetch over a real connection; held until an install fetches a real page again on a person's asking",
+    "M19.3.6": "the replay runs over what the product's own runner reported for a page the check holds (no browser, container or proxy exists on the install to report anything else), so it shows the control plane re-judging a run and not a container that was not believed; held until a run in a sandbox on a runsc host is replayed (ops/browser/REHEARSAL.md)"
   }
 }
