@@ -18703,6 +18703,19 @@
     "M39.10.7"
    ],
    "decision": "needs-rupash 189: how a team agent may use mail; open until answered"
+  },
+  {
+   "id": "DEC-138A",
+   "source": "needs-rupash 138 (decided 2026-10-13, option A)",
+   "area": "Connectors",
+   "requirement": "Each Laravel client record is visible to one department for now: a view's rule names one department, the index stores that one value on every record, and a rule naming several is refused where it is typed.",
+   "leaves": [
+    "M11.9.16"
+   ],
+   "proof": [
+    "M11.9.17"
+   ],
+   "decision": null
   }
  ]
 }
