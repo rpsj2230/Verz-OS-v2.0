@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-13T09:08:18.072934+00:00",
-  "commit": "7d24c199",
-  "commit_subject": "33 tasks are proved on the install by two acceptance runs (#567)",
+  "generated_at": "2026-10-13T10:50:16.089246+00:00",
+  "commit": "8a7cc29e",
+  "commit_subject": "Two narrowings in the client template and the joiner leaver work become needs items 215 and 216 (#563)",
   "total": 1622,
   "done": 864,
   "percent": 53.3,
