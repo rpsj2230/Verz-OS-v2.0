@@ -223,7 +223,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 768M
     healthcheck:
       test:
       - CMD
@@ -695,7 +695,7 @@ services:
       retries: 10
       start_period: 90s
   automation-egress:
-    image: ubuntu/squid:6.10-24.04_edge
+    image: ubuntu/squid:6.6-24.04_edge
     restart: unless-stopped
     networks:
     - automation

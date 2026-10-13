@@ -2703,6 +2703,8 @@ thing on the server.
 
 **Decided 2026-10-13: "124: B".** The automation canvas is switched on now, taking 512 MiB from what item 120 is sharing out. Not yet done on the server.
 
+**Corrected 2026-10-13: the canvas costs 896 MiB, not 512.** The 512 was the editor alone. The canvas's compose file also runs its egress proxy (128 MiB) and its own database (256 MiB), and all three hold their limits, so `brain.ops.overlays` now costs the canvas at 896 MiB and says so in the deploy's journal. Whether it fits is measured on the server at each deploy; the editor is also unreachable by staff until the canvas has an address of its own (`AUTOMATION_PUBLIC_URL`), which needs a web address and a proxy route only you can give.
+
 ## 123. May a task that names a table library be marked done by what it is for? - DECIDED 2026-10-13: yes
 
 **In plain terms:** task M32.5.2.1 says every grid in the console uses a particular table library

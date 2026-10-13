@@ -126,7 +126,10 @@ services:
   # admits `notapi.lark.com`, because that string genuinely ends with `api.lark.com`, so any
   # host somebody can register whose name ends in the right characters is allowed through.
   automation-egress:
-    image: ubuntu/squid:6.10-24.04_edge
+    # Pinned to a tag that exists: `6.10-24.04_edge`, which this line named until 2026-10-13, is not
+    # published, so the first pull on any server failed. `docs/install/images.md` records the day each
+    # tag was seen to exist and `tests/unit/test_image_pins.py` holds this line to that page.
+    image: ubuntu/squid:6.6-24.04_edge
     restart: unless-stopped
     networks:
       - automation

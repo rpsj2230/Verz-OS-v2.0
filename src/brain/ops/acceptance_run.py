@@ -48,6 +48,7 @@ Task ids: M38.5.1
 from __future__ import annotations
 
 import asyncio
+import gc
 import secrets
 import sys
 import uuid
@@ -366,6 +367,20 @@ async def in_use(engine: AsyncEngine, stream: TextIO) -> bool:
 
 
 # ------------------------------------------------------------------------- running
+#: Why the suite collects garbage between its checks.
+A_CHECK_THAT_FAILED_MAY_NOT_KEEP_THE_NEXT_ONE_SHORT_OF_MEMORY: Final = (
+    "The suite runs several hundred checks in one process inside the worker's container, and that "
+    "container's memory limit is the whole of what the process has. A check that failed leaves an "
+    "exception whose traceback holds the frames that raised it, and those hold the harness, its "
+    "connection and whatever the check built: a reference cycle, which Python frees on its own "
+    "schedule and not on the suite's. On an install whose worker was being killed for memory "
+    "(2026-10-13, 339 MB of anonymous memory in one process) the suite could not afford that "
+    "schedule, so each check's cycles are collected before the next begins. This cannot return "
+    "memory the allocator keeps, so it is no substitute for a limit with margin "
+    "(`brain.ops.container_limit`)."
+)
+
+
 async def run_one(
     engine: AsyncEngine,
     one: Check,
@@ -455,6 +470,8 @@ async def run_suite(
         results.append(result)
         if after is not None:
             await after(result)
+        # See `A_CHECK_THAT_FAILED_MAY_NOT_KEEP_THE_NEXT_ONE_SHORT_OF_MEMORY`.
+        gc.collect()
     return tuple(results)
 
 

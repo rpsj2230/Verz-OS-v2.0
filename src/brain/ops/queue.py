@@ -33,7 +33,8 @@ a queue in that path adds a hop that can only make the wait longer.
 
 **A slot has a size as well as a class, and until now it had only one size.** `MIB_PER_SLOT`
 is one number for every job in the fleet, and two containers are budgeted from it very
-differently: `brain-worker` holds seven slots inside 384 MiB, and `brain-parse-worker` holds
+differently: `brain-worker` holds seven slots inside 768 MiB (384 until 2026-10-13), and
+`brain-parse-worker` holds
 one job inside 512 MiB because the job's size was chosen by whoever made the document. Both
 of them drained `system`, because `queue_name_for` derived the queue from the traffic class
 alone, so **the 50 MiB PDF the knowledge door admits could be fetched into a 48 MiB slot**.

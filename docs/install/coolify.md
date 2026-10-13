@@ -50,14 +50,24 @@ computed from the compose files by that module and compared against this page on
 **The optional services need no merge.** On an install that deploys with the pull timer
 (`ops/deploy/brain-deploy`), the services named on **Install, Settings** under *Optional
 services this server runs* (`INSTALL_SERVICES`: `presidio`, the personal data detector,
-`langfuse`, the trace ledger and its file store, and `sandbox`, the script sandbox, which runs
-only under gVisor and is refused until the server's docker has it) are started by every release beside Coolify's
-copy, as a compose project of their own, after the release measures the server's memory and finds
+`langfuse`, the trace ledger and its file store, `sandbox`, the script sandbox, which runs
+only under gVisor and is refused until the server's docker has it, `objectstore`, the file store
+for uploaded documents and exports, and `automation`, the automation canvas with its egress proxy
+and its own database) are started by every release beside Coolify's copy, as a compose project of their own, after the release measures the server's memory and finds
 room for them. The trace ledger's settings files, its seven secrets and its database are put in
 place by the release too: the secrets are minted on the server into
 `/opt/brain/settings/overlays.env`, which only root can read, and never leave it, except the
 ledger's two project keys, which the release hands to the application to keep in the vault so
-every run's masked trace reaches the ledger. The deploy's
+every run's masked trace reaches the ledger. The file store and the canvas are prepared the same
+way: their secrets and the application's key to the store are minted into the same file, their
+settings files (the store's provisioning script, the canvas's egress allowlist) are copied from the
+image where they are missing and never overwritten, the store's access file takes the application's
+identity beside any other without replacing it, and the application's key is kept in the vault slot
+`providers/seaweedfs`. The application connects to a store switched on beside it when it next
+starts, which the next release does. The canvas costs 896 MiB and not 512, being the editor, its
+egress proxy and its database, and its editor is reachable by staff only once
+`AUTOMATION_PUBLIC_URL` in that file is the address your proxy serves it on
+([server-steps.md](server-steps.md), section 4). The deploy's
 journal says what was started, what was refused for memory and why. Nothing is pasted into
 Coolify for them, and switching one off stops it at the next release with its data kept.
 

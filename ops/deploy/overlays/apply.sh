@@ -107,8 +107,16 @@ while IFS= read -r line; do
         skipped=1
         anyskipped=1
       fi ;;
-    "FILE "*) [ -n "$skipped" ] || files="$files -f $HERE/${line#FILE }" ;;
-    "JOIN "*) [ -n "$skipped" ] || echo "$line" >> "$joins" ;;
+    "FILE "*)
+      # A file two overlays both name (the object store's, which the trace ledger shares) is given
+      # to compose once: the same file twice would merge its lists into themselves.
+      if [ -z "$skipped" ]; then
+        case " $files " in
+          *" -f $HERE/${line#FILE } "*) ;;
+          *) files="$files -f $HERE/${line#FILE }" ;;
+        esac
+      fi ;;
+    "JOIN "*|"JOIN_AS_SERVICE "*) [ -n "$skipped" ] || echo "$line" >> "$joins" ;;
     "WAIT "*) [ -n "$skipped" ] || waits="$waits ${line#WAIT }" ;;
     "AFTER "*) [ -n "$skipped" ] || afters="$afters ${line#AFTER }" ;;
   esac
@@ -142,8 +150,15 @@ if ! docker compose -p "$overlays" $envfile $files up -d $orphans; then
   exit 1
 fi
 
-while read -r _ key services; do
-  network="${overlays}_${key}"
+while read -r verb key services; do
+  # The network as docker knows it. Compose names a network `<project>_<key>` unless its file gives
+  # it a name of its own (the canvas's tool network is `brain-tool-api` whatever the project is),
+  # and every network compose makes carries the project and the key as labels, so they are asked
+  # for first and the conventional name is the answer only when the labels name nothing.
+  network="$(docker network ls --filter "label=com.docker.compose.project=$overlays" \
+    --filter "label=com.docker.compose.network=$key" --format '{{.Name}}' 2>/dev/null |
+    head -n 1 || true)"
+  [ -n "$network" ] || network="${overlays}_${key}"
   for service in $services; do
     docker ps --filter "label=com.docker.compose.project=$project" \
       --filter "label=com.docker.compose.service=$service" --format '{{.Names}}' |
@@ -153,7 +168,16 @@ while read -r _ key services; do
             grep -qxF "$network"; then
           continue
         fi
-        if docker network connect "$network" "$container"; then
+        # A container joined by hand is known by its name and id only, where compose also gives it
+        # its service name, so a join that must be reachable by that name says so.
+        if [ "$verb" = JOIN_AS_SERVICE ]; then
+          joined=0
+          docker network connect --alias "$service" "$network" "$container" && joined=1
+        else
+          joined=0
+          docker network connect "$network" "$container" && joined=1
+        fi
+        if [ "$joined" = 1 ]; then
           say "joined $container to $network"
         else
           say "could not join $container to $network"
