@@ -1,10 +1,10 @@
 /**
  * What the page in front of the reader was read from a copy of the database that is behind.
  *
- * `brain.console.read_replica.banner_for` puts a `staleness` field on every route body that may be
+ * The API puts a `staleness` field on every route body that may be
  * read from a replica (estate, directory, people, govern, learning and memory), with the sentence a
  * reader needs: how many seconds behind the copy is. It is a field and never a caption
- * (`THE_BANNER_DESCRIBES_THE_COPY_AND_NEVER_THE_ROWS`), and the console used to draw it on two pages
+ * (the banner describes the copy and never its rows), and the console used to draw it on two pages
  * and ignore it on the rest, so a person reading the People page from a copy a minute behind was
  * told nothing. Every request notes what it was told here, and the frame draws it once above
  * whichever page is showing, so a page that gains the field needs no code to be honest about it.
