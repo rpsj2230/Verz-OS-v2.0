@@ -195,6 +195,17 @@ ONE_QUESTION_ASKED_OF_SEVERAL_PLACES_IS_READ_IN_EACH: Final = (
     "records across the places is an ambiguous name, as it would be inside one place."
 )
 
+#: Why an ambiguous name is answered with each client's result, separately (needs-rupash 159).
+EACH_CLIENT_MATCHED_IS_ANSWERED_ON_ITS_OWN_AND_NEVER_ADDED_TO_ANOTHER: Final = (
+    "When every record answering to a name is one the asker reads, and the registry says they are "
+    "more than one client, the asker is told so and given each client's result on its own line. "
+    "Figures are never added, averaged or merged: two clients are two answers. A record the asker "
+    "may not read never reaches this branch, so an asker who reads one of two is answered from "
+    "that one alone, byte for byte as if the other did not exist, and a client whose answer field "
+    "is withheld from the asker makes the whole reply the plain sentence rather than a list with "
+    "a gap in it."
+)
+
 #: Why two records matching one name produces no answer rather than the first row.
 TWO_RECORDS_MATCHING_ONE_NAME_IS_A_FALL_THROUGH = (
     "A fast-lane question names one thing. Two records answering to that name is an "
@@ -618,6 +629,11 @@ class FastLaneUnresolved:
     """
 
     review_ref: str | None
+    #: Each client's own records, one entry per client and source, each read at the asker's reach
+    #: and holding only that client's records (needs-rupash 159). Empty for a caller that has
+    #: none to give. Never summed: the answer route renders each on its own. See
+    #: `EACH_CLIENT_MATCHED_IS_ANSWERED_ON_ITS_OWN_AND_NEVER_ADDED_TO_ANOTHER`.
+    clients: tuple[FastLaneAnswer, ...] = ()
 
 
 def reader_for(match: RuleMatch, readers: Mapping[tuple[str, str], RowReader]) -> RowReader:
@@ -699,7 +715,25 @@ async def respond(
         clients = sorted({current[key] for key in keys})
         if len(clients) < 2:
             return None
-        return FastLaneUnresolved(review_ref=await ambiguity.open_review(clients))
+        each = tuple(
+            FastLaneAnswer(
+                rule_id=one.rule_id,
+                entity=one.entity,
+                source=one.source,
+                field=one.field,
+                result=one.result.model_copy(update={"records": mine}),
+            )
+            for client in clients
+            for one in held
+            if (
+                mine := tuple(
+                    record
+                    for record in one.result.records
+                    if current[(one.source, record.entity, record.id)] == client
+                )
+            )
+        )
+        return FastLaneUnresolved(review_ref=await ambiguity.open_review(clients), clients=each)
     return held[0] if held else answers[0]
 
 

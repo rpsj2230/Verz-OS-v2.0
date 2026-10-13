@@ -1393,7 +1393,7 @@ def incidents(
 
 
 # -------------------------------------------------------------- the stop button (M27.2.8)
-def _halt_row(one: Halt) -> dict[str, str]:
+def _halt_row(one: Halt, agent_departments: Mapping[str, str] | None = None) -> dict[str, str]:
     """The fields a halt grant's scope may be written against.
 
     The scope and its target, which are the two things a halt names, and for a department halt
@@ -1403,11 +1403,15 @@ def _halt_row(one: Halt) -> dict[str, str]:
     scoped to halts you declared yourself would hide from an administrator the halt somebody
     else put on their department, which is the one they most need to see.
     """
-    return halt_row(one.scope, one.target)
+    department = "" if agent_departments is None else agent_departments.get(one.target, "")
+    return halt_row(one.scope, one.target, department=department)
 
 
 def stopped_for(
-    state: HaltState, reader: EntitlementSet, now: datetime | None = None
+    state: HaltState,
+    reader: EntitlementSet,
+    now: datetime | None = None,
+    agent_departments: Mapping[str, str] | None = None,
 ) -> tuple[Halt, ...]:
     """Everything currently stopped, as this reader may see it (M27.2.8).
 
@@ -1415,6 +1419,10 @@ def stopped_for(
     them. See `A_GLOBAL_HALT_IS_SHOWN_TO_EVERYBODY_IT_STOPS`. Narrower halts name a
     department, an agent, a connector or a person, and each is filtered by the halt screen's
     own capability in a scope that matches the row.
+
+    `agent_departments` maps a stopped agent to its department, looked up by the caller at the
+    moment of asking, so a department's administrator sees the stop of one agent of their own
+    department as they may lift it (needs-rupash 160 A).
 
     Widest first, following `HaltState.blocking`, so a reader reporting one reports the most
     general, which is the one an administrator will recognise.
@@ -1433,7 +1441,7 @@ def stopped_for(
         one
         for one in state.halts
         if one.scope is HaltScope.EVERYTHING
-        or (where is not None and where.matches(_halt_row(one)))
+        or (where is not None and where.matches(_halt_row(one, agent_departments)))
     ]
     return tuple(sorted(found, key=lambda one: (one.scope is not HaltScope.EVERYTHING, one.at)))
 

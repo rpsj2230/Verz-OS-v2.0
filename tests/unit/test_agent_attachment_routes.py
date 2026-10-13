@@ -96,12 +96,13 @@ REACHES = ("read:client", "read:deal", "write:deal.stage", "read:ticket")
 CONNECTOR = "freshdesk"
 SOURCED = f"read:{min(e for e, n in providers().items() if n == CONNECTOR)}"
 
-#: `u_narrow` is the agent's steward and reaches the connector's read; `u_admin` holds the tool and
-#: connector roles and does not reach it; `u_prefix` reaches everything and holds no role; `u_wide`
-#: holds everything and sits in another department, so the agent is not one they can see.
+#: `u_narrow` is the agent's steward, reaches the connector's read and holds no role, so it may
+#: not attach a connector (needs-rupash 178 A); `u_admin` holds the tool and connector roles and
+#: does not reach it; `u_prefix` reaches everything and holds the connector role; `u_wide` holds
+#: everything and sits in another department, so the agent is not one they can see.
 GRANTS: Mapping[str, tuple[Grant, ...]] = {
     "u_admin": everywhere(*SETTINGS_READ, "admin:tool", "admin:connector", *REACHES),
-    "u_prefix": everywhere(*SETTINGS_READ, *REACHES, SOURCED),
+    "u_prefix": everywhere(*SETTINGS_READ, *REACHES, SOURCED, "admin:connector"),
     "u_narrow": everywhere(*SETTINGS_READ, *REACHES, SOURCED),
     "u_wide": everywhere(*SETTINGS_READ, "admin:tool", "admin:connector", *REACHES, SOURCED),
 }
@@ -161,10 +162,11 @@ def test_tools_and_connectors_are_attached_within_the_ceiling_and_a_run_carries_
     above the ceiling is refused in one sentence; a tool is attached and detached, and the answer
     route's roster hands a run exactly the tools the agent carries after each.
 
-    Connectors, on the agent's own list: the steward attaches one, the column holds it and a run's
-    ceiling reads through it; a holder of neither the stewardship nor the connector role is refused
-    naming them; the connector administrator who does not reach what it opens is refused in one
-    sentence; a reader the agent is not visible to gets the missing agent's 404; a second attach is
+    Connectors, on the agent's own list: a holder of the connector role attaches one, the column
+    holds it and a run's ceiling reads through it; the steward, who holds no role, is refused
+    naming it (needs-rupash 178 A); the connector administrator who does not reach what it opens
+    is refused in one sentence; a reader the agent is not visible to gets the missing agent's
+    404; a second attach is
     told it is attached; the administrator detaches it, asking nothing of their reach, and the
     ceiling no longer reads the source. Every press is one `compose_change` entry naming who, what,
     which way and why, the connectors' written by the agent row's own trigger.
@@ -190,15 +192,15 @@ def test_tools_and_connectors_are_attached_within_the_ceiling_and_a_run_carries_
         )
         said["after_attach"] = mine(await roster())
         on = press("connector", CONNECTOR, True)
-        said["no_role"] = await client.post(PATH, json=on, headers=headers("u_prefix"))
+        said["no_role"] = await client.post(PATH, json=on, headers=headers("u_narrow"))
         said["no_reach"] = await client.post(PATH, json=on, headers=headers("u_admin"))
         said["unseen"] = await client.post(PATH, json=on, headers=headers("u_wide"))
         said["missing"] = await client.post(
             f"{API_PREFIX}/agents/no_such_agent/attachments", json=on, headers=headers("u_wide")
         )
-        said["bound"] = await client.post(PATH, json=on, headers=headers("u_narrow"))
+        said["bound"] = await client.post(PATH, json=on, headers=headers("u_prefix"))
         said["after_bound"] = mine(await roster())
-        said["again"] = await client.post(PATH, json=on, headers=headers("u_narrow"))
+        said["again"] = await client.post(PATH, json=on, headers=headers("u_prefix"))
         said["unbound"] = await client.post(
             PATH, json=press("connector", CONNECTOR, False), headers=headers("u_admin")
         )
@@ -265,7 +267,7 @@ def test_tools_and_connectors_are_attached_within_the_ceiling_and_a_run_carries_
         for one in ledgered
     ] == [
         ("u_admin", f"agent:{AGENT}", "tool", "crm.read_deal", "attached", FROM_THE_AGENT_PAGE),
-        ("u_narrow", f"agent:{AGENT}", "connector", CONNECTOR, "attached", FROM_THE_AGENT_PAGE),
+        ("u_prefix", f"agent:{AGENT}", "connector", CONNECTOR, "attached", FROM_THE_AGENT_PAGE),
         ("u_admin", f"agent:{AGENT}", "connector", CONNECTOR, "detached", FROM_THE_AGENT_PAGE),
         ("u_admin", f"agent:{AGENT}", "tool", "crm.read_deal", "detached", FROM_THE_AGENT_PAGE),
     ]

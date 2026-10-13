@@ -79,7 +79,7 @@ reader that hands it the values. `--identity-provider` prints that entry alone, 
 already exists: Keycloak imports a realm only when it has none of that name, and the wizard's
 answer is saved after the first import has run.
 
-Task ids: M41.1.5
+Task ids: M41.1.5, M1.1.8
 """
 
 from __future__ import annotations
@@ -185,7 +185,8 @@ THE_REALM_TAKES_ONE_ORIGIN_BECAUSE_KEYCLOAK_TAKES_ONE_LOGOUT_URL: Final = (
 CLIENT_ID_SETTING: Final = "INSTALL_OIDC_CLIENT_ID"
 SHIPPED_CONSOLE_CLIENT: Final = "brain-console"
 
-#: The four settings the brokered identity provider is built from. See `brain.identity.brokering`.
+#: The settings the brokered identity provider is built from, and the console's address as the
+#: fifth, which only the Lark entry needs. See `brain.identity.brokering`.
 BROKER_SETTING: Final = "INSTALL_BROKERED_DIRECTORY"
 BROKER_CLIENT_SETTING: Final = "INSTALL_BROKERED_CLIENT_ID"
 STAFF_SOURCE_SETTING: Final = "INSTALL_STAFF_SOURCE"
@@ -320,11 +321,17 @@ def brokered(
     The reader of the four values, so the importer's container is handed every one of them
     (`tests/unit/test_realm_importer_settings.py` reads the names out of this file).
     """
+    try:
+        origin = install_origin(value_of(ORIGIN_SETTING, env, saved))
+    except (RealmError, InstallError):
+        # No public address yet: only the Lark entry needs one, and it says so itself.
+        origin = ""
     return brokering(
         directory=value_of(BROKER_SETTING, env, saved),
         client_id=value_of(BROKER_CLIENT_SETTING, env, saved),
         staff_source=value_of(STAFF_SOURCE_SETTING, env, saved),
         location=value_of(STAFF_LOCATION_SETTING, env, saved),
+        origin=origin,
     )
 
 

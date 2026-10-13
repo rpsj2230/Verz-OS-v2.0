@@ -112,6 +112,13 @@ INFERRED_HALF_LIFE: Final = "inferred_memory_half_life_days"
 #: The knob that sets how many independent agreements make a learned rule eligible for review.
 PROMOTION_AGREEMENT_KNOB: Final = "promotion_agreement"
 
+#: The knob that caps what the website widget's model answers may cost in a day (needs-rupash 139).
+WIDGET_DAILY_SPEND: Final = "widget_daily_spend"
+
+#: In minor units of the install's currency, so about five major units where the minor unit is a
+#: hundredth. A figure the owner changes on the Rate limits screen.
+WIDGET_DAILY_SPEND_DEFAULT: Final = 500
+
 #: The namespace every row here sits under.
 TUNING_NAMESPACE: Final = "tuning"
 
@@ -123,6 +130,9 @@ class KnobKind(enum.StrEnum):
     BUDGET = "budget"
     #: How learning behaves. Names no window and no resource; the Learning screen lists these.
     LEARNING = "learning"
+    #: What a feature that a stranger can reach may spend a day. Listed with the limits, because it
+    #: is one: the website widget's model answers stop when it is used up.
+    SPEND = "spend"
 
 
 @dataclass(frozen=True)
@@ -373,6 +383,22 @@ KNOBS: Final[tuple[Knob, ...]] = (
             "still approves every rule, whatever this says."
         ),
     ),
+    Knob(
+        name=WIDGET_DAILY_SPEND,
+        kind=KnobKind.SPEND,
+        label="What the website widget's model answers may cost a day",
+        unit="minor units of your currency a day",
+        default=WIDGET_DAILY_SPEND_DEFAULT,
+        lowest=1,
+        highest=100_000_000,
+        bounds_because=(
+            "Visitors to your website are strangers with no budget of their own, so this is the "
+            "most a day of their questions can cost you. At the lowest figure the model writes "
+            "almost nothing before the widget falls back to the published passages; a very high "
+            "figure is no cap at all. The cap is counted from midnight UTC, and the widget "
+            "answers with the published passages once it is used up."
+        ),
+    ),
 )
 
 #: The knobs by name.
@@ -571,7 +597,9 @@ def knobs_of(kind: KnobKind) -> Sequence[Knob]:
 
 
 #: The kinds the Rate limits screen lists and sets. The Learning screen's are the rest.
-LIMIT_KINDS: Final[frozenset[KnobKind]] = frozenset({KnobKind.RATE, KnobKind.BUDGET})
+LIMIT_KINDS: Final[frozenset[KnobKind]] = frozenset(
+    {KnobKind.RATE, KnobKind.BUDGET, KnobKind.SPEND}
+)
 
 #: The kinds the Learning screen lists and sets.
 LEARNING_KINDS: Final[frozenset[KnobKind]] = frozenset({KnobKind.LEARNING})

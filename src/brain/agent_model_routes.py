@@ -32,10 +32,14 @@ from sqlalchemy import update
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked
 from brain.attribution import attribute
+from brain.console.reads import permitted
+from brain.console.screens import screen
 from brain.core.errors import Absent, Failed
 from brain.credential_routes import CredentialProblemsView, CredentialProblemView
 from brain.models.registry import MODEL_NAME_PATTERN, ModelPin, RegistryError
+from brain.operate_routes import MODELS_SCREEN
 from brain.provider_routes import _sessions, may_switch, models_of
+from brain.role_refusals import CHOOSING_A_MODEL_NEEDS_THE_SUPER_ADMIN, role_refusal
 from brain.tables.agent import AgentRow
 
 log = structlog.get_logger()
@@ -88,6 +92,10 @@ async def pin_model(
     """Pin a provider and model for an agent, or clear the pin. See the module docstring."""
     if not may_switch(asked.reach, asked.now):
         log.info("agent model pin refused", principal=asked.caller.principal.id)
+        if permitted(screen(MODELS_SCREEN).read, asked.reach, asked.now):
+            # Somebody who can open the Models screen knows a model can be chosen, so they are
+            # told which role chooses it (needs-rupash 178 A). Anybody else is answered below.
+            return role_refusal(CHOOSING_A_MODEL_NEEDS_THE_SUPER_ADMIN)
         raise _not_answerable()
     if (body.provider is None) != (body.model is None):
         return _refused("a pin is a provider and a model together, or neither")
