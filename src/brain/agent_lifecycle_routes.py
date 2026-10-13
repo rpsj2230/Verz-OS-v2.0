@@ -923,17 +923,22 @@ def may_change_channels(record: AgentRecord, asked: Asking) -> bool:
     return holds(AGENT_LIFECYCLE_CAPABILITY, record, asked)
 
 
-def may_install_in_groups(record: AgentRecord, asked: Asking) -> bool:
-    """Whether this caller may put this agent into a group chat, or take it out.
+def may_steward_or_administer(record: AgentRecord, asked: Asking) -> bool:
+    """Whether this caller is the agent's steward or holds the lifecycle authority over its row.
 
-    The agent's steward or a holder of the lifecycle authority over its row, as switching its
-    channels was until needs-rupash 178 A. Which rooms the agent answers in is not which surfaces
-    it answers on, and the owner's decision named channels, connectors and the leash; so the room
-    install keeps the rule it had and says so, rather than narrowing with the channel switch.
+    The rule switching an agent's channels had until needs-rupash 178 A, kept for the parts the
+    owner left with the steward: what an agent remembers (needs-rupash 180, and 178's own list
+    gives memory to the owner) and which group chats it is in. Which rooms the agent answers in is
+    not which surfaces it answers on, and the decision named channels, connectors and the leash.
     """
     return record.audience.owner_id == asked.caller.principal.id or holds(
         AGENT_LIFECYCLE_CAPABILITY, record, asked
     )
+
+
+def may_install_in_groups(record: AgentRecord, asked: Asking) -> bool:
+    """Whether this caller may put this agent into a group chat, or take it out."""
+    return may_steward_or_administer(record, asked)
 
 
 def visible(record: AgentRecord, asked: Asking) -> bool:
