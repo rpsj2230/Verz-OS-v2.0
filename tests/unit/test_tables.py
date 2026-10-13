@@ -168,7 +168,7 @@ MIGRATION_LEARNED_RULES = VERSIONS / "0206_learned_rule_promotion.py"
 MIGRATION_ROLE_NOMINATIONS = VERSIONS / "0208_role_nominations.py"
 MIGRATION_ELEVATION_CHAIN = VERSIONS / "0209_elevation_chain.py"
 MIGRATION_BUDGET_STOP = VERSIONS / "0211_budget_stop.py"
-MIGRATION_ALERT_ACKNOWLEDGEMENT = VERSIONS / "0224_alert_acknowledgement.py"
+MIGRATION_ALERT_ACKNOWLEDGEMENT = VERSIONS / "0217_alert_acknowledgement.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -491,7 +491,7 @@ ROLE_NOMINATION_TABLES: tuple[str, ...] = ("gate.role_nomination",)
 ELEVATION_CHAIN_TABLES: tuple[str, ...] = ("obs.elevation_entry",)
 #: And the one 0211 adds: every used-up budget, stopped or only said.
 BUDGET_STOP_TABLES: tuple[str, ...] = ("ops.budget_stop",)
-#: And the one 0224 adds: who acknowledged an incident, and when (M27.15.45).
+#: And the one 0217 adds: who acknowledged an incident, and when (M27.15.45).
 ALERT_ACKNOWLEDGEMENT_TABLES: tuple[str, ...] = ("ops.alert_acknowledgement",)
 
 ALL_TABLES = (

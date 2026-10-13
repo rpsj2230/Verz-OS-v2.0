@@ -542,7 +542,7 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # period rather than anybody's record (`0211`).
         "ops.budget_stop",
         # An alert acknowledgement names a source and an instant, and the person who pressed: an
-        # actor and not an owner, and `0224` grants no way for a row to leave (M27.15.45).
+        # actor and not an owner, and `0217` grants no way for a row to leave (M27.15.45).
         "ops.alert_acknowledgement",
         "ops.retention_release",
         "ops.retention_report",

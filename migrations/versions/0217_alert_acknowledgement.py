@@ -19,8 +19,8 @@ acknowledged, and the repeat notice resumes, which is the safe direction.
 
 Task ids: M27.15.45
 
-Revision ID: 0224
-Revises: 0223
+Revision ID: 0217
+Revises: 0216
 """
 
 from __future__ import annotations
@@ -28,9 +28,9 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0224"
-# The plan's number, after 0223. Re-pointed at whichever migration is the head when it lands.
-down_revision = "0223"
+revision = "0217"
+# The plan's number, after 0216. Re-pointed at whichever migration is the head when it lands.
+down_revision = "0216"
 branch_labels = None
 depends_on = None
 

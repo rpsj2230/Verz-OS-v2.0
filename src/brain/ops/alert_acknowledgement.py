@@ -2,7 +2,7 @@
 
 `brain.ops.alerting` gives every severity an acknowledgement window and says nothing records one
 being met. An incident on the Incidents screen is read off the worker's newest attempt at a source,
-so there is nothing to mark. This is the mark: `ops.alert_acknowledgement` (`0224`), one row per
+so there is nothing to mark. This is the mark: `ops.alert_acknowledgement` (`0217`), one row per
 incident, keyed on its kind, its subject and the instant it began.
 
 **The first press wins and a second changes nothing.** `acknowledge` inserts and, when the row is
@@ -92,7 +92,7 @@ async def acknowledge(
 ) -> Acknowledged:
     """Record `by` as acknowledging this incident, or return who already did.
 
-    The session's principal (`app.principal_id`) must be `by`, which `0224`'s insert policy holds.
+    The session's principal (`app.principal_id`) must be `by`, which `0217`'s insert policy holds.
     """
     await session.execute(text("SELECT set_config('app.principal_id', :by, true)"), {"by": by})
     await session.execute(

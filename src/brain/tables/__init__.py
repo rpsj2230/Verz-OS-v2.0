@@ -509,7 +509,7 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0211_budget_stop. Points at nothing: the ceiling, the principal and the recipients are
     # values, so a stop's row outlives a ceiling's next version and a person leaving.
     "ops.budget_stop",
-    # 0224_alert_acknowledgement. Points at nothing: the subject is a source's name and the person
+    # 0217_alert_acknowledgement. Points at nothing: the subject is a source's name and the person
     # is a value, so an acknowledgement outlives both.
     "ops.alert_acknowledgement",
 )

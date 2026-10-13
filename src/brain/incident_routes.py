@@ -29,7 +29,7 @@ reassuring answer, and it would be given by a process that looked at nothing.
 
 **An incident can be acknowledged, and that stops its repeat notice and hides nothing.** A person
 who holds the screen across the whole install presses once and the row names who and when
-(`brain.ops.alert_acknowledgement`, `0224`); the incident stays listed in the state the worker
+(`brain.ops.alert_acknowledgement`, `0217`); the incident stays listed in the state the worker
 found. The control is offered to that reader alone (`may_acknowledge`), and the press is refused
 to anybody else in the one answer every refusal here gives, so a department-scoped reader is not
 told there is a button. Only an incident this reader is shown can be acknowledged: naming a

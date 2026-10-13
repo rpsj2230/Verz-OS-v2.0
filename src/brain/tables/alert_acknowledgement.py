@@ -1,6 +1,6 @@
 """`ops.alert_acknowledgement`: who acknowledged an alert, and when (M27.15.45).
 
-The row behind `brain.ops.alert_acknowledgement`. `0224` builds it.
+The row behind `brain.ops.alert_acknowledgement`. `0217` builds it.
 
 **An alert is identified by what it is about and when it began.** Nothing on this install stores
 an alert: an incident is read off the worker's newest attempt at a source, and it began when that
@@ -13,7 +13,7 @@ person pressed a button once.
 is a principal id, with no key into either table, so an acknowledgement is not deleted by a
 connection being removed or a person leaving. It is a record of who said they had seen it.
 
-**Written once, in the session's own name, and never updated.** `0224`'s insert policy admits only
+**Written once, in the session's own name, and never updated.** `0217`'s insert policy admits only
 a row naming `app.principal_id`, and the unique key means a second press finds the first person's
 row and writes nothing.
 
