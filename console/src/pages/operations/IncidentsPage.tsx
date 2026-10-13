@@ -13,8 +13,9 @@
  * **Acknowledging says somebody has seen it and hides nothing.** A reader who holds the screen across
  * the whole installation is offered the control, once per incident; it stays listed in the state the
  * worker found, with who acknowledged it and when (M27.15.45).
+ * **System health sits beneath it**, for the reader the API shows it to (M27.13.2).
  *
- * Task ids: M27.2.7, M27.15.45
+ * Task ids: M27.2.7, M27.13.2, M27.15.45
  */
 
 import { useCallback, useState } from "react";
@@ -36,6 +37,7 @@ import {
 } from "../incidentsQuery";
 import { at, Line, OPERATIONS, OpsPage, WholeList } from "./parts";
 import { Pill } from "./pills";
+import { SystemHealthSection } from "./SystemHealthSection";
 
 export const INCIDENTS_LEDE = "Which connected sources are slow or not answering now, and what stops working because of it.";
 export const READING_INCIDENTS = "Loading what is degraded.";
@@ -95,36 +97,39 @@ export function IncidentsPage() {
       notice={failure === null ? undefined : <FailureNotice failure={failure} />}
       body={body}
     >
-      {(page) =>
-        (page.unread ?? "") !== "" ? (
-          <Note>{page.unread}</Note>
-        ) : (
-          <WholeList
-            title={DEGRADED_HEADING}
-            caption={DEGRADED_HEADING}
-            columns={COLUMNS}
-            rows={page.items}
-            rowId={(row) => row.subject}
-            rowLabel={(row) => row.subject}
-            exportName="incidents"
-            empty={NOTHING_DEGRADED}
-            emptyDescription={NOTHING_DEGRADED_MORE}
-            rowActions={(row) =>
-              page.may_acknowledge && !row.acknowledged_by ? (
-                <Button variant="outline" size="sm" disabled={busy} onClick={() => acknowledge(row)}>
-                  {ACKNOWLEDGE_LABEL}
-                </Button>
-              ) : null
-            }
-            footer={
-              <>
-                <Line>{page.told}</Line>
-                {page.may_acknowledge ? <Line>{page.acknowledging_means}</Line> : null}
-              </>
-            }
-          />
-        )
-      }
+      {(page) => (
+        <>
+          {(page.unread ?? "") !== "" ? (
+            <Note>{page.unread}</Note>
+          ) : (
+            <WholeList
+              title={DEGRADED_HEADING}
+              caption={DEGRADED_HEADING}
+              columns={COLUMNS}
+              rows={page.items}
+              rowId={(row) => row.subject}
+              rowLabel={(row) => row.subject}
+              exportName="incidents"
+              empty={NOTHING_DEGRADED}
+              emptyDescription={NOTHING_DEGRADED_MORE}
+              rowActions={(row) =>
+                page.may_acknowledge && !row.acknowledged_by ? (
+                  <Button variant="outline" size="sm" disabled={busy} onClick={() => acknowledge(row)}>
+                    {ACKNOWLEDGE_LABEL}
+                  </Button>
+                ) : null
+              }
+              footer={
+                <>
+                  <Line>{page.told}</Line>
+                  {page.may_acknowledge ? <Line>{page.acknowledging_means}</Line> : null}
+                </>
+              }
+            />
+          )}
+          <SystemHealthSection />
+        </>
+      )}
     </OpsPage>
   );
 }
