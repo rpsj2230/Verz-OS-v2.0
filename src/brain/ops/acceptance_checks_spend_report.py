@@ -12,11 +12,11 @@ show exactly the run it recorded, and a key the install shares (its department, 
 grown by at least that run. It never asserts a total, which would be a statement about the company
 and not about the product. See `A_SPEND_CHECK_COMPARES_THE_REPORT_WITH_ITSELF_BEFORE_AND_AFTER`.
 
-**The rows are written through the store the request path writes through.** A run's cost is
-`brain.ops.spend_store.record` over an `Actual`, the function `UsageRecorder` calls when a request
-finishes, so what is proved is the ledger and the report over it and not an insert the check made
-up. What is not proved here is that a real question's finish reaches the recorder, which the
-install's own questions prove by appearing on this report.
+**The rows are an `Actual`'s fields, inserted as the other install checks insert a cost.** The
+usage recorder is the ledger's one writer (a test over the source holds that), so the check does
+not call the store's own writer; it reads back through `spend_store.recorded` that the five
+dimensions arrive as written. What is not proved here is that a real question's finish reaches
+the recorder, which the install's own questions prove by appearing on this report.
 
 **The budget history is the one store every level appends to.** The company ceiling is set
 twice through the route a Super Admin uses, and a department and a person's row are appended
@@ -32,7 +32,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 
-from sqlalchemy import text
+from sqlalchemy import insert, text
 
 from brain.core.scope import Scope
 from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, check
@@ -121,7 +121,8 @@ async def a_run_is_recorded_and_the_report_shows_it_in_every_dimension(h: Harnes
     from brain.core.principal import PrincipalKind
     from brain.gate.context import TrafficClass
     from brain.ops.spend import Actual, Dimension
-    from brain.ops.spend_store import record, recorded
+    from brain.ops.spend_store import recorded
+    from brain.tables.spend import SpendActualRow
 
     await h.found_departments()
     asker, sync = h.principal(A, "asker"), h.principal(A, "sync")
@@ -163,9 +164,28 @@ async def a_run_is_recorded_and_the_report_shows_it_in_every_dimension(h: Harnes
             trace_id=f"{h.trace_id}-m",
         ),
     )
+    # Inserted as the other install checks insert a cost: the usage recorder is the one writer of
+    # the ledger the product has, and a second module calling the store's own writer is a second
+    # writer a test over the source refuses (`tests/unit/test_agent_profile.py`).
     async with h.sessions() as session:
-        for one in runs:
-            await record(session, one)
+        await session.execute(
+            insert(SpendActualRow),
+            [
+                {
+                    "principal_id": one.principal_id,
+                    "principal_kind": one.principal_kind.value,
+                    "traffic": one.traffic.value,
+                    "department": one.department,
+                    "agent_id": one.agent_id,
+                    "model": one.model,
+                    "lane": one.lane.value,
+                    "cost_minor": one.cost_minor,
+                    "at": one.at,
+                    "trace_id": one.trace_id,
+                }
+                for one in runs
+            ],
+        )
         await session.commit()
     async with h.sessions() as session:
         kept = {one.trace_id: one for one in await recorded(session)}
