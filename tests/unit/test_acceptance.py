@@ -731,11 +731,20 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert outcomes.pop("the_rate_limits_screen_lists_the_windows_refusing_now")[0] == NOT_RUN
     assert outcomes.pop("rate_limits_and_capacity_answer_their_readers")[0] == NOT_RUN
     assert outcomes.pop("three_classes_share_one_budget_and_give_way_in_order")[0] == NOT_RUN
+    # Nor has this database's worker recorded a daily backup report yet, so there is no scheduled
+    # run to judge; `tests/unit/test_acceptance_checks_backup.py` records one and runs the check.
+    assert (
+        outcomes.pop("a_backup_older_than_its_recovery_point_is_recorded_and_said_once")[0]
+        == NOT_RUN
+    )
     # Nothing has furnished this database's Starter pack, which the application does on its first
     # start; `tests/unit/test_acceptance_checks_joiner_mover_leaver.py` furnishes it and runs it.
     assert (
         outcomes.pop("a_joiner_gets_a_department_pack_and_a_mover_or_leaver_loses_it")[0] == NOT_RUN
     )
+    # The scratch database is not an install started from a release, so no image reference was
+    # handed in; `tests/unit/test_acceptance_checks_install_template.py` hands it one.
+    assert outcomes.pop("the_install_runs_one_published_image_at_a_named_release")[0] == NOT_RUN
     # No cache here either; `tests/unit/test_acceptance_cache.py` runs it with a store in its place.
     assert outcomes.pop("a_cached_answer_reaches_only_the_reach_it_was_computed_for")[0] == NOT_RUN
     # Nor the plan and freshness checks, which ask the same cache;
