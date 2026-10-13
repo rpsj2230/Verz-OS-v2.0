@@ -146,7 +146,7 @@ async def _connected_here(h: Harness, connector: str) -> bool:
 
 
 @check(
-    leaves=("M33.5.1.1",),
+    leaves=("M33.5.1.1", "M27.11.9"),
     sentence=(
         "A connector admin connects the domains source with a list of domains made up for the "
         "check through the Connectors screen's route, and the install reads it back connected "
@@ -201,7 +201,7 @@ async def a_connector_admin_installs_and_configures_a_connector(h: Harness) -> N
 
 # ---------------------------------------------- 2. bind and rotate a key (M33.5.1.2)
 @check(
-    leaves=("M33.5.1.2",),
+    leaves=("M33.5.1.2", "M27.11.9"),
     sentence=(
         "A connector admin connects Xero with a key made for the check, then replaces the key, "
         "each through the Connectors screen's route: the connection names the key's slot and "
