@@ -430,7 +430,7 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
   "POST /api/v1/agents/{agent_id}/channels": {
     row: CHANNELS_PRESSED,
     audit: CHANNELS_PRESSED,
-    behaviour: t("test_agent_lifecycle_routes", "test_an_agent_s_steward_switches_its_channels_and_the_store_is_told_who_did_it"),
+    behaviour: t("test_agent_lifecycle_routes", "test_an_administrator_over_the_row_switches_an_agent_s_channels"),
   },
   "POST /api/v1/agents/{agent_id}/upgrade/accept": {
     row: UPGRADE_PRESSED,
