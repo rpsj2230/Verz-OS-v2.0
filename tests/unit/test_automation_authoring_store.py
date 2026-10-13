@@ -190,19 +190,22 @@ def test_a_written_automation_reads_back_arrives_in_the_ledger_and_install_is_st
         installed = an_installation(AUTHOR, "auto_installed")
         again = an_installation(AUTHOR, "auto_installed_again")
 
-        async def work() -> tuple[str, str, Any, Any]:
+        async def work() -> tuple[str, str, Any, Any, str]:
             engine = app_engine(url)
             try:
                 store = StoredAgentAutomations(make_session_factory(engine))
                 one = await store.author(first, ent_hash="a" * 32, trace_id="trace-first")
                 two = await store.author(second, ent_hash="a" * 32, trace_id="trace-second")
+                again_one = await store.author(
+                    first, ent_hash="a" * 32, trace_id="trace-pressed-twice"
+                )
                 done = await store.install(installed, ent_hash="a" * 32, trace_id="t-install")
                 twice = await store.install(again, ent_hash="a" * 32, trace_id="t-again")
-                return one, two, done, twice
+                return one, two, done, twice, again_one
             finally:
                 await engine.dispose()
 
-        one, two, done, twice = run(work)
+        one, two, done, twice, again_one = run(work)
         rows = sql(
             url,
             "SELECT automation_id, template_id, trigger_kind, trigger_source, cadence_every, "
@@ -230,6 +233,11 @@ def test_a_written_automation_reads_back_arrives_in_the_ledger_and_install_is_st
     )
 
     assert (one, two) == ("auto_first", "auto_second")
+    assert again_one == "auto_first"
+    assert len(rows) == 2
+    assert [one.trace_id for one in chain if one.action.value == "compose_change"].count(
+        "trace-pressed-twice"
+    ) == 0
     assert read == [first.authored, second.authored]
     assert (
         done.created is True and twice.created is False and twice.automation_id == "auto_installed"

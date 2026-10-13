@@ -32,6 +32,7 @@ Task ids: M39.9.2.1, M39.9.2.2, M39.9.2.3, M39.9.2.4, M17.4.1, M17.4.2
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping
 from datetime import datetime
 from typing import Annotated, Final, Protocol, runtime_checkable
@@ -82,7 +83,6 @@ from brain.console.automation_gallery import (
     GalleryError,
     NotConfirmedError,
     may_open_gallery,
-    new_automation_id,
 )
 from brain.core.errors import Absent, Failed
 from brain.ops.agent_automation_store import StoredAgentAutomations
@@ -434,6 +434,18 @@ def _authored_from(
     )
 
 
+def authored_id(confirmation: str, principal_id: str) -> str:
+    """The id of what a confirmation writes, derived from it and from whom it runs as.
+
+    So a second press of the same confirmed request, a retry after a dropped answer, meets the
+    key and writes nothing, and answers with the first. The digest already covers every term and
+    the person, so two different automations never share an id, and the same words by the same
+    person at the same reach are the same automation. See `AutomationAuthors.author`.
+    """
+    shared = hashlib.sha256(f"{confirmation}:{principal_id}".encode()).hexdigest()
+    return f"auto_{shared[:32]}"
+
+
 def _refused(findings: tuple[str, ...]) -> JSONResponse:
     view = AuthoringRefusedView(outcome=REFUSED, sentences=list(findings))
     return JSONResponse(status_code=422, content=view.model_dump(mode="json"))
@@ -580,7 +592,9 @@ async def author_automation(
     shown = preview(authored, agent, author=asked.caller.principal, author_reach=asked.reach)
     try:
         written = authoring_of(
-            shown, confirmation=body.confirmation, automation_id=new_automation_id()
+            shown,
+            confirmation=body.confirmation,
+            automation_id=authored_id(body.confirmation, asked.caller.principal.id),
         )
     except NotConfirmedError:
         log.info("automation authoring unconfirmed", principal=asked.caller.principal.id)

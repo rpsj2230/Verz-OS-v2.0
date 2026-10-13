@@ -341,10 +341,12 @@ def test_one_confirmed_request_writes_one_paused_automation_as_the_caller(
     """The write: the digest the preview gave, one row for the caller with no next run and the
     task the words imply, and the caller's reach digest carried. Delete this and the write is
     unconfirmed, written as somebody else, or not paused."""
-    answer = create_as(client, "u_admin", confirmed(client, "u_admin"))
+    asked_for = confirmed(client, "u_admin")
+    answer = create_as(client, "u_admin", asked_for)
     body = answer.json()
 
     assert answer.status_code == 201, answer.text
+    assert body["automation_id"] == routes.authored_id(str(asked_for["confirmation"]), "u_admin")
     assert body["runs_as"] == "u_admin"
     assert body["next_run_at"] is None
     assert body["starts_paused"] == IT_STARTS_PAUSED
@@ -408,3 +410,15 @@ def test_a_reader_without_the_authority_over_this_task_cannot_write_it(
 
     assert refusal(answer) == missing
     assert authors.written == []
+
+
+def test_the_id_a_confirmation_writes_is_derived_from_it_and_from_who_wrote_it() -> None:
+    """So a second press of the same confirmed request meets the key and writes nothing, and two
+    people never share an id. Delete this and a retry after a dropped answer writes a second
+    automation, or one person's confirmation collides with another's."""
+    one = routes.authored_id("a" * 64, "u_admin")
+
+    assert one == routes.authored_id("a" * 64, "u_admin")
+    assert one != routes.authored_id("b" * 64, "u_admin")
+    assert one != routes.authored_id("a" * 64, "u_other")
+    assert one.startswith("auto_") and len(one) == len("auto_") + 32

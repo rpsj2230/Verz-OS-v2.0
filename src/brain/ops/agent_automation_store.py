@@ -191,12 +191,15 @@ class StoredAgentAutomations:
 
         The same transaction-local settings as an install, so the policy admits the row and the
         trigger records it in the ledger as `authored_install`. There is no conflict to answer: an
-        authored automation is outside the one-per-template rule, and its id is fresh.
+        authored automation is outside the one-per-template rule, and its id is derived from what
+        was confirmed, so the same request twice is answered with the first and writes nothing.
         """
         installation = authoring.installation
         async with self._sessions() as session, session.begin():
             await session.execute(_set_config(PRINCIPAL_SETTING, installation.installed_by))
             await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
             await session.execute(_set_config(ENT_HASH_SETTING, ent_hash))
-            written = (await session.execute(authoring_insert(authoring))).scalar_one()
-        return str(written)
+            written = (await session.execute(authoring_insert(authoring))).scalar_one_or_none()
+        # None means the id was already there: the same confirmed request, pressed twice, and the
+        # first one is the answer. PostgreSQL fires no row trigger for a row it did not insert.
+        return installation.automation.automation_id if written is None else str(written)
