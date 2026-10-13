@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**55 items are open: 232,** what declares that an install has a residency constraint, **231,** which chat backup and safety alerts are sent to, **230,** whether a browser run that steps outside what was approved suspends and asks again or ends, **223,** what may start an automation besides the clock, **222,** whether the install may measure how long approvals wait and show only the typical figure, **221,** who is told when a safety mechanism has not run, **220,** which speech service turns dictation into text, **219,** whether an approver may amend an action before approving it, **218,** whether the product may count how often each knowledge item is read, **216,** what counts as a delegation when a person moves department, **215,** whether the setup wizard takes a logo as an upload or as the address of a picture you already host, **210,** whether an automation a person wrote in words may call a model with nobody present, **209,** what starts an automation that waits for a change in a source or a call from outside, **202,** three disclosure decisions on screens I built (who the sign-in page names, what the landing figures show a reader without the spend screens, and whether every file download is written down), **201,** who an agent is shared with and whether its page has a browsing switch, **200,** what happens to a person's agents when the person is switched off, **199,** whether these are the criteria to hold the Maintenance Agent to, **198,** going live with your real systems, the order and one rule for the recordings, **197,** sign in with Lark, what you do and one question, **196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **193,** which formats an agent's generated documents start with and which libraries may be added, **192,** whether sensitive actions that cannot be undone need a second person, **191,** whether an agent may ever answer with nothing behind it, **189,** how a team agent may use mail without one person's mail reaching anybody else, **188,** whether five console tasks that ask for what the design does not do are narrowed, **187,** whether the chat tools show progress while an answer is made, **186,** whether answers keep using the old search index while a new embedding model is built, **185,** which person approves the eight starter skills, **184,** which outside AI services are offered first and what they count as, **183,** whether a skill is refused when its agent lacks one of its tools, **182,** what a skill names when it needs knowledge, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **167,** whether a chat room or channel belongs to exactly one agent, **163,** the short list of what stops tasks being proved on your install, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **134,** connecting the Slack channel, **132,** connecting the email channel, **131,** making staff accounts work on your install, **127 and 128,** things for you to do (switch on the Lark chat channel, and connect Xero, HubSpot and Freshdesk), **and 91,** the
+**56 items are open: 232,** what declares that an install has a residency constraint, **231,** which chat backup and safety alerts are sent to, **230,** whether a browser run that steps outside what was approved suspends and asks again or ends, **223,** what may start an automation besides the clock, **222,** whether the install may measure how long approvals wait and show only the typical figure, **221,** who is told when a safety mechanism has not run, **220,** which speech service turns dictation into text, **219,** whether an approver may amend an action before approving it, **218,** whether the product may count how often each knowledge item is read, **216,** what counts as a delegation when a person moves department, **215,** whether the setup wizard takes a logo as an upload or as the address of a picture you already host, **210,** whether an automation a person wrote in words may call a model with nobody present, **209,** what starts an automation that waits for a change in a source or a call from outside, **203,** what "only towards stricter" means for how a connected source's own permissions are followed, **202,** three disclosure decisions on screens I built (who the sign-in page names, what the landing figures show a reader without the spend screens, and whether every file download is written down), **201,** who an agent is shared with and whether its page has a browsing switch, **200,** what happens to a person's agents when the person is switched off, **199,** whether these are the criteria to hold the Maintenance Agent to, **198,** going live with your real systems, the order and one rule for the recordings, **197,** sign in with Lark, what you do and one question, **196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **193,** which formats an agent's generated documents start with and which libraries may be added, **192,** whether sensitive actions that cannot be undone need a second person, **191,** whether an agent may ever answer with nothing behind it, **189,** how a team agent may use mail without one person's mail reaching anybody else, **188,** whether five console tasks that ask for what the design does not do are narrowed, **187,** whether the chat tools show progress while an answer is made, **186,** whether answers keep using the old search index while a new embedding model is built, **185,** which person approves the eight starter skills, **184,** which outside AI services are offered first and what they count as, **183,** whether a skill is refused when its agent lacks one of its tools, **182,** what a skill names when it needs knowledge, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **167,** whether a chat room or channel belongs to exactly one agent, **163,** the short list of what stops tasks being proved on your install, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **134,** connecting the Slack channel, **132,** connecting the email channel, **131,** making staff accounts work on your install, **127 and 128,** things for you to do (switch on the Lark chat channel, and connect Xero, HubSpot and Freshdesk), **and 91,** the
 checks only you can do on your install; it waits for the Knowledge upload grants (item 105) to land.
 Each says in plain terms what it is, what I recommend, and every step.
 
@@ -309,6 +309,46 @@ a way for something outside to start work with nobody present, and the schedule 
 proved on your install.
 
 **What I need from you:** reply "209: A" or "209: B". (Tasks M17.4.1 and M39.9.2.2.)
+
+## 203. When you set how a source's own permissions are followed, is switching it off allowed?
+
+**In plain terms:** you decided (item 165, A) that an administrator may set, per connected source, how the
+Brain follows that source's own permissions, "only towards stricter". The same answer also says an
+administrator may switch a source "off the source's rules altogether", leaving only the Brain's own
+grants. Those two sentences pull apart. Following the source's rules is an extra check on top of the
+Brain's own grants, so switching it **off** makes a source **less** strict, not more. I have not built the
+setting, because whichever way I read it I would be building a control that does something different from
+what the other half of the sentence says, and it is a control on who may see company data.
+
+There are two more things the build needs and I want your word on both:
+
+- **What the choice changes.** Today a connector's way of following the source's permissions is declared
+  once by whoever wrote the connector and shown on the Connectors screen; nothing reads a different
+  choice. For a setting to mean anything, a run of that connector has to read the administrator's choice
+  as well as the declaration. That is a change to how reads are decided and it needs a column on the
+  connection (a database change), so I will not start it on a guess.
+- **Where "stricter" starts.** A connector can follow the source in at most two ways (ask the source about
+  the person each time, or keep a copy of its rule and check it here), and many can follow only one. For
+  those, the only change on offer is "off".
+
+**Option A: stricter only, and "off" is not offered.** The screen offers a source only a way that adds a
+check the connector can really do (for example, from keeping a copy of the rule to asking the source about
+the person each time). Nobody can switch a source's own rules off. A connector that can only do one way
+has nothing to choose. Safest, and for most connectors it offers nothing.
+
+**Option B: stricter only, and "off" is offered with two approvers.** As A, and "off" is allowed but needs
+a second administrator to confirm and is recorded on the ledger, because it removes a check.
+
+**Option C: as your answer reads, "off" offered like any other change.** One administrator may switch a
+source's own rules off. It is what the answer says; it is also a way for one person to loosen who sees a
+source.
+
+**My recommendation:** A. It is "only towards stricter" in the plainest sense, it can never loosen anything,
+and an administrator who really wants a source's rules off asks for a release. I will build whichever you
+choose, behind a switch that ships off.
+
+**What I need from you:** reply "203: A", "203: B" or "203: C". (Tasks M33.5.1.3 and the register rows
+that rest on item 165.)
 
 ## 202. Three things I built tell a reader a little more than you may want: who administers, what the figures show, and which downloads are written down
 
@@ -2623,6 +2663,21 @@ nobody sees through the Brain what they could not see themselves.
 safe either way: B only ever adds to it.
 
 **Decided 2026-10-13: "121: B".** On an agent's page the owner and administrators also see that other people's conversations happened: who, when, and whether the agent failed, never the question or the answer.
+
+## 234. The install's worker runs out of memory every half hour: raise its limit, and replace the token that was shown - DECIDED 2026-10-13: A
+
+**In plain terms:** reading your server for tonight's changes, I found two things that are not in the five changes you approved.
+
+1. **The worker is killed for using too much memory, about 30 times today.** Its limit is 384 MiB and the acceptance run alone reaches about 340 MiB, so roughly every 25 to 35 minutes the kernel kills a process in it, and a run in progress dies. That is the second reason (after my own merges restarting the install) that no acceptance run has completed since yesterday, and so why your task percentage has not moved. The host has about 7,300 MiB free, so there is room.
+   - **Option A: raise the worker's limit to 768 MiB now**, through Coolify's stored copy the same way as the pooler line, recreating only the worker, before tonight's vault step. I recommend this. The repository's own limit is being raised too, so every install gets it.
+   - **Option B: leave it.** Acceptance runs keep dying and tasks keep not closing.
+2. **The worker's secrets-vault token was printed once.** An environment check I ran on your server did not hide it, so it appeared in full in my session's output (it was not written to any file or the server). It is a worker token for reading the vault, not your unseal key or a person's password. Treat it as seen.
+   - **Option A: replace it after tonight's vault step**, by minting a new worker token and updating Coolify's stored copy, in the same window. I recommend this.
+   - **Option B: leave it** and accept the exposure.
+
+**What I need from you:** reply "234: A" for both recommendations, or "234: 1A 2B" and so on.
+
+**Decided 2026-10-13: "234: A".** The worker's memory limit is raised to 768 MiB on the install now, through Coolify's stored copy, recreating only the worker; the repository's own limit is raised too. The worker's vault token that was shown is replaced after the vault step in tonight's window.
 
 ## 233. Four decisions before the server changes you approved can finish - DECIDED 2026-10-13: A
 
