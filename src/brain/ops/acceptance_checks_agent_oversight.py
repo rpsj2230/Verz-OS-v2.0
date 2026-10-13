@@ -140,13 +140,15 @@ async def an_agents_steward_is_told_that_others_conversations_happened(h: Harnes
     # The steward is told of the colleague's two runs; an administrator, who used the agent
     # themselves not at all, of the steward's as well. Newest first.
     expected = (
-        (steward, STEWARD_NOT_TOLD, ["failed", "answered"]),
-        (administrator, ADMINISTRATOR_NOT_TOLD, ["answered", "failed", "answered"]),
+        (steward, ["failed", "answered"]),
+        (administrator, ["answered", "failed", "answered"]),
     )
-    for reader, told_wrongly, outcomes in expected:
+    for reader, outcomes in expected:
         seen = await _read(h, app, reader, desk)
         if not seen["oversees"] or len(seen["others"]) != len(outcomes):
-            raise CheckFailedError(told_wrongly)
+            if reader == steward:
+                raise CheckFailedError(STEWARD_NOT_TOLD)
+            raise CheckFailedError(ADMINISTRATOR_NOT_TOLD)
         if [one["outcome"] for one in seen["others"]] != outcomes:
             raise CheckFailedError(NOT_WHO_WHEN_AND_HOW)
         if any(
