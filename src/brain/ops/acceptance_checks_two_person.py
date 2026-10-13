@@ -179,14 +179,18 @@ async def a_money_action_runs_only_after_two_other_people_approve_it(h: Harness)
     from brain.console.approvals import Decided, Endorsed
     from brain.core.errors import Absent
     from brain.gate.suspension_store import StoredSuspensions
+    from brain.ops.acceptance_run import SET_UP_REACH
     from brain.ops.features import TWO_PERSON_APPROVAL, switch
+    from brain.tables.audit import attributed_to
 
     await h.found_departments()
     asker, first, second = (h.principal(A, role) for role in ("asker", "first", "second"))
     for one in (asker, first, second):
         await h.person(one, department=A, grants=within(A, ACTION_CAPABILITY, "approve:action"))
     async with h.sessions() as session:
-        for statement in h.attributed():
+        for statement in attributed_to(
+            actor_id=h.actor, ent_hash=SET_UP_REACH, trace_id=h.trace_id
+        ):
             await session.execute(statement)
         await switch(session, TWO_PERSON_APPROVAL, on=True, by=h.actor)
         await session.commit()
