@@ -153,6 +153,7 @@ from brain.ops.sandbox import sandbox_address
 from brain.ops.secrets import VaultRole
 from brain.ops.sensitive_read_store import SensitiveReadRecorder
 from brain.ops.skill_store import StoredSkills
+from brain.ops.starter_skill_store import furnish_skills_when_on
 from brain.ops.starter_store import furnish as furnish_install
 from brain.ops.telemetry_store import TelemetryRecorder
 from brain.ops.template_key import TemplateKeyState, keep_trying, template_key_at_start
@@ -726,6 +727,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             )
         except Exception as exc:
             log.warning("install could not be furnished", error=type(exc).__name__)
+        # The starter skills, when the install has switched them on: eight submissions waiting for a
+        # person's review, none approved, a name the library holds left alone. Never fatal, for
+        # furnishing's reason. See `brain.ops.starter_skill_store`.
+        try:
+            wrote = await furnish_skills_when_on(
+                app.state.db_sessions,
+                actor=GRANTED_BY,
+                trace_id=f"{RECONCILIATION_TRACE}{uuid.uuid4().hex[:16]}",
+                now=datetime.now(UTC),
+            )
+            if wrote:
+                log.info("starter skills furnished", skills=list(wrote))
+        except Exception as exc:
+            log.warning("starter skills could not be furnished", error=type(exc).__name__)
         # The shipped templates, signed with the key this process read from its write-once slot
         # above, so the gallery offers them to install. A version already on file is kept, so a
         # start after the first writes nothing; never fatal, for furnishing's reason. See
