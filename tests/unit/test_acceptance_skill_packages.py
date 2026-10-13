@@ -15,7 +15,7 @@ Not asked here, and said where a reader would look: what a version with no examp
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M12.3.4, M12.3.1, M12.4.11
+Task ids: M12.3.4, M12.3.1, M12.4.11, M12.4.9
 """
 
 from __future__ import annotations
@@ -53,8 +53,8 @@ def test_the_module_declares_one_check_per_leaf_it_proves() -> None:
     can drift onto a leaf its sentence does not prove, or two checks can claim one leaf, and the
     leaf closes on a check that never looked."""
     assert [(one.name, one.leaves) for one in registered((MODULE,))] == [
-        (REHEARSED, ("M12.3.4",)),
-        (EXPORTED, ("M12.3.1",)),
+        (REHEARSED, ("M12.3.4", "M12.4.9")),
+        (EXPORTED, ("M12.3.1", "M12.4.9")),
         (SCRIPTED, ("M12.4.11",)),
     ]
 

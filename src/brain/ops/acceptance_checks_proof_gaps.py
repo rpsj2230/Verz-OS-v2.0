@@ -23,9 +23,10 @@ link it.
 **M11.8.3, live reading.** Clauses with a check: a question over a connected ticket source answered
 live, a canary from a ticket body found in no table, and deny-listed fields never projected.
 Without one: a question spanning many records answered from projected headers (the fast lane has no
-question shape that filters a source's records, so only one record by name is asked today), and
-document embeddings computed with no outbound call (M7.3.3, the local inference server, is not
-delivered: needs-rupash item 25).
+question shape that filters a source's records, so only one record by name is asked today). The
+clause on document embeddings computed with no outbound call has a check of its own (M7.3.3, in
+the knowledge-models module), which says NOT_RUN where the local inference server is not
+delivered (needs-rupash item 25), and this roll-up reads what it says.
 
 **M1.6.18 and M1.1.9 are checks that cannot run, and say why.** Making an account for a reserved
 person at the owner's own sign-in service and pressing Forgot password for it needs a mailbox
