@@ -302,6 +302,26 @@ SHARED_TOOL_START: Final = Feature(
     read_by=("brain.ops.shared_start:universal_when_on",),
 )
 
+#: Counting which documents an agent's answers cite, for the Knowledge section's figures. Off
+#: because it is a new record kept on every answer: `brain.ops.agent_item_use` keeps an agent, a
+#: document, a day and a count, and no question, person or passage. While off, the section shows no
+#: figure rather than noughts.
+AGENT_ITEM_COUNTS: Final = Feature(
+    name="agent_item_counts",
+    title="Count which documents an agent's answers cite",
+    what=(
+        "Each answer an agent gives adds one to a count for every document it cited, by day, and "
+        "the agent's Knowledge section shows beside each document how many answers drew on it in "
+        "the last thirty days and which it has not touched. The count records the agent, the "
+        "document and the day, and nothing about who asked or what was asked."
+    ),
+    while_off=(
+        "Nothing is counted and the Knowledge section shows no figure beside a document. Counts "
+        "already kept stay, and are shown again if the switch is turned back on."
+    ),
+    read_by=("brain.ops.agent_item_use:counting_is_on",),
+)
+
 #: Every feature this product can switch on, in the order the screen lists them.
 FEATURES: Final[tuple[Feature, ...]] = (
     PROMPT_EDITING,
@@ -311,6 +331,7 @@ FEATURES: Final[tuple[Feature, ...]] = (
     BUDGET_ENFORCEMENT,
     SUPERVISION_REVIEW,
     SHARED_TOOL_START,
+    AGENT_ITEM_COUNTS,
 )
 
 

@@ -230,6 +230,7 @@ from brain.knowledge.rows import (
 from brain.knowledge.search import KNOWLEDGE_READ
 from brain.memory.promotion_store import counted_after_answering
 from brain.memory.turn import Turn, recall_place, session_statements, turn_of
+from brain.ops.agent_item_use import StoredItemUses, cited_item_ids, counting_is_on
 from brain.ops.budget_stop_store import Asker, budget_refusal_for
 from brain.ops.capacity_ledger import CapacityLedger, make_ledger
 from brain.ops.classification_store import classified_lane_of
@@ -2643,6 +2644,30 @@ async def logged_retrieval(
         return None
 
 
+async def counted_citations(
+    state: Any, agent_id: str | None, answered: Answered, *, now: datetime
+) -> None:
+    """Add one to the agent's count for each document this answer cited (M39.2.3.5).
+
+    From the records the person was shown and from nothing else, so what is counted is what the
+    answer's citation frames say it drew on. Does nothing for an answer with no agent, none of
+    whose records names a document, or on an install that has not switched `agent_item_counts`
+    on, and an answer is never failed for it: the count is a report, and what cannot be kept is
+    logged. See `brain.ops.agent_item_use`.
+    """
+    if not agent_id or answered.composed is None:
+        return
+    items = cited_item_ids(answered.composed.payload.records)
+    sessions = getattr(state, "db_sessions", None)
+    if not items or not isinstance(sessions, async_sessionmaker):
+        return
+    try:
+        if await counting_is_on(sessions):
+            await StoredItemUses(sessions).count(agent_id, items, now.date())
+    except Exception:
+        log.warning("agent_item_use.not_counted", exc_info=True)
+
+
 def _first_id(record: Mapping[str, Any]) -> object:
     return next((record[key] for key in ID_KEYS if key in record), "")
 
@@ -2748,6 +2773,7 @@ async def answer(request: Request, recorder: Ingress, asked: Asked, ask: Questio
         return halted_reply(request, outcome)
     thread = await remembered(request, asking, ask, outcome, recorder)
     retrieval = await logged_retrieval(request.app.state, searched, outcome)
+    await counted_citations(request.app.state, recorder.agent_id, outcome, now=asking.now)
     # What the person said for this conversation only, kept once the exchange has its thread.
     await session_formed(
         request.app.state,

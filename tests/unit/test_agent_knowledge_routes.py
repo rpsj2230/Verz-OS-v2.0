@@ -134,7 +134,11 @@ def served(monkeypatch: pytest.MonkeyPatch) -> Iterator[tuple[TestClient, Stub]]
     async def no_names(_session: Any, _ids: Any) -> dict[str, str]:
         return {"u_steward": "Sam Steward", "u_verifier": "Vera Verifier"}
 
+    async def counting_off(_sessions: Any) -> bool:
+        return False
+
     monkeypatch.setattr(routes, "names_of", no_names)
+    monkeypatch.setattr(routes, "counting_is_on", counting_off)
     with console_client(GRANTS, routers=(router,)) as (client, stub):
         stub.answerers.append(answer)
         yield client, stub
@@ -300,3 +304,72 @@ def test_an_agent_whose_rule_reaches_nothing_is_still_answered_with_its_rule_and
     body = AgentKnowledgeView.model_validate(knowledge(client, "u_admin").json())
     assert (body.items, body.more, body.unread) == ([], False, "")
     assert [(one.field, one.value) for one in body.rule] == [("department", "web")]
+
+
+class Counted:
+    """`StoredItemUses.uses`, answering for the documents it was asked about and recording which."""
+
+    def __init__(self, by_item: dict[str, int]) -> None:
+        self.by_item = by_item
+        self.asked: list[str] = []
+
+    def __call__(self, _sessions: Any) -> Counted:
+        return self
+
+    async def uses(self, agent_id: str, item_ids: list[str], *, today: Any) -> dict[str, int]:
+        self.asked.extend(item_ids)
+        return {one: self.by_item[one] for one in item_ids if one in self.by_item}
+
+
+def test_while_counting_is_off_no_item_carries_a_figure_and_none_is_asked_for(
+    served: tuple[TestClient, Stub], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Off is not nought: nought says the agent never touched a document. Delete this and an
+    install that never switched counting on shows every document as unused."""
+    client, _ = served
+    stock(monkeypatch, [item("web_one")])
+    counted = Counted({"web_one": 4})
+    monkeypatch.setattr(routes, "StoredItemUses", counted)
+    body = AgentKnowledgeView.model_validate(knowledge(client, "u_admin").json())
+    assert [one.uses for one in body.items] == [None]
+    assert body.use_figures is None
+    assert counted.asked == []
+
+
+def test_while_counting_is_on_each_item_carries_its_figure_and_nought_means_not_touched(
+    served: tuple[TestClient, Stub], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The figure beside an item is the count for it, nought when the agent never cited it, and
+    the section says whose activity that is. Delete this and a figure is shown without saying whose,
+    or an untouched document has no figure to prune it by."""
+
+    async def counting_on(_sessions: Any) -> bool:
+        return True
+
+    monkeypatch.setattr(routes, "counting_is_on", counting_on)
+    client, _ = served
+    stock(monkeypatch, [item("web_used", added=1), item("web_idle", added=2)])
+    monkeypatch.setattr(routes, "StoredItemUses", Counted({"web_used": 4}))
+    body = AgentKnowledgeView.model_validate(knowledge(client, "u_admin").json())
+    assert {one.item_id: one.uses for one in body.items} == {"web_used": 4, "web_idle": 0}
+    assert body.use_figures is not None
+    assert (body.use_figures.window_days, body.use_figures.basis) == (30, routes.COUNT_BASIS)
+
+
+def test_a_count_is_asked_only_for_documents_the_reader_is_listed(
+    served: tuple[TestClient, Stub], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A document elsewhere, or one the reader may not open, contributes to no figure because it is
+    never asked about. Delete this and the read can start counting over the whole library and
+    disclose how much an agent used what the reader cannot see."""
+
+    async def counting_on(_sessions: Any) -> bool:
+        return True
+
+    monkeypatch.setattr(routes, "counting_is_on", counting_on)
+    client, _ = served
+    stock(monkeypatch, [item("web_one"), item("finance_one", department="finance")])
+    counted = Counted({"web_one": 1, "finance_one": 99})
+    monkeypatch.setattr(routes, "StoredItemUses", counted)
+    knowledge(client, "u_admin")
+    assert counted.asked == ["web_one"]

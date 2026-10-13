@@ -50,7 +50,15 @@ export interface KnowledgeItem {
   readonly verifiedAt?: string;
   readonly reviewBy?: string;
   readonly due: boolean;
+  /** How many answers cited it in the window, absent when nothing is counted. Absent is not nought. */
+  readonly uses?: number;
   readonly reached: boolean;
+}
+
+/** What the figure beside each item counts: the window and whose activity it is. */
+export interface UseFigures {
+  readonly windowDays: number;
+  readonly basis: string;
 }
 
 export interface AgentKnowledge {
@@ -61,6 +69,8 @@ export interface AgentKnowledge {
   readonly addInto?: string;
   readonly more: boolean;
   readonly atLeast: boolean;
+  /** Present only while the install counts which documents an agent's answers cite. */
+  readonly useFigures?: UseFigures;
   /** Set when the API could not say which documents the agent draws on, with an empty list. */
   readonly unread?: string;
   readonly keptRule: string;
@@ -117,6 +127,7 @@ export function readKnowledgeItem(one: Fields): KnowledgeItem | null {
     ...optional("verifiedAt", said(one["verified_at"])),
     ...optional("reviewBy", said(one["review_by"])),
     due: one["due"] === true,
+    ...(typeof one["uses"] === "number" ? { uses: one["uses"] } : {}),
     // Absent means reached: the list is the documents the rule reaches, so a body that omits the
     // field is the list's own contract and not a document left out.
     reached: one["reached"] !== false,
@@ -170,7 +181,11 @@ export function readAgentKnowledge(payload: unknown): AgentKnowledge | null {
   }
   const unread = said(fields["unread"]);
   const addInto = said(fields["add_into"]);
+  const figures = fieldsOf(fields["use_figures"]);
+  const windowDays = figures?.["window_days"];
+  const basis = said(figures?.["basis"]);
   return {
+    ...(typeof windowDays === "number" && basis !== undefined ? { useFigures: { windowDays, basis } } : {}),
     items: each(fields["items"], readKnowledgeItem),
     rule: readRule(fields["rule"]),
     canAdd: fields["can_add"] === true,

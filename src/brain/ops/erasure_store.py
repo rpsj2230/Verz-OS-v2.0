@@ -541,6 +541,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # request that found it used up and of the people told: actors, and a stop is the budget's
         # period rather than anybody's record (`0211`).
         "ops.budget_stop",
+        # How many answers of an agent cited a document on a day (`0213`): no question, no
+        # principal and no text, so a count is about the agent's use of a document and nobody's.
+        "ops.agent_item_use",
         "ops.retention_release",
         "ops.retention_report",
         "ops.routing_change",
