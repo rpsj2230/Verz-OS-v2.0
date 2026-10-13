@@ -17,12 +17,26 @@ Classes: 1 built and wired, only an install check is missing; 2 partly built; 3 
 | M34 (Wave 4) | 17 | 1 | 6 | 8 | 0 | 2 |
 | M35 (Wave 4) | 21 | 11 | 7 | 0 | 0 | 3 |
 | M40 (Wave 4) | 53 | 20 | 15 | 14 | 3 | 1 |
-| M19 (Wave 5) | 0 | 0 | 0 | 0 | 0 | 0 |
+| M19 (Wave 5) | 47 | 2 | 34 | 10 | 1 | 0 |
 | M30 (Wave 5) | 30 | 5 | 12 | 6 | 2 | 5 |
 | M36 (Wave 5) | 22 | 8 | 5 | 6 | 0 | 3 |
 | M37 (Wave 5) | 40 | 7 | 5 | 26 | 0 | 2 |
-| M42 (Wave 5) | 0 | 0 | 0 | 0 | 0 | 0 |
-| Total | 313 | 93 | 78 | 98 | 19 | 25 |
+| M42 (Wave 5) | 52 | 25 | 6 | 4 | 5 | 12 |
+| Total | 412 | 120 | 118 | 112 | 25 | 37 |
+
+## Findings that cut across modules
+
+Read these before taking a module. They explain why so many leaves are class 2 or 3 although an older note said "built and wired".
+
+1. **The old proxy note ("a module names the leaf and something imports it") overstated what is wired.** Whole packages have no caller outside themselves: `brain.orchestration` (M18.1 to M18.4), `brain.migration` (M37.1 and M37.2, in-memory registers with no table, route or page), `identity/lifecycle.py` (M26: the real joiner, mover and leaver work is done by `staff_sync_run`, `starter_pack_store`, `principal_state_store` and `automation_owner`), and most of `adoption.py` (M34). For these, class 3 means a store, a route and a page still have to be built, not just a call wired.
+2. **M40 leaf ids sit on the wrong module.** Many `member/*.py`, `member_activity.py` and `member_library.py` functions have no caller, while the behaviour is built elsewhere (`GET /me/workspace`, the Knowledge lifecycle routes, `GET /approvals`, `/me/accounts`, `/me/channels`, `/me/memory/*`). Those leaves are class 1 and the install check should read the real route.
+3. **`orchestration/unattended.py` is a model, not the automation runtime** (M17.4). The runtime is `ops/automation_run.py`, `automation_run_store`, `console/automation_gallery` and `automations_routes`, and it supports the schedule trigger only. There is no workflow engine (M17.6); the nearest pieces are `builder/procedure.py`, `ops/automation.py` and `automation_routes.tool_call`.
+4. **M19 has no worker half.** The driver that compiles an envelope, sends the start line to the browser launcher, relays the run and writes the session and recording is not built; the sandbox bodies have never been sent to a Docker daemon; no workflow builds the browser runner image. Almost every M19 leaf waits on that one driver, so install checks written first would only be checks that cannot pass.
+5. **Backups are narrower than the M30 and M42 leaves say.** The only backup that runs is a nightly `pg_dump -Fc` with a manifest (`ops/backup/brain-backup`). No pgBackRest, WAL archiving, restic, encryption of a copy or off-host enforcement exists; the restore drill is run by hand; `ops/schedule_runner.py` entries for the drill and the backup exposure have `needs=` and no `run`; `recovery.alerts`, `controls.overdue` and `launch.service_level` are tested and called by nothing; backup and control alerts have no delivery channel.
+6. **Enforcement and retention that ship partly empty (M21, M25).** Budget enforcement is wired but off (flag `budget_enforcement`, needs-rupash item 169, decided A). Department and user budgets can be read and never set by any route. The trace payload store has INSERT only, so the daily sweep never deletes from it; detaching a ledger partition keeps its rows; `browsing.recording.remove_expired` has no caller; cache, index, recordings and attachments are not reached by erasure; `ops/erasure.assemble` and `certify` have no caller, so there is no deletion certificate. The console draws English only (M35): the locale formatters have no caller.
+7. **Narrowings with no needs-rupash item** (CLAUDE.md says a narrowing is a question): M19.9.1 (the leaf wants a new approval naming a breach mid-run; `approval.py` deliberately approves the envelope up front and ends a refused run), M42.5.5 (the wizard collects a logo address where the leaf says upload), M36.2.2.2 (`gate/screening.screen_in_one_pass` is built, its own docstring says the collapse does not pay), M40.3.1.3 (per-item usage counts conflict with a retrieval log that deliberately stores no item reference), M40.6.1.2 (amend is explicitly not offered), M21.2.6 (the refusal sentence names no budget). A builder should raise each as a numbered item rather than decide it.
+8. **A function with a docstring that says it is wired is not evidence.** `mine_routes.CORRECTIONS_ARE_NOT_RECORDED` and the `write_verification` docstring are stale against main; `needs_you.py` still says no budget stop is recorded.
+
 
 # Wave 4
 
@@ -817,6 +831,161 @@ Classes: 1 built and wired, only an install check is missing; 2 partly built; 3 
 
 # Wave 5
 
+## M19 Browser and computer use
+
+### M19, Class 1: built and wired, only an install check is missing (2)
+
+- **M19.2.1** Planner that never reads page content, asserted by test  
+  Evidence: browsing/planning.py:plan takes only declared Goal and PlanRequest; browsing/shape.py:browsing_gaps parses the package source and fails if page content can reach a plan; test_browsing_plan.py and test_browsing_shape.py assert it. planning is used by tools/website_check.py and ops/acceptance_audit.py.  
+  Next step: Write a check naming M19.2.1 that calls brain.browsing.shape.browsing_gaps() on the installed package and requires an empty result, plus plan() on a declared target.
+- **M19.9.3** A browser run starts from an empty profile in its own container and cannot attach to or import a staff member's browser profile, cookies ...  
+  Evidence: sandbox.py gives each run a fresh container with read-only root, tmpfs only and no volume; sandbox_gaps refuses any volume or bind; test_browsing_sandbox.py test_every_way_out_of_the_sandbox_is_a_gap asserts it. No product code reads a staff browser profile.  
+  Next step: Write a check naming M19.9.3 that builds sandbox_for(...), requires no gaps, then adds a volume and a bind and requires sandbox_gaps to refuse each.
+
+### M19, Class 3: built but not wired (10)
+
+- **M19.2.2** Envelope compilation: plan intersected with capabilities and skill ceiling  
+  Evidence: browsing/envelope.py:compile_envelope and seal intersect a plan with capabilities and the skill ceiling; test_browsing_plan.py. Only ops/acceptance_audit.py calls it (to seal a sample); no route, worker or tool compiles an envelope for a real run.  
+  Next step: Call compile_envelope from the worker-side driver (compile an envelope, send wire start_fields to browser-launcher:7300, relay the run, call session_store.start/end and recording.write; launcher.py and recording.py say 'not built'); meanwhile a check can call it over a declared target and assert compilation_only_removes.
+- **M19.2.3** Envelope storage and approval record  
+  Evidence: tables/browsing.py (BrowserEnvelopeRow, migration 0041), envelope_store.put_envelope/load_envelope/record_decision and approval.raise_approval/approved exist and are tested. put_envelope is called only by ops/acceptance_audit.py; raise_approval and record_decision have no caller.  
+  Next step: In the driver call put_envelope after compile_envelope, raise_approval through the leash, and record_decision from the approvals decide path; then a check that stores, approves and reloads one.
+- **M19.3.6** Second independent check in the control plane on every returned result  
+  Evidence: browsing/enforcer.py:recheck re-judges every returned result in the control plane; test_browsing_enforcer.py. Nothing outside browsing/ calls recheck, because the control-plane relay that would receive results is not built.  
+  Next step: Call enforcer.recheck from the worker-side driver (compile an envelope, send wire start_fields to browser-launcher:7300, relay the run, call session_store.start/end and recording.write; launcher.py and recording.py say 'not built') on each runner record line before it is accepted or recorded.
+- **M19.4.1** Placeholder resolution at the tool-execution boundary  
+  Evidence: browsing/credentials.py:resolve turns a placeholder into a value inside ops.secrets.borrow; test_browsing_credentials.py. Nothing outside browsing/ calls it: the tool-execution boundary for a browser action does not exist (shape.secrets_do_not_travel is a static test only).  
+  Next step: Call credentials.resolve in the driver at the instruction-send point with a vault Bindings source (VaultRole.BROWSER_RUNNER), then a check using a vaulted test credential.
+- **M19.4.2** Origin binding so a secret only substitutes on its own domain  
+  Evidence: credentials.py:resolve compares the binding origin exactly with the action origin and refuses otherwise; test_browsing_credentials.py. No caller outside browsing/, so it never guards a real action.  
+  Next step: Wire with M19.4.1; a static check can call resolve with a stub vault for a matching and a non-matching origin.
+- **M19.4.3** TOTP generation server-side from a stored seed  
+  Evidence: credentials.py:totp computes the code server side from the stored seed and resolve returns only the code; test_browsing_credentials.py. No caller outside browsing/ and no seed storage UI.  
+  Next step: Wire with M19.4.1; add the vault slot for a seed and a check that a code is produced without the seed leaving the control plane.
+- **M19.5.1** Rubric generated from the goal before seeing the trajectory  
+  Evidence: browsing/grading.py:build_rubric takes a goal and a declaration with no parameter a trajectory could arrive through; test_browsing_grading.py and test_browsing_shape.py assert it. Called by nothing outside browsing/.  
+  Next step: Call build_rubric in the driver before the start line and keep it with the envelope; a static check can build one and assert it has required criteria.
+- **M19.5.3** Agent's own success claim ignored  
+  Evidence: grading.py:score has no parameter for the agent's claim (Claim is carried and compared, never scored); test_browsing_grading.py asserts it. Nothing outside browsing/ calls score.  
+  Next step: Wire through verify_run in the driver; a static check can call score with a contradicting Claim and require the verdict to ignore it.
+- **M19.5.4** Tuned for low false-positive rate, accepting false negatives  
+  Evidence: grading.py:score resolves every unknown or unmet outcome against the run (passes only if all required criteria are MET); test_browsing_grading.py. No caller outside browsing/ and no measured false-positive rate exists.  
+  Next step: Wire with M19.5.2; a check can feed UNKNOWN outcomes and require passed False. A measured rate needs real runs.
+- **M19.6.7** Skill loader refusing a browser skill where an API tool exists, unless exempted with a named approver and expiry  
+  Evidence: browsing/skill_gate.py:load_gaps and may_load refuse a browser skill when a registered API tool exists unless an Exemption names an approver and expiry (max 90 days); test_browsing_sessions.py. No skill import or load path imports skill_gate.  
+  Next step: Call may_load from the skill import/pin path (tools/skills.py, ops/skill_store.py) with the target registry and an exemption source; exemption storage is also missing.
+
+### M19, Class 2: partly built (34)
+
+- **M19.1.1** Ephemeral gVisor container per run  
+  Evidence: browsing/sandbox.py:sandbox_for and sandbox_gaps build and re-check the gVisor (runsc) bodies; launcher.py creates and removes them; docker-compose.browser.yml deploys browser-launcher (opt-in, health = runsc present). Nothing calls the launcher; no body ever sent to a daemon.  
+  Next step: Build the worker-side driver (compile an envelope, send wire start_fields to browser-launcher:7300, relay the run, call session_store.start/end and recording.write; launcher.py and recording.py say 'not built'), run ops/browser/REHEARSAL.md on a runsc host, then write a check reading launcher health and a labelled run's runtime.
+- **M19.1.2** Playwright for Python with Chromium  
+  Evidence: ops/browser/Dockerfile and playwright_browser.py (Playwright, Chromium) are the runner image and entry; browsing/runner.py:drive is what it calls. Playwright is not a repo dependency, no workflow builds the -browser image (release.yml builds only the app image), never run.  
+  Next step: Add a release job that builds and signs the '-browser' image, run REHEARSAL.md sections 1 to 3, then a check that a run's runner reports chromium and playwright versions.
+- **M19.1.3** Worker owning the CDP session and snapshot serialisation  
+  Evidence: browsing/runner.py:drive owns the line protocol, playwright_browser.py the CDP session, wire.py:snapshot_fields serialises snapshots; test_browsing_runner.py and test_browsing_wire.py cover the decisions. The runner is never run on a Docker daemon, gVisor or Chromium (browsing/__init__.py, ops/browser/REHEARSAL.md).  
+  Next step: Same step as M19.1.2: build the runner image, rehearse one run and check a snapshot line reaches the launcher.
+- **M19.1.4** Accessibility-tree snapshots rather than screenshots  
+  Evidence: browsing/observation.py:Snapshot has no picture field; wire.snapshot_from_accessibility builds it from the accessibility tree and playwright_browser.py supplies the tree; test_browsing_targets.py. Never run in a browser; no control-plane caller consumes snapshots.  
+  Next step: After the driver exists, check a read-only run returns a tree snapshot and no image field; observation.vision_gaps() is the static half to name now.
+- **M19.1.5** tmpfs-only writable layer, destroyed at run end, never reused  
+  Evidence: sandbox.py declares a read-only root, tmpfs home/tmp/shm charged to the memory cap and no volumes (sandbox_gaps refuses one); launcher.py teardown removes the set; test_browsing_sandbox.py and test_browsing_launcher.py. Bodies never sent to a daemon.  
+  Next step: Write a check that builds sandbox_for(...), requires sandbox_gaps()==() and a mutated body refused; the live half waits on the driver and REHEARSAL.md.
+- **M19.1.6** Per-run network namespace  
+  Evidence: sandbox.py gives each run an internal network named from the run id with the egress proxy as the only other member (egress_network_body); launcher.py removes it at teardown; test_browsing_sandbox.py, test_browsing_deployment.py. Never created on a daemon.  
+  Next step: Static half as M19.1.5; live half is REHEARSAL.md plus the missing driver.
+- **M19.2.4** Target registry with declared surface maps  
+  Evidence: browsing/targets.py has Target, Surface (declared verbs, read_back) and TargetRegistry with tests. Nothing stores targets: no table, route or console page declares one; website_check defaults to an empty registry and acceptance_audit builds one in memory.  
+  Next step: Add a browser_target table, route and console page (or a setup step) to declare targets and surfaces, then load the registry from it into website_check and the driver.
+- **M19.3.1** Enforcer with policy compiled at container start and immutable after  
+  Evidence: browsing/enforcer.py:Policy is frozen and compiled once by compile_policy from the sealed envelope; wire.policy_of reads it at runner start; egress_addon receives its origins at proxy creation; test_browsing_enforcer.py. Runs only inside a container that has never started.  
+  Next step: After the driver and rehearsal, check a run's policy digest equals its envelope digest; static half: enforcer.policy_gaps() and enforcement_gaps().
+- **M19.3.2** Reference validation against the snapshot just produced  
+  Evidence: browsing/enforcer.py:authorise refuses an element reference absent from the snapshot just produced (observation.is_current); runner.py calls it per instruction; test_browsing_enforcer.py. Inside the runner only; never run.  
+  Next step: Check via a rehearsed run that a stale or invented reference is refused; static half is the unit test over authorise.
+- **M19.3.3** Origin allowlist check per action  
+  Evidence: enforcer.authorise checks the action origin against the policy and Target.allows_origin; egress_addon.py kills any other host at the proxy; test_browsing_enforcer.py, test_browsing_plan.py, test_browsing_sandbox.py. Runs inside the never-started sandbox.  
+  Next step: Live check needs the driver and a runsc host; a static check can call egress_addon's decision over an undeclared origin.
+- **M19.3.4** Write verb and count checks against the envelope  
+  Evidence: enforcer.authorise holds the envelope's verbs and per-verb counts in Spend and refuses an undeclared write verb or an extra use; test_browsing_enforcer.py. Used by runner.py only; no run has happened.  
+  Next step: As M19.3.3: needs the driver; static half can call authorise over a sealed sample envelope.
+- **M19.3.5** mitmproxy sidecar as the sole route out  
+  Evidence: sandbox.py makes a mitmproxy container (EGRESS_IMAGE mitmproxy 11.1.3, unverified against a registry) the only member with a route out; egress_addon.py is the addon; test_browsing_sandbox.py covers its decisions. The proxy has never been started.  
+  Next step: Pull and pin the proxy image, rehearse per REHEARSAL.md, then a check that a runner cannot reach an undeclared host.
+- **M19.4.4** Outbound scrubbing from message history  
+  Evidence: credentials.py:scrub_outbound is live on the request path via ops/log_capture.py (Logs screen) and gate/screening.py; scrub_history is used only by browsing/recording.py. No browser run's message history is scrubbed in practice because no run exists.  
+  Next step: Call scrub_history over each run's message history in the driver and treat a hit as an incident; log_capture already gives a check target.
+- **M19.4.5** Vision disabled so a credential cannot be read off a screenshot  
+  Evidence: observation.py:Snapshot carries no picture and vision_gaps() asserts it; verification.admit_frames withholds frames beside a typed credential; tests in test_browsing_targets.py, test_browsing_grading.py, test_browsing_verification.py. No actor or judge runs, so nothing consumes either.  
+  Next step: A static check can call vision_gaps() and admit_frames over a sample; the live half waits on the driver.
+- **M19.5.2** Two-pass scoring: actions only, then with screenshots  
+  Evidence: verification.py:verify_run does the actions-only pass then the admitted-frames pass and refuses second-pass outcomes for a failed first pass; tested. grading.verification_gaps says 'no judge is built', so no outcome is produced and nothing calls verify_run.  
+  Next step: Build the judge (model or person giving an Outcome per criterion) and call verify_run from the driver at run end.
+- **M19.5.5** Out-of-band read-back from the system of record where possible  
+  Evidence: verification.py:read_back and read_back_plan define the out-of-band read through ReadBackPort; test_browsing_verification.py. No ReadBackPort implementation exists and grading.verification_gaps says no target declares a read_back tool.  
+  Next step: Implement a ReadBackPort that reads through the gate (a connector or tool), declare read_back on a registered surface, and call it from verify_run.
+- **M19.6.2** Per-domain concurrency limit  
+  Evidence: browsing/concurrency.py:may_open applies a per-domain row after the global admission check; test_browsing_concurrency.py. No module outside browsing/ imports it, and its docstring says the counter that fills SessionCounts is not built.  
+  Next step: Build the counter (read started and ended sessions from browser_session) and call may_open from the driver before launch.
+- **M19.6.3** Per-agent limit  
+  Evidence: browsing/concurrency.py:may_open also applies a per-agent row; test_browsing_concurrency.py. No caller and no SessionCounts source (docstring: 'Not built: the counter').  
+  Next step: As M19.6.2; session_store.start/end already hold the rows a counter can read.
+- **M19.6.4** Memory and CPU caps per session  
+  Evidence: sandbox.py:Caps sets memory (swap equal), pids and CPU quota for runner and proxy and refuses tmpfs sizes that leave no memory floor; test_browsing_sandbox.py, test_browsing_sessions.py. Figures are marked judgements; bodies never sent to a daemon.  
+  Next step: Static check on sandbox_gaps with caps; measure real figures in the REHEARSAL.md run.
+- **M19.6.5** Global kill switch  
+  Evidence: sessions.py:may_start consults ops.admission.decide so a halt refuses a new session; enforcer.stopped_now stops a running one at safe points; tests in test_browsing_enforcer.py, test_browsing_sessions.py. brain.ops.halt is live but no run exists to stop and no worker calls may_start.  
+  Next step: Call may_start in the driver and enforcer.stopped_now in the relay loop; a check can then halt and see a start refused with RefusalKind.HALTED.
+- **M19.6.6** Full session recording with retention policy  
+  Evidence: browsing/recording.py has record, write, transcript_digest, recording_gaps and remove_expired (window = ops.retention.RECORDING_RETENTION_DAYS, holds kept, undated keys counted); test_browsing_recording.py. Docstring: no worker calls record/write, no scheduled caller of remove_expired, nothing written to the object store.  
+  Next step: Hand an S3Backend (ops/object_store.py) to recording.write at run end in the driver and add a remove_expired job to ops/schedule_runner.py.
+- **M19.7.1** Read-only capability shipped first  
+  Evidence: browsing/sessions.py defines READ_SURFACE (ToolDefinition), surface_scope and capability_gaps; ops/starter.py seeds BROWSE_SURFACE; test_browsing_sessions.py pins read-first ordering. No handler is registered, so no agent can run the tool (docstring: 'No handler is registered here').  
+  Next step: Register a handler in tools/startup.py that sends the read run to the driver; website_check's ReadOnlyBrowser seam is the same missing half.
+- **M19.7.2** Write capability behind envelope approval  
+  Evidence: sessions.py:ACT_ON_SURFACE is the one write tool; approval.py raises the envelope as a leash suspension, console/approvals.py renders its terms, envelope_store and enforcer.compile_policy bind it by digest; tests in test_browsing_approval.py, _enforcer.py, _sessions.py. No caller raises an approval or runs the write.  
+  Next step: Call approval.raise_approval and approved in the driver start path; add a readable envelope diff to the approval card (none exists).
+- **M19.7.3** Assisted ceiling on writes unless a per-surface exception is signed  
+  Evidence: browsing/autonomy.py:SurfaceException, sign and runs_unattended cap writes at Assisted unless a signed exception exists, applied in envelope.compile_envelope; test_browsing_autonomy.py. Docstring: nowhere to keep an exception and recording it as a leash change is not wired.  
+  Next step: Add an exception store, a console grant screen and an audit-ledger leash_change entry (shared with M19.9.7), and pass stored exceptions to compile_envelope.
+- **M19.9.1** A browser action outside its approved envelope suspends the run and sends a new approval naming the breach, and actions inside the envelo...  
+  Evidence: enforcer.authorise refuses an out-of-envelope action and the run ends on it (runner.py); approval.py deliberately approves the envelope up front and rejects mid-run cards (A_PERSON_APPROVES_THE_CONTRACT_BEFORE_THE_CONTAINER_STARTS). Suspend and re-approve naming the breach does not exist.  
+  Next step: Either build a breach suspension (a new leash approval naming the refusal) or record the narrowing as a docs/needs-rupash.md question and name it in register row ARC-B-021's decision.
+- **M19.9.2** Browser approval is proved on an install: a read-only website check runs without approval, a planned browser write is shown once as a rea...  
+  Evidence: Read-only website check exists and is wired (tools/website_check.py, app.py HttpsProber); envelope approval primitives exist (approval.py). No readable diff of an envelope on the card and no in-envelope or out-of-envelope run, so approve-once and ask-again cannot be shown.  
+  Next step: Needs the driver plus an envelope diff in the approval card; then a check that runs a read, an approved write and a breach and records each.
+- **M19.9.4** Website and portal reading is proved on an install: asked whether a live website is working, an agent checks it over HTTP, opens the rend...  
+  Evidence: HTTP half is built and wired (tools/website_check.py, ops/website_probe.py). Missing: rendered-page read in the sandbox (launcher never called), portal login with a vault credential (credentials.resolve has no caller), recording kept under retention, target registration.  
+  Next step: Depends on the driver, REHEARSAL.md proof and target storage; then one install check over a declared test site plus the HTTP check.
+- **M19.9.5** A browser write is proved on an install: one multi-step form-filling task against a registered target runs at the Assisted rung only afte...  
+  Evidence: Pieces exist (planning, envelope, approval, enforcer, grading, verification.read_back) but there is no driver, no judge, no ReadBackPort implementation and no target declares read_back; a form-filling run at Assisted cannot happen.  
+  Next step: Needs the driver, judge and a ReadBackPort over a registered target; then a check that runs one approved form fill, a refused extra step and a read-back.
+- **M19.9.6** The browser sandbox runs on an install, and an agent whose ceiling holds the browser tools opens a page in it.  
+  Evidence: docker-compose.browser.yml and launcher --check give a launcher whose health is gVisor present; agent browser tools are defined (sessions.READ_SURFACE) but no handler is registered, so no agent opens a page in the sandbox. Never run on a daemon.  
+  Next step: Run the REHEARSAL.md first build on a runsc host, build the driver and register the read handler, then check an agent with the browse capability fetches one page.
+- **M19.9.7** An administrator grants a per-surface browser write exception or a browser-over-API exemption from the console with an approver and expir...  
+  Evidence: autonomy.SurfaceException and skill_gate.Exemption are value types with sign and expiry rules (test_browsing_autonomy.py). No store, no console screen or route for an administrator to grant one, no ledger leash_change entry, no listing until lapse.  
+  Next step: Build a table, routes and a console page for grants with approver and expiry, write the audit leash_change on grant, pass live grants into compile_envelope and may_load.
+- **M19.9.8** On the install a browser run's outcome is scored by a judge from its actions and admitted frames against the rubric fixed before the run,...  
+  Evidence: grading.build_rubric and verification.verify_run exist and are tested; grading.verification_gaps states no judge is built and no target declares a read_back tool. Nothing scores a real run.  
+  Next step: Build the judge and the read-back port, call verify_run at run end, then a check that scores a recorded run against its prior rubric.
+- **M19.9.9** On the install open browser sessions are counted as they start and end, and a session over the global, per-website or per-agent limit wai...  
+  Evidence: sessions.may_start (global admission budget) and concurrency.may_open (domain, agent) decide with reasons; concurrency docstring: the counter that records sessions as they start and end is not built, and nothing calls either decision.  
+  Next step: Build the counter from browser_session rows (session_store.start/end), call both decisions from the driver, then a check that fills a limit and sees a refusal naming it.
+- **M19.9.10** On the install an agent's browser write to an allowlisted site is compiled into an envelope, approved by a person, signs in with a vaulte...  
+  Evidence: compile_envelope, approval, credentials.resolve and enforcer exist as separate tested modules but no code joins them for a run; no vault credential binding source for browser targets exists; no run has happened.  
+  Next step: Needs the driver plus Bindings backed by the vault; then a check that approves one write envelope and shows the credential absent from plan, trace and recording.
+- **M19.9.11** Browser session recordings on the install are written to the object store at run end, and a scheduled job removes expired ones, keeps hel...  
+  Evidence: recording.write and remove_expired are built and tested, with the recordings bucket in ops/storage.py and RECORDING_RETENTION_DAYS; no caller writes a recording at run end and no scheduled job calls remove_expired.  
+  Next step: Call recording.write in the driver and register a scheduled remove_expired in ops/schedule_runner.py (holds from the legal hold store); then a check that writes, ages and sweeps.
+
+### M19, Class 4: unbuilt (1)
+
+- **M19.8.1** An agent can operate an allowlisted desktop application inside an isolated virtual desktop, with every action recorded, every write held ...  
+  Evidence: Nothing found by subject (desktop, virtual desktop, computer use, xvfb) in src or ops; only register rows (ARC-B-028, OWN-98, CONA-25) name it, as 'deferred behind browser checks'.  
+  Build: Build after the browser run is proved on an install; reuse the sandbox, launcher, enforcer, envelope and recording patterns with a desktop runner image. Sequence behind M19.9.4 and M19.9.5.
+
 ## M30 Hosting, delivery and recovery
 
 ### M30, Class 1: built and wired, only an install check is missing (5)
@@ -1137,4 +1306,177 @@ Classes: 1 built and wired, only an install check is missing; 2 partly built; 3 
 - **M37.7.8** Every migration requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against th...  
   Evidence: Person-run demonstration of every migration requirement on an install, recorded against the requirement it proves; register rows GAP2-25 and others name it as proof. Depends on the migration package being wired and on the owner or a tester running it.  
   Waits on: waits on M37.1.x and M37.2.x wiring, then on a person running it
+
+## M42 Client deployment template
+
+### M42, Class 1: built and wired, only an install check is missing (25)
+
+- **M42.1.3** One published image deployed by tag, never rebuilt per client  
+  Evidence: install.sh steps 7 and 10 fetch one archive and write APP_IMAGE=<repo>:<release tag>; release.yml verifies the signed CI digest and tags it (no rebuild); installer.rebuild_gaps and release_pinning_gaps hold compose files to it in test_deployment_installer.py.  
+  Next step: Check that reads /opt/brain/.env APP_IMAGE is a tag of the product image and equals the running container's image reference.
+- **M42.1.4** Release pinning per client, so one client can hold a version back without forking  
+  Evidence: installer.release_pinning_gaps and release.update_plan pin APP_IMAGE to a named tag, refuse 'latest' (install.sh line 61), and update.sh/rollback.sh re-pin per install; test_deployment_installer.py, test_deployment_release.py. The pin lives in that install's .env.  
+  Next step: Check that the pin is not 'latest' and that the pinned tag is one the release feed lists.
+- **M42.2.3** Step-by-step install from a clean server, written so it needs no reference to the Verz install  
+  Evidence: docs/install/install.md (fourteen pages in docs/install) is held to the installer plan by ops/install_docs.py:step_gaps, tested in test_install_docs.py; docs_routes.py serves docs; independence sweeps keep other companies' details out.  
+  Next step: Write a check that reads the install's served guide and calls step_gaps against the installer PLAN; a clean-server walk-through is M42.4.7.
+- **M42.2.8** Backup, monitoring, logging and health-check configuration  
+  Evidence: docs/install/operations.md, checklist.md and restore-drill.md describe backup, monitoring, logging and health checks; install_docs.checklist_gaps, scheduled_job_gaps and drill_procedure_gaps hold them to code (test_install_docs.py). Backup itself is not auto-scheduled (see M42.3.5).  
+  Next step: Check naming M42.2.8 that runs the doc-gap functions on the served pages; fix scheduling separately in M42.7.4.
+- **M42.3.1** Install script, idempotent and safe to run twice  
+  Evidence: ops/install/install.sh is generated by deployment/install_script.py:render_install from installer.PLAN; every step tests for done and prints 'already done, skipping'; test_install_script.py and test_deployment_installer.py hold it.  
+  Next step: Install-time proof is running the script twice on a server; a check can read the installer markers (APP_IMAGE, starter.furnished) and compare the shipped script to render_install.
+- **M42.3.6** Update script pinning a release tag, and a rollback script re-pinning the previous one  
+  Evidence: ops/update/update.sh and rollback.sh are generated by release.render_update/render_rollback from update_plan and rollback_plan, carried in the archive (ops/update rule), tested in test_deployment_release.py; update-and-rollback.md says never run on a server.  
+  Next step: Check reads that the pin variable in .env is a release tag and the scripts' drift test passes; the live run belongs to M42.2.10.
+- **M42.3.8** A published release for every fix, with plain-English notes stating what changed, whether it changes the database, and how urgent it is  
+  Evidence: release.yml publishes v0.1.0 (gh release list, 2026-09-29) with notes from release.notes_from_tag_message stating the database change (DatabaseChange) and Urgency; test_deployment_release.py covers it.  
+  Next step: Check that reads the install's release feed entry for the running tag and asserts notes with a database answer and an urgency.
+- **M42.3.9** The console shows the running version and whether a newer release exists, because nothing else reminds a client IT team to update  
+  Evidence: console/version_view.py, deployment/release_feed.py (ReleaseWatch) and install_routes.py serve the running version and newest release; pages Updates.tsx and install/UpdatesPage.tsx draw it; tests test_install_routes.py, test_release_feed.py, test_version_view.py, console/tests/install-pages.test.tsx.  
+  Next step: Write a check naming M42.3.9 that reads the updates route and requires a running version and a newer-release verdict (switched-off counts as an answer).
+- **M42.5.1** install.sh: one command on a fresh server that checks the machine, installs what is missing, downloads the release, builds the database a...  
+  Evidence: ops/install/install.sh (29 steps: machine checks, Docker, archive, secrets, vault, pull, database, start, ready wait, furnish) is generated by deployment/install_script.py:render_install, held by test_install_script.py, published beside the archive by release.yml.  
+  Next step: Install-time proof is M42.5.17; a check can compare the shipped script to render_install output.
+- **M42.5.2** Every password, key and secret generated on the client server during install, never defaulted and never shipped in the template  
+  Evidence: install.sh step 12 mints POSTGRES_PASSWORD, APP_ROLE_PASSWORD and BRAIN_SETUP_SECRET with openssl rand on the server and the vault steps mint tokens; variables.is_secret_name feeds installer.value_leaks_in; test_deployment_variables.py. release.archive_gaps checks the archive for client values.  
+  Next step: Check running variables.unminted_secrets over the install's own .env (needs wiring, see M42.1.2).
+- **M42.5.3** A setup code printed once by the installer and required by the first wizard screen, so whoever loads the page first cannot claim the system  
+  Evidence: install.sh step 28 prints the setup code once; deployment/app_environment.py and firstrun.py hold its digest; setup_wizard.assert_unlocked and claim require it on every screen; tests test_app_environment.py and test_setup_wizard.py.  
+  Next step: Cannot be shown after first run; prove on the fresh-install walk, or a check over assert_unlocked with a wrong code.
+- **M42.5.4** Setup wizard in the console: numbered steps with visible progress, step 3 of 10, and a back button on every screen  
+  Evidence: console/src/pages/FirstRun.tsx draws 'Step N of TOTAL_STEPS' and a Back button on each screen; setup_wizard.py:progress_for is the Python counterpart; console/tests/first-run.test.tsx reads the screens back from setup_wizard.py.  
+  Next step: Prove on the fresh-install walk (the wizard is closed afterwards); the console test already covers the structure.
+- **M42.5.7** Wizard step: staff source, choosing between Google Workspace, Microsoft, Lark or a spreadsheet, signing in and pulling the list  
+  Evidence: connectors/staff_directories.py and setup_staff_routes.py (registered in routers.py) offer Google Workspace, Microsoft, Lark or a spreadsheet, sign in and pull the list; console StaffListCheck.tsx and setup/staffList.ts; tests test_staff_directories.py, test_setup_staff_routes.py, first-run-staff-list.test.tsx.  
+  Next step: A check can call the staff-source listing for the configured source; the sign-in half belongs to the fresh-install walk.
+- **M42.5.8** Wizard step: AI provider, either their own key or a local-only profile with no external provider  
+  Evidence: setup_wizard.py model_provider step takes a provider and key (key held in the vault) via _provider_rule; MODEL_PROFILES still lists 'local', but needs-rupash 80 decided hosted providers only (no local-only profile wanted); test_setup_wizard.py.  
+  Next step: Check reads that the install's provider slot is held in the vault; the 'local-only' half is decided out by item 80 (register REQ-42 records it).
+- **M42.5.9** Wizard step: optional data source connections, skippable and repeatable later from the console  
+  Evidence: wizard connections step (slug list) plus console ConnectSourcesStep.tsx and ConnectSource.tsx connect sources from first run, and the Connectors pages repeat it later (connector_routes.py, ops/connector_store.py); tests console/tests/first-run.test.tsx.  
+  Next step: Check naming M42.5.9 that lists the connector catalogue and one connection on a furnished install via connector_routes.
+- **M42.5.10** Wizard step: review everything before any of it is written, because a wizard that commits each screen as it goes cannot be corrected  
+  Evidence: setup_wizard.py:review builds a ReviewLine per setting and apply_install writes everything at once through POST /setup/appointment (setup_routes.py); console FirstRun.tsx draws the review screen; tests test_setup_wizard.py, test_setup_routes.py, test_install_settings.py.  
+  Next step: A check cannot run it after first run (the wizard is closed); prove it on the fresh-install walk, or check review() over a sample draft.
+- **M42.5.11** The wizard becomes unreachable the moment the first administrator exists, so the install path cannot be replayed by anybody who finds the...  
+  Evidence: setup_wizard.py:assert_open refuses once an administrator exists (WizardClosedError) and setup_routes.py answers an indistinguishable 404; tests in test_setup_wizard.py and test_setup_routes.py.  
+  Next step: Write a check that, on an install with an administrator, posts to /setup/appointment and requires the same 404 body as an unknown path.
+- **M42.5.13** Every step validates before it advances and says what is wrong in words the person can act on  
+  Evidence: setup_wizard.py:problems_with validates every step (checks, _provider_rule, _staff_source_rule) and setup_routes returns a 422 by step, field and catalogue key; brain.locale.MESSAGES supplies the sentences; tests test_setup_wizard.py, console/tests/first-run.test.tsx.  
+  Next step: A check on a finished install cannot post answers; prove by the fresh-install walk or by calling problems_with on invalid sample answers.
+- **M42.5.14** A finishing screen that hands the person straight into the console already signed in, with nothing further to configure before the system...  
+  Evidence: sign_in_routes.py POST /setup/sign-in (FINISH_PATH) binds the first administrator and signs them in; FirstRun.tsx lands in the console; vault_setup.py and install_settings.py leave nothing to configure; tests test_sign_in_routes.py, test_console_served.py, test_vault_setup.py, first-run.test.tsx.  
+  Next step: Prove on the fresh-install walk; a check can assert that after first run the ask route answers (see M42.6.3).
+- **M42.5.15** Installer output legible to a person: what it is doing, how far through it is, and what to do if a step fails  
+  Evidence: install.sh prints 'step N of 29: <name>' with 'already done, skipping' and per-step fail messages naming what to do (generated from installer.PLAN via say() and fail()); tests in test_deployment_installer.py and test_install_script.py.  
+  Next step: Check reads the shipped script and requires every step to carry a message and a failure text; a live run is M42.5.17.
+- **M42.6.2** The setup wizard writes what it collects, so a first install needs no hand-edited environment file for the values it asks for  
+  Evidence: setup_routes.py POST /setup/appointment saves answers into ops.setting (Appointer.appoint); brain.install.value_of resolves them ahead of the environment; the provider key goes to the vault (vault_setup.py); tests test_setup_routes.py, test_vault_setup.py, test_vault_renewal.py.  
+  Next step: Check that reads ops.setting for the install settings the wizard collected and that INSTALL_* values resolve without environment entries.
+- **M42.6.3** A question can be asked and its answer read in the console, so an install proves itself end to end before any channel is connected  
+  Evidence: console/src/pages/Ask.tsx and askQuery.ts post to POST /api/v1/answer (api_routes.py:2651) and show the answer; tests console/tests/ask-page.test.tsx; the answer path is the real gate.  
+  Next step: Write a check naming M42.6.3 that posts a question as a seeded person through /api/v1/answer and requires an answer or a worded refusal (an unreachable model server is an honest 'not run').
+- **M42.6.4** Console screens for skills: add a skill, see what it is trusted to reach, and assign it to an agent  
+  Evidence: console/skill_library.py, ops/skill_store.py, skill_routes.py, tables/skill.py and pages skills/SkillForms.tsx, skillsQuery.ts add a skill, show what it reaches and assign it to an agent; tests test_skill_library.py, test_skill_routes.py, test_skill_store.py, skills-page.test.tsx.  
+  Next step: A skill console check exists in ops/acceptance_skill_console.py; add the leaf id there if it proves add and assign, or write one naming M42.6.4.
+- **M42.6.5** Console screens for connectors: connect one, hold its credential in the vault, and see what it is trusted to read  
+  Evidence: connector_routes.py, ops/connector_admin.py, connector_store.py, ops/credentials.py and openbao.py hold the credential in the vault, console/connector_trust.py shows what it reads, connectors/SourceFlow.tsx draws it; tests test_connector_routes.py, test_connector_trust.py and others.  
+  Next step: Name M42.6.5 on the connector install checks that connect, vault-hold and show trust (acceptance_checks_connectors*.py), or write one that does all three.
+- **M42.6.6** A helper for a person who does not use a terminal: it asks for the server address and runs the one install command there  
+  Evidence: ops/install/windows/install-from-windows.ps1 and .cmd are generated and held by deployment/windows_helper.py (asks five questions, runs the documented command over ssh.exe); release.yml carries them; test_windows_helper.py.  
+  Next step: Static check that the shipped helper equals windows_helper output; the double-click run is a person-run step on Windows.
+
+### M42, Class 3: built but not wired (4)
+
+- **M42.1.1** Per-client variables in a separate private repository, one file per install, documented field by field  
+  Evidence: deployment/variables.py:template_for, parse_env and variables_repository_gaps implement one file per install and refuse a fork-shaped repository; test_deployment_variables.py. Nothing calls them outside tests (docs/install/checklist.md only names one); the private repository itself is the owner's.  
+  Next step: Wire variables_repository_gaps into a CI job template for the variables repository (or a CLI command) and publish template_for output in the release; the repository is a process step.
+- **M42.3.2** Environment template generator that refuses to emit a value it cannot explain  
+  Evidence: deployment/variables.py:template_for emits a documented template with every credential-shaped name blank and refuses undeclared names; tested. No caller outside tests: install.sh writes .env from its own template step without it.  
+  Next step: Have install.sh step 9 (write the environment file) or the archive generate .env.example through template_for, then a check compares the shipped template to its output.
+- **M42.3.4** Health-check script a person runs after deploying and can read the output of  
+  Evidence: installer.py:health_report prints per-service healthcheck state and each component's ready_when text; no __main__ or script calls it (only docs name it), and install.sh step 23 polls /health/ready only.  
+  Next step: Add a python -m brain.deployment.installer health command (or ops/install/health.sh) calling health_report and name it in docs/install/operations.md.
+- **M42.5.12** A resumable install: closing the browser halfway continues where it stopped rather than starting the server again  
+  Evidence: setup_wizard.py:write_draft, read_draft, discard_draft and draft_from persist a draft to a file but nothing outside setup_wizard.py calls them; setup_routes.py says resuming from setup-draft.json is not served, and console FirstRun.tsx keeps answers in page memory only.  
+  Next step: Call write_draft from setup_routes per answered step, read it back on page load, and have FirstRun.tsx load the draft before step 1.
+
+### M42, Class 2: partly built (6)
+
+- **M42.1.2** Secrets minted per install and never copied between clients, enforced by a check that refuses a shared value  
+  Evidence: install.sh step 12 mints POSTGRES_PASSWORD, APP_ROLE_PASSWORD and BRAIN_SETUP_SECRET with openssl on the client server (wired). variables.py:shared_secrets and unminted_secrets refuse shared or weak values but nothing calls them outside tests.  
+  Next step: Run unminted_secrets over the install's own environment in an install check and expose shared_secrets as a command for the variables repository.
+- **M42.3.3** Database create, migrate and seed scripts  
+  Evidence: deployment/database.py has create, migrate and seed with a CLI (python -m brain.deployment.database), documented in the guide and checked by install_docs.database_command_gaps. install.sh does not call it (compose creates the database) and seed loads the demo company.  
+  Next step: Decide the install's path (call database migrate from the installer, or retire the claim), and write a check that the CLI's migrate reports the head the install runs.
+- **M42.3.5** Backup and restore scripts, with the restore verified rather than assumed  
+  Evidence: ops/backup/brain-backup, brain-restore-drill and brain-install-backup exist and run against stand-ins (tests/unit/test_backup_scripts.py); restore-drill.md says nobody followed it on a server, the archive does not carry ops/backup, nothing schedules a drill.  
+  Next step: Run the drill once on the owner's install, record it, and fix packaging (M42.7.4). CLAUDE.md bars 'restore' in function names under src/brain.
+- **M42.5.5** Wizard step: company name, logo upload and web address  
+  Evidence: setup_wizard.py company step collects company_name, product_name, web_address and logo_url (an address, not an upload) into INSTALL_* settings; its docstring says 'M42.5.5 says upload' and substitutes an address. No upload route exists and no needs-rupash question records the narrowing.  
+  Next step: Either build a logo upload (object store plus a served path) or add a docs/needs-rupash.md question and name its number in register row CON-8 or OWN3-1.
+- **M42.7.4** The release archive carries the backup and restore scripts and the installer schedules the nightly backup, so an install made from a rele...  
+  Evidence: ops/backup/brain-backup, brain-restore-drill and brain-install-backup (with a systemd timer) exist, but release.INCLUDED has no ops/backup rule (restore-drill.md: the archive does not carry ops/backup) and install.sh has no step that schedules the backup.  
+  Next step: Add an ops/backup rule to release.INCLUDED and an installer PLAN step running brain-install-backup, regenerate install.sh, then check the timer exists on an install.
+- **M42.7.8** Probed from an address outside the allowlist, the install answers only on its public ports with valid TLS, every administrative console r...  
+  Evidence: docs/install/network.md and threat-model.md describe public ports, TLS and the allowlist, and ops/security exists; no probe from outside the allowlist and no alert on the install's own certificate within fourteen days exists (ops/website_probe.py reads other sites' certificates only).  
+  Next step: Build an external probe job and a certificate-expiry alert to a named person, then a check that reads the alert configuration; the outside-address probe itself is a person step.
+
+### M42, Class 5: not code, owner or blocked (12)
+
+- **M42.2.10** Update procedure and rollback procedure, both rehearsed rather than written  
+  Evidence: docs/install/update-and-rollback.md says neither procedure has been run on a server and 'M42.2.10 is not claimed'; update.sh and rollback.sh exist (generated, tested) but a rehearsal is a person-run event.  
+  Waits on: Waits on the owner (or a person) rehearsing update and rollback on a real install and recording it; register rows FEAT-12.12, GAP2-30 and LIVE-07 depend on it.
+- **M42.4.4** Verz is client number one: their live system is installed from the template by running the installer on their server, not migrated from t...  
+  Evidence: A person-run event: Verz's live system installed by running the installer on its server, not migrated from development. Code half exists (install.sh, v0.1.0); register row LIVE-01 and needs-rupash 82 treat the owner's server as company one.  
+  Waits on: Waits on the owner running the installer on the Verz production server and recording it; nothing to build.
+- **M42.4.5** Verify on that install: it boots, sign-in works, the administrator works, core features answer and integrations configure, with nothing c...  
+  Evidence: Person-run verification on the Verz install (boots, sign-in, administrator, core answers, integrations, nothing carried over); register OWN-166 lists it as proof. Install checks cover parts but the leaf is the owner's demonstration.  
+  Waits on: Waits on M42.4.4 and the owner's walk of the install.
+- **M42.4.6** Record the measured time from bare server to first answered question, because that number is what the template is for  
+  Evidence: A measured time from bare server to first answered question is a number a person records during an install run; nothing in src records installer durations (no timer in install.sh).  
+  Waits on: Waits on M42.4.4 and M42.5.17; optionally add timestamps to install.sh output so the figure is read rather than clocked.
+- **M42.4.7** A second install on a throwaway server as a fictitious client, run start to finish by somebody following only the documentation, because ...  
+  Evidence: A second install on a throwaway server by somebody following only the documentation is a person-run demonstration (register OWN3-1 and FEAT-12.12 proof).  
+  Waits on: Waits on a person and a throwaway server after M42.4.4; no code to build.
+- **M42.4.8** Every question asked during those two installs becomes a line in the documentation, since a question asked twice is a missing step  
+  Evidence: Turning questions asked during the two installs into documentation lines is a follow-up to M42.4.4 and M42.4.7 and has no input until they happen.  
+  Waits on: Waits on M42.4.7; then edit docs/install and re-run the install_docs gap tests.
+- **M42.5.17** The installer is run start to finish on a fresh AWS instance and on a fresh VPS, each ending with the company's Brain answering a questio...  
+  Evidence: A person-run demonstration on a fresh AWS instance and a fresh VPS with the time recorded (register OWN3-1 proof; needs-rupash 82 item 2).  
+  Waits on: Waits on the owner or a person with two throwaway servers; nothing to build.
+- **M42.6.7** The first real release is published and fetched back on a clean machine, so the image and the archive are known to exist rather than know...  
+  Evidence: release.yml has published v0.1.0 (2026-09-29) with image and archive, but 'fetched back on a clean machine' is a person-run step; test_deployment_release.py covers archive contents only.  
+  Waits on: Waits on a person fetching the v0.1.0 archive and pulling the image by tag on a clean machine and recording it (register RWD-03, LIVE-07).
+- **M42.7.2** The release lifecycle is proved on an install: a CI-built, signed image that passed lint, types, tests, canaries and the licence check is...  
+  Evidence: A composite install demonstration: release.yml cosign-verifies and tags the CI digest and update.sh/rollback.sh exist, but pull by digest, drain of a running workflow and rollback completing have not been run (update-and-rollback.md says never run).  
+  Waits on: Waits on a person rehearsing a release on an install (M42.2.10); individual claims can be broken into checks afterwards.
+- **M42.7.5** The owner's install runs the standard profile, and the System health screen shows the worker, the vault, the object store and the connect...  
+  Evidence: A state of the owner's install: standard profile, health screen showing worker, vault, object store and pooler ready, provider key in the vault. Parts have checks (acceptance_checks_vault_worker.py reads the health figure) but the leaf is about that server's configuration.  
+  Waits on: Waits on the owner's install being on that profile and the owner confirming; whether the health screen shows the pooler is not verified.
+- **M42.7.6** The owner's install is pinned to a published release tag rather than the latest image, and the Version screen shows that tag and whether ...  
+  Evidence: A state of the owner's install: pinned to a published tag, with the Version screen showing it and the newer-release verdict. The screen is built (M42.3.9, release_feed) and v0.1.0 exists.  
+  Waits on: Waits on the owner re-pinning staging to v0.1.0 via update.sh; then screenshot or check the Version screen.
+- **M42.7.7** Every other requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the re...  
+  Evidence: A person demonstrates every other register requirement on an install and records each check against its requirement; register rows LIVE-08, LIVE-09, LIVE-12, LIVE-13 and CONB-44 list it as proof.  
+  Waits on: Waits on the owner and the acceptance run; nothing to build beyond the requirement-area proof reading already in PR 495.
+
+### M42, Class 4: unbuilt (5)
+
+- **M42.4.2** Audit the database, logs, uploads, object store, vector store, embeddings and caches  
+  Evidence: Nothing audits stores for another company's values: deployment/audit.py covers configuration, build inputs and git history only; ops/independence.py covers source and docs. No search over database rows, logs, uploads, object store, vector store, embeddings or caches.  
+  Build: Build a read-only sweep over each store for foreign hostnames and company names, reusing deployment.audit.client_values_in and the independence shapes; run it on the fresh install.
+- **M42.4.3** Audit credentials, tokens, webhooks, third-party integrations and default administrator accounts  
+  Evidence: No credential, token, webhook, integration or default-administrator audit found: deployment.audit does not read live settings, and variables.unminted_secrets is an unwired helper for secrets only.  
+  Build: Build an audit listing every credential slot, token, webhook subscription and administrator account on an install and refusing defaults; reuse variables.unminted_secrets and the vault slot list.
+- **M42.5.16** Wizard step: chat and email channels, each connected and sent a test message before the finish, skippable and repeatable later from the c...  
+  Evidence: No channels step exists: setup_wizard.StepId has setup_code, company, administrator, data_steward, staff_source, model_provider, connections, review, finish; channel connection exists elsewhere (channel routes, console Channels pages).  
+  Build: Add a skippable StepId.CHANNELS in setup_wizard.py and console/src/setup/wizard.ts that connects a channel and sends a test message, reusing the channel connect and test-send routes behind the console Channels page.
+- **M42.7.1** The install health check reports whether the host exposes kernel virtualisation, and the browser isolation stated to the administrator is...  
+  Evidence: No install health check reports kernel virtualisation: grep for kvm and virtualisation finds only a sentence in browsing/sandbox.py; launcher.py --check reports gVisor (runsc) only, and no administrator-facing text states browser isolation.  
+  Build: Add a host probe (/dev/kvm present, Engine.runtimes) to the launcher health and the System health screen and have the console state isolation from that result; reuse launcher.runtimes.
+- **M42.7.3** The release image and archive carry the licence notice of every bundled third-party component and font, generated from the lockfiles, and...  
+  Evidence: No notice bundling found: ops/dependency_policy.py checks licences of locked packages in CI but nothing generates a notices file from the lockfiles, puts one in the image or archive, or fails a release without one; release.INCLUDED has no notice rule.  
+  Build: Build a notices generator from the uv and npm lockfiles (reuse dependency_policy readers), bundle it in the image and archive, and fail release.yml when it is missing or a component lacks one.
 
