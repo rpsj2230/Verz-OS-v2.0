@@ -170,6 +170,7 @@ from brain.console.installation import (
     MemoryCapacity,
     ThrottleRow,
     UnusualRow,
+    approval_wait_facts,
     connection_capacity,
     install_facts,
     memory_capacity,
@@ -196,6 +197,7 @@ from brain.ops.admission import (
     seed_profiles,
     shed_plan,
 )
+from brain.ops.approval_wait import typical_wait, waits_since
 from brain.ops.backup_manifest import DRILL_SUFFIX, MANIFEST_SUFFIX, read_drills, read_manifests
 from brain.ops.capacity_ledger import LedgerUnreadableError
 from brain.ops.deployment_history import History, history_from, recorded
@@ -1322,6 +1324,24 @@ def _permitted(reach: EntitlementSet, key: str, now: datetime) -> None:
 router = APIRouter(prefix=API_PREFIX, tags=["install"])
 
 
+async def _approval_wait_facts(request: Request, now: datetime) -> tuple[Fact, ...]:
+    """The typical approval wait as facts, or none when this process has no database to ask.
+
+    A database that cannot answer (an install not yet upgraded to the view) is said to be unknown
+    and never a wait of nothing. The look is one aggregate over two times and no person.
+    """
+    found = getattr(request.app.state, "db_sessions", None)
+    if not isinstance(found, async_sessionmaker):
+        return ()
+    try:
+        async with found() as session:
+            pairs = await waits_since(session, now=now)
+    except SQLAlchemyError as error:
+        log.warning("approval waits not read", error=type(error).__name__)
+        return approval_wait_facts(None, readable=False)
+    return approval_wait_facts(typical_wait(pairs))
+
+
 @router.get("/install", response_model=InstallView, responses=COMMON_RESPONSES)
 async def install(request: Request, asked: Asked) -> InstallView:
     """What is actually running: the release, the migration level, the profile and its features.
@@ -1347,7 +1367,8 @@ async def install(request: Request, asked: Asked) -> InstallView:
         pending=None,
         pinned_image=settings.app_image,
     )
-    return InstallView(facts=[fact_view(one) for one in facts])
+    waits = await _approval_wait_facts(request, asked.now)
+    return InstallView(facts=[fact_view(one) for one in (*facts, *waits)])
 
 
 @router.get("/install/updates", response_model=UpdatesView, responses=COMMON_RESPONSES)
