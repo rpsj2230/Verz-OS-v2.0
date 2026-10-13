@@ -217,6 +217,10 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Adds a skill to the library undecided. A second import of the same bytes is refused by the " +
     "table's key rather than written over, so nothing existing is replaced, and the skill reaches no " +
     "agent until somebody approves it and an administrator assigns it, both of which are confirmed.",
+  "src/pages/skills/SkillForms.tsx DRAFT_PATH":
+    "Asks the model to draft a skill from a description and stores it in the library undecided, " +
+    "unreadable by any agent, exactly as an import is: nothing existing is replaced, it reaches no agent " +
+    "until a second person approves it and an administrator assigns it, both of which are confirmed.",
   "src/pages/skills/SkillForms.tsx IMPORT_PATH":
     "Imports a skill from a repository commit or an address into the library undecided, exactly as " +
     "an added package is: the same bytes twice are refused by the key, nothing existing is replaced, " +
