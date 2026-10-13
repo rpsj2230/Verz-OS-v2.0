@@ -20,6 +20,7 @@ front of a bare server. Nothing in them names another company's installation.
 | [scaling.md](scaling.md) | A read replica, and splitting the stack across two hosts |
 | [threat-model.md](threat-model.md) | Every surface an install exposes, and what stands in the way |
 | [handover.md](handover.md) | A company leaving: its data exported and checkable, the install removed, a certificate |
+| [server-steps.md](server-steps.md) | The four things on the server a release cannot do: the deploy hook, the vault's move, gVisor, and the two services that need you |
 | [images.md](images.md) | Every container image the files pin, and the day each tag was seen to exist |
 
 ## Which half of this is checked

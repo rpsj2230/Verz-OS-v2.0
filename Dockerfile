@@ -128,6 +128,17 @@ COPY --chown=brain:brain ops/keycloak/accounts-client.sh /app/ops/keycloak/accou
 # release's policies arrive with the release on a server that has no checkout (needs-rupash 114).
 COPY --chown=brain:brain ops/openbao/apply-release.sh /app/ops/openbao/apply-release.sh
 COPY --chown=brain:brain ops/openbao/policies /app/ops/openbao/policies
+# The vault's own compose file and the one command that moves an older install onto the seal that
+# opens itself. An install with no checkout has nothing else to run it from: it copies this directory
+# out of the image (docs/install/server-steps.md). Nothing in the image runs either.
+COPY --chown=brain:brain ops/openbao/compose.yml /app/ops/openbao/compose.yml
+COPY --chown=brain:brain ops/openbao/switch-to-auto-unseal.sh /app/ops/openbao/switch-to-auto-unseal.sh
+# The server's own deploy hook and the timer's script that runs it. The timer's script copies the
+# hook out of the image it is about to deploy (ops/deploy/brain-autodeploy, refresh_hook), so a
+# release that adds a step to the hook reaches a server that deploys itself without anybody
+# copying a file from a checkout. Nothing in the image runs them.
+COPY --chown=brain:brain ops/deploy/brain-deploy /app/ops/deploy/brain-deploy
+COPY --chown=brain:brain ops/deploy/brain-autodeploy /app/ops/deploy/brain-autodeploy
 # The optional services step and the product's compose files it starts (brain.ops.overlays):
 # copied out of the image by the server's deploy hook and run there, so a release reaches a
 # Coolify install, whose own copy of the compose file no release can change, without anybody

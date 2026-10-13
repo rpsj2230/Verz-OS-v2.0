@@ -9,11 +9,14 @@ belonging to a company: the target in step 5 is any public page the operator cho
 ## 1. gVisor is installed and Docker knows it as `runsc`
 
 Install gVisor from its own documentation for the host's distribution, then register it and
-restart Docker:
+reload Docker. **Reload, not restart**: a reload makes the daemon read its configuration again
+without stopping, which is enough for a new runtime, while a restart stops every container on a
+host that does not run Docker with `live-restore` (`docs/install/server-steps.md`, section 3, has
+the whole of it):
 
 ```
 sudo runsc install
-sudo systemctl restart docker
+sudo systemctl reload docker
 docker info --format '{{json .Runtimes}}'          # must list "runsc"
 docker run --rm --runtime=runsc alpine dmesg | head -3   # must mention gVisor
 ```

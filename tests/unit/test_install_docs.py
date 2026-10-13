@@ -944,6 +944,7 @@ def test_the_documents_the_checks_read_are_all_present() -> None:
         "threat-model.md",
         "handover.md",
         "images.md",
+        "server-steps.md",
     }
     assert {one.name for one in GUIDES.glob("*.md")} == expected
 
