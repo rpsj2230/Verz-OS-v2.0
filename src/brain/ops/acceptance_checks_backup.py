@@ -266,3 +266,84 @@ async def a_question_is_measured_in_its_lane_and_counted_on_service_levels(h: Ha
         raise CheckFailedError("the Service levels route did not count the question in its lane")
     if {one.value for one in Lane} - set(after):
         raise CheckFailedError("the Service levels route left a lane out of its list")
+
+
+# --------------------------------------- 4. a change made while a run is going (M30.4.6, M30.4.7)
+async def _a_run_whose_asker_changes(h: Harness, change: str) -> tuple[str, str, str]:
+    """What a scripted model was told after a search that worked, after the asker's standing was
+    changed between two of its tool calls, and for a tool nobody registered. `change` is `grant`
+    or `person`: the asker's grant is taken away, or the asker is switched off."""
+    import json
+
+    from sqlalchemy import update
+
+    from brain.govern_routes import retire_grant
+    from brain.ops.acceptance_checks_runtime import (
+        THE_TOOLS_GRANT,
+        _proposal,
+        _run,
+        _scripted,
+        _setup,
+    )
+    from brain.tables.identity import PrincipalRow
+
+    setup = await _setup(h)
+
+    async def alter(turn: int) -> None:
+        if turn != 1:
+            return
+        if change == "grant":
+            await h.execute(*h.attributed(), retire_grant(setup.asker, THE_TOOLS_GRANT))
+        else:
+            await h.execute(
+                *h.attributed(),
+                update(PrincipalRow)
+                .where(PrincipalRow.id == setup.asker)
+                .values(not_after=h.now - timedelta(minutes=1)),
+            )
+
+    nonexistent = json.dumps({"tool": "knowledge.nothing_registered_here", "arguments": {}})
+    model = _scripted(
+        [_proposal(setup.word), _proposal(setup.word), nonexistent, '{"answer": "done"}'],
+        alter,
+    )
+    await _run(h, setup, model, 1)
+    return (
+        setup.word,
+        str(model.shown[2][-1].content),
+        str(model.shown[3][-1].content),
+    )
+
+
+@check(
+    leaves=("M30.4.6",),
+    sentence=(
+        "An installed agent's run that searches documents, has its asker's grant taken away "
+        "while it is going and searches again, is refused the second time in the words a model "
+        "is given for a tool nobody registered; the first search returned the document."
+    ),
+)
+async def a_policy_change_during_a_run_refuses_the_next_call(h: Harness) -> None:
+    word, after, absent = await _a_run_whose_asker_changes(h, "grant")
+    if word in after:
+        raise CheckFailedError("a search made after the grant lapsed still returned the document")
+    if after != absent:
+        raise CheckFailedError("a refused tool was told differently from a tool nobody registered")
+
+
+@check(
+    leaves=("M30.4.7",),
+    sentence=(
+        "An installed agent's run that searches documents, whose asker is switched off while it "
+        "is going, is refused on its next search in the words a model is given for a tool nobody "
+        "registered."
+    ),
+)
+async def a_person_switched_off_during_a_run_is_refused_at_the_next_call(h: Harness) -> None:
+    word, after, absent = await _a_run_whose_asker_changes(h, "person")
+    if word in after:
+        raise CheckFailedError(
+            "a search made after its asker was switched off returned the document"
+        )
+    if after != absent:
+        raise CheckFailedError("a refused tool was told differently from a tool nobody registered")

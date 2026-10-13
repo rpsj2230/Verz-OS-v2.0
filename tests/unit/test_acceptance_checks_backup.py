@@ -9,6 +9,7 @@ each is shown failing when the thing it proves is broken.
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
 Task ids: M30.3.10, M30.6.10, M30.5.2, M30.6.9, M30.3.5
+Task ids: M30.4.6, M30.4.7
 """
 
 from __future__ import annotations
@@ -25,18 +26,22 @@ MODULE = "brain.ops.acceptance_checks_backup"
 REPORT = "a_backup_older_than_its_recovery_point_is_recorded_and_said_once"
 RETENTION = "the_retention_ladder_fits_inside_the_promised_window"
 LANE = "a_question_is_measured_in_its_lane_and_counted_on_service_levels"
+POLICY = "a_policy_change_during_a_run_refuses_the_next_call"
+PERSON = "a_person_switched_off_during_a_run_is_refused_at_the_next_call"
 
 
 # ------------------------------------------------------------------------ the figures
-def test_the_module_declares_the_three_checks_and_the_leaves_each_closes() -> None:
+def test_the_module_declares_the_five_checks_and_the_leaves_each_closes() -> None:
     """Delete this and a check can lose a leaf with the page showing the same row, and the leaf
     then closes on a check that never looked, or never closes."""
     assert [(one.name, one.leaves) for one in registered((MODULE,))] == [
         (REPORT, ("M30.3.10", "M30.6.10")),
         (RETENTION, ("M30.3.5",)),
         (LANE, ("M30.5.2", "M30.6.9")),
+        (POLICY, ("M30.4.6",)),
+        (PERSON, ("M30.4.7",)),
     ]
-    assert checks_in(MODULE) == [REPORT, RETENTION, LANE]
+    assert checks_in(MODULE) == [REPORT, RETENTION, LANE, POLICY, PERSON]
 
 
 def test_the_module_sits_in_the_range_this_package_was_given() -> None:
@@ -78,16 +83,18 @@ def _install_env(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_the_checks_pass_on_an_install_and_leave_nothing_and_the_report_waits_for_the_worker(
     install: str,
 ) -> None:
-    """**The module as the worker runs it.** The retention and lane checks pass, the report check
-    is not run because no worker has run the report, and nothing written is left behind. Delete
-    this and a check that can never pass on a real schema, or one that leaves a setting row on the
-    owner's install, reaches it first."""
+    """**The module as the worker runs it.** The retention, lane and mid-run checks pass, the
+    report check is not run because no worker has run the report, and nothing written is left
+    behind. Delete this and a check that can never pass on a real schema, or one that leaves a
+    setting row on the owner's install, reaches it first."""
     before = counts(install)
 
     outcomes = run_checks(install, registered((MODULE,)))
 
     assert outcomes[RETENTION] == (PASSED, "")
     assert outcomes[LANE] == (PASSED, "")
+    assert outcomes[POLICY] == (PASSED, "")
+    assert outcomes[PERSON] == (PASSED, "")
     assert outcomes[REPORT][0] == NOT_RUN and "no run of the backup report" in outcomes[REPORT][1]
     assert counts(install) == before
 
@@ -100,8 +107,7 @@ def test_the_lane_check_fails_when_the_route_stops_counting_a_question(
     so. Delete this and the Service levels screen can show a lane as unmeasured while the install
     answers questions in it."""
     from brain import report_routes
-
-    real = report_routes.service_levels_for_reader
+    from brain.console.service_level_view import service_levels_for_reader as real
 
     async def nothing(*args: object, **kwargs: object) -> object:
         levels = await real(*args, **kwargs)  # type: ignore[arg-type]
@@ -136,3 +142,31 @@ def test_the_retention_check_fails_when_the_ladder_outlives_the_window(
 
     with pytest.raises(CheckFailedError):
         asyncio.run(the_retention_ladder_fits_inside_the_promised_window(None))  # type: ignore[arg-type]
+
+
+@pytest.mark.needs_db
+def test_the_mid_run_checks_fail_when_a_run_keeps_its_asker_s_reach_from_the_start(
+    install: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With a run that reads its asker's reach once and never again, the grant taken away and the
+    person switched off both still find the document, and both checks say so. Delete this and the
+    two leaves pass whatever the runtime does between two calls."""
+    from brain.gate import runtime
+
+    real = runtime.AgentRuntime
+
+    class Frozen(real):  # type: ignore[valid-type, misc]
+        def __init__(self, **kwargs: object) -> None:
+            reach = kwargs["asker"]
+
+            async def fixed(now: object) -> object:
+                return reach
+
+            kwargs["reach_now"] = fixed
+            super().__init__(**kwargs)
+
+    monkeypatch.setattr(runtime, "AgentRuntime", Frozen)
+
+    outcomes = run_checks(install, registered((MODULE,)))
+
+    assert outcomes[POLICY][0] == FAILED and outcomes[PERSON][0] == FAILED

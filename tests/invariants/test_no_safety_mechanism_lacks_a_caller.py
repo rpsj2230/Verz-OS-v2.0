@@ -56,7 +56,7 @@ from brain.ops.schedule_runner import RUNNERS
 #: is the regression this whole file exists for. Pinning the set means the test names which
 #: control moved and in which direction, and the direction is the interesting half: a control
 #: leaving this set is somebody's good afternoon and one joining it is an incident.
-KNOWN_ORPHANS = frozenset(
+KNOWN_ORPHANS: frozenset[str] = frozenset(
     {
         # `retention_sweep` left on 2026-09-15: the worker's schedule starts it. See
         # `SCHEDULED_BY_THE_WORKER`.
