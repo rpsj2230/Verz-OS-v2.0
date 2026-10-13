@@ -3,7 +3,7 @@
 - **Screens:** `/agents`, `/agents/:agentId`, `/agents/:agentId/:tab`, `/agent-templates`, `/agent-templates/:templateId`, `/approvals`, `/approvals/:suspensionId`, `/agents/new`, `/agents/drafts`, `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step`
 - **Tables:** `agent.agent`, `agent.template_instance`, `agent.template_version`, `agent.template_draft`, `agent.audience_extra`, `agent.upgrade_decline`, `agent.leash_change`, `agent.supervised_action`, `agent.action_verdict`, `agent.supervision_pin`, `agent.tool_attachment`, `ops.agent_item_use`, `agent.group_install`, `ops.channel_room`, `agent.browser_envelope`, `gate.suspension`, `agent.manifest_draft`, `agent.manifest_revision`, `agent.manifest_act`, `agent.learning_pause`, `ops.agent_run`
 - **Installation values:** none
-- **Measured here:** 72 routes, 13 called by no screen; 41 write routes, 38 with all three proofs; 4 gaps.
+- **Measured here:** 73 routes, 14 called by no screen; 41 write routes, 38 with all three proofs; 4 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -78,6 +78,7 @@
 | `POST /api/v1/agents/{agent_id}/upgrade/decline` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/approvals/{suspension_id}/decision` | `/approvals`, `/approvals/:suspensionId` |
 | `PUT /api/v1/agents/{agent_id}/budget` | `/agents/:agentId`, `/agents/:agentId/:tab` |
+| `PUT /api/v1/agents/{agent_id}/budget/ceilings` | **no screen** |
 | `PUT /api/v1/agents/{agent_id}/model-pin` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 
 - **Gap.** An agent's finished runs are recorded, how each ended and what it spent, and no screen lists them. Recorded: ops.agent_run is written by brain.gate.runtime for operating the runtime and is not the record of what an agent did (brain.ops.agent_run_store.AN_AGENT_RUN_ROW_IS_A_COUNT_AND_NOT_AN_AUDIT_RECORD); the agent's Dashboard draws spend from the usage routes, and a list of runs is a screen nobody has drawn yet.
