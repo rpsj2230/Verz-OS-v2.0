@@ -68,7 +68,15 @@ See `A_REFUSAL_THAT_SAYS_THE_ACTION_MOVED_IS_AN_ANSWER`.
 approval was granted at, so everything `resume` re-checks is checked against the present. What
 it reads is `state`, which the decision wrote and a check holds the verdict to.
 
-Task ids: M35.3.1.1, M33.6.1.3, M27.9.3, M7.4.4
+**Two people, when the switch is on and the action is one that cannot be taken back (M13.7.7).**
+`put_suspension` asks the `two_person_approval` feature and `needs_second_person` at the moment it
+writes the row, so what needs two people is fixed when it is raised. A first approval is
+`HeldRows.endorse`: it writes the approver and the instant and leaves the row pending, a different
+person then decides it, and `0218`'s checks refuse any other order, as the route does.
+`needs_second_person` is where needs-rupash 192 lands: every sensitive effect (A) or money
+alone (B).
+
+Task ids: M35.3.1.1, M33.6.1.3, M27.9.3, M7.4.4, M13.7.7
 """
 
 from __future__ import annotations
@@ -87,12 +95,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.audit.ledger import AuditAction, AuditEntry
 from brain.core.entitlement import Capability, EntitlementSet
-from brain.core.envelope import Entity, TypedResult
+from brain.core.envelope import Entity, SideEffect, ToolDefinition, TypedResult
 from brain.core.field_policy import FieldPolicy
 from brain.gate.injection import RiskAssessment
 from brain.gate.leash import Action, ApprovalState, Leash, Resumption, SuspendedAction, resume
 from brain.gate.takeover_store import TakeoverStandings
 from brain.knowledge.promotion import THE_DOCUMENT_MOVED
+from brain.ops.features import TWO_PERSON_APPROVAL, is_on
 from brain.ops.idempotency import OperationLedger
 from brain.tables.audit import AuditEntryRow, attributed_to
 from brain.tables.suspension import SuspensionRow
@@ -141,6 +150,24 @@ A_REFUSAL_THAT_SAYS_THE_ACTION_MOVED_IS_AN_ANSWER: Final = (
     "that one refusal, known by its code and its words, is raised as NoLongerAppliesError for "
     "the route to say and to close, and every other error the statement raises is still a fault."
 )
+
+#: Whether an action needs two people when the feature is on. Option A of needs-rupash 192, the
+#: recommendation: every action whose tool declares a sensitive effect. Option B is `False` here
+#: and `tool.side_effect is SideEffect.MONEY` below, which is the only line that changes.
+EVERY_SENSITIVE_EFFECT_NEEDS_TWO_PEOPLE: Final = True
+
+
+def needs_second_person(tool: ToolDefinition) -> bool:
+    """Whether an action by this tool needs two different people to approve it, switch aside.
+
+    A tool that only reads or drafts is never held for two: nothing it does needs taking back.
+    """
+    if tool.side_effect in {SideEffect.NONE, SideEffect.DRAFT}:
+        return False
+    if EVERY_SENSITIVE_EFFECT_NEEDS_TWO_PEOPLE:
+        return tool.declares_sensitive_effect()
+    return tool.side_effect is SideEffect.MONEY
+
 
 #: The SQLSTATE a trigger's `RAISE ... ERRCODE = 'check_violation'` carries, and a CHECK's.
 CHECK_VIOLATION: Final = "23514"
@@ -242,6 +269,9 @@ def stored_from(row: Mapping[str, Any]) -> SuspendedAction:
             state=ApprovalState(row["state"]),
             decided_by=row["decided_by"] or "",
             decided_at=row["decided_at"],
+            two_person=bool(row.get("two_person", False)),
+            endorsed_by=row.get("endorsed_by") or "",
+            endorsed_at=row.get("endorsed_at"),
         )
     except (ValidationError, ValueError) as exc:
         msg = f"suspension {row['id']!r} does not construct"
@@ -298,7 +328,13 @@ async def put_suspension(session: AsyncSession, suspension: SuspendedAction) -> 
     The session must already be `at_reach` for the principal the suspension runs as: `0042`
     admits an insert in that principal's name only.
     """
-    await session.execute(insert(SuspensionRow).values(**row_values(suspension)))
+    two_person = needs_second_person(suspension.action.tool) and await is_on(
+        session, TWO_PERSON_APPROVAL
+    )
+    # Written only when true, so a row that needs one person is the row the previous release wrote
+    # and this release still runs against a schema before `0218`.
+    extra = {"two_person": True} if two_person else {}
+    await session.execute(insert(SuspensionRow).values(**row_values(suspension), **extra))
 
 
 # --------------------------------------------------------------------- the reading side
@@ -363,6 +399,28 @@ class HeldRows:
             .one_or_none()
         )
         return None if row is None else _readable(dict(row))
+
+    async def endorse(self, endorsed: SuspendedAction) -> bool:
+        """Write a first approval over a pending two-person row at its digest, leaving it pending.
+
+        False when no row changed: it was already endorsed, decided or moved. The database holds
+        the same rules as `SuspendedAction.endorsed`, in `0218`'s checks and policy.
+        """
+        changed = cast(
+            "CursorResult[Any]",
+            await self.session.execute(
+                update(SuspensionRow)
+                .where(
+                    SuspensionRow.id == endorsed.id,
+                    SuspensionRow.state == ApprovalState.PENDING.value,
+                    SuspensionRow.action_digest == endorsed.action_digest,
+                    SuspensionRow.two_person.is_(True),
+                    SuspensionRow.endorsed_by.is_(None),
+                )
+                .values(endorsed_by=endorsed.endorsed_by, endorsed_at=endorsed.endorsed_at)
+            ),
+        )
+        return changed.rowcount == 1
 
     async def record(self, decided: SuspendedAction, entry: AuditEntry) -> AuditEntry | None:
         """Write a decision over its pending row at its digest, and return the entry kept for it.
