@@ -3984,6 +3984,41 @@ const PROGRESS = {
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (requirement_check_routes); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
+  "M39.10.1": {
+    status: "OPEN",
+    why: "P1. Partly built: agents/model.py has Visibility (GLOBAL, DEPARTMENT, PERSONAL) with an owner_id, and the agent page shows its audience. What is missing is the kind named as a choice at creation and on the page. REUSE agents.model.AgentAudience, agents.creation, agent_routes.",
+    updated: "2026-10-12",
+  },
+  "M39.10.2": {
+    status: "OPEN",
+    why: "P1. Partly built: agents/creation.py makes a personal agent for its maker (AgentAudience PERSONAL, owner_id) and brain.member_activity.build_personal_agent materialises one. What is missing is the builder's own flow for a person to make one and the capability rule that only an administrator may make a team agent. REUSE agents.creation, agents.authoring, member_activity.",
+    updated: "2026-10-12",
+  },
+  "M39.10.3": {
+    status: "OPEN",
+    why: "P1. DEPENDS on M39.10.1. Audience scope for PERSONAL is the owner (agents/model.py scope_for); check that every list, the gallery and the oversight view follow it, with no count of hidden agents.",
+    updated: "2026-10-12",
+  },
+  "M39.10.4": {
+    status: "OPEN",
+    why: "P1. DEPENDS on M11.7.6 and needs item 173's steps done by the owner. Google Workspace is read per person with that person's own token (brain.connectors, My workspace); what is missing is attaching that connection to a personal agent and refusing anyone else.",
+    updated: "2026-10-12",
+  },
+  "M39.10.5": {
+    status: "OPEN",
+    why: "P2. DEPENDS on the owner's answer to needs item 189 (recommended C, built as A first). A team agent has no personal Google connection; a shared mailbox is a connection an administrator makes; a person's own mail in a private conversation only, never a room, memory or knowledge item.",
+    updated: "2026-10-12",
+  },
+  "M39.10.6": {
+    status: "OPEN",
+    why: "P1. Install check for the first, second and third leaves, with reserved people; held if it uses a made-up mailbox.",
+    updated: "2026-10-12",
+  },
+  "M39.10.7": {
+    status: "OPEN",
+    why: "P2. Browser proof of the create flow's kind choice.",
+    updated: "2026-10-12",
+  },
   "M39.9.1.1": {
     status: "OPEN",
     why: "P1, the core of the Knowledge requirement. Today the API lists Knowledge as one of seven workspace tabs (console/workspace.Tab.KNOWLEDGE) and the Profile draws a read-only card of what the agent's rule reaches (AgentCapabilities.tsx KnowledgeCard: M39.2.3.1, .3, .4), but the console's tab strip draws only Conversations, Automations, Memory, Artifacts and Settings, so there is no Knowledge section and no list of items. REUSE: the workspace tab read, brain.knowledge.item (retrievable, badge), console/agent_tabs.KnowledgeScope. REMAINING: a paged read of the items this agent draws on at the reader's reach, and AgentKnowledge.tsx with its empty state. M39.1.2.2 is reopened for the missing tabs.",
