@@ -236,9 +236,11 @@ async def the_browser_planner_cannot_read_a_page_and_a_run_starts_empty(
     box = sandbox_for(f"acc{h.run}", origins=frozenset({STAND_IN_ORIGIN}), app_image="app:check")
     if sandbox_gaps(box):
         raise CheckFailedError("a run's sandbox was built with a way out of it")
-    for label, planted in _planted(box).items():
+    for planted in _planted(box):
         if not sandbox_gaps(planted):
-            raise CheckFailedError(f"a run's sandbox given {label} was not refused")
+            raise CheckFailedError(
+                "a run's sandbox given a volume, a host bind or a writable root was not refused"
+            )
 
     rubric = build_rubric(request, target, now=h.now)
     if not rubric.required():
@@ -253,7 +255,7 @@ async def the_browser_planner_cannot_read_a_page_and_a_run_starts_empty(
         raise CheckFailedError("a run whose every criterion was met was not passed")
 
 
-def _planted(box: Any) -> dict[str, Any]:
+def _planted(box: Any) -> tuple[Any, ...]:
     """Copies of a sandbox with a volume, a host bind and a writable root planted in the runner."""
     from dataclasses import replace
 
@@ -264,11 +266,11 @@ def _planted(box: Any) -> dict[str, Any]:
         return replace(box, runner=replace(runner, body=planted))
 
     with_volume = {**box.runner.body, "Volumes": {"/profile": {}}}
-    return {
-        "a volume": runner_with(body=with_volume),
-        "a host bind": runner_with(Binds=["/home/staff/.config/browser:/profile"]),
-        "a writable root": runner_with(ReadonlyRootfs=False),
-    }
+    return (
+        runner_with(body=with_volume),
+        runner_with(Binds=["/home/staff/.config/browser:/profile"]),
+        runner_with(ReadonlyRootfs=False),
+    )
 
 
 # ------------------------------------------------------------------ 2. the worker's half, joined
@@ -474,11 +476,7 @@ async def a_browser_write_waits_for_a_person_and_runs_are_counted(
         trace_id=h.trace_id,
     )
     if not result.clean or result.ended != "stopped" or result.actions != 2:
-        raise CheckFailedError(
-            "a read-only run did not go through the runner and replay clean: it ended "
-            f"{result.ended!r} after {result.actions} actions, with {len(result.findings)} "
-            f"findings and {len(result.leaked)} leaks"
-        )
+        raise CheckFailedError("a read-only run did not go through the runner and replay clean")
     if result.gaps or not result.keys or result.digest is None:
         raise CheckFailedError("a read-only run was not recorded whole")
     if runner.page.navigated != [f"{STAND_IN_ORIGIN}/invoices"]:

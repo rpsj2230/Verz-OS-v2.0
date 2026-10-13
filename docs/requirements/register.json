@@ -5255,7 +5255,7 @@
    "proof": [
     "M19.9.2"
    ],
-   "decision": null
+   "decision": "needs-rupash 230: what is built ends a run at its first action outside the envelope and approves the envelope up front; suspending and asking again is the question"
   },
   {
    "id": "ARC-B-022",
