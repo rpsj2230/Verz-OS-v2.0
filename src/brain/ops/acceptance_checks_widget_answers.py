@@ -93,7 +93,13 @@ async def _priced(h: Harness) -> str:
             "this install has no currency set, so no cost can be counted against a cap"
         )
     price = Price(input_minor=Decimal(1_000_000), output_minor=Decimal(1_000_000), currency=code)
-    await h.execute(*h.attributed(), set_price_statement(STAND_IN, ANSWERS, price, by=h.actor))
+    from brain.ops.acceptance_run import SET_UP_REACH
+    from brain.tables.audit import attributed_to
+
+    await h.execute(
+        *attributed_to(actor_id=h.actor, ent_hash=SET_UP_REACH, trace_id=h.trace_id),
+        set_price_statement(STAND_IN, ANSWERS, price, by=h.actor),
+    )
     return code
 
 

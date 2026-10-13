@@ -39,6 +39,8 @@ CALLS_A_MODEL_WITHOUT_TOOLS: Final[frozenset[str]] = frozenset(
         "brain.ops.model_probe_run",
         "brain.provider_routes",
         "brain.models.adapter",
+        # The website widget's answer, written from the public passages with no tool at all.
+        "brain.widget_answers",
     }
 )
 
