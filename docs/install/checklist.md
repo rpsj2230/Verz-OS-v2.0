@@ -18,7 +18,11 @@ until a release has been published.
   about it" in [operations.md](operations.md).
 - [ ] Keep this install's variables file in a private repository that holds install files and no
   product code, one file per install. A repository holding product code is a fork, and
-  `brain.deployment.variables.variables_repository_gaps` reports it as one.
+  `brain.deployment.variables.variables_repository_gaps` reports it as one. Start a file with
+  `python -m brain.deployment.variables template <install>`, and run
+  `python -m brain.deployment.variables check <directory>` on the repository on every push: it
+  names a file that is not an install file and a credential set to one value on two installs,
+  and never prints a value.
 - [ ] If this server, its disk, a home directory or a deployment project was copied from another
   install, cut the four links below before anything starts.
 

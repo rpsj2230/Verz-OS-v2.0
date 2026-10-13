@@ -62,7 +62,7 @@ def test_the_module_declares_one_check_per_group_of_leaves() -> None:
     checks = [(one.name, one.leaves) for one in registered((MODULE,))]
     assert checks == [
         (DOCUMENT, ("M8.1.2", "M8.1.4", "M7.4.7")),
-        (RECORD, ("M8.1.1", "M9.2.1")),
+        (RECORD, ("M8.1.1", "M9.2.1", "M42.6.3")),
         (NOTHING, ("M8.2.1",)),
         (SCOPE, ("M8.2.2",)),
         (KIND, ("M7.6.1",)),

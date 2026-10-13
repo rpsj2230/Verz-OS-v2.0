@@ -21,7 +21,7 @@ Rejected: one check walking a person through all three, which would be one red r
 The starter-pack check is one flow (join, move, leave) because each step is the previous one's
 state; the disable, the agent and the automation are each their own.
 
-Task ids: M26.1.2, M26.1.3, M26.2.1, M26.2.4, M26.2.6, M26.3.1, M26.3.2, M26.3.3
+Task ids: M26.1.2, M26.1.3, M26.2.1, M26.2.4, M26.2.6, M26.3.1, M26.3.2, M26.3.3, M26.3.4
 """
 
 from __future__ import annotations
@@ -393,3 +393,72 @@ async def an_automation_waits_for_an_owner_when_its_owner_is_disabled(
     taken: Any = adopt(issued.registration, current_owner=None, new_owner=new_owner, now=h.now)
     if taken.owner_principal_id != successor:
         raise CheckFailedError("a live person could not adopt an automation awaiting an owner")
+
+
+@check(
+    leaves=("M26.3.4",),
+    sentence=(
+        "A document a person kept at personal level is read by nobody else in their department, "
+        "not by its department's administrator, while they work here; once they are disabled it "
+        "is read by nobody at all and is not erased: enabled again it is theirs to read."
+    ),
+)
+async def a_leaver_s_personal_document_stays_and_nobody_else_reaches_it(h: Harness) -> None:
+    from brain.identity.lifecycle import departure_disposition
+    from brain.identity.principal_state_store import StoredPrincipalStates
+    from brain.knowledge.ingest import MediaType
+    from brain.knowledge.search import KNOWLEDGE_UPLOAD
+    from brain.knowledge.visibility import Visibility
+    from brain.ops.acceptance_checks import KNOWLEDGE_READS, _found, _in, _upload
+    from brain.ops.acceptance_checks_lifecycle import _body
+    from brain.ops.erasure import Disposition
+    from brain.ops.retention import Store
+
+    await h.found_departments()
+    leaver, colleague, keeper = (h.principal(A, one) for one in ("leaver", "colleague", "keeper"))
+    await h.person(leaver, department=A, grants=_in(A, *KNOWLEDGE_READS, KNOWLEDGE_UPLOAD.value))
+    await h.person(colleague, department=A, grants=_in(A, *KNOWLEDGE_READS))
+    await h.person(keeper, department=A, grants=_in(A, *KNOWLEDGE_READS, "admin:knowledge"))
+    word = h.word()
+    stored = await _upload(
+        h,
+        leaver,
+        filename="Personal notes.md",
+        declared=MediaType.MARKDOWN.value,
+        body=_body(word),
+        level=Visibility.PERSONAL,
+    )
+    if not hasattr(stored, "item"):
+        raise CheckFailedError("a person could not keep a document at personal level")
+
+    async def reads(who: str) -> bool:
+        _, kept = await _found(h, who, word)
+        return any(word in str(one.get("document", "")) for one in kept)
+
+    if not await reads(leaver):
+        raise CheckFailedError("a person could not read the document they kept")
+    if await reads(colleague) or await reads(keeper):
+        raise CheckFailedError("somebody else in the department read a personal document")
+
+    states = StoredPrincipalStates(h.sessions)
+
+    async def disabled(value: bool) -> None:
+        await states.set_disabled(
+            leaver,
+            disabled=value,
+            may=lambda _department: True,
+            by=h.actor,
+            ent_hash="0" * 32,
+            trace_id=h.trace_id,
+        )
+
+    await disabled(True)
+    if await reads(leaver) or await reads(colleague) or await reads(keeper):
+        raise CheckFailedError("a leaver's personal document was still read by somebody")
+    await disabled(False)
+    if not await reads(leaver):
+        raise CheckFailedError("a leaver's personal document was erased when they were disabled")
+    if departure_disposition(Store.KNOWLEDGE) is not Disposition.RETAINED:
+        raise CheckFailedError(
+            "the product's policy for a leaver's personal knowledge is not to keep it"
+        )
