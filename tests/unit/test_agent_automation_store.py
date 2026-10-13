@@ -26,7 +26,7 @@ from typing import Any
 import psycopg
 import psycopg.sql
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import CheckConstraint, MetaData, Table, UniqueConstraint, create_engine
 from sqlalchemy.pool import NullPool
 from sqlalchemy.schema import CreateTable
 
@@ -146,12 +146,52 @@ def test_the_migration_and_the_model_hold_the_live_grammars_and_widths_they_copi
     assert len(new_automation_id()) <= table_module.AUTOMATION_ID_CHARS
 
 
+#: The columns, the check and the index `0225` added to what `0055` built, which the model carries
+#: and `0055`'s own rendering does not.
+ADDED_BY_0225 = frozenset(
+    {
+        "trigger_kind",
+        "trigger_source",
+        "cadence_every",
+        "cadence_hour",
+        "cadence_weekday",
+        "condition_field",
+        "condition_op",
+        "condition_value",
+        "instruction",
+        "tools",
+        "from_template_id",
+    }
+)
+
+
+def as_0055_built_it() -> Table:
+    """The model's table without what `0225` added, and with the constraint `0225` replaced."""
+    model = metadata.tables["agent.automation"]
+    # In the model's order, under their bare names, which the convention prefixes.
+    kept = [
+        CheckConstraint(str(one.sqltext), name=str(one.name).removeprefix("ck_automation_"))
+        for one in AgentAutomationRow.__table_args__
+        if isinstance(one, CheckConstraint)
+        and str(one.name).removeprefix("ck_automation_")
+        not in {name for name, _ in table_module.AUTHORING_CHECKS}
+    ]
+    return Table(
+        "automation",
+        MetaData(naming_convention=metadata.naming_convention),
+        *[column._copy() for column in model.columns if column.name not in ADDED_BY_0225],
+        *kept,
+        UniqueConstraint(
+            "agent_id", "template_id", "runs_as_id", name="uq_automation_agent_template_person"
+        ),
+        schema="agent",
+    )
+
+
 def test_the_migration_builds_the_table_exactly_as_the_model_declares_it() -> None:
     """Compared as rendered DDL, for the reason `test_tables` compares 0002's. Delete this and the
     model can gain a column or lose the unique constraint with the database built the old way."""
-    expected = squash(
-        str(CreateTable(metadata.tables["agent.automation"]).compile(dialect=DIALECT))
-    )
+    expected = squash(str(CreateTable(as_0055_built_it()).compile(dialect=DIALECT)))
 
     assert expected in squash(rendered("upgrade", MIGRATION))
 
@@ -228,6 +268,7 @@ def test_the_registry_entry_read_back_out_of_the_row_is_the_entry_the_install_ca
     assert set(values) == {one.name for one in AgentAutomationRow.__table__.columns} - {
         "created_at",
         "updated_at",
+        *ADDED_BY_0225,
     }
 
 
@@ -238,8 +279,8 @@ def test_the_insert_does_nothing_on_the_constraints_columns_and_says_what_it_wro
 
     assert ONE_INSTALL == ("agent_id", "template_id", "runs_as_id")
     assert compiled(installing(made)).endswith(
-        "ON CONFLICT (agent_id, template_id, runs_as_id) DO NOTHING "
-        "RETURNING agent.automation.automation_id"
+        "ON CONFLICT (agent_id, template_id, runs_as_id) WHERE template_id <> 'authored' "
+        "DO NOTHING RETURNING agent.automation.automation_id"
     )
     assert "WHERE agent.automation.agent_id = " in compiled(already_installed(made))
     assert "AND agent.automation.template_id = " in compiled(already_installed(made))

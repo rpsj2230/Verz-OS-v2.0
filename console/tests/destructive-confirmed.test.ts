@@ -39,6 +39,10 @@ import { CONTROL_DIRECTORIES, everyConfirmation, everyWrite } from "./support/wr
  * why each one is not destructive.
  */
 const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
+  "src/components/AutomationAuthoring.tsx authoringPreviewApiPath(agentId)":
+    "Reviewing a new automation writes nothing: brain.automation_authoring_routes.authoring_preview " +
+    "returns what saving would store and what it would have done, keeps no row, and the save is a " +
+    "second press that is confirmed, which tests/unit/test_automation_authoring_routes.py holds.",
   // The owner's rule (needs-rupash 38 (2)): stopping is one press, with no confirmation and no
   // second signature, because a stop that can be held up by a dialog fails at the moment it is
   // needed. It ends no work and loses none; resuming is the guarded act, and it is confirmed.
