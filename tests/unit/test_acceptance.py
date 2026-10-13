@@ -731,6 +731,12 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert outcomes.pop("the_rate_limits_screen_lists_the_windows_refusing_now")[0] == NOT_RUN
     assert outcomes.pop("rate_limits_and_capacity_answer_their_readers")[0] == NOT_RUN
     assert outcomes.pop("three_classes_share_one_budget_and_give_way_in_order")[0] == NOT_RUN
+    # Nor has this database's worker recorded a daily backup report yet, so there is no scheduled
+    # run to judge; `tests/unit/test_acceptance_checks_backup.py` records one and runs the check.
+    assert (
+        outcomes.pop("a_backup_older_than_its_recovery_point_is_recorded_and_said_once")[0]
+        == NOT_RUN
+    )
     # Nothing has furnished this database's Starter pack, which the application does on its first
     # start; `tests/unit/test_acceptance_checks_joiner_mover_leaver.py` furnishes it and runs it.
     assert (

@@ -324,7 +324,7 @@ minutes.
 | `retention_sweep` | that nothing is kept past the window its data class was given | `in_process` |
 | `canary_run` | that the gate still refuses today what it refused yesterday | `in_process` |
 | `restore_drill` | that the copies being taken can actually be restored | `in_process` |
-| `backup_exposure` | that a stretch of work with no copy anywhere is noticed while it is still short | `nothing` |
+| `backup_exposure` | that a stretch of work with no copy anywhere is noticed while it is still short | `in_process` |
 | `denial_digest` | that a colleague who keeps being told there is nothing there is noticed by somebody who can fix it | `in_process` |
 | `directory_sync` | that the roster follows employment: joiners, movers and leavers | `in_process` |
 | `knowledge_reverification` | that an answer drawn from something somebody once approved is not still being given long afterwards | `in_process` |
