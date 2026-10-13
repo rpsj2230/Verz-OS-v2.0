@@ -964,6 +964,14 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         NOT_RUN,
         acceptance_checks_evaluation.THE_WORKER_HAS_NOT_STARTED_THEM,
     )
+    # No currency is set here, so the widget's cap has no unit to be counted in; the check's own
+    # test file sets one, runs it and it passes (`tests/unit/test_acceptance_widget_answers.py`).
+    from brain.ops import acceptance_checks_widget_answers
+
+    assert outcomes.pop("the_widget_writes_from_public_passages_under_a_daily_cap") == (
+        NOT_RUN,
+        acceptance_checks_widget_answers.NO_CURRENCY_SET,
+    )
     # A roll-up reads what the checks before it came to, so on an install where some of those are
     # not run it is not run too, and it is never failed while they pass; each one's own test file
     # runs the checks it reads (`tests/unit/test_acceptance_roll_up.py`).
