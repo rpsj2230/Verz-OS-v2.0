@@ -21,6 +21,31 @@ export const END_MY_DEVICE_API_PATH = "/me/devices/end";
 export const MY_READS_API_PATH = "/me/reads";
 export const MY_ARTIFACTS_API_PATH = "/me/artifacts";
 export const MY_STORED_API_PATH = "/me/stored";
+export const MY_SHARES_API_PATH = "/me/shares";
+export const SHARED_WITH_ME_API_PATH = "/me/shared";
+
+export type MySharesBody = components["schemas"]["SharesView"];
+export type SharedWithMeBody = components["schemas"]["SharedWithMePage"];
+
+/** Where one of the person's artifacts is shared with a colleague, under the API base. */
+export function shareApiPath(artifactId: string): string {
+  return `/me/artifacts/${encodeURIComponent(artifactId)}/share`;
+}
+
+/** Where a share is taken back. */
+export function unshareApiPath(artifactId: string): string {
+  return `/me/artifacts/${encodeURIComponent(artifactId)}/unshare`;
+}
+
+/** Where a file shared with this person is fetched. */
+export function sharedFileApiPath(artifactId: string): string {
+  return `/me/shared/${encodeURIComponent(artifactId)}/download`;
+}
+
+/** The body sharing and taking back send: the colleague's person id and nothing else. */
+export function colleagueBody(colleague: string): { readonly colleague: string } {
+  return { colleague: colleague.trim() };
+}
 
 /** The body ending one of a person's own sign-ins sends: its id and nothing else. */
 export function endBody(sessionId: string): { readonly session_id: string } {
