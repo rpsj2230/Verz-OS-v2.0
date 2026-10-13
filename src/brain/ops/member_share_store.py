@@ -1,6 +1,6 @@
-"""An artifact handed to a colleague, kept and read as the two people it names (`0229`).
+"""An artifact handed to a colleague, kept and read as the two people it names (`0230`).
 
-`record` and `withdraw` write as the sharer, because `0229`'s policies hold an insert and a
+`record` and `withdraw` write as the sharer, because `0230`'s policies hold an insert and a
 delete to the person the transaction names; `sent_by` and `received_by` read for one person and
 the policy shows each only the rows they are on. **A row is a record that somebody was handed
 something and admits nobody to anything**: whether the colleague may open it is

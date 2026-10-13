@@ -1,4 +1,4 @@
-"""A request for an agent a person cannot yet run, kept and read (`0229`).
+"""A request for an agent a person cannot yet run, kept and read (`0230`).
 
 `record` writes as the asker and answers whether this was the first request for that agent from that
 person, because the table holds one row for each and a second ask is not a second row; `of` reads
