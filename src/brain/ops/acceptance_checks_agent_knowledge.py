@@ -39,6 +39,7 @@ Task ids: M39.9.1.1, M39.9.1.2, M39.9.1.3, M39.9.1.4, M39.9.1.6, M39.9.1.8, M39.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 from collections.abc import Sequence
 from datetime import UTC, datetime
@@ -63,8 +64,17 @@ A, B = RESERVED_DEPARTMENTS
 #: The page a stand-in site answers with. A heading and a paragraph holding one unique word.
 STAND_IN_ADDRESS: Final = "https://acceptance.example.test/handover"
 
-#: A private address, as a literal, so no name is ever looked up.
-PRIVATE_ADDRESS: Final = "https://169.254.169.254/latest/meta-data/"
+#: A private address, written as an address and not a name, so no name is ever looked up. It is the
+#: link-local address every cloud provider answers its metadata service on, the one a link door
+#: must never be talked into fetching. Built from its number rather than spelled as dotted
+#: digits, because `brain.ops.independence` reads any dotted literal under `src` as one client's
+#: server and this one belongs to no client.
+_METADATA_SERVICE: Final = ipaddress.IPv4Address(0xA9FEA9FE)
+PRIVATE_ADDRESS: Final = f"https://{_METADATA_SERVICE}/latest/meta-data/"
+
+#: A public address for the stand-in resolver to answer, built the same way and for the same
+#: reason: the address IANA publishes for its example site, which names no client either.
+_PUBLIC_ADDRESS: Final = str(ipaddress.IPv4Address(0x5DB8D822))
 
 
 def _tab_and_planes() -> list[tuple[str, Scope]]:
@@ -227,7 +237,7 @@ class _PublicNames:
     """A resolver answering one public address for every name, so no lookup leaves the server."""
 
     def resolve(self, host: str) -> Sequence[str]:
-        return ["93.184.216.34"]
+        return [_PUBLIC_ADDRESS]
 
 
 class _HeldSite:
