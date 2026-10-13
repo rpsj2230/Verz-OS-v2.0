@@ -276,6 +276,28 @@ describe("one draft", () => {
     expect(body.document["persona"]).toBe("Answer briefly.");
   });
 
+  test("the Write step links the parts of an agent the form does not hold, from the API's own words", async () => {
+    // What breaks if this is deleted: workflows, memory and channels have no pointer from the
+    // builder, or the console writes its own words and addresses beside the API's.
+    const withLinks = {
+      ...(FORM as Record<string, unknown>),
+      set_elsewhere: [
+        { part: "workflows", title: "Workflows", sentence: "A workflow is put on an agent from the Automations page.", address: "/automations" },
+        { part: "channels", title: "Where it answers", sentence: "Chosen when you publish it.", address: "" },
+      ],
+    };
+    const { container } = await consoleAt(draftAddress(DRAFT_ID), {
+      [`GET ${DRAFT_API}`]: { body: aDraft() },
+      "GET /api/v1/builder/form": { body: withLinks },
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("A workflow is put on an agent from the Automations page.");
+    });
+    expect(container.textContent).toContain("Chosen when you publish it.");
+    const links = [...container.querySelectorAll("a")].map((one) => one.getAttribute("href"));
+    expect(links).toContain("/automations");
+  });
+
   test("a refused save says the API's sentence", async () => {
     // What breaks if this is deleted: a stale save drawn as a failure with nothing to act on, or as
     // saved.

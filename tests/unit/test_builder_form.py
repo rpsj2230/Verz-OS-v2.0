@@ -447,3 +447,24 @@ def test_a_part_field_the_model_gains_still_renders_under_its_own_title() -> Non
     assert ui["placeholders"]["items"]["hint"] == {}
     key = PART_WORDS[("Placeholder", "key")]
     assert ui["placeholders"]["items"]["key"]["ui:title"] == key.title
+
+
+def test_the_parts_linked_from_the_builder_are_not_sections_and_each_says_where_it_is_set() -> None:
+    """Needs-rupash 170 A. Knowledge's documents, workflows, memory and channels are linked and are
+    never sections of the saved definition, so none shares a name with a section; each carries a
+    sentence in words and an address that is a console path or empty for a later step on this page.
+    Delete this and a linked part can become a section, a second description of one thing, or a
+    link can be added with no words beside it."""
+    from brain.builder.compose import Section
+    from brain.builder.form import (
+        SET_ELSEWHERE,
+        WORKFLOWS_KNOWLEDGE_AND_CHANNELS_ARE_LINKED_NOT_SECTIONS,
+    )
+
+    assert WORKFLOWS_KNOWLEDGE_AND_CHANNELS_ARE_LINKED_NOT_SECTIONS
+    assert {one.part for one in SET_ELSEWHERE} == {"knowledge", "workflows", "memory", "channels"}
+    assert not {one.part for one in SET_ELSEWHERE} & {one.value for one in Section} - {"knowledge"}
+    for one in SET_ELSEWHERE:
+        assert one.title.strip() and one.sentence.strip()
+        assert one.address == "" or one.address.startswith("/")
+    assert [one.address for one in SET_ELSEWHERE if one.part == "channels"] == [""]

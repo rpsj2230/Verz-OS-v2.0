@@ -285,6 +285,7 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # The window's runs of refusals for the Audit screen's statistics: the digest's grouped
         # read of the ledger, which writes nothing.
         "brain.audit_statistics_routes:DenialPatterns.between": Repeat.READS,
+        "brain.audit_statistics_routes:RedactedRequests.between": Repeat.READS,
         "brain.audit.chain_check:LedgerSequence.after": Repeat.READS,
         "brain.audit.chain_check:LedgerSequence.at_seq": Repeat.READS,
         "brain.audit.chain_check:LedgerSequence.newest": Repeat.READS,
