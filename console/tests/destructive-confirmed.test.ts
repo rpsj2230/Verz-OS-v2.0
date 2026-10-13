@@ -292,6 +292,30 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "A copy is noted as one signal against an answer the person was given, and a second copy of the " +
     "same answer adds nothing, which tests/unit/test_acceptance_copied.py holds; it ends and " +
     "replaces nothing.",
+  "src/components/MyPreferences.tsx LEARNING_API_PATH":
+    "Switching learning off or on removes no memory: it stops or resumes forming new ones, the cost " +
+    "of that is said beside the button, and it is undone by pressing it again, which " +
+    "tests/unit/test_acceptance_checks_member_preferences.py holds for the learning flow.",
+  "src/components/MyPreferences.tsx REACH_API_PATH":
+    "Saves where the person is reached as one statement that replaces their previous statement of " +
+    "it; the saved answer is shown before the press and can be typed back, and a message already " +
+    "sent is untouched, which tests/unit/test_acceptance_checks_member_preferences.py holds.",
+  "src/components/MyPreferences.tsx QUIET_API_PATH":
+    "Sets or clears two times at which a digest is held; an approval is never held, so nothing a " +
+    "person must act on is delayed, and the previous times are shown and can be typed back, which " +
+    "tests/unit/test_acceptance_checks_member_preferences.py holds.",
+  "src/components/MyAccountCards.tsx shareApiPath(artifactId)":
+    "Hands one artifact to a colleague who can already open it, so it grants no access that was not " +
+    "there; nothing is ended or replaced and it is taken back by Unshare, which " +
+    "tests/unit/test_acceptance_checks_member_share.py holds.",
+  "src/components/MyAccountCards.tsx unshareApiPath(artifactId)":
+    "Takes a share back, which is the safe direction: it ends only the colleague's reading of it " +
+    "through the share, the artifact and the sharer's own copy are untouched, and sharing again " +
+    "restores it, which tests/unit/test_acceptance_checks_member_share.py holds.",
+  "src/components/MyAccountCards.tsx askForAgentApiPath(agentId)":
+    "Records that somebody asked for an agent they cannot run, once for each person and agent, and " +
+    "grants nothing: the lead is told once and decides, which " +
+    "tests/unit/test_acceptance_checks_member_agent_request.py holds.",
   "src/components/MyChannels.tsx myCodeApiPath(row.channel)":
     "Asking for a code binds nothing: the code is shown to the person who asked and does nothing " +
     "until they send it from their own chat. It ends only an older code of theirs for that channel " +
