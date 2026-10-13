@@ -114,7 +114,10 @@ VERSIONS = ROOT / "migrations" / "versions"
 MIGRATION = VERSIONS / "0042_suspension.py"
 DECISION_MIGRATION = VERSIONS / "0083_suspension_decision.py"
 TAKEOVER_MIGRATION = VERSIONS / "0172_takeover_instants.py"
+TWO_PERSON_MIGRATION = VERSIONS / "0221_two_person_approval.py"
 LEDGER_MIGRATION = VERSIONS / "0003_resolver_and_tables.py"
+#: Where `ops.setting` is built, which `put_suspension` reads the two-person switch from.
+SETTING_MIGRATION = VERSIONS / "0004_capability_registry_and_config.py"
 APPROVAL_ACTION_MIGRATION = VERSIONS / "0023_approval_action.py"
 
 APPROVALS = f"{API_PREFIX}/approvals"
@@ -455,13 +458,20 @@ def the_table_alone(database: str) -> Iterator[str]:
 
 
 @contextmanager
-def suspensions(database: str) -> Iterator[str]:
+def suspensions(database: str, *, with_two_person: bool = True) -> Iterator[str]:
     """A fresh database holding the ledger and `gate.suspension` with `0083`'s decision on it."""
     scratch = fresh(database)
     try:
         migrate(database, "stamp", "0001")
         migrate(database, "upgrade", revision(LEDGER_MIGRATION))
-        upgraded(database, APPROVAL_ACTION_MIGRATION, MIGRATION, DECISION_MIGRATION)
+        upgraded(
+            database,
+            SETTING_MIGRATION,
+            APPROVAL_ACTION_MIGRATION,
+            MIGRATION,
+            DECISION_MIGRATION,
+            *((TWO_PERSON_MIGRATION,) if with_two_person else ()),
+        )
         yield scratch
     finally:
         drop(database)
@@ -1278,7 +1288,7 @@ def test_the_decision_migration_comes_down_and_back_up_and_refuses_an_unrecorded
             sql(url, "SELECT to_regprocedure('gate.record_suspension_decision()') IS NOT NULL"),
         )
 
-    with suspensions(database) as url:
+    with suspensions(database, with_two_person=False) as url:
         migrate(database, "downgrade", predecessor(DECISION_MIGRATION))
         down = built()
         with_store(url, lambda store: put(store, raised("m_1")))

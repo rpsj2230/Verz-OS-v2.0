@@ -45,7 +45,7 @@ import {
   TAKEOVER_REASONS,
   type ApprovalCardView,
   type Decision,
-  type Verdict,
+  type Confirmation,
 } from "../approvalsQuery";
 import { nameOf } from "../review/parts";
 
@@ -75,6 +75,12 @@ export const TAKE_OVER_CONSEQUENCE =
   "over, and three takeovers of the same kind of action inside a week hold this agent a step lower " +
   "on it, so a person sees more of its work first.";
 export const KEEP_IT_LABEL = "Keep it waiting";
+export const NEEDS_TWO_SENTENCE =
+  "This cannot be taken back, so two different people approve it. Your approval is the first, " +
+  "and it runs only after a second person approves.";
+export const SECOND_OF_TWO_SENTENCE =
+  "This cannot be taken back, and one person has already approved it. Your approval is the " +
+  "second, and it runs when you give it.";
 
 /** Written down because a take-over button that sends on one press is the easy version. */
 export const TAKING_OVER_IS_CONFIRMED_BECAUSE_IT_LOWERS_THE_AGENT =
@@ -90,10 +96,15 @@ export function approvalAddress(suspensionId: string): string {
   return `${APPROVALS_ADDRESS}/${encodeURIComponent(suspensionId)}`;
 }
 
-export type { Verdict } from "../approvalsQuery";
+export type { Confirmation, Verdict } from "../approvalsQuery";
 
-export function said(verdict: Verdict): string {
+export const APPROVED_FIRST_SENTENCE =
+  "Approved. Yours is the first approval of two, so it has not run and waits for a second person.";
+
+export function said(verdict: Confirmation): string {
   switch (verdict) {
+    case "approved_first":
+      return APPROVED_FIRST_SENTENCE;
     case "approved":
       return APPROVED_SENTENCE;
     case "rejected":
@@ -138,6 +149,11 @@ export function ApprovalCard({
           {card.unsentBecause}
         </p>
       )}
+      {card.needsSecond ? (
+        <p className="approval-card__second" role="note">
+          {card.firstApproved ? SECOND_OF_TWO_SENTENCE : NEEDS_TWO_SENTENCE}
+        </p>
+      ) : null}
       {decision}
       {linked ? (
         <Link className="approval-card__link" to={approvalAddress(card.suspensionId)}>
@@ -159,7 +175,7 @@ export function DecisionControls({
 }: {
   readonly suspensionId: string;
   readonly mayTakeOver?: boolean;
-  readonly onDecided: (verdict: Verdict) => void;
+  readonly onDecided: (verdict: Confirmation) => void;
 }) {
   const [reason, setReason] = useState("");
   const [takeoverReason, setTakeoverReason] = useState("");

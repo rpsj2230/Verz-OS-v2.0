@@ -233,6 +233,7 @@ from brain.knowledge.ingest import IngestRefused
 from brain.knowledge.uploads import assert_safe_filename, read_arriving
 from brain.knowledge_routes import NAME_HEADER
 from brain.listing import Column, ListAsked, Listing
+from brain.ops.features import SKILL_NEEDS, is_on
 from brain.ops.skill_fetch import HttpsFetcher, SystemResolver
 from brain.ops.skill_store import MAX_LIBRARY, StoredSkills
 from brain.prompt_routes import agent_scope_row, every_agent_with_install, installed
@@ -939,6 +940,8 @@ def pins_of(
             signature=version_row.signature,
             signed_by=version_row.signed_by,
             signed_at=version_row.signed_at,
+            schema_version=version_row.schema_version or 1,
+            overview_path=version_row.overview_path or "",
         )
         instance = TemplateInstance(
             instance_id=instance_row.id,
@@ -1871,6 +1874,14 @@ async def assign_skill(
         clock=lambda: now,
     )
     signed, instance = found.install
+    # The switch is read here and decided in `assignment`, so a skill's needs are refused only on
+    # an install that switched the rule on. See `brain.ops.features.SKILL_NEEDS`.
+    needs_registry: ToolRegistry | None = None
+    pool = sessions_of(request)
+    if pool is not None:
+        async with pool() as session:
+            if await is_on(session, SKILL_NEEDS):
+                needs_registry = _tool_registry(request) or ToolRegistry()
     try:
         made = assignment(
             one,
@@ -1881,6 +1892,7 @@ async def assign_skill(
             by=asked.reach,
             recorder=recorder,
             now=now,
+            needs_registry=needs_registry,
         )
     except (SkillLibraryError, AgentTabError) as refused:
         raise _refused_because(str(refused)) from None

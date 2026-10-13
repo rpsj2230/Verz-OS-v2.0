@@ -409,10 +409,15 @@ def test_a_full_sdk_response_is_read_field_by_field() -> None:
         model="claude-sonnet-5-20260601",
         choices=[Bag(message=Bag(content="Fourteen."), finish_reason="stop")],
         usage=Bag(
-            prompt_tokens=900, completion_tokens=12, prompt_tokens_details=Bag(cached_tokens=800)
+            prompt_tokens=900,
+            completion_tokens=12,
+            prompt_tokens_details=Bag(cached_tokens=800),
+            completion_tokens_details=Bag(reasoning_tokens=7),
         ),
     )
-    assert completion_from_sdk(raw) == a_completion(served_model="claude-sonnet-5-20260601")
+    assert completion_from_sdk(raw) == a_completion(
+        served_model="claude-sonnet-5-20260601", reasoning_tokens=7
+    )
 
 
 def test_asking_for_an_sdk_that_is_not_installed_says_exactly_that(

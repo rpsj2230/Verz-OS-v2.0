@@ -697,7 +697,7 @@ async def _moved_card_is_answered_and_closed(
 
 
 @check(
-    leaves=("M7.4.4",),
+    leaves=("M7.4.4", "M40.3.1.4"),
     sentence=(
         "A steward in acceptance_a asks for their verified document to be company-wide: it waits "
         "on the Approvals screen of another holder of approve:knowledge.visibility there, never "
