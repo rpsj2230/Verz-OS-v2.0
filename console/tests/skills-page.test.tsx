@@ -15,7 +15,7 @@
  * sends it, and every path it sends to with the API document.
  *
  * Task ids: M27.16.1, M27.11.8, M27.15.55, M27.15.56, M42.6.4, M12.2.2, M12.3.2, M12.4.13
- * Task ids: M12.2.10, M27.15.57, M12.3.4
+ * Task ids: M12.2.10, M27.15.57, M12.3.4, M12.4.14
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -27,15 +27,16 @@ import { SKILLS_HEADING } from "../src/pages/Skills";
 import { HISTORY_ELSEWHERE } from "../src/pages/skills/SkillAbout";
 import { LAST_USED_LABEL, NOT_USED, RUNS_LABEL } from "../src/pages/skills/SkillDashboard";
 import { NO_SUCH_SKILL } from "../src/pages/skills/SkillDetailPage";
-import { EXAMPLES_HINT, FROM_ADDRESS, FROM_REPOSITORY, IMPORT_PROCEDURE, PACKAGE_FORMAT, PROCEDURE_FORMAT } from "../src/pages/skills/SkillForms";
+import { DESCRIBE_FORMAT, DRAFT_IT, EXAMPLES_HINT, FROM_ADDRESS, FROM_REPOSITORY, IMPORT_PROCEDURE, PACKAGE_FORMAT, PROCEDURE_FORMAT } from "../src/pages/skills/SkillForms";
 import { RETIRE, REINSTATE, DETACH, APPROVE, FINDINGS_HEADING } from "../src/pages/skills/SkillProfile";
 import { EXPORT, exportedSentence, NOT_YET_REHEARSED, REHEARSAL_FAILED, REHEARSAL_PASSED, REHEARSE } from "../src/pages/skillsQuery";
-import { PROCEDURE_TAB, queueWords, readLibraryRows } from "../src/pages/skills/SkillsPage";
+import { DESCRIBE_TAB, PROCEDURE_TAB, queueWords, readLibraryRows } from "../src/pages/skills/SkillsPage";
 import { REVIEW_PILL, UNAVAILABLE } from "../src/pages/skills/skillActions";
 import { readHistory, readSkillDetail } from "../src/pages/skills/skillDetailQuery";
 import {
   CONCERN_WORDS,
   detachPath,
+  DRAFT_PATH,
   findingWords,
   LIBRARY_API_PATH,
   MAX_PACKAGE_BYTES,
@@ -410,6 +411,54 @@ describe("importing from a repository", () => {
     expect(choices.map((one) => one.closest("label")?.textContent)).toEqual([FROM_REPOSITORY, FROM_ADDRESS]);
     expect(choices[0]?.checked).toBe(true);
     expect(document.body.textContent).not.toMatch(/only upload and paste/i);
+  });
+});
+
+describe("describing a skill", () => {
+  test("a description is judged before it is sent, sent as words, and what was left out is said after", async () => {
+    // What breaks if this is deleted: a form that sends an empty description, one that draws the
+    // draft as approved, or a draft whose left-out tools the person is never told about.
+    const { container, sent } = await consoleAt("/skills", {
+      [`GET ${API}${LIBRARY_API_PATH}`]: { body: libraryPage([row()]) },
+      [`POST ${API}${DRAFT_PATH}`]: {
+        status: 201,
+        body: {
+          skill: version({ name: "renewal-check", version: "0.1.0", review: "pending" }),
+          findings: [{ what: "mail.send_everything", message: "the tool mail.send_everything was left out of the draft" }],
+          note: "This draft is in the library waiting for review.",
+        },
+      },
+    });
+    pressed("Add a skill", container);
+    const tab = await waitFor(() => {
+      const found = [...document.querySelectorAll<HTMLElement>('[role="tab"]')].find((one) => one.textContent === DESCRIBE_TAB);
+      if (found === undefined) {
+        throw new Error("the describe tab has not arrived");
+      }
+      return found;
+    });
+    fireEvent.mouseDown(tab, { button: 0 });
+    tab.focus();
+    await waitFor(() => {
+      expect(document.body.textContent).toContain(DESCRIBE_FORMAT);
+    });
+    const submit = [...document.querySelectorAll<HTMLButtonElement>("button")].find((one) => one.textContent === DRAFT_IT);
+    expect(submit?.disabled).toBe(true);
+    const input = document.getElementById("skills-describe") as HTMLTextAreaElement;
+
+    fireEvent.change(input, { target: { value: "Tell a client when their domain renews" } });
+    expect(submit?.disabled).toBe(false);
+    fireEvent.click(submit as HTMLButtonElement);
+
+    await waitFor(() => {
+      expect(sent.filter((one) => one.method === "POST" && one.path === `${API}${DRAFT_PATH}`).map((one) => one.body)).toEqual([
+        { description: "Tell a client when their domain renews" },
+      ]);
+    });
+    await waitFor(() => {
+      expect(container.querySelector('[data-slot="told-details"]')?.textContent).toContain("mail.send_everything");
+    });
+    expect(sent.filter((one) => one.method === "POST").length).toBe(1);
   });
 });
 

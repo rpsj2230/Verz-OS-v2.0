@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from collections.abc import Awaitable, Callable, Iterator, Sequence
+from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -216,6 +216,29 @@ def sql(url: str, statement: str, *params: object) -> list[tuple[Any, ...]]:
     with psycopg.connect(url, autocommit=True) as conn:
         cursor = conn.execute(statement, params or None)
         return cursor.fetchall() if cursor.description else []
+
+
+def row_the_database_can_hold(url: str, qualified: str, row: Mapping[str, Any]) -> dict[str, Any]:
+    """`row` without the keys the database has no column for yet.
+
+    A test that steps a scratch database back to an old revision and then writes a row through
+    the model is writing with the model's present columns, and every migration since that
+    revision added some. Naming them one by one in the test is a list that goes stale on the next
+    migration, which is how a test of `0187` failed on `0225`. Asking the database what it holds
+    keeps the row to what a row of that revision was, whatever has been added since.
+    """
+    schema, table = qualified.split(".")
+    held = {
+        name
+        for (name,) in sql(
+            url,
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema = %s AND table_name = %s",
+            schema,
+            table,
+        )
+    }
+    return {key: value for key, value in row.items() if key in held}
 
 
 def shape(url: str, qualified: Sequence[str]) -> dict[str, set[str]]:

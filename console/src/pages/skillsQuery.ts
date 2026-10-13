@@ -48,6 +48,8 @@ export type SkillPin = components["schemas"]["SkillPinView"];
 export type SkillQueueRow = components["schemas"]["QueueEntryView"];
 /** One skill in the library, as `LibrarySkillView` sends it. */
 export type LibrarySkill = components["schemas"]["LibrarySkillView"];
+/** A skill drafted from a description, as `SkillDraftView` sends it: the library's row and what was left out. */
+export type SkillDraft = components["schemas"]["SkillDraftView"];
 /** An agent this reader may assign a skill to, as `AgentChoiceView` sends it. */
 export type AgentChoice = components["schemas"]["AgentChoiceView"];
 /** What an assignment answered, as `AssignedView` sends it. */
@@ -80,6 +82,9 @@ export const IMPORT_PATH = `${SKILLS_API_PATH}/imports`;
 
 /** Where a written procedure is sent, as the file itself (M12.2.10). */
 export const PROCEDURE_PATH = `${SKILLS_API_PATH}/procedures`;
+
+/** Where a person's description of a skill is sent to be drafted (M12.4.14). */
+export const DRAFT_PATH = `${SKILLS_API_PATH}/drafts`;
 
 /** The searchable library: one row per version, searched and filtered by the route (M27.11.8). */
 export const LIBRARY_API_PATH = `${SKILLS_API_PATH}/library`;
@@ -599,4 +604,33 @@ export function procedureSentence(one: LibrarySkill): string {
       ? "Nothing in it was found that a reviewer needs pointing to."
       : "Read what is listed below before it is approved.";
   return `${one.name} ${one.version} was imported as a draft and is waiting for review. ${read}`;
+}
+
+// ------------------------------------------------------------- a skill described in conversation (M12.4.14)
+
+/** The longest description the API takes, which `brain.tools.skill_draft.DESCRIPTION_CHARS` holds. */
+export const MAX_DESCRIPTION_CHARS = 4000;
+
+/** Why a description cannot be sent yet, or null. The API decides everything else. */
+export function descriptionProblem(text: string): string | null {
+  const described = text.trim();
+  if (described === "") {
+    return "Say what the skill should do.";
+  }
+  if (described.length > MAX_DESCRIPTION_CHARS) {
+    return `A description is at most ${String(MAX_DESCRIPTION_CHARS)} characters; this one is longer.`;
+  }
+  return null;
+}
+
+/** The sentence after a skill was drafted. What was left out is listed beneath it. */
+export function draftedSentence(one: SkillDraft): string {
+  const said =
+    one.findings.length === 0
+      ? "Nothing in it was left out."
+      : "Read what was left out, below, before it is approved.";
+  return (
+    `${one.skill.name} ${one.skill.version} was drafted and is waiting for review. No agent can ` +
+    `read it until a second person has approved it. ${said}`
+  );
 }
