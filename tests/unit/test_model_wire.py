@@ -201,6 +201,30 @@ def test_a_chat_completions_call_carries_the_system_turn_and_the_providers_own_l
         assert body["messages"][0] == {"role": "system", "content": "Answer briefly."}
 
 
+def test_a_chat_completions_answer_reports_its_reasoning_tokens_as_a_part_of_the_output() -> None:
+    """M27.15.6. The reasoning count is read out of `completion_tokens_details`, and an answer
+    that reports none, or a malformed one, is zero rather than a failed call.
+
+    Delete this and a reasoning model's thinking is invisible on the usage record, or a provider
+    that sends an odd detail block is reported as an outage."""
+    for details, expected in (
+        ({"reasoning_tokens": 3}, 3),
+        ({"reasoning_tokens": "many"}, 0),
+        (None, 0),
+    ):
+        answer = {
+            **CHAT_ANSWER,
+            "usage": {**CHAT_ANSWER["usage"], "completion_tokens_details": details},
+        }
+        recorded = answering(answer)
+        send = http_transport(PROVIDER_WIRES["moonshot"], client=recorded.client(), key=lambda: KEY)
+
+        completion = send(a_request())
+
+        assert completion.output_tokens == 4
+        assert completion.reasoning_tokens == expected
+
+
 def test_a_callers_extra_cannot_replace_the_model_the_router_chose() -> None:
     """`extra` passes a provider's knobs through, and the model, the turns and the limit are not
     knobs. Delete this and a caller can answer from a deployment the chain never selected."""

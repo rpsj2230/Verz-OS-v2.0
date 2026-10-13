@@ -505,7 +505,7 @@ async def each_adapter_is_listed_and_its_health_follows_its_deliveries(h: Harnes
 
 # ------------------------------------------------------------------------ 4. codes
 @check(
-    leaves=("M10.3.1", "M10.3.2", "M27.13.1"),
+    leaves=("M10.3.1", "M10.3.2", "M27.13.1", "M40.1.1.2"),
     sentence=(
         "A code minted in a reserved person's open sign-in and sent alone in a signed Lark direct "
         "message binds that account to them and is kept only as a digest; sent again it binds "

@@ -50,6 +50,7 @@ const JOBS_ROUTES = "src/brain/jobs_routes.py";
 const INSTALL_ROUTES = "src/brain/install_routes.py";
 const TUNING_ROUTES = "src/brain/tuning_routes.py";
 const INCIDENT_ROUTES = "src/brain/incident_routes.py";
+const SYSTEM_HEALTH_ROUTES = "src/brain/system_health_routes.py";
 
 beforeAll(async () => {
   installRadixStubs();
@@ -785,11 +786,23 @@ describe("Storage", () => {
           since: "2019-03-06T09:00:00Z",
           blocks: ["xero.list_invoices", "xero.get_invoice"],
           blocks_unknown: "",
+          acknowledged_by: "ACK-PERSON",
+          acknowledged_at: "2019-03-06T10:00:00Z",
         },
-        { subject: "laravel", state: "degraded", since: "2019-03-06T09:00:00Z", blocks: [], blocks_unknown: "BLOCKS-UNKNOWN-SENTENCE" },
+        {
+          subject: "laravel",
+          state: "degraded",
+          since: "2019-03-06T09:00:00Z",
+          blocks: [],
+          blocks_unknown: "BLOCKS-UNKNOWN-SENTENCE",
+          acknowledged_by: "",
+          acknowledged_at: null,
+        },
       ],
       unread: "",
       told: "TOLD-SENTENCE",
+      may_acknowledge: false,
+      acknowledging_means: "ACK-MEANS",
     };
     expect(Object.keys(body).sort()).toEqual(backendModelFields(INCIDENT_ROUTES, "IncidentsView").sort());
     expect(Object.keys(body.items[0] ?? {}).sort()).toEqual(backendModelFields(INCIDENT_ROUTES, "IncidentView").sort());
@@ -800,6 +813,47 @@ describe("Storage", () => {
     expect(text).toContain("Slow or partly failing");
     expect(text).toContain("BLOCKS-UNKNOWN-SENTENCE");
     expect(text).toContain("TOLD-SENTENCE");
+    expect(text).toContain("ACK-PERSON");
+    // The control is the API's flag drawn: a reader it is not offered to is shown none.
+    expect(screen.queryByRole("button", { name: "Acknowledge" })).toBeNull();
+    expect(text).not.toContain("ACK-MEANS");
+  });
+
+  test("Incidents offers Acknowledge only where the API says so, once per incident, and sends the incident as listed", async () => {
+    // What breaks if this is deleted: the control drawn for a reader the API refuses, offered again
+    // for an incident somebody already acknowledged, or sent with anything but the source and the
+    // instant the page drew (M27.15.45).
+    const incident = (subject: string, by: string) => ({
+      subject,
+      state: "down",
+      since: "2019-03-06T09:00:00Z",
+      blocks: ["x.y"],
+      blocks_unknown: "",
+      acknowledged_by: by,
+      acknowledged_at: by === "" ? null : "2019-03-06T10:00:00Z",
+    });
+    const body = {
+      items: [incident("xero", ""), incident("laravel", "SOMEBODY")],
+      unread: "",
+      told: "TOLD",
+      may_acknowledge: true,
+      acknowledging_means: "ACK-MEANS",
+    };
+    const sent: unknown[] = [];
+    const { container } = await open("/incidents", {
+      "GET /api/v1/console/incidents": () => ({ body }),
+      "POST /api/v1/console/incidents/acknowledgement": (_url, init) => {
+        sent.push(JSON.parse(String(init?.body)));
+        return { body: incident("xero", "ME") };
+      },
+    });
+    expect(mainText(container)).toContain("ACK-MEANS");
+    const buttons = screen.getAllByRole("button", { name: "Acknowledge" });
+    expect(buttons).toHaveLength(1);
+    fireEvent.click(buttons[0] as HTMLElement);
+    await waitFor(() => {
+      expect(sent).toEqual([{ subject: "xero", since: "2019-03-06T09:00:00Z" }]);
+    });
   });
 
   test("Incidents says what the API could not read rather than that nothing is degraded", async () => {
@@ -810,6 +864,57 @@ describe("Storage", () => {
     const text = mainText(container);
     expect(text).toContain("UNREAD-SENTENCE");
     expect(text).not.toContain(NOTHING_DEGRADED);
+  });
+
+  test("System health under Incidents draws a guarantee as held only when the API says so, and nothing for a reader the API refuses", async () => {
+    // What breaks if this is deleted: a lapsed guarantee drawn as held, a body that does not say
+    // read as held, or a department's reader shown an error under a page that is otherwise fine
+    // (M27.13.2, M27.15.54).
+    const body = {
+      as_of: "2019-03-06T09:00:00Z",
+      status: "ok",
+      parts: [{ name: "database", state: "ready", gates: true, said: "" }],
+      worker: { state: "ready", last_seen: "2019-03-06T08:59:00Z", said: "WORKER-SENTENCE" },
+      vault: { name: "vault", state: "not_ready", gates: false, said: "VAULT-SENTENCE" },
+      object_store: { name: "object_store", state: "unknown", gates: false, said: "STORE-SENTENCE" },
+      breakers: null,
+      breakers_said: "BREAKERS-SENTENCE",
+      guarantees: [
+        { control: "canary_run", guards: "GUARDS-ONE", held: true, because: "", said: "" },
+        { control: "restore_drill", guards: "GUARDS-TWO", held: false, because: "behind", said: "" },
+        { control: "outbox_dispatch", guards: "GUARDS-THREE", held: false, because: "", said: "" },
+      ],
+      guarantees_said: "",
+    };
+    expect(Object.keys(body).sort()).toEqual(backendModelFields(SYSTEM_HEALTH_ROUTES, "SystemHealthView").sort());
+    expect(Object.keys(body.guarantees[0] ?? {}).sort()).toEqual(backendModelFields(SYSTEM_HEALTH_ROUTES, "GuaranteeView").sort());
+    const incidents = { items: [], unread: "", told: "TOLD" };
+    const shown = await open("/incidents", {
+      "GET /api/v1/console/incidents": () => ({ body: incidents }),
+      "GET /api/v1/console/system-health": () => ({ body }),
+    });
+    await waitFor(() => {
+      expect(mainText(shown.container)).toContain("WORKER-SENTENCE");
+    });
+    const text = mainText(shown.container);
+    expect(text).toContain("VAULT-SENTENCE");
+    expect(text).toContain("BREAKERS-SENTENCE");
+    expect(text).toContain("It is behind");
+    expect(text).toContain("Not shown to be running");
+    const rows = [...shown.container.querySelectorAll("tr")].map((row) => row.textContent ?? "");
+    expect(rows.find((row) => row.includes("Canary run"))).toContain("Held");
+    expect(rows.find((row) => row.includes("Restore drill"))).toContain("Not held");
+    expect(rows.find((row) => row.includes("Outbox dispatch"))).toContain("Not held");
+
+    const refused = await open("/incidents", {
+      "GET /api/v1/console/incidents": () => ({ body: incidents }),
+      "GET /api/v1/console/system-health": () => ({ body: { message: "no" }, status: 404 }),
+    });
+    await waitFor(() => {
+      expect(asked(refused.idp).some((url) => url.pathname.endsWith("/console/system-health"))).toBe(true);
+    });
+    expect(mainText(refused.container)).not.toContain("Guarantees");
+    expect(mainText(refused.container)).toContain("TOLD");
   });
 
 });

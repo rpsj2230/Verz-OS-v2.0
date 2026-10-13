@@ -268,6 +268,25 @@ def _unknown(
     )
 
 
+def seal_of(reader: VaultStatusReader | None) -> Seal:
+    """Whether the vault is there, reachable, initialised and open, and nothing about its slots.
+
+    Never raises for the vault. The one place the four answers are told apart, so a screen that
+    wants only the state (System health) and `report` cannot disagree about it.
+    """
+    if reader is None:
+        return Seal.ABSENT
+    try:
+        status = reader.seal_status()
+    except Exception:
+        # Broad, and the type alone decides nothing: whatever stopped the answer, the vault
+        # did not say whether it is sealed, and that is the one thing this reports.
+        return Seal.UNREACHABLE
+    if not status.initialized:
+        return Seal.UNINITIALISED
+    return Seal.SEALED if status.sealed else Seal.OPEN
+
+
 def report(
     reader: VaultStatusReader | None, role: VaultRole = VaultRole.APPLICATION
 ) -> VaultReport:
@@ -275,22 +294,7 @@ def report(
     providers = [(path, SLOTS[path].description) for path in sorted(SLOTS)]
     connectors = [SLOT_SCOPES[name] for name in sorted(SLOT_SCOPES)]
     unknown_providers, unknown_connectors = _unknown(providers, connectors)
-    if reader is None:
-        seal = Seal.ABSENT
-    else:
-        try:
-            status = reader.seal_status()
-        except Exception:
-            # Broad, and the type alone decides nothing: whatever stopped the answer, the vault
-            # did not say whether it is sealed, and that is the one thing this reports.
-            seal = Seal.UNREACHABLE
-        else:
-            if not status.initialized:
-                seal = Seal.UNINITIALISED
-            elif status.sealed:
-                seal = Seal.SEALED
-            else:
-                seal = Seal.OPEN
+    seal = seal_of(reader)
     if reader is None or seal is not Seal.OPEN:
         return VaultReport(seal, SEAL_SAYS[seal], unknown_providers, unknown_connectors)
     token = token_report(reader, role)

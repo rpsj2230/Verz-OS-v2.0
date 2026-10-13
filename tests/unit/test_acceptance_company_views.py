@@ -38,7 +38,7 @@ def test_the_module_declares_one_check_per_company_read() -> None:
     assert [(one.name, one.leaves) for one in registered((MODULE,))] == [
         (ESTATE, ("M33.1.1.1",)),
         (ACTIVITY, ("M33.1.1.2",)),
-        (HEAD, ("M33.2.1.3", "M33.2.1.4")),
+        (HEAD, ("M33.2.1.3", "M33.2.1.4", "M21.3.5")),
         (NOMINATION, ("M33.1.2.3",)),
         (EXPORT, ("M33.3.1.3",)),
     ]

@@ -85,6 +85,7 @@ from brain.agent_lifecycle_routes import router as agent_lifecycle_router
 
 # Where a link to one tab of one agent lands for the person following it, or the one 404.
 from brain.agent_link_routes import router as agent_link_router
+from brain.agent_memory_kinds_routes import router as agent_memory_kinds_router
 from brain.agent_memory_routes import router as agent_memory_router
 
 # An agent's pinned provider and model, tried before its tier. See `brain.agent_model_routes`.
@@ -123,6 +124,7 @@ from brain.audit_statistics_routes import router as audit_statistics_router
 # The automation gallery on an agent's Automations tab, and its one confirmed install. Its own
 # router because the write is: an `admin:` authority asked before the agent is read, a
 # confirmation recomputed on the server, and a row whose trigger writes the ledger entry.
+from brain.automation_authoring_routes import router as automation_authoring_router
 from brain.automation_gallery_routes import router as automation_gallery_router
 
 # The endpoint an automation step calls. A sixth router because the caller differs: it
@@ -384,6 +386,10 @@ from brain.provider_registry_routes import router as provider_registry_router
 # rung's measured health, and a metered check. See `brain.provider_routes`.
 from brain.provider_routes import router as provider_router
 
+# Quality from the console: flagging an answer, turning the flag into a regression case, a day's
+# annotation queue and the candidates a failed case opened. See `brain.quality_routes`.
+from brain.quality_routes import router as quality_router
+
 # Who can see a record, for somebody who can already see it. See `brain.record_access_routes`.
 from brain.record_access_routes import router as record_access_router
 
@@ -460,6 +466,7 @@ from brain.sign_in_routes import router as sign_in_router
 # the procedures the agents a reader may see are pinned to. Its three writes add a skill,
 # decide about one as somebody other than who added it, and assign an approved one through
 # `attach_skill`, each asking its `admin:` authority first. See `brain.skill_routes`.
+from brain.skill_draft_routes import router as skill_draft_router
 from brain.skill_routes import router as skill_router
 
 # The Staff sources screen and the trial run behind it. A router of its own because it
@@ -477,6 +484,11 @@ from brain.stewardship_routes import router as stewardship_router
 # is, behind `admin:storage` over everything. Never an object's name. See
 # `brain.storage_routes`.
 from brain.storage_routes import router as storage_router
+
+# System health: every part, the worker, the vault, object storage, the breakers and which
+# guarantees are held, for a reader of Incidents over the whole installation. See
+# `brain.system_health_routes`.
+from brain.system_health_routes import router as system_health_router
 
 # A person's own threads, listed, searched and reopened at the reach held now. See
 # `brain.thread_routes`.

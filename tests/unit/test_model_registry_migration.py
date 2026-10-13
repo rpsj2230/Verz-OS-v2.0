@@ -10,6 +10,7 @@ Task ids: M5.3.2, M5.6.2, M5.6.4, M5.7.2, M5.7.3, M5.4.1
 from __future__ import annotations
 
 import io
+import re
 from pathlib import Path
 from types import ModuleType
 
@@ -87,7 +88,8 @@ def test_refused_joins_the_outcomes_the_attempt_table_and_the_health_layer_both_
 def test_the_columns_added_to_existing_tables_are_exactly_the_ones_the_fixture_excuses() -> None:
     """`tests.fixtures.amended_tables.ADDED_LATER` lets the creating migrations' comparisons ignore
     these columns; this holds it to what `0097` adds, and what `0186`, `0189`, `0199` and `0206`
-    add, which their own tests hold against the database, and nothing else.
+    add, which their own tests hold against the database, and `0225`'s memory kinds, which
+    `tests/unit/test_agent_lifecycle_store.py` holds against the database, and nothing else.
 
     Delete this and the fixture can excuse a column no migration adds."""
     upgrade = rendered("upgrade")
@@ -103,13 +105,16 @@ def test_the_columns_added_to_existing_tables_are_exactly_the_ones_the_fixture_e
     }
     for column, file in later.items():
         assert f"ADD COLUMN {column} " in (versions / file).read_text(encoding="utf-8")
+    # `0225` adds its column through the operations API, so it is read as the call and not as SQL.
+    kinds = (versions / "0225_agent_memory_kinds.py").read_text(encoding="utf-8")
+    assert re.search(r'op\.add_column\(\s*"agent",\s*sa\.Column\(\s*"memory_kinds"', kinds)
     department = versions / "0199_department_fast_path_rules.py"
     assert '"department", sa.String(NAME_CHARS)' in department.read_text(encoding="utf-8")
     learned = versions / "0206_learned_rule_promotion.py"
     assert '"learned_from", sa.String(MEMORY_ID_CHARS)' in learned.read_text(encoding="utf-8")
     assert dict(ADDED_LATER) == {
         "ops.model_attempt": ("data_categories",),
-        "agent.agent": ("model_pin_provider", "model_pin_model", *later),
+        "agent.agent": ("model_pin_provider", "model_pin_model", *later, "memory_kinds"),
         "agent.manifest_act": ("channels",),
         "gate.fast_path_rule": ("department", "learned_from"),
     }
