@@ -10,6 +10,7 @@
 import { myCodeApiPath, myUnbindApiPath } from "../../../src/pages/channelsQuery";
 import { myConsentPath } from "../../../src/pages/connectors/consentAtVendor";
 import { LEARNING_UNDO_API_PATH } from "../../../src/pages/learningUndoQuery";
+import { END_MY_DEVICE_API_PATH } from "../../../src/pages/myAccountQuery";
 import { EDIT_API_PATH, FORGET_API_PATH } from "../../../src/pages/myWorkspaceQuery";
 import { LEARNING_API_PATH, QUIET_API_PATH, REACH_API_PATH } from "../../../src/pages/myPreferencesQuery";
 import { A_BINDING_CHANGE_IS_AUDITED, at, type Proofs, t, type WriteRoute } from "../auditClaims";
@@ -32,6 +33,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/components/MyPreferences.tsx QUIET_API_PATH": [
     at("POST /api/v1/me/preferences/quiet-hours", "QUIET_API_PATH", QUIET_API_PATH),
+  ],
+  "src/components/MyAccountCards.tsx END_MY_DEVICE_API_PATH": [
+    at("POST /api/v1/me/devices/end", "END_MY_DEVICE_API_PATH", END_MY_DEVICE_API_PATH),
   ],
   "src/pages/MyWorkspace.tsx FORGET_API_PATH": [
     at("POST /api/v1/me/memory/forget", "FORGET_API_PATH", FORGET_API_PATH),
@@ -97,6 +101,18 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_acceptance_checks_member_preferences", "test_every_member_preference_check_passes_on_an_install_and_leaves_nothing", true),
     audit: { notApplicable: "A person's own setting about being reached changes nobody's access and is not written to the ledger." },
     behaviour: t("test_acceptance_checks_member_preferences", "test_a_digest_sent_inside_quiet_hours_fails_the_held_digest_check", true),
+  },
+  // A member ending their own sign-in is the Sessions screen's ending through the same store, with
+  // the ownership question asked under the row's lock, so its database proof follows the row and the
+  // ledger entry; the install check follows the route itself.
+  "POST /api/v1/me/devices/end": {
+    row: t("test_session_store", "test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request", true),
+    audit: t("test_session_store", "test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request", true),
+    behaviour: t(
+      "test_acceptance_checks_member_account",
+      "test_every_member_account_check_passes_on_an_install_and_leaves_nothing",
+      true,
+    ),
   },
   // A forget is the Learning screen's undo written for the person the memory is about, through the
   // same store, so the same database test follows it to the row, the ledger and the next recall.
