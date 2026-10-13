@@ -251,6 +251,10 @@ DRAIN_LIMIT: Final = 20
 SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
     {
         "agent.agent": "owner_id",
+        # A person's own project (`0232`). `0232` grants no way for a project to leave, so an
+        # erasure keeps these and reports them kept; the threads and files it lists are erased by
+        # their own tables' rules, and the list of them is the project's items, below.
+        "agent.project": "owner_id",
         # What an agent produced, for the person it was produced for. `0058` grants no way for a
         # row to leave, so an erasure keeps these and reports them kept.
         "agent.artifact": "caller_id",
@@ -364,6 +368,8 @@ class Through:
 THROUGH: Final[Mapping[str, Through]] = MappingProxyType(
     {
         "chat.message": Through(parent="chat.conversation", key="conversation_id", parent_key="id"),
+        # A thread or file listed in a person's project is theirs through the project (`0232`).
+        "agent.project_item": Through(parent="agent.project", key="project_id", parent_key="id"),
         # A draft's saves and the acts on each are its owner's through the draft (`0149`). A second
         # person's approval names them as an actor, not an owner, so the row is the draft's owner's.
         # 0150: a browser session is the person's its run was sealed for, through the envelope;
