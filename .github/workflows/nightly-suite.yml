@@ -1,10 +1,11 @@
 name: Nightly suite
 
-# The whole unit suite against main, every night. A pull request still runs every shard today, so
-# this is the floor the test selection is measured against rather than a replacement for anything;
-# when the selection is switched on (brain.ops.test_selection, after a week of shadow records with
-# no miss), this is what keeps every file running at least once a day. The job is the pull
-# request's shard job, step for step, and tests/unit/test_test_selection.py holds the two equal.
+# The whole unit suite against main, every night. A pull request runs only the files its diff can
+# reach (brain.ops.test_plan, switched on 2026-10-13), so this is what keeps every file running
+# at least once a day, what a selection that missed something is found by, and where the coverage
+# floor is held for the whole suite. The shard job is the pull request's, step for step: it gets
+# no base commit, which brain.ops.test_plan reads as "run everything", and
+# tests/unit/test_test_selection.py holds the two equal and the base absent.
 # Named apart from CI on purpose: Deploy listens for CI completing on main, and a nightly run must
 # never deploy anything.
 
@@ -50,6 +51,7 @@ jobs:
       # rather than overwriting one another. Absolute, so a test that changes directory
       # still writes where the upload looks.
       COVERAGE_FILE: ${{ github.workspace }}/coverage-shard-${{ matrix.shard }}
+      # TEST_SELECTION_BASE is deliberately not set here: with no base the plan is the whole suite.
     steps:
       - uses: actions/checkout@v4
         with:
@@ -78,14 +80,30 @@ jobs:
         working-directory: ops/automation/piece
         run: npm ci --ignore-scripts
       - name: This shard's tests, with coverage recorded
-        # `files=$(...)` rather than a pipe, because `bash -e` stops on a failed assignment and
-        # does not stop on the left of a pipe. The emptiness check is the one that matters:
-        # pytest given no file runs `testpaths`, so an empty list would run the whole suite.
+        id: suite
+        # The plan is this shard's share of the selected files, or of the whole suite when the
+        # selection is not sure (`brain.ops.test_plan` says which and why on stderr). If the plan
+        # itself fails to run, the shard falls back to its whole share, which is the old
+        # behaviour. `files=$(...)` rather than a pipe, because `bash -e` stops on a failed
+        # assignment and does not stop on the left of a pipe. The emptiness check is the one that
+        # matters: pytest given no file runs `testpaths`, so an empty list would run the whole
+        # suite. An empty share of a selection is a pass, with the reason printed.
         run: |
-          files=$(uv run python -m brain.ops.test_shards --shard ${{ matrix.shard }} --of ${{ strategy.job-total }})
+          mode_file="$GITHUB_WORKSPACE/plan-shard-${{ matrix.shard }}.txt"
+          files=$(uv run python -m brain.ops.test_plan --shard ${{ matrix.shard }} --of ${{ strategy.job-total }} --base "$TEST_SELECTION_BASE" --head "$GITHUB_SHA" --mode-file "$mode_file") || {
+            echo "::warning::the test selection failed, so shard ${{ matrix.shard }} runs its whole share of the suite"
+            echo "mode=full" > "$mode_file"
+            files=$(uv run python -m brain.ops.test_shards --shard ${{ matrix.shard }} --of ${{ strategy.job-total }})
+          }
+          if [ -z "$files" ] && grep -q '^mode=selected$' "$mode_file"; then
+            echo "shard ${{ matrix.shard }} of ${{ strategy.job-total }} has nothing to run: the files selected for this change all fall in the other shards"
+            echo "ran=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           [ -n "$files" ] || { echo "::error::shard ${{ matrix.shard }} has no test files"; exit 1; }
+          echo "ran=true" >> "$GITHUB_OUTPUT"
           echo "shard ${{ matrix.shard }} of ${{ strategy.job-total }}: $(echo "$files" | wc -l) file(s)"
-          uv run pytest --cov --cov-report= --cov-fail-under=0 --junitxml="$GITHUB_WORKSPACE/junit/shard-${{ matrix.shard }}.xml" $files
+          uv run pytest --cov --cov-report= --cov-fail-under=0 $files
 
       - name: Migrations go forward, back, and forward again
         # A migration that cannot be reversed is a deploy with no way home. This runs the
@@ -116,6 +134,9 @@ jobs:
           echo "no role bypasses RLS"
 
       - name: Keep this shard's coverage data for the floor
+        # Not kept by a shard that ran nothing: there is no data to keep, and the floor is only
+        # held over a run in which every shard ran the whole suite.
+        if: ${{ steps.suite.outputs.ran == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: coverage-shard-${{ matrix.shard }}
@@ -126,13 +147,55 @@ jobs:
           overwrite: true
           retention-days: 7
 
-      - name: Keep this shard's test report for the selection shadow
-        # Whatever the tests did: a red shard's report is the one the shadow most needs.
-        if: ${{ always() }}
+      - name: Keep this shard's plan, whether it ran everything
         uses: actions/upload-artifact@v4
         with:
-          name: junit-shard-${{ matrix.shard }}
-          path: ${{ github.workspace }}/junit
-          if-no-files-found: ignore
+          name: plan-shard-${{ matrix.shard }}
+          path: ${{ github.workspace }}/plan-shard-${{ matrix.shard }}.txt
+          if-no-files-found: error
           overwrite: true
           retention-days: 7
+
+  # The coverage floor over the whole suite, held here every night because a pull request's run
+  # is partial whenever it was selected. Same steps as the pull request's `coverage` job once it
+  # has found every shard ran everything; here that is a requirement and not a discovery.
+  coverage:
+    name: Unit tests and coverage
+    runs-on: ubuntu-latest
+    needs: tests
+    if: ${{ !cancelled() }}
+    steps:
+      - name: Every shard passed
+        env:
+          SHARDS: ${{ needs.tests.result }}
+        run: |
+          [ "$SHARDS" = "success" ] || { echo "::error::the unit test shards ended in $SHARDS"; exit 1; }
+          echo "every shard passed"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: plan-shard-*
+          path: ${{ runner.temp }}/plan-data
+          merge-multiple: true
+      - name: Every shard ran the whole suite
+        run: |
+          total=$(find "${{ runner.temp }}/plan-data" -name 'plan-shard-*.txt' | wc -l | tr -d '[:space:]')
+          full=$({ grep -lx 'mode=full' "${{ runner.temp }}/plan-data"/plan-shard-*.txt || true; } | wc -l | tr -d '[:space:]')
+          [ "$total" -gt 0 ] && [ "$full" = "$total" ] || { echo "::error::$full of $total shards ran the whole suite, and the nightly must run all of it"; exit 1; }
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --locked
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-shard-*
+          path: coverage-data
+          merge-multiple: true
+      - name: Coverage floor over the whole suite
+        run: |
+          plans=$(find "${{ runner.temp }}/plan-data" -name 'plan-shard-*.txt' | wc -l | tr -d '[:space:]')
+          data=$(find coverage-data -name 'coverage-shard-*' | wc -l | tr -d '[:space:]')
+          [ "$plans" = "$data" ] || { echo "::error::$plans shards ran and $data left coverage data"; exit 1; }
+          uv run coverage combine coverage-data/coverage-shard-*
+          uv run coverage report
