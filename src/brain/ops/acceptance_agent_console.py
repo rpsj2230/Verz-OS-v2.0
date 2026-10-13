@@ -106,6 +106,25 @@ def _console(h: Harness, registry: ToolRegistry | None = None) -> FastAPI:
     return app
 
 
+async def a_department_administrator(h: Harness, department: str = A) -> str:
+    """A reserved person holding the lifecycle authority over one reserved department's agents.
+
+    Switching an agent's channels is a department administrator's and no longer its steward's
+    (needs-rupash 178 A), so a check that switches them reads as this person and not as the
+    steward. The grant is over the department, which is what a department's administrator holds,
+    and the sign-in is the second factor the authority is an `admin:` verb for.
+    """
+    from brain.agents.lifecycle import AGENT_LIFECYCLE_CAPABILITY
+
+    admin = h.principal(department, "deptadmin")
+    await h.person(
+        admin,
+        department=department,
+        grants=((AGENT_LIFECYCLE_CAPABILITY.value, Scope.department(department)),),
+    )
+    return admin
+
+
 def _request(app: FastAPI) -> Any:
     from starlette.requests import Request
 

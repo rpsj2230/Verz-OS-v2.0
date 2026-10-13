@@ -17,7 +17,9 @@ from typing import Final, Literal
 
 from sqlalchemy import insert
 
+from brain.agents.template import LeashRung, ManifestGuardrails
 from brain.core.scope import Scope
+from brain.gate.injection import AutonomyTier
 from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, check
 from brain.ops.acceptance_agent_console import _asking, _console, _readers, _request
 from brain.ops.acceptance_operations_console import refused, screen_grants, traced
@@ -61,8 +63,13 @@ async def a_rung_falls_at_once_and_rises_only_on_proof_and_a_second_person(h: Ha
     for one in (first, second):
         await h.person(one, department=A, grants=holds)
     await h.person(nobody, department=A)
-    agent_id = await installed_agent(h, first)
     target = f"acceptance_{h.run}.update_status"
+    # Published at Assisted, since a rung is raised only as far as the rung it was published at
+    # (needs-rupash 179 A): the check lowers it first, and raises it back on proof.
+    published = ManifestGuardrails(
+        leash=(LeashRung(target=target, scope=Scope(), rung=AutonomyTier.ASSISTED),)
+    )
+    agent_id = await installed_agent(h, first, guardrails=published)
     request = _request(_console(h))
 
     def press(to: Literal["shadow", "assisted"]) -> MoveAsked:
@@ -83,12 +90,16 @@ async def a_rung_falls_at_once_and_rises_only_on_proof_and_a_second_person(h: Ha
         kind = getattr(answer, "kind", "")
         return status, str(kind)
 
-    if not await refused(pressed(nobody, "assisted")):
+    if not await refused(pressed(nobody, "shadow")):
         raise CheckFailedError("a person who may not move a rung moved one")
+    brought_down = await pressed(first, "shadow")
+    if brought_down[0] != 200 or brought_down[1] != "lowered":
+        raise CheckFailedError("a rung could not be lowered at once")
     status, _ = await pressed(first, "assisted")
     if status == 200:
         raise CheckFailedError("a rung was raised with nothing judged to show for it")
 
+    # After the fall, since a rise is judged on what happened since the rung last moved.
     for n in range(JUDGED):
         digest = hashlib.sha256(f"{h.trace_id}-{n}".encode()).hexdigest()
         await h.execute(
@@ -104,14 +115,14 @@ async def a_rung_falls_at_once_and_rises_only_on_proof_and_a_second_person(h: Ha
                 tier=0,
                 checks=[],
                 trace_id=f"{h.trace_id}-{n}",
-                at=h.now - timedelta(hours=2, minutes=n),
+                at=h.now + timedelta(minutes=3, seconds=n),
             ),
             insert(ActionVerdictRow).values(
                 action_digest=digest,
                 agent_id=agent_id,
                 verdict="approved",
                 reviewer_id=first,
-                at=h.now - timedelta(hours=1, minutes=n),
+                at=h.now + timedelta(minutes=3, seconds=n + 30),
             ),
         )
 
@@ -129,7 +140,7 @@ async def a_rung_falls_at_once_and_rises_only_on_proof_and_a_second_person(h: Ha
 
     page = await agent_leash(request, agent_id, await _asking(h, first, strong=True))
     kinds = [one.kind for one in page.history if one.target == target]
-    if sorted(kinds) != ["lowered", "proposed", "raised"]:
+    if sorted(kinds) != ["lowered", "lowered", "proposed", "raised"]:
         raise CheckFailedError(
             "the page's history did not list the proposal, the rise and the fall"
         )

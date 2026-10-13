@@ -41,11 +41,13 @@ something withheld and one about something absent, so a question about an unmark
 one about nothing at all get the same body, the same status and the same headers. See
 `A_QUESTION_ABOUT_ANYTHING_UNMARKED_IS_ANSWERED_AS_NOTHING_FOUND`.
 
-**No model writes the answer yet, and that is stated rather than implied.** The answer lane's
-model step meters every attempt against a person's budget and routes by a person's reach, and a
-visitor is neither; giving a stranger a model's words means deciding who pays for them, which is
-a decision for the owner and not this route's. Until then a visitor reads the published passages,
-which is what the marking agreed to show.
+**The model writes the answer only while the owner has switched that on, and under a daily cap.**
+The answer lane's model step meters every attempt against a person's budget and routes by a
+person's reach, and a visitor is neither, so who pays for a stranger's words was a decision for the
+owner, taken on needs item 139 (option B): the model writes it from these passages and nothing
+else, the cost is capped each day by a figure he sets on the Rate limits screen, and a visitor is
+given the passages themselves whenever the model is off, over its cap or unavailable. The passages
+stay in the answer either way. See `brain.widget_answers`.
 
 Task ids: M10.5.5, M10.7.2
 """
@@ -74,6 +76,7 @@ from brain.channels.widget import (
 from brain.core.errors import Failed
 from brain.gate.abstain import NOT_FOUND_TEXT
 from brain.knowledge.document_tools import QUESTION_CHARS, KnowledgePassage
+from brain.widget_answers import written_answer
 
 log = structlog.get_logger(__name__)
 
@@ -280,4 +283,11 @@ async def ask(
     search = public_search_of(request.app.state)
     if search is None:
         raise Failed("no database on this process")
-    return answer_of(await search(body.question))
+    found = await search(body.question)
+    shown = answer_of(found)
+    if not found:
+        return shown
+    written = await written_answer(request, body.question, found)
+    if written is None:
+        return shown
+    return shown.model_copy(update={"answer": written})

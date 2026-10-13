@@ -273,3 +273,83 @@ def test_a_question_in_a_live_session_extends_it(client: tuple[TestClient, FastA
 
     after = sessions_of(app.state).get(session, datetime.now(tz=UTC))
     assert after is not None and after.expires_at > before.expires_at
+
+
+# ------------------------------------------------------------ the model's words (needs-rupash 139)
+def test_a_question_the_model_answers_carries_its_words_and_still_the_passages(
+    client: tuple[TestClient, FastAPI], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When the model-written answer is on and under its cap the visitor is given the model's
+    sentence, and the passages it was written from stay beside it.
+
+    Delete this and a route that drops the passages, or never uses the model's words, passes."""
+    import brain.widget_routes as routes
+
+    async def written(
+        _request: object, _question: str, passages: object, **_: object
+    ) -> str | None:
+        assert len(passages) == 1  # type: ignore[arg-type]
+        return "We open at nine."
+
+    monkeypatch.setattr(routes, "written_answer", written)
+    http, app = client
+    app.state.widget_search = Search("HOURSQZ")
+
+    answer = http.post(
+        ASK,
+        json={"session": minted(http), "question": "When do you open HOURSQZ?"},
+        headers={"Origin": SITE},
+    )
+
+    assert answer.json()["answer"] == "We open at nine."
+    assert [one["document_id"] for one in answer.json()["passages"]] == ["upload.opening"]
+
+
+def test_a_question_nothing_was_found_for_never_asks_the_model(
+    client: tuple[TestClient, FastAPI], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A question with no public passage is the not-found sentence and no model is called, so a
+    probe for what is unmarked costs nothing and says nothing.
+
+    Delete this and every unfound question could be sent to a model paid for by the install."""
+    import brain.widget_routes as routes
+
+    async def never(*_: object, **__: object) -> str | None:
+        raise AssertionError("the model was asked about a question nothing was found for")
+
+    monkeypatch.setattr(routes, "written_answer", never)
+    http, app = client
+    app.state.widget_search = Search("HOURSQZ")
+
+    answer = http.post(
+        ASK,
+        json={"session": minted(http), "question": "salaries"},
+        headers={"Origin": SITE},
+    )
+
+    assert answer.json() == {"answer": NOT_FOUND_TEXT, "passages": []}
+
+
+def test_a_model_that_has_nothing_to_say_leaves_the_passages_as_the_answer(
+    client: tuple[TestClient, FastAPI], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Over the cap, switched off or unavailable the model returns nothing and the visitor reads the
+    passages' introduction, as they always did.
+
+    Delete this and the fallback the owner asked for could turn into an error or an empty answer."""
+    import brain.widget_routes as routes
+
+    async def nothing(*_: object, **__: object) -> str | None:
+        return None
+
+    monkeypatch.setattr(routes, "written_answer", nothing)
+    http, app = client
+    app.state.widget_search = Search("HOURSQZ")
+
+    answer = http.post(
+        ASK,
+        json={"session": minted(http), "question": "When do you open HOURSQZ?"},
+        headers={"Origin": SITE},
+    )
+
+    assert answer.json()["answer"] == FROM_WHAT_THIS_SITE_PUBLISHES

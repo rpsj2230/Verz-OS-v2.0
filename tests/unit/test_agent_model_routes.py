@@ -20,6 +20,7 @@ from brain.agent_routes import record_of
 from brain.agents.install_store import agent_values
 from brain.app import Settings, create_app
 from brain.models.registry import ModelPin
+from brain.role_refusals import CHOOSING_A_MODEL_NEEDS_THE_SUPER_ADMIN
 from brain.tables.agent import AgentRow
 from tests.unit.test_provider_routes import Estate, Ledger, Questions, _service, _wiring, call
 
@@ -123,15 +124,21 @@ def test_a_pin_is_cleared_back_to_the_tier_and_half_a_pin_is_refused(client: Tes
 
 
 def test_pinning_needs_the_matrix_write_over_everything(client: TestClient) -> None:
-    """It decides where every question to the agent goes first, whoever asks.
+    """It decides where every question to the agent goes first, whoever asks. A reader who can
+    open the Models screen and holds no write is told which role chooses a model (needs-rupash 178
+    A), and anybody who cannot open it is answered by the one 404 and told nothing of a role.
 
     Delete this and a reader of the Models screen, or a department's editor, can move an agent's
-    questions to another provider."""
-    for pid in ("u_narrow", "u_elsewhere", "u_none"):
-        response = call(
-            client, "PUT", pid, PIN, {"provider": "moonshot", "model": "moonshot-model"}
-        )
-        assert response.status_code == 404, pid
+    questions to another provider, or is refused as if nothing could be chosen."""
+    for reader in ("u_narrow", "u_elsewhere"):
+        told = call(client, "PUT", reader, PIN, {"provider": "moonshot", "model": "moonshot-model"})
+        assert told.status_code == 403, reader
+        assert told.json()["message"] == CHOOSING_A_MODEL_NEEDS_THE_SUPER_ADMIN
+    response = call(
+        client, "PUT", "u_none", PIN, {"provider": "moonshot", "model": "moonshot-model"}
+    )
+    assert response.status_code == 404
+    assert CHOOSING_A_MODEL_NEEDS_THE_SUPER_ADMIN not in response.text
     assert _WRITES == []
 
 
