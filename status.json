@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-13T16:40:51.497802+00:00",
-  "commit": "2078f398",
-  "commit_subject": "Install checks for the delegation table, a rebuilt agent, an added skill, adoption, the scheduler and modularity (M18.3.1, M18.3.2, M18.3.3, M29.3.1, M37.2.2.3, M37.2.3.1, M37.2.3.2, M37.2.3.3, M37.3.2.4, M37.5.1.2, M37.5.1.4) (#569)",
+  "generated_at": "2026-10-13T16:48:21.264721+00:00",
+  "commit": "a208c33d",
+  "commit_subject": "The System health install check describes controls the install's worker has never run, so a real run cannot contradict it (#584)",
   "total": 1625,
   "done": 864,
   "percent": 53.2,
