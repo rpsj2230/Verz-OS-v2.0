@@ -160,7 +160,7 @@ from brain.builder.drafts import (
     body_text,
     validity,
 )
-from brain.builder.form import form_document
+from brain.builder.form import SET_ELSEWHERE, form_document
 from brain.builder.procedure import read_drawing, skill_markdown
 from brain.builder.publish import Check, PublishDecision, blocking_failures
 from brain.console.govern import _in_reach
@@ -308,6 +308,17 @@ class BuilderFormSection(BaseModel):
     ui: dict[str, Any]
 
 
+class SetElsewhereView(BaseModel):
+    """One part of an agent set on another page: what it is, where, and the address."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    part: str
+    title: str
+    sentence: str
+    address: str
+
+
 class BuilderFormView(BaseModel):
     """`brain.builder.form.form_document`, read by `console/src/components/manifestSections.ts`."""
 
@@ -315,6 +326,9 @@ class BuilderFormView(BaseModel):
 
     version: str = Field(alias="schema")
     sections: list[BuilderFormSection]
+    #: The parts of an agent the builder links to and does not hold. See
+    #: `brain.builder.form.WORKFLOWS_KNOWLEDGE_AND_CHANNELS_ARE_LINKED_NOT_SECTIONS`.
+    set_elsewhere: list[SetElsewhereView] = Field(default_factory=list)
 
 
 class DraftActView(BaseModel):
@@ -1039,7 +1053,18 @@ _TOLD: Final[dict[int | str, dict[str, object]]] = {
 async def builder_form(request: Request, asked: Asked) -> JSONResponse:
     """The form a draft is written in, one JSON Schema per section, cut from the manifest's own."""
     await _may_build(request, asked)
-    return JSONResponse(status_code=200, content=form_document())
+    return JSONResponse(
+        status_code=200,
+        content={
+            **form_document(),
+            "set_elsewhere": [
+                SetElsewhereView(
+                    part=one.part, title=one.title, sentence=one.sentence, address=one.address
+                ).model_dump()
+                for one in SET_ELSEWHERE
+            ],
+        },
+    )
 
 
 @router.get(DRAFTS_PATH, response_model=AgentDraftsPage, responses=COMMON_RESPONSES)

@@ -326,6 +326,13 @@ class ToolCalls:
         self.sources: set[str] = set()
         #: The skills the model step offered to a model, by digest. Empty until it offers any.
         self.skills: tuple[SkillUse, ...] = ()
+        #: How many fields and records the redactor took out of this request's answer, or None
+        #: when it walked nothing (needs-rupash 181 A). A number for the ledger, never shown.
+        self.redactions: int | None = None
+
+    def redacted(self, replaced: int) -> None:
+        """The redactor walked an answer for this request and took this many out of it."""
+        self.redactions = (self.redactions or 0) + replaced
 
     def read_live(self, calls: int) -> None:
         """Count the live reads of one refresh, as calls started and as live reads."""
@@ -584,6 +591,7 @@ async def answer_lane(
                 # The skills the model step offered (M27.15.9) and the one source read (M27.1.5).
                 skills=calls.skills,
                 connector=calls.connector,
+                redaction_count=calls.redactions,
                 stage_ms=None if recorder is None else recorder.stage_ms(completed_at),
             ),
         )
@@ -710,7 +718,16 @@ async def _outcome(
         # Records the asker reads, which are more than one client (M14.6.5). Named as ambiguous
         # and never combined: see fast_lane.NAMING_AMBIGUITY_ONLY_AMONG_RECORDS_THE_ASKER_READS.
         return _unresolved(
-            stream, frames, gaps, found, entitlement=entitlement, scope=scope, now=now
+            stream,
+            frames,
+            gaps,
+            found,
+            entitlement=entitlement,
+            scope=scope,
+            now=now,
+            policies=policies,
+            source_policies=source_policies,
+            calls=calls,
         )
 
     policy = policy_for(found, policies, source_policies)
@@ -742,6 +759,9 @@ async def _outcome(
     # The redactor's own pair, so the trace the sink records is the one that did the work.
     _enter(recorder, GateStep.REDACT)
     redacted = redact(found.result, entitlement=entitlement, policy=policy, now=now)
+    # What the redactor took out of this answer, a field or a whole record, as a number the metadata
+    # ledger keeps (needs-rupash 181 A); a record dropped for having nothing visible counts too.
+    calls.redacted(redacted.trace.redaction_count + redacted.trace.dropped_count)
     payload = redacted.payload
 
     sentence = served_from(found, payload)
@@ -912,6 +932,7 @@ async def _answered_by_model(
             entering=None if recorder is None else recorder.enter,
             horizons=horizons,
             using=calls.use,
+            redacting=calls.redacted,
         )
     frames.append(stream.step(Progress.READING))
     if drafted.asked:
@@ -1110,6 +1131,46 @@ def unresolved_text(
     return UNRESOLVED_TEXT
 
 
+#: What introduces each client's own result (needs-rupash 159).
+SEVERAL_CLIENTS_ANSWERED_ON_THEIR_OWN: Final = (
+    "That name matches more than one client, so each one's result is given on its own and none "
+    "is added to another:"
+)
+
+
+def listed_per_client(
+    found: FastLaneUnresolved,
+    *,
+    entitlement: EntitlementSet,
+    policies: Mapping[str, FieldPolicy],
+    source_policies: Mapping[tuple[str, str], FieldPolicy] | None,
+    now: datetime,
+    calls: ToolCalls,
+) -> str:
+    """Each matched client's result on its own, or the empty string when any cannot be given.
+
+    Every entry was read at the asker's reach and is redacted again here by its own source's
+    classification, so a field the asker may not read is not in a sentence. A client with no
+    classification, or whose answer field was withheld, makes the whole list empty and the reply
+    the plain sentence: a list with a gap in it says that something was kept back. See
+    `fast_lane.EACH_CLIENT_MATCHED_IS_ANSWERED_ON_ITS_OWN_AND_NEVER_ADDED_TO_ANOTHER`.
+    """
+    lines: list[str] = []
+    for entry in found.clients:
+        policy = policy_for(entry, policies, source_policies)
+        if policy is None:
+            return ""
+        redacted = redact(entry.result, entitlement=entitlement, policy=policy, now=now)
+        calls.redacted(redacted.trace.redaction_count + redacted.trace.dropped_count)
+        sentence = served_from(entry, redacted.payload)
+        if not sentence:
+            return ""
+        lines.append(f"{entry.source}, record {entry.result.records[0].id}: {sentence}")
+    if not lines:
+        return ""
+    return f"{SEVERAL_CLIENTS_ANSWERED_ON_THEIR_OWN} {'; '.join(lines)}."
+
+
 def _unresolved(
     stream: AnswerStream,
     frames: list[str],
@@ -1119,10 +1180,23 @@ def _unresolved(
     entitlement: EntitlementSet,
     scope: SearchScope,
     now: datetime,
+    policies: Mapping[str, FieldPolicy],
+    source_policies: Mapping[tuple[str, str], FieldPolicy] | None,
+    calls: ToolCalls,
 ) -> Answered:
-    """Close the stream with the unresolved sentence. Recorded as records retrieved and not
-    answering, which is what happened: the records came back and none of them is the answer."""
+    """Close the stream with the unresolved sentence, then each client's result on its own.
+    Recorded as records retrieved and not answering, which is what happened: the records came back
+    and none of them is the answer."""
     text = unresolved_text(found, entitlement=entitlement, now=now)
+    each = listed_per_client(
+        found,
+        entitlement=entitlement,
+        policies=policies,
+        source_policies=source_policies,
+        now=now,
+        calls=calls,
+    )
+    text = f"{text} {each}" if each else text
     declined = Abstention(
         reason=AbstentionReason.RETRIEVED_BUT_NOT_ANSWERING,
         scope=scope,

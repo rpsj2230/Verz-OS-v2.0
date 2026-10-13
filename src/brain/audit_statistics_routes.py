@@ -11,6 +11,15 @@ asks `brain.ops.denial_alerts.reach` whether the reader would have been told it.
 refusal in its words, so a reader with no grant is answered alike on a process with a ledger and on
 one without, and alike on this address and on the ledger's own.
 
+**A third figure is counted over the request ledger, and told to fewer readers (needs-rupash 181
+A).** On a real install nothing writes a redaction marker into the audit ledger, so
+`redacted_entries` can only ever read nought. `redacted_requests` counts the requests whose answer
+the redactor changed, from `obs.request_telemetry.redaction_count`, which the answer lane now
+fills. That ledger has no idea who may see it, so the figure is sent only to a reader whose audit
+grant is unrestricted for every kind of entry (`brain.console.auditor.covers_everybody`), the way
+the company's consumption is sent only to a reader whose budget grant covers everybody, and is
+null for anybody else rather than zero. The reader's own requests are left out of it.
+
 **Two counts and nothing beside them that could be subtracted.** The refusals, by the shape
 `denial_alerts` assessed and its own sentence, and the number of entries that carried a redaction.
 No capability, field, object or person, and no total of the window: see
@@ -56,12 +65,18 @@ from brain.api_routes import Asked
 from brain.audit.ledger import AuditEntry
 from brain.audit.view import MAX_PAGE_SIZE, AuditFilter, AuditRow, AuditView
 from brain.audit_routes import AUDIT_SCREEN, LOAD_CHUNK, READ_CEILING, entry_from, ledger_of
-from brain.console.auditor import redaction_statistics, refusal_statistics, shapes_told
+from brain.console.auditor import (
+    covers_everybody,
+    redaction_statistics,
+    refusal_statistics,
+    shapes_told,
+)
 from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.core.errors import Absent, Failed
 from brain.ops.denial_alerts import DenialPattern
 from brain.ops.denial_digest_run import denials_between, patterns_from
+from brain.ops.telemetry_store import redacted_requests_between
 from brain.routing_routes import sessions_of
 
 log = structlog.get_logger()
@@ -100,6 +115,10 @@ class AuditStatisticsView(BaseModel):
     until: datetime
     refusals: list[RefusalShapeView]
     redacted_entries: int
+    #: How many requests in the window had an answer the redactor changed, over everybody's but the
+    #: reader's own (needs-rupash 181 A). Null, not zero, for a reader whose audit grant does not
+    #: cover everybody: the request ledger has no idea who may see it. Never a count of values.
+    redacted_requests: int | None = None
     #: The most ledger entries one answer is counted over, newest first. A constant.
     read_at_most: int
 
@@ -123,6 +142,39 @@ class StoredDenialPatterns:
         async with self._sessions() as session, session.begin():
             found = await session.execute(denials_between(since, until))
             return patterns_from([row._tuple() for row in found.all()])
+
+
+@runtime_checkable
+class RedactedRequests(Protocol):
+    """Where the window's count of redacted requests comes from: `StoredRedactedRequests`."""
+
+    async def between(self, since: datetime, until: datetime, *, excluding: str) -> int:
+        """Requests in `[since, until)` whose answer was redacted, by anybody but `excluding`."""
+        ...
+
+
+class StoredRedactedRequests:
+    """The request ledger's count, over the window asked."""
+
+    def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
+        self._sessions = sessions
+
+    async def between(self, since: datetime, until: datetime, *, excluding: str) -> int:
+        async with self._sessions() as session, session.begin():
+            return await redacted_requests_between(
+                session, start=since, end=until, excluding_principal=excluding
+            )
+
+
+def redacted_requests_of(request: Request) -> RedactedRequests:
+    """`app.state.redacted_requests` when something put one there, the database otherwise."""
+    found = getattr(request.app.state, "redacted_requests", None)
+    if isinstance(found, RedactedRequests):
+        return found
+    factory = sessions_of(request)
+    if factory is None:
+        raise Failed("no database on this process")
+    return StoredRedactedRequests(factory)
 
 
 def patterns_of(request: Request) -> DenialPatterns:
@@ -202,6 +254,11 @@ async def audit_statistics(
     view = AuditView(loaded, reader=asked.reach, now=asked.now)
     patterns = await patterns_of(request).between(starts, ends)
     reader_id = asked.reach.principal_id
+    redacted_requests = (
+        await redacted_requests_of(request).between(starts, ends, excluding=reader_id)
+        if covers_everybody(asked.reach, asked.now)
+        else None
+    )
     refusals = refusal_statistics(
         view, shapes=shapes_told(patterns, asked.reach, now=asked.now), reader_id=reader_id
     )
@@ -215,5 +272,6 @@ async def audit_statistics(
             for one in refusals
         ],
         redacted_entries=redaction_statistics(visible_rows(view), reader_id=reader_id),
+        redacted_requests=redacted_requests,
         read_at_most=READ_CEILING,
     )

@@ -57,6 +57,7 @@ import {
   NO_PATTERN,
   readStatistics,
   REDACTED_LABEL,
+  REDACTED_REQUESTS_LABEL,
   STATISTICS_HEADING,
   STATISTICS_LEDE,
   timesWords,
@@ -364,6 +365,9 @@ function Statistics() {
           )}
           <FactList>
             <Fact label={REDACTED_LABEL}>{String(found.redacted_entries)}</Fact>
+            {typeof found.redacted_requests === "number" ? (
+              <Fact label={REDACTED_REQUESTS_LABEL}>{String(found.redacted_requests)}</Fact>
+            ) : null}
           </FactList>
         </div>
       );
