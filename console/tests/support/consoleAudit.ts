@@ -869,10 +869,15 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "System health and the state of every service": {
     screens: ["/", "/models", "/runs", "/stop"],
-    routes: ["/api/v1/console/overview/figures", "/api/v1/console/overview", "/api/v1/halts*"],
+    routes: ["/api/v1/console/overview/figures", "/api/v1/console/overview", "/api/v1/halts*", "/api/v1/help/*"],
     tables: ["ops.halt"],
     installation: [],
-    gaps: [],
+    gaps: [
+      {
+        what: "No page draws the help routes yet: the runbooks, the alert steps, the incident playbook and what the system can see are served and nothing links to them.",
+        because: "brain.help_routes serves them to a reader of the screen each is about (M34.4.1, M34.3.2.1, M34.3.1.1, M34.3.1.2), and the console has not been given a Help page or a link from each screen to its runbook.",
+      },
+    ],
   },
   "Backup and recovery": {
     screens: [

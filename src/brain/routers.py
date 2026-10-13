@@ -286,6 +286,10 @@ from brain.group_rule_routes import router as group_rule_router
 # a scope that matches what is stopped. See `brain.halt_routes` and `brain.ops.halt_store`.
 from brain.halt_routes import router as halt_router
 
+# The install's own help pages: what it can see, a runbook for each screen and alert, and the
+# incident playbook, each as open as the screen it is about. See `brain.help_routes`.
+from brain.help_routes import router as help_router
+
 # Incidents: which connected sources are degraded now, since when, and which tools stop working
 # because of it, at the Connectors screen's rule for which sources a reader may be told of. See
 # `brain.incident_routes`.
