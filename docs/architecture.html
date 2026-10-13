@@ -877,7 +877,7 @@
   <p>One distinction the console must hold and most products collapse: a Super Admin sees the complete <strong>inventory</strong> by role - every item, its owner, scope, freshness and audience. Opening the <strong>contents</strong> of another department's document is a separate capability, granted by default in a single-tenant install, revocable, and written to the audit ledger on every use. Existence, configuration and content are three planes of visibility, and role governs the first two while entitlement governs the third.</p>
 
   <h3>An agent is a container, not a configuration row</h3>
-  <p>The member application and the agent workspace were both missing from the first console specification, and the second omission is the more expensive one. An agent composes <span data-part-count="">ten</span> things, each stored as a <strong>reference with a pinned version rather than an inline copy</strong>, so a fix reaches every instance when someone promotes the version and a repository push on its own changes nothing that is live. The list is <code>brain.console.workspace.Part</code> and it is the one M39.1.1.1 names; the count here is carried in the markup and checked against that enum by a test:</p>
+  <p>The member application and the agent workspace were both missing from the first console specification, and the second omission is the more expensive one. An agent composes <span data-part-count="">twelve</span> things, each stored as a <strong>reference with a pinned version rather than an inline copy</strong>, so a fix reaches every instance when someone promotes the version and a repository push on its own changes nothing that is live. The list is <code>brain.console.workspace.Part</code> and it is the one M39.1.1.1 names; the count here is carried in the markup and checked against that enum by a test:</p>
 
   <table>
     <thead><tr><th>Attached</th><th>Stored as</th><th>Who may change it</th></tr></thead>
@@ -886,6 +886,8 @@
       <tr><td>Knowledge</td><td>a scope predicate, never a document list</td><td>owner, within their own scope</td></tr>
       <tr><td>Connectors</td><td>references; ungranted ones show as <em>requested</em></td><td>department admin</td></tr>
       <tr><td>Skills</td><td>pinned versions from the approved library only</td><td>owner, after review</td></tr>
+      <tr><td>Tools</td><td>references to registered tools, narrowed by the ceiling and the caller</td><td>owner, within their own reach</td></tr>
+      <tr><td>Workflows</td><td>stored, versioned procedures, referenced and never copied in</td><td>owner, after review</td></tr>
       <tr><td>Channels</td><td>references, intersected with the ceiling</td><td>department admin</td></tr>
       <tr><td>Availability</td><td>who may find and invoke this agent, never what a run may reach</td><td>department admin</td></tr>
       <tr><td>Model policy</td><td>primary and fallback chain</td><td>super admin</td></tr>
@@ -1397,7 +1399,7 @@
       </tbody>
     </table>
   </div>
-  <p><strong><span data-open-questions="">Forty-five</span> questions are open</strong>, listed in full at <a href="/build/needs-rupash">/build/needs-rupash</a>. The count is carried in the markup and checked against the tracker by a test, because the previous sentence said six long after four had been answered, and a stale number in a document of record is worse than none: a reader takes it for the current position.</p>
+  <p><strong><span data-open-questions="">Forty-seven</span> questions are open</strong>, listed in full at <a href="/build/needs-rupash">/build/needs-rupash</a>. The count is carried in the markup and checked against the tracker by a test, because the previous sentence said six long after four had been answered, and a stale number in a document of record is worse than none: a reader takes it for the current position.</p>
   <p><strong>What a closed task means, and what it does not.</strong> A task is closed here
   when the decision is made, the code is written and a test proves the property. That is a
   real bar and it is not the same bar as "a person can use it", and the gap between the two

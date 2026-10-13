@@ -122,6 +122,11 @@ class TokenUsage:
     input_tokens: int
     output_tokens: int
     cached_input_tokens: int = 0
+    #: The part of `output_tokens` the model spent reasoning, as the provider counted it (M27.15.6).
+    #: **A part of the output count, never an addition to it**: a provider that bills reasoning
+    #: as output already includes it, so summing the two double-counts. Zero where a provider
+    #: reports none, which is also what a model that did not reason reports.
+    reasoning_tokens: int = 0
 
 
 @dataclass(frozen=True)

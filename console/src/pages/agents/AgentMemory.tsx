@@ -17,7 +17,9 @@
  * The press is confirmed, and its answer is drawn as the route said it: promoted, waiting for a
  * second person, or why not.
  *
- * Task ids: M39.4.1.1, M39.4.1.2, M39.4.1.3, M39.4.1.4, M39.4.1.5, M39.4.2.1, M39.4.2.2, M39.4.2.3, M39.4.2.4
+ * **Which kinds of memory it may read and write is the first card** (`AgentMemoryKinds.tsx`, M39.7.1).
+ *
+ * Task ids: M39.7.1, M39.4.1.1, M39.4.1.2, M39.4.1.3, M39.4.1.4, M39.4.1.5, M39.4.2.1, M39.4.2.2, M39.4.2.3, M39.4.2.4
  */
 
 import { Brain } from "lucide-react";
@@ -33,6 +35,7 @@ import { dayWords } from "../access/formParts";
 import { TIER_WORDS, UNDO_API_PATH, undoBody } from "../learningQuery";
 import { changeWords } from "../learning/learningActions";
 import { WORKS_AT } from "./agentActions";
+import { AgentMemoryKinds } from "./AgentMemoryKinds";
 import {
   PROVENANCE_WORDS,
   agentMemoryApiPath,
@@ -320,6 +323,7 @@ export function AgentMemory({ agentId }: { readonly agentId: string }) {
       )}
       <div className="[display:grid] min-w-0 gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-4">
+          <AgentMemoryKinds agentId={agentId} />
           <SectionCard title={MEMORY_HEADING} lede="What this agent learnt, as the words it keeps. Stated by a person, then inferred from how people asked.">
             <div data-slot="memory-curated">
               <MemoryList items={memory.curated} empty={NOTHING_REMEMBERED} onAsk={onAsk} />

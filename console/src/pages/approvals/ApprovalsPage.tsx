@@ -24,7 +24,7 @@ import { Button } from "../../components/ui/button";
 import { WaitingPublishes } from "../agents/WaitingPublishes";
 import { APPROVALS_API_PATH, readApprovalQueue } from "../approvalsQuery";
 import { nameOf, peopleIn } from "../review/parts";
-import { ApprovalCard, DecisionControls, said, type Verdict } from "./ApprovalCard";
+import { ApprovalCard, DecisionControls, said, type Confirmation } from "./ApprovalCard";
 
 /** Why the page moves focus to the sentence confirming a decision. */
 export const A_CONFIRMATION_IS_DRAWN_WHERE_THE_THUMB_IS =
@@ -66,7 +66,7 @@ export function useConfirmationInView(sentence: RefObject<HTMLParagraphElement |
 }
 
 /** The sentence saying what the last confirmed decision was, which takes focus. */
-export function Confirmed({ verdict, sentence }: { readonly verdict: Verdict | null; readonly sentence: RefObject<HTMLParagraphElement | null> }) {
+export function Confirmed({ verdict, sentence }: { readonly verdict: Confirmation | null; readonly sentence: RefObject<HTMLParagraphElement | null> }) {
   if (verdict === null) {
     return null;
   }
@@ -79,8 +79,8 @@ export function Confirmed({ verdict, sentence }: { readonly verdict: Verdict | n
 
 export function ApprovalsPage() {
   const [round, setRound] = useState(0);
-  const [last, setLast] = useState<Verdict | null>(null);
-  const decided = useCallback((verdict: Verdict) => {
+  const [last, setLast] = useState<Confirmation | null>(null);
+  const decided = useCallback((verdict: Confirmation) => {
     setLast(verdict);
     setRound((one) => one + 1);
   }, []);

@@ -89,15 +89,21 @@ def _agent_rows(url: str) -> None:
     effective = materialise(
         signed, instance, audience=AgentAudience(level=Visibility.COMPANY, owner_id="u_one")
     )
-    row = agent_values(effective.record)
-    del row["connectors"]
-    # And the three 0189 adds after it.
-    for later in ("channels", "max_turns", "max_tool_calls"):
-        del row[later]
+    from tests.fixtures.scratch_postgres import row_the_database_can_hold
+
+    # The row as this revision held it: the database says which columns it has, so the ones every
+    # later migration added (connectors, the 0189 three, memory kinds and the rest) are left out.
+    row = row_the_database_can_hold(url, "agent.agent", agent_values(effective.record))
     engine = create_engine(url.replace("postgresql://", "postgresql+psycopg://", 1))
     try:
         with engine.begin() as conn:
-            conn.execute(insert(TemplateVersionRow).values(**version_values(signed)))
+            conn.execute(
+                insert(TemplateVersionRow).values(
+                    **row_the_database_can_hold(
+                        url, "agent.template_version", version_values(signed)
+                    )
+                )
+            )
             conn.execute(
                 insert(TemplateInstanceRow).values(
                     id=AGENT,

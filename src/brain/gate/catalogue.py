@@ -158,6 +158,16 @@ def _admits(entitlement: EntitlementSet, tool: ToolDefinition, now: datetime | N
     return entitlement.scope_for(needed, now) is not None
 
 
+def within_ceiling(tool: ToolDefinition, ceiling: AgentCeiling) -> bool:
+    """Whether the agent's own ceiling admits this tool: it names it, and its side effect is no
+    larger than the agent's. The two halves of `project`'s ceiling test and nothing else, so a
+    question about the agent alone (is this skill's tool one it could ever reach?) is asked with the
+    same rule the catalogue applies, and a caller's entitlement is not in it (M12.3.3)."""
+    return tool.name in ceiling.allowed_tools and _rank(tool.side_effect) <= _rank(
+        ceiling.max_side_effect
+    )
+
+
 def project(
     registry: Iterable[ToolDefinition],
     entitlement: EntitlementSet,
@@ -181,9 +191,7 @@ def project(
     # ordering would defeat prompt caching just as thoroughly as a varying membership, and
     # would do it invisibly, because the list would still look right.
     for tool in sorted(registry, key=lambda t: t.name):
-        if tool.name not in ceiling.allowed_tools:
-            continue
-        if _rank(tool.side_effect) > _rank(ceiling.max_side_effect):
+        if not within_ceiling(tool, ceiling):
             continue
         if not _admits(entitlement, tool, now):
             continue

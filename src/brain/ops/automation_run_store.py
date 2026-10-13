@@ -52,7 +52,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from brain.agent_routes import one_agent, record_of
 from brain.agents.model import AgentRecord
 from brain.console.agent_automations import Automation, AutomationSurfaceError, SchedulerChange
-from brain.console.automation_gallery import Cadence, template_by_id
+from brain.console.automation_authoring import AUTHORED_TEMPLATE, Authored, authored_from_row
+from brain.console.automation_gallery import Cadence, GalleryError, template_by_id
 from brain.console.automations import Change, ChangeKind, Folded, folded, shown
 from brain.console.questions_view import gap_lines
 from brain.core.principal import Employment, Principal, PrincipalKind
@@ -319,8 +320,7 @@ async def run_one(
         row = (await session.execute(claim(automation_id, now))).scalar_one_or_none()
         if row is None or row.next_run_at is None:
             return None
-        template = template_by_id(row.template_id)
-        now_is = await _folded(session, row, None if template is None else template.cadence)
+        now_is = await _folded(session, row, _cadence_of(row))
         owner_id = now_is.owner_id
         owner = await principals.live_principal(owner_id)
         held = refusal_in(
@@ -353,7 +353,7 @@ async def run_one(
         agent_row = (await session.execute(one_agent(row.agent_id))).scalar_one_or_none()
         agent: AgentRecord | None = None if agent_row is None else record_of(agent_row)
         decided: Admitted | PausedBecause
-        if template is None:
+        if not _has_a_source(row, now_is.cadence):
             decided = PausedBecause.TASK_UNBUILT
         else:
             decided = admitted_run(
@@ -415,7 +415,7 @@ async def run_one(
             outcome=outcome,
             refused_because=refused,
             failures_before=failures_in_a_row(before),
-            cadence=None if template is None else now_is.cadence,
+            cadence=now_is.cadence,
             owner_id=owner_id if agent is None else agent.audience.owner_id,
             guards=row.guards,
             at=now,
@@ -560,6 +560,8 @@ class Listed:
     installed_by: str = ""
     installed_as: str = ""
     installed_at: datetime | None = None
+    #: What a person wrote, when they wrote it and it did not come from a template alone.
+    authored: Authored | None = None
 
     def owner_live(self, now: datetime) -> bool:
         """Whether the person it runs as is here at `now`."""
@@ -696,8 +698,38 @@ async def _folded(
 
 
 def _cadence_of(row: AgentAutomationRow) -> Cadence | None:
+    """The cadence a row starts from: its template's, or the one a person wrote.
+
+    A row a person wrote carries its own cadence in three columns when its trigger is a schedule,
+    and none when it is not, which is what makes such an automation unstartable. A template that
+    has since been withdrawn leaves a row with no cadence, as before.
+    """
+    if row.template_id == AUTHORED_TEMPLATE:
+        authored = _authored_of(row)
+        return None if authored is None else authored.trigger.cadence
     template = template_by_id(row.template_id)
     return None if template is None else template.cadence
+
+
+def _has_a_source(row: AgentAutomationRow, cadence: Cadence | None) -> bool:
+    """Whether something still says what this row runs and when: its template or what was written.
+
+    A template that has been withdrawn leaves nothing to run, as before. An automation a person
+    wrote with no schedule leaves nothing to run either, because nothing on this install fires an
+    event or a webhook, and a run of it is refused with the same reason, not counted as a failure.
+    """
+    if row.template_id == AUTHORED_TEMPLATE:
+        return cadence is not None
+    return template_by_id(row.template_id) is not None
+
+
+def _authored_of(row: AgentAutomationRow) -> Authored | None:
+    """What a person wrote, or None for a template install or a row that does not construct."""
+    try:
+        return authored_from_row(row)
+    except (ValueError, GalleryError):
+        log.warning("authored automation does not construct", automation=row.automation_id)
+        return None
 
 
 def _why_stopped(
@@ -778,6 +810,7 @@ async def _listed(
                 installed_by=row.installed_by,
                 installed_as=row.runs_as_id,
                 installed_at=row.created_at,
+                authored=_authored_of(row),
             )
         )
     return tuple(found)

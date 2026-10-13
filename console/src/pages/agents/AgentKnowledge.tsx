@@ -24,7 +24,12 @@
  * connected source and each pinned skill, named by kind and linking to the page that owns it, so one
  * place shows the agent's whole context and nothing is copied or asked for twice.
  *
- * Task ids: M39.9.1.7, M39.2.3.2, M39.9.1.1, M39.9.1.2, M39.9.1.3, M39.9.1.4, M39.9.1.6
+ * **Retiring a document and fetching a link again are offered under a row** (`ItemActs`), only where
+ * the API said this reader may act on it, and both are the Knowledge page's own acts: a document is
+ * the company's, so retiring one withdraws it for every agent. **How it arrived is said as recorded**:
+ * a file, a link, or "not recorded" for a document added before it was kept, never read off its text.
+ *
+ * Task ids: M39.9.1.5, M39.9.1.7, M39.2.3.2, M39.9.1.1, M39.9.1.2, M39.9.1.3, M39.9.1.4, M39.9.1.6
  */
 
 import { FileText, Link2, Plug, Sparkles, X } from "lucide-react";
@@ -42,6 +47,7 @@ import { AddFileForm, AddLinkForm, type Door } from "../knowledge/addForms";
 import { readUploadOptions, UPLOAD_OPTIONS_API_PATH } from "../knowledgeQuery";
 import { skillAddress } from "../skillsQuery";
 import { clauseWords } from "./agentCapabilitiesQuery";
+import { ItemActs } from "./AgentKnowledgeActs";
 import {
   agentKnowledgeApiPath,
   agentKnowledgeLinkApiPath,
@@ -50,6 +56,8 @@ import {
   readKnowledgeAdded,
   type KnowledgeAdded,
   type AgentKnowledge as Knowledge,
+  type UseFigures,
+  type Arrival,
   type KnowledgeItem,
 } from "./agentKnowledgeQuery";
 
@@ -70,7 +78,33 @@ export const WIDEN_THROUGH_A_DRAFT = "Widen what it draws on, through a draft";
 export const DOES_NOT_MATCH = "It does not match";
 export const NARROWS_NOTHING_OWN = "It narrows nothing of its own: it draws on whatever you may read.";
 
-function ItemRow({ item }: { readonly item: KnowledgeItem }) {
+/** What the figure beside an item says. Absent while nothing is counted, and never drawn as nought. */
+export function usesWords(uses: number, figures: UseFigures): string {
+  if (uses === 0) {
+    return `Not cited in the last ${String(figures.windowDays)} days`;
+  }
+  return `Cited in ${uses === 1 ? "1 answer" : `${String(uses)} answers`} in the last ${String(figures.windowDays)} days`;
+}
+
+export const ARRIVED_AS_A_FILE = "added as a file";
+export const ARRIVED_AS_A_LINK = "added from a link";
+export const ARRIVAL_NOT_RECORDED = "how it was added is not recorded";
+
+export function arrivalWords(arrival: Arrival): string {
+  return arrival === "file" ? ARRIVED_AS_A_FILE : arrival === "link" ? ARRIVED_AS_A_LINK : ARRIVAL_NOT_RECORDED;
+}
+
+function ItemRow({
+  agentId,
+  item,
+  figures,
+  onChanged,
+}: {
+  readonly agentId: string;
+  readonly item: KnowledgeItem;
+  readonly figures?: UseFigures | undefined;
+  readonly onChanged: () => void;
+}) {
   const addedBy = item.addedByName === "" ? undefined : item.addedByName;
   const day = dayWords(item.addedAt);
   const added = [addedBy === undefined ? null : `added by ${addedBy}`, day === "" ? null : day].filter((one): one is string => one !== null);
@@ -87,9 +121,12 @@ function ItemRow({ item }: { readonly item: KnowledgeItem }) {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-dim">
         {item.place === "" ? null : <span>{`in ${item.place}`}</span>}
         {added.length === 0 ? null : <span>{added.join(", ")}</span>}
+        <span data-slot="knowledge-arrival">{arrivalWords(item.arrivedAs)}</span>
         <span data-slot="knowledge-badge">{verifiedWords(item)}</span>
         {item.reviewBy === undefined ? null : <span>{`review by ${dayWords(item.reviewBy)}`}</span>}
+        {item.uses === undefined || figures === undefined ? null : <span data-slot="knowledge-uses">{usesWords(item.uses, figures)}</span>}
       </div>
+      <ItemActs agentId={agentId} item={item} onChanged={onChanged} />
     </li>
   );
 }
@@ -233,6 +270,12 @@ export function AgentKnowledge({
     setMore(null);
     setVersion((count) => count + 1);
   };
+  // A retired or replaced document changes the list, so the first page is asked for again.
+  const onChanged = (): void => {
+    setLater([]);
+    setMore(null);
+    setVersion((count) => count + 1);
+  };
   const ways = knowledge.canAdd && options !== null ? <Ways shown={way} onShow={setWay} /> : null;
   const form =
     options === null || way === null ? null : (
@@ -274,7 +317,7 @@ export function AgentKnowledge({
       <>
         <ul data-slot="knowledge-list" className="m-0 flex list-none flex-col p-0">
           {items.map((one) => (
-            <ItemRow key={one.itemId} item={one} />
+            <ItemRow key={one.itemId} agentId={agentId} item={one} figures={knowledge.useFigures} onChanged={onChanged} />
           ))}
         </ul>
         {hasMore ? (
@@ -301,6 +344,7 @@ export function AgentKnowledge({
           {added === null ? null : <Answer added={added} onWiden={onWiden} onClose={() => setAdded(null)} />}
           {body}
           {form}
+          {knowledge.useFigures === undefined ? null : <Note>{`Figures beside each document count ${knowledge.useFigures.basis}.`}</Note>}
           {knowledge.keptRule === "" ? null : <Note>{knowledge.keptRule}</Note>}
         </div>
       </SectionCard>

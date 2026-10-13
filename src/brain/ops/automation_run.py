@@ -215,6 +215,10 @@ class TaskDeclaration:
         return self.reads is not None
 
 
+#: The task an automation a person wrote in words runs. Not a template's, so `task_gaps` does not
+#: ask a template to name it, and `brain.console.automation_authoring.AUTHORED_TASK` is this.
+INSTRUCTION_TASK: Final = "automation.instruction"
+
 #: Every task the product's templates name, and whether this install can run it.
 TASKS: Final[tuple[TaskDeclaration, ...]] = (
     TaskDeclaration(task="automation.unanswered_questions", reads=QUESTION_AUTHORITY),
@@ -241,6 +245,14 @@ TASKS: Final[tuple[TaskDeclaration, ...]] = (
             "so at its own reach the run would find nothing and report that nothing waits"
         ),
     ),
+    TaskDeclaration(
+        task=INSTRUCTION_TASK,
+        needs=(
+            "an agent run with nobody present. The agent runtime answers a person who asked, and "
+            "nothing starts one on a schedule at its owner's reach with every write held, so an "
+            "instruction a person wrote is saved and shown and cannot be started yet"
+        ),
+    ),
 )
 
 
@@ -256,7 +268,7 @@ def task_declaration(
 
 def task_gaps(declarations: Sequence[TaskDeclaration] = TASKS) -> tuple[str, ...]:
     """Every template task with no declaration, and every declaration no template names."""
-    named = {one.task for one in BUILT_IN}
+    named = {one.task for one in BUILT_IN} | {INSTRUCTION_TASK}
     declared = [one.task for one in declarations]
     gaps = [
         f"{task!r} is a template's task and nothing declares it"
@@ -307,6 +319,30 @@ def _runs_on(cadence: Cadence, weekday: int) -> bool:
             return weekday not in WEEKEND
         case Every.WEEK:
             return weekday == cadence.weekday
+
+
+def slots_before(cadence: Cadence, before: datetime, count: int) -> tuple[datetime, ...]:
+    """The last `count` instants strictly before `before` at which this cadence ran, newest first.
+
+    The mirror of `next_run_after`, over the same `_runs_on`, so a rehearsal replays the slots the
+    scheduler would have used and not a second reading of the cadence. At most `7 * count + 1`
+    days back are looked at, which covers a weekly cadence however `count` falls.
+    """
+    if before.tzinfo is None:
+        msg = "a naive instant has no hour in UTC to count a cadence back from"
+        raise AutomationRunError(msg)
+    at = before.astimezone(UTC)
+    candidate = at.replace(hour=cadence.hour_utc, minute=0, second=0, microsecond=0)
+    if candidate >= at:
+        candidate -= timedelta(days=1)
+    found: list[datetime] = []
+    for _ in range(len(WEEKDAYS) * max(count, 1) + 1):
+        if len(found) == count:
+            break
+        if _runs_on(cadence, candidate.weekday()):
+            found.append(candidate)
+        candidate -= timedelta(days=1)
+    return tuple(found)
 
 
 # ------------------------------------------------------------------ the reach

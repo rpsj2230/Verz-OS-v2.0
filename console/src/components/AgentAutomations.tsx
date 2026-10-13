@@ -58,6 +58,9 @@ export const SCHEDULE_LABEL = "Cadence";
 export const NEXT_RUN_LABEL = "Next run";
 export const LAST_RUN_LABEL = "Last run";
 export const FOUND_LABEL = "What it found";
+export const TOLD_LABEL = "Told to";
+export const MAY_USE_LABEL = "May use";
+export const WRITTEN_BY_A_PERSON_LABEL = "What was written";
 
 /** What a start is told, beside the next run it would leave. */
 export const A_START_ACTS_UNWATCHED =
@@ -278,6 +281,30 @@ export function AgentAutomations({ agentId, automations, onChanged }: AgentAutom
             <li key={one.automationId} className="card">
               <h4>{one.name}</h4>
               <Facts one={one} />
+              {one.authored === undefined ? null : (
+                <dl className="fields" aria-label={WRITTEN_BY_A_PERSON_LABEL} data-slot="authored-card">
+                  <div className="fields__row">
+                    <dt>{SCHEDULE_LABEL}</dt>
+                    <dd>{one.authored.trigger}</dd>
+                  </div>
+                  <div className="fields__row">
+                    <dt>Only when</dt>
+                    <dd>{one.authored.condition ?? "It runs every time."}</dd>
+                  </div>
+                  <div className="fields__row">
+                    <dt>{TOLD_LABEL}</dt>
+                    <dd>{one.authored.instruction}</dd>
+                  </div>
+                  <div className="fields__row">
+                    <dt>{MAY_USE_LABEL}</dt>
+                    <dd>{one.authored.tools.length === 0 ? "No tools." : one.authored.tools.join(", ")}</dd>
+                  </div>
+                  <div className="fields__row">
+                    <dt>Writes</dt>
+                    <dd>{one.authored.writesWait}</dd>
+                  </div>
+                </dl>
+              )}
               <p className="note">{one.nextRunAt ?? one.pausedBecause}</p>
               {one.lastRun === undefined ? null : (
                 <div>

@@ -47,7 +47,7 @@ leave in one and nothing else**, so a payload that did not pass through
 `brain.ops.tracing.mask` is refused by the database as well as never built by
 `brain.ops.trace_store`.
 
-Task ids: M30.5.2, M3.4.2, M3.6.3, M27.1.3, M24.3.4
+Task ids: M30.5.2, M3.4.2, M3.6.3, M27.1.3, M24.3.4, M27.15.6
 """
 
 from __future__ import annotations
@@ -103,6 +103,7 @@ COUNT_COLUMNS: Final[tuple[str, ...]] = (
     "redaction_count",
     "fallback_count",
     "retry_count",
+    "reasoning_tokens",
 )
 
 #: The duration columns nothing measures yet, each refused below zero and allowed to be absent.
@@ -166,6 +167,12 @@ class RequestTelemetryRow(Base):
     lane_basis: Mapped[str | None] = mapped_column(String(BASIS_CHARS))
     routed_tier: Mapped[str | None] = mapped_column(String(TIER_CHARS))
     tier_basis: Mapped[str | None] = mapped_column(String(BASIS_CHARS))
+    #: What a reasoning model spent thinking, a part of `tokens_out`, and where the request's time
+    #: went by gate step (M27.15.6; migration 0215). Null before 0215 and where nothing measured.
+    reasoning_tokens: Mapped[int | None] = mapped_column(Integer)
+    # none_as_null: an unmeasured request is SQL NULL, which the check allows, and not the JSON null
+    # that the column type would otherwise write, which the check refuses as not an object.
+    stage_ms: Mapped[dict[str, float] | None] = mapped_column(JSONB(none_as_null=True))
 
     __table_args__ = (
         CheckConstraint(one_of("traffic_class", TrafficClass), name="traffic_class"),
@@ -191,6 +198,9 @@ class RequestTelemetryRow(Base):
         ),
         CheckConstraint(
             f"tier_basis IS NULL OR {one_of('tier_basis', TierBasis)}", name="tier_basis"
+        ),
+        CheckConstraint(
+            "stage_ms IS NULL OR jsonb_typeof(stage_ms) = 'object'", name="stage_ms_object"
         ),
         *(_not_negative(one) for one in (*COUNT_COLUMNS, *OPTIONAL_DURATION_COLUMNS)),
         Index("ix_request_telemetry_received_at", "received_at"),

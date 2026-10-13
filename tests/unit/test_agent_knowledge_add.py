@@ -39,7 +39,7 @@ from brain.knowledge.lifecycle import StoredItem
 from brain.knowledge.search import KNOWLEDGE_UPLOAD
 from brain.knowledge_routes import NAME_HEADER
 from brain.tables.agent import AgentRow
-from tests.fixtures.console_http import console_client, headers
+from tests.fixtures.console_http import console_client, headers, no_audience_extras
 from tests.fixtures.documents import LINE
 from tests.fixtures.setting_rows import Result
 from tests.fixtures.web_pages import PRICING_PAGE, PRICING_URL
@@ -116,6 +116,7 @@ def served(monkeypatch: pytest.MonkeyPatch) -> Iterator[Served]:
 
     monkeypatch.setattr(routes, "added_item", read_back)
     with console_client(GRANTS, routers=(router,)) as (client, stub):
+        stub.answerers.append(no_audience_extras)
         stub.answerers.append(answer)
         yield Served(client, kept, site)
 
