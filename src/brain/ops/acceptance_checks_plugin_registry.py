@@ -73,7 +73,6 @@ NO_CORE_VERSION: Final = (
 )
 NOT_LISTED_FOR_AN_ADMINISTRATOR: Final = "an administrator of plugins was not shown the registry"
 LISTED_FOR_ANYBODY: Final = "a person without the authority over plugins was shown the registry"
-ARRIVED_SWITCHED_ON: Final = "a plugin recorded on the install arrived enabled"
 WRITES_ALLOWED_WITH_THE_SWITCH_OFF: Final = (
     "a write that opens a plugin's state was accepted while the registry was switched off"
 )
@@ -298,9 +297,7 @@ async def a_plugin_is_recorded_and_moved_through_its_states(h: Harness) -> None:
 
     made: PluginView = await _recorded(routes, admin, manifest)
     if made.state != "installed" or made.version != "1.0.0":
-        raise CheckFailedError(
-            ARRIVED_SWITCHED_ON if made.state == "enabled" else A_MANIFEST_WAS_NOT_RECORDED
-        )
+        raise CheckFailedError(A_MANIFEST_WAS_NOT_RECORDED)
     if await _stored(h, plugin_id) != ("1.0.0", "installed", 1):
         raise CheckFailedError(NOT_STORED)
     if not await refused(routes.install(admin, manifest)):
