@@ -77,6 +77,10 @@
     "M26.2.1": "passes against a stand-in the check made (accounts, a roster or a role handed to it); held until the install shows it on its own",
     "M26.2.4": "passes against a stand-in the check made (accounts, a roster or a role handed to it); held until the install shows it on its own",
     "M26.2.6": "passes against a stand-in the check made (accounts, a roster or a role handed to it); held until the install shows it on its own",
-    "M26.3.2": "passes against a stand-in the check made (accounts, a roster or a role handed to it); held until the install shows it on its own"
+    "M26.3.2": "passes against a stand-in the check made (accounts, a roster or a role handed to it); held until the install shows it on its own",
+    "M42.5.3": "passes on a setup code and an enrolment the check made, through the wizard's own functions; held until the fresh-install walk is recorded on an install",
+    "M42.5.4": "passes on a setup code and an enrolment the check made, through the wizard's own functions; held until the fresh-install walk is recorded on an install",
+    "M42.5.10": "passes on a setup code and an enrolment the check made, through the wizard's own functions; held until the fresh-install walk is recorded on an install",
+    "M42.5.13": "passes on a setup code and an enrolment the check made, through the wizard's own functions; held until the fresh-install walk is recorded on an install"
   }
 }
