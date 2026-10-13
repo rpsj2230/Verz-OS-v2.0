@@ -738,6 +738,10 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     # The scratch database is not an install started from a release, so no image reference was
     # handed in; `tests/unit/test_acceptance_checks_install_template.py` hands it one.
     assert outcomes.pop("the_install_runs_one_published_image_at_a_named_release")[0] == NOT_RUN
+    # Nor the release check switched on, which no install ships with.
+    assert (
+        outcomes.pop("the_release_this_install_runs_says_what_changed_and_how_urgent")[0] == NOT_RUN
+    )
     # A scratch database was not set up through the wizard and names no vault;
     # `tests/unit/test_acceptance_checks_first_run.py` writes the values and answers for the vault.
     assert outcomes.pop("the_wizard_s_values_are_held_in_the_install_s_settings")[0] == NOT_RUN

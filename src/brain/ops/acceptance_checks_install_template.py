@@ -20,7 +20,7 @@ Rejected: reading `.env` on the host. The worker does not mount it, and an insta
 a second mount is an install that cannot be checked until somebody changes its compose file.
 
 Task ids: M42.1.2, M42.1.3, M42.1.4, M42.2.3, M42.2.8, M42.3.1, M42.3.6
-Task ids: M42.3.9, M42.5.1, M42.5.2, M42.5.15, M42.3.3, M42.1.1, M42.3.2
+Task ids: M42.3.9, M42.5.1, M42.5.2, M42.5.15, M42.3.3, M42.1.1, M42.3.2, M42.3.8
 """
 
 from __future__ import annotations
@@ -409,3 +409,67 @@ async def the_variables_template_is_blank_and_the_repository_is_checked(
         "first" in one for one in found
     ):
         raise CheckFailedError("the repository check did not name what it found")
+
+
+#: Said when the release check is off, which is how every install ships.
+THE_RELEASE_CHECK_IS_OFF: Final = (
+    "this install has not switched on the check for newer releases, so it asks nobody what the "
+    "release it runs says; switch it on under Features and the next run reads it"
+)
+
+#: Said when the release list does not carry the running release.
+THE_RUNNING_RELEASE_IS_NOT_LISTED: Final = (
+    "the release list names no published release matching the one this install runs, so there "
+    "are no notes of it to read"
+)
+
+#: The three questions a published release's notes answer, as `ReleaseNotes.render` heads them.
+WHAT_A_RELEASE_NOTE_ANSWERS: Final = (
+    "## What changed",
+    "## Does this change your database",
+    "## How urgent this is",
+)
+
+
+@check(
+    leaves=("M42.3.8",),
+    sentence=(
+        "The published release this install runs, read from the release list the install is "
+        "switched on to ask, carries notes in plain words that say what changed, whether the "
+        "database changes and how urgent it is."
+    ),
+)
+async def the_release_this_install_runs_says_what_changed_and_how_urgent(h: Harness) -> None:
+    import json
+
+    from brain.console.version_view import image_tag, ordinal
+    from brain.deployment.release_feed import feed_address, https_fetch
+    from brain.ops.features import RELEASE_CHECK, switch_states, switched_on_in
+
+    async with h.sessions() as session:
+        on = h.settings.release_check or RELEASE_CHECK.name in switched_on_in(
+            await switch_states(session), (RELEASE_CHECK,)
+        )
+    address = feed_address(switched_on=on, url=h.settings.release_feed_url)
+    if not address:
+        raise CheckNotRunError(THE_RELEASE_CHECK_IS_OFF)
+    tag = image_tag(h.settings.app_image)
+    if ordinal(tag) is None:
+        raise CheckNotRunError(PINNED_TO_A_BUILD)
+    try:
+        payload = json.loads(await asyncio.to_thread(https_fetch, address))
+    except (OSError, ValueError) as exc:
+        raise CheckNotRunError(THE_RUNNING_RELEASE_IS_NOT_LISTED) from exc
+    entries = payload if isinstance(payload, list) else [payload]
+    notes = [
+        str(one.get("body", ""))
+        for one in entries
+        if isinstance(one, dict) and str(one.get("tag_name", "")).strip() == tag
+    ]
+    if not notes:
+        raise CheckNotRunError(THE_RUNNING_RELEASE_IS_NOT_LISTED)
+    if any(heading not in notes[0] for heading in WHAT_A_RELEASE_NOTE_ANSWERS):
+        raise CheckFailedError(
+            "the notes of the release this install runs do not say what changed, whether the "
+            "database changes and how urgent it is"
+        )

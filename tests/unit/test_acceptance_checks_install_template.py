@@ -6,7 +6,7 @@ read; the Updates screen's check signs a reserved person in and runs against Pos
 and skips where `DATABASE_URL` is unset.
 
 Task ids: M42.1.2, M42.1.3, M42.1.4, M42.2.3, M42.2.8, M42.3.1, M42.3.6
-Task ids: M42.3.9, M42.5.1, M42.5.2, M42.5.15, M42.3.3, M42.1.1, M42.3.2
+Task ids: M42.3.9, M42.5.1, M42.5.2, M42.5.15, M42.3.3, M42.1.1, M42.3.2, M42.3.8
 """
 
 from __future__ import annotations
@@ -40,6 +40,7 @@ UPDATE = "the_update_refuses_latest_and_the_rollback_reads_the_previous"
 SCREEN = "the_updates_screen_names_the_version_and_whether_newer_exists"
 HEAD = "the_database_is_at_the_head_the_migrate_command_brings_it_to"
 VARIABLES = "the_variables_template_is_blank_and_the_repository_is_checked"
+NOTES = "the_release_this_install_runs_says_what_changed_and_how_urgent"
 
 IMAGE = "ghcr.io/rpsj2230/verz-brain-v2.0"
 
@@ -64,8 +65,19 @@ def test_the_module_declares_the_leaves_each_check_proves() -> None:
         SCREEN: ("M42.3.9",),
         HEAD: ("M42.3.3",),
         VARIABLES: ("M42.1.1", "M42.3.2"),
+        NOTES: ("M42.3.8",),
     }
-    assert checks_in(MODULE) == [STEPS, SECRETS, GUIDES, PIN, UPDATE, SCREEN, HEAD, VARIABLES]
+    assert checks_in(MODULE) == [
+        STEPS,
+        SECRETS,
+        GUIDES,
+        PIN,
+        UPDATE,
+        SCREEN,
+        HEAD,
+        VARIABLES,
+        NOTES,
+    ]
 
 
 def test_the_installer_and_the_update_checks_pass_on_the_plan_this_release_carries() -> None:
@@ -221,3 +233,43 @@ def test_the_guides_are_found_where_the_application_serves_them() -> None:
 
     assert _guides() == DOCS / "install"
     assert isinstance(DOCS, Path)
+
+
+@pytest.mark.needs_db
+@pytest.mark.parametrize(
+    ("body", "listed", "expected"),
+    [
+        (
+            "## What changed\n- x\n## Does this change your database\nNo.\n## How urgent this is\n",
+            True,
+            "passed",
+        ),
+        ("## What changed\n- x\n", True, "failed"),
+        ("", False, "not run"),
+    ],
+)
+def test_the_notes_check_reads_the_running_releases_notes_from_the_list(
+    install: str,
+    issuer: None,
+    monkeypatch: pytest.MonkeyPatch,
+    body: str,
+    listed: bool,
+    expected: str,
+) -> None:
+    """A release whose notes carry the three headings passes, one that says only what changed
+    fails, and one the list does not carry is not run. Delete this and M42.3.8 closes on notes
+    nobody read, or fails on an install the list says nothing about."""
+    import json
+
+    from brain.console import version_view
+    from brain.deployment import release_feed
+    from brain.ops import features
+
+    monkeypatch.setattr(version_view, "image_tag", lambda reference: "v1.2.3")
+    monkeypatch.setattr(
+        features, "switched_on_in", lambda states, one=(): {features.RELEASE_CHECK.name}
+    )
+    entry = {"tag_name": "v1.2.3" if listed else "v0.0.1", "body": body}
+    monkeypatch.setattr(release_feed, "https_fetch", lambda url: json.dumps([entry]).encode())
+    outcome, reason = run_module(install, MODULE)[NOTES]
+    assert outcome == expected, reason
