@@ -42,7 +42,7 @@ OWN_KNOWLEDGE = "a_member_sees_the_knowledge_they_added_and_nobody_elses"
 LEAVES = {
     DISABLE: ("M33.1.2.4",),
     GRANT: ("M33.2.2.2",),
-    DEPUTY: ("M33.2.2.5",),
+    DEPUTY: ("M33.2.2.5", "M27.15.3"),
     ADOPT: ("M33.2.2.3",),
     NARROWED: ("M33.2.1.1",),
     DEPARTMENT_APPROVES: ("M33.2.2.1",),

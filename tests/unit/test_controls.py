@@ -56,8 +56,10 @@ def _control(**changes: object) -> Control:
     fields: dict[str, object] = {
         "name": "example",
         # A function nothing under `src` calls. `due` was this until 2026-09-17, when the Quality
-        # screen became its caller; `scan_stores` is the fixture suite's and stays uncalled here.
-        "symbols": ("brain.ops.canaries:scan_stores",),
+        # screen became its caller, and `scan_stores` until 2026-10-12, when an install check
+        # began to call it; an install check is a legitimate caller, so each time it happens
+        # the fixture has to move to a function that is still not called.
+        "symbols": ("brain.ops.canaries:locked_findings",),
         "guards": "an example guarantee",
         "lost_silently": "the example guarantee, with nothing saying so",
         "every": timedelta(hours=1),

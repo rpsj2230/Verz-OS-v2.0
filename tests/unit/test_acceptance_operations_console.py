@@ -11,7 +11,7 @@ an install with no record of its furnishing.
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 The template signing clock is 2999, for the reason CLAUDE.md records about fixtures.
 
-Task ids: M27.1.6, M27.6.1, M27.15.51, M27.12.7, M27.7.27, M27.9.5
+Task ids: M27.1.6, M27.6.1, M27.7.25, M27.15.51, M27.12.7, M27.7.27, M27.9.5
 """
 
 from __future__ import annotations
@@ -52,8 +52,8 @@ def test_the_module_declares_one_check_per_group_of_leaves() -> None:
     page showing the same rows, and the leaf closes on a check that never looked."""
     assert [(one.name, one.leaves) for one in registered((MODULE,))] == [
         (TRAFFIC, ("M27.1.6",)),
-        (INSTALL, ("M27.6.1",)),
-        (FEATURE, ("M27.15.51",)),
+        (INSTALL, ("M27.6.1", "M27.7.25")),
+        (FEATURE, ("M27.15.51", "M27.7.25")),
         (SETTING, ("M27.12.7",)),
         (LIMITS, ("M27.7.27",)),
         (FURNISHED, ("M27.9.5",)),

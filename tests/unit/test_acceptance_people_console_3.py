@@ -10,7 +10,7 @@ steward who is the administrator.
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
 Task ids: M27.5.6, M27.5.10, M27.7.29, M27.5.8, M27.15.63, M27.3.7, M27.9.3, M27.7.8, M27.7.9,
-M27.7.28, M27.9.9
+M27.7.28, M27.9.9, M27.12.6
 """
 
 from __future__ import annotations
@@ -57,11 +57,11 @@ def test_each_check_closes_the_leaves_its_flow_exercises() -> None:
         MENU: ("M27.5.6",),
         SCOPE: ("M27.5.10", "M27.7.29"),
         FILTERS: ("M27.5.8", "M27.15.63"),
-        APPROVALS: ("M27.3.7", "M27.9.3"),
+        APPROVALS: ("M27.3.7", "M27.9.3", "M27.12.6"),
         ELEVATION: ("M27.7.8",),
         REVIEW: ("M27.7.9",),
         WORKSPACE: ("M27.7.28",),
-        STEWARD: ("M27.9.9",),
+        STEWARD: ("M27.9.9", "M27.15.3"),
     }
 
 

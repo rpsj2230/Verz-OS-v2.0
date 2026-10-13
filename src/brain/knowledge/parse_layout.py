@@ -73,10 +73,11 @@ refuse a hostile response in a different package from the paragraph explaining w
 
 **Nothing calls anything in this module.** No `LayoutService` is implemented:
 `brain.ops.inference_client` is the embedding leg and says itself that nothing calls it either.
-`layout_request_gaps` has no caller because the one preflight that would run it,
-`brain.ops.worker.preflight`, is not edited here; wiring it there is one line and is written up
-rather than done. `LayoutParser` with no service is the honest state of M7.2.1 and is what a
-route in `brain.knowledge.parse_paths` would hold today.
+`layout_request_gaps` is called by `brain.ops.worker.advisories` since 2026-10-12, once an install
+has declared an embedding revision (an install with a model server): printed at every worker start
+and never a refusal, because the finding is the owner's choice to close. `LayoutParser` with no
+service is the honest state of M7.2.1 and is what a route in `brain.knowledge.parse_paths` would
+hold today.
 
 Scope: domain logic. Nothing here opens a connection, loads a model or reads a clock.
 
