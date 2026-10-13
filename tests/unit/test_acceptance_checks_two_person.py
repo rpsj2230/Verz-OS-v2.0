@@ -4,7 +4,7 @@ product broken the way it would plausibly break.
 The pure half holds the module's place, the rule for which tools need two people and the in-memory
 flow of a first and a second approval. The database half runs the check as the worker would and
 then shows it failing with each half of the rule removed: the route letting the first approval
-decide, the queue offering the action to the person it runs as, and `0218`'s check missing.
+decide, the queue offering the action to the person it runs as, and `0221`'s check missing.
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
@@ -221,7 +221,7 @@ def test_a_queue_that_offers_the_action_to_whoever_it_runs_as_fails_the_check(
 
 @pytest.mark.needs_db
 def test_a_database_without_the_checks_fails_the_check(install: str) -> None:
-    """`0218`'s approval check dropped. Delete this and the check passes on a database that holds
+    """`0221`'s approval check dropped. Delete this and the check passes on a database that holds
     the rule nowhere, which is the half it exists to prove."""
     from tests.fixtures.scratch_postgres import sql
 

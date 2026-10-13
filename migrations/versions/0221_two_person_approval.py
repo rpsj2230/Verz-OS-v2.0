@@ -31,8 +31,8 @@ two columns and nothing else. The decision's policy is untouched.
 
 Task ids: M13.7.7
 
-Revision ID: 0218
-Revises: 0217
+Revision ID: 0221
+Revises: 0220
 """
 
 from __future__ import annotations
@@ -40,9 +40,9 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0218"
-# The plan's number, after 0217. Re-pointed at whichever migration is the head when it lands.
-down_revision = "0217"
+revision = "0221"
+# The plan's number, after 0220. Re-pointed at whichever migration is the head when it lands.
+down_revision = "0220"
 branch_labels = None
 depends_on = None
 

@@ -114,7 +114,7 @@ VERSIONS = ROOT / "migrations" / "versions"
 MIGRATION = VERSIONS / "0042_suspension.py"
 DECISION_MIGRATION = VERSIONS / "0083_suspension_decision.py"
 TAKEOVER_MIGRATION = VERSIONS / "0172_takeover_instants.py"
-TWO_PERSON_MIGRATION = VERSIONS / "0218_two_person_approval.py"
+TWO_PERSON_MIGRATION = VERSIONS / "0221_two_person_approval.py"
 LEDGER_MIGRATION = VERSIONS / "0003_resolver_and_tables.py"
 #: Where `ops.setting` is built, which `put_suspension` reads the two-person switch from.
 SETTING_MIGRATION = VERSIONS / "0004_capability_registry_and_config.py"

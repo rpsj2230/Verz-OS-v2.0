@@ -11,7 +11,7 @@ offered it as the second of two, and approving it decides it, naming a decider w
 asker nor the first approver. Every call is `brain.approval_routes.take_decision`, the function the
 decision route and a card press both call.
 
-**Then the database is asked on its own.** `0218`'s checks are the rule beneath the route, and a
+**Then the database is asked on its own.** `0221`'s checks are the rule beneath the route, and a
 check that only drove the route would pass with them deleted. Four statements are tried as the
 application role in a savepoint each and must be refused by name: approving a row nobody has
 endorsed, deciding it as the person who endorsed it, deciding it as the person who asked, and
@@ -50,7 +50,7 @@ A, B = RESERVED_DEPARTMENTS
 #: What the action the check holds requires, and what its approvers decide with.
 ACTION_CAPABILITY: Final = "write:invoice.record"
 
-#: The constraints of `0218` the check expects the database to refuse with, by their own names.
+#: The constraints of `0221` the check expects the database to refuse with, by their own names.
 TWO_OTHERS: Final = "a_two_person_row_is_approved_by_two_others"
 ASKER_DOES_NOT: Final = "the_asker_does_not_endorse"
 

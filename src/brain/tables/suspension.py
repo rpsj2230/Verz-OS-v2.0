@@ -35,7 +35,7 @@ shown before something ran in somebody's name. The principal and the agent are v
 reason `0014` gives: a key into `auth.principal` would make deleting a person delete what was
 approved in their name.
 
-**Two people, when the action is one that cannot be taken back (`0218`).** `two_person` is set when
+**Two people, when the action is one that cannot be taken back (`0221`).** `two_person` is set when
 the action is raised, and then a first approval writes `endorsed_by` and `endorsed_at` and leaves
 the row pending, so that a different person has to decide it. The checks below are the rule in
 the database, beside the route's, because a statement run by hand reaches the table and not the
@@ -134,7 +134,7 @@ class SuspensionRow(TimestampMixin, Base):
     verdict: Mapped[str | None] = mapped_column(String(VERDICT_CHARS), nullable=True)
     #: Why, on every verdict but an approval. A code in `REASON_CODE`'s grammar, never prose.
     reason_code: Mapped[str | None] = mapped_column(String(REASON_CODE_CHARS), nullable=True)
-    #: Whether this action needs two different people, fixed when it was raised (`0218`).
+    #: Whether this action needs two different people, fixed when it was raised (`0221`).
     two_person: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     #: The first approver of a two-person action, who did not decide it, and when.
     endorsed_by: Mapped[str | None] = mapped_column(String(ID_CHARS), nullable=True)

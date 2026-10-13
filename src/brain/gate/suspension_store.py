@@ -72,7 +72,7 @@ it reads is `state`, which the decision wrote and a check holds the verdict to.
 `put_suspension` asks the `two_person_approval` feature and `needs_second_person` at the moment it
 writes the row, so what needs two people is fixed when it is raised. A first approval is
 `HeldRows.endorse`: it writes the approver and the instant and leaves the row pending, a different
-person then decides it, and `0218`'s checks refuse any other order, as the route does.
+person then decides it, and `0221`'s checks refuse any other order, as the route does.
 `needs_second_person` is where needs-rupash 192 lands: every sensitive effect (A) or money
 alone (B).
 
@@ -332,7 +332,7 @@ async def put_suspension(session: AsyncSession, suspension: SuspendedAction) -> 
         session, TWO_PERSON_APPROVAL
     )
     # Written only when true, so a row that needs one person is the row the previous release wrote
-    # and this release still runs against a schema before `0218`.
+    # and this release still runs against a schema before `0221`.
     extra = {"two_person": True} if two_person else {}
     await session.execute(insert(SuspensionRow).values(**row_values(suspension), **extra))
 
@@ -404,7 +404,7 @@ class HeldRows:
         """Write a first approval over a pending two-person row at its digest, leaving it pending.
 
         False when no row changed: it was already endorsed, decided or moved. The database holds
-        the same rules as `SuspendedAction.endorsed`, in `0218`'s checks and policy.
+        the same rules as `SuspendedAction.endorsed`, in `0221`'s checks and policy.
         """
         changed = cast(
             "CursorResult[Any]",

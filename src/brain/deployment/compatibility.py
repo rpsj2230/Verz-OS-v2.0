@@ -129,7 +129,7 @@ A_RESTRICTION_ON_A_FLAG_THE_PREVIOUS_RELEASE_NEVER_SETS_IS_NOT_A_NARROWING: Fina
     "of false is true for every row whose flag is false. The previous release never names the "
     "column, so every row it writes holds false there and the new check binds none of them; it "
     "binds only the rows the new release marks, which is how a rule is given to a state the old "
-    "release cannot produce. 0218 is the first to need it."
+    "release cannot produce. 0221 is the first to need it."
 )
 
 #: Why a restriction that binds only a word the previous release could not write is not a narrowing.
