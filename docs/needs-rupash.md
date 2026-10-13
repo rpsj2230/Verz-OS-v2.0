@@ -2,11 +2,89 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**52 items are open: 232,** what declares that an install has a residency constraint, **231,** which chat backup and safety alerts are sent to, **230,** whether a browser run that steps outside what was approved suspends and asks again or ends, **219,** whether an approver may amend an action before approving it, **218,** whether the product may count how often each knowledge item is read, **216,** what counts as a delegation when a person moves department, **215,** whether the setup wizard takes a logo as an upload or as the address of a picture you already host, **210,** whether an automation a person wrote in words may call a model with nobody present, **209,** what starts an automation that waits for a change in a source or a call from outside, **203,** what "only towards stricter" means for how a connected source's own permissions are followed, **202,** three disclosure decisions on screens I built (who the sign-in page names, what the landing figures show a reader without the spend screens, and whether every file download is written down), **201,** who an agent is shared with and whether its page has a browsing switch, **200,** what happens to a person's agents when the person is switched off, **199,** whether these are the criteria to hold the Maintenance Agent to, **198,** going live with your real systems, the order and one rule for the recordings, **197,** sign in with Lark, what you do and one question, **196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **193,** which formats an agent's generated documents start with and which libraries may be added, **192,** whether sensitive actions that cannot be undone need a second person, **191,** whether an agent may ever answer with nothing behind it, **189,** how a team agent may use mail without one person's mail reaching anybody else, **188,** whether five console tasks that ask for what the design does not do are narrowed, **187,** whether the chat tools show progress while an answer is made, **186,** whether answers keep using the old search index while a new embedding model is built, **185,** which person approves the eight starter skills, **184,** which outside AI services are offered first and what they count as, **183,** whether a skill is refused when its agent lacks one of its tools, **182,** what a skill names when it needs knowledge, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **167,** whether a chat room or channel belongs to exactly one agent, **163,** the short list of what stops tasks being proved on your install, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **134,** connecting the Slack channel, **132,** connecting the email channel, **131,** making staff accounts work on your install, **127 and 128,** things for you to do (switch on the Lark chat channel, and connect Xero, HubSpot and Freshdesk), **and 91,** the
+**56 items are open: 226,** whether a question is estimated before it is answered and refused when the estimate exceeds what is left, **225,** whether two scaling leaves are closed by what they are for (one pass over the screens, and the ledger's partitioning trigger), **224,** whether the sentence a person is refused with names the budget and who can raise it, **232,** what declares that an install has a residency constraint, **231,** which chat backup and safety alerts are sent to, **230,** whether a browser run that steps outside what was approved suspends and asks again or ends, **227,** whether the modularity proof may stand without a provider key being replaced, **219,** whether an approver may amend an action before approving it, **218,** whether the product may count how often each knowledge item is read, **216,** what counts as a delegation when a person moves department, **215,** whether the setup wizard takes a logo as an upload or as the address of a picture you already host, **210,** whether an automation a person wrote in words may call a model with nobody present, **209,** what starts an automation that waits for a change in a source or a call from outside, **203,** what "only towards stricter" means for how a connected source's own permissions are followed, **202,** three disclosure decisions on screens I built (who the sign-in page names, what the landing figures show a reader without the spend screens, and whether every file download is written down), **201,** who an agent is shared with and whether its page has a browsing switch, **200,** what happens to a person's agents when the person is switched off, **199,** whether these are the criteria to hold the Maintenance Agent to, **198,** going live with your real systems, the order and one rule for the recordings, **197,** sign in with Lark, what you do and one question, **196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **193,** which formats an agent's generated documents start with and which libraries may be added, **192,** whether sensitive actions that cannot be undone need a second person, **191,** whether an agent may ever answer with nothing behind it, **189,** how a team agent may use mail without one person's mail reaching anybody else, **188,** whether five console tasks that ask for what the design does not do are narrowed, **187,** whether the chat tools show progress while an answer is made, **186,** whether answers keep using the old search index while a new embedding model is built, **185,** which person approves the eight starter skills, **184,** which outside AI services are offered first and what they count as, **183,** whether a skill is refused when its agent lacks one of its tools, **182,** what a skill names when it needs knowledge, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **167,** whether a chat room or channel belongs to exactly one agent, **163,** the short list of what stops tasks being proved on your install, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **134,** connecting the Slack channel, **132,** connecting the email channel, **131,** making staff accounts work on your install, **127 and 128,** things for you to do (switch on the Lark chat channel, and connect Xero, HubSpot and Freshdesk), **and 91,** the
 checks only you can do on your install; it waits for the Knowledge upload grants (item 105) to land.
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 226. Should a question be estimated before it is answered, and refused when the estimate is more than is left?
+
+**In plain terms:** task M21.2.1 says each question's cost is estimated before it is answered, from the
+lane, the model tier, how many tools it may use and how much it retrieves, and M21.2.2 says a question
+whose estimate is more than the budget has left is refused before any model is called. The estimating is
+built and tested (`spend.estimate`) and is used only when an agent is rehearsed. What runs on every real
+question is the stop you chose in item 169: when a budget is **already used up**, the next question is
+refused before anything is spent. A question that would take a budget **past** its limit is answered, and
+the budget stops the question after it.
+
+**Option A: keep it as decided in item 169.** Only a used-up budget stops a question. The two estimate
+leaves are closed as not wanted. Nothing new runs on the answer path, and a limit is overshot by at most
+the one question that crossed it.
+
+**Option B: estimate every question and refuse the ones that would cross a limit.** The estimate is a
+guess before the model is called, so some questions are refused that would have fitted and some are
+answered that go over. It adds a lookup to every question. It is built behind a switch that ships off,
+like the stop itself.
+
+**Option C: estimate, and warn instead of refusing.** The person is told this question is likely to take
+the budget past its limit and may go ahead. The limit still stops the question after it.
+
+**My recommendation:** A. You have already chosen to stop when a limit is used up and to watch a week of
+"would have stopped" figures first; an estimate would refuse questions on a guess, and the overshoot it
+prevents is one question.
+
+**What I need from you:** reply "226: A", "226: B" or "226: C".
+
+## 225. Are two scaling leaves closed by what they are for: one pass over the screens, and the ledger's partitioning trigger?
+
+**In plain terms:** two tasks in the scaling group say something the build deliberately does differently.
+
+**a. M36.2.2.2, "collapse the screens into a single pass".** Every piece of text is checked for personal
+data and secrets by several screens in turn. A single pass that reports exactly the same thing is built and
+tested (`screen_in_one_pass`), and what it was measured to do is no faster: Python's pattern matching has no
+way to search for many patterns at once, so the single pass does the same work in a different order.
+
+**b. M36.1.1.4, "partition the ledger when it has too many rows or is too slow".** The ledger is already
+cut into monthly partitions by the worker. The trigger the product uses is the length of time the ledger is
+kept against the size of a partition, which is true from the day the install is made. A row count would fire
+only after the table is already large, which is the moment partitioning is hardest to do.
+
+**Option A: both are closed by what they are for.** The screens stay as they are, with the single pass kept
+in case the language gains the means to make it pay. The ledger's trigger is the retention window, shown on
+the Capacity page, and a row count is not added.
+
+**Option B: build what the tasks literally say.** Switch the answer path to the single pass anyway, and add a
+row-count and slow-query trigger on the Capacity page as well as the window.
+
+**My recommendation:** A for both. (a) changes nothing a person can see and was measured not to help. (b) the
+page already says the ledger is due and partitioned, and a measured row count would say it later.
+
+**What I need from you:** reply "225: a A, b A", changing a letter for either you want built.
+
+## 224. Should the sentence a person is refused with, when a budget stops them, name the budget and who can raise it?
+
+**In plain terms:** task M21.2.6 says a person stopped by a budget is told which budget was hit and who can
+raise it. What the product says today, deliberately, is one sentence naming neither: "A spending limit that
+covers your questions has been reached, so this question was not answered. Whoever manages that budget has
+been told, and questions are answered again when its period ends." The reason is that a refusal naming a
+department's budget tells the person that budget exists and, from two refusals a week apart, how fast
+everybody else is spending it.
+
+**Option A: as built.** Everybody gets the one sentence. The budget and who manages it are on the Spend
+page's list of stops for the people who may read that spend.
+
+**Option B: name it to the people it is theirs to know.** A person stopped by their own allowance is told
+it is theirs and who manages their department's budgets. A person who may read that department's spend is
+told which budget and until when. Everybody else gets the one sentence. The code for this is built
+(`spend_view.told_about`) and is called from the refusal.
+
+**Option C: name it to everybody.** Simplest to read, and tells a stranger which budgets exist.
+
+**My recommendation:** B. A person stopped by their own allowance should be able to find who can raise it,
+and a refusal that names only what the reader is already entitled to read discloses nothing new.
+
+**What I need from you:** reply "224: A", "224: B" or "224: C".
 
 ## 232. What declares that an install has a residency constraint?
 
@@ -73,6 +151,31 @@ person decides, and what they are approving is one action on a page they have no
 and it costs a person one more press when a run needs more. B can be added later behind its own switch.
 
 **What I need from you:** reply "230: A" or "230: B".
+
+## 227. May the modularity proof stand without a vendor's key being replaced on your install?
+
+**In plain terms:** task M29.3.1 says modularity is proved on an install, and one of its four clauses is
+that a replaced vendor adapter takes effect with no deploy. Three clauses are shown by checks the install
+runs by itself: a connector for an API nobody shipped goes live with no release, a channel is switched
+off from the console and refuses what arrives, and a console setting says when it applies. The fourth is
+shown only as far as a check safely can: a model provider is switched on and tested from the Models
+screen with no deploy. Replacing a provider's key is not shown, because a check that rotated a real key
+would be handling it, and the Models module refuses that on purpose.
+
+**Option A: the nearest check is enough.** The task closes when the four checks pass. I would then also
+say on the Install page that rotation is not exercised.
+
+**Option B: you do it once by hand.** You replace one provider's key from the Models screen on your
+install, ask a question, and tell me it answered; I record that against the task. Until then the task is
+held and the Install page shows the three clauses green and the fourth as not proved.
+
+**Option C: the clause is dropped from the task.** The task closes on the other three and the sentence is
+changed to match.
+
+**My recommendation:** B, because it is the one clause a check cannot show and it takes a minute. The task
+is held until you answer, so nothing closes on less than its sentence.
+
+**What I need from you:** reply "227: A", "227: B" or "227: C".
 
 ## 219. May an approver amend an action before approving it, or only approve or reject?
 
@@ -1623,6 +1726,112 @@ Record against the Tools area.
     requirement until the browser checks are done.
 - **The rest.** As in check 13.
 
+## 223. What may start an automation besides the clock, and who vouches for an event that arrives from outside? - DECIDED 2026-10-13: B
+
+**In plain terms:** your brief says an automation can start three ways: on a schedule, when a connected
+system reports a change, and when something outside calls a web address we give it. Today only the schedule
+works. The other two exist as words in a list and nothing starts a run on either. Building them is not
+plumbing, because each one lets something other than a person on the clock make an agent act as its owner:
+a connector change is only as trustworthy as the connector's own notion of "changed", and a web address that
+starts work is a door onto the internet that needs a secret, a size limit and a rule for repeats.
+
+**Option A: schedule only, for now.** I narrow the leaf to say so and the Automations page offers one way to
+start. Nothing new is exposed. A weekly report and a morning summary are covered, which is every template in
+the gallery.
+
+**Option B: schedule and connector change.** A run starts when the minimal index of a connector reports a
+changed record id (never its content), and the run reads the record live as its owner, as every run does.
+Nothing new faces the internet.
+
+**Option C: all three.** B, and a signed inbound address per automation: a long secret in the address,
+one body size limit, and the same body refused a second time within a day. It is the one that lets a
+form on your website start work, and the one with a public door.
+
+**My recommendation:** B now, C when a real automation needs it. B costs no new exposure and covers "when a
+deal changes in HubSpot"; C is worth building the day somebody names the outside thing that should call it.
+I will build either behind a switch that ships off, and prove it on your install with a changed record.
+
+**What I need from you:** reply "223: A", "223: B" or "223: C".
+
+**Decided 2026-10-13: "223: B".** What starts an automation besides the clock is a change a connector's index reports (schedule and connector change). A signed inbound address per automation is not built until a real automation needs it. Task M17.4.1 is built to that.
+
+## 222. May the install measure how long approvals wait across everybody, and show only the typical figure? - DECIDED 2026-10-13: A
+
+**In plain terms:** your brief says push notifications for approvals are held back until approvals wait
+long enough to need them, and that the install should measure that wait and tell you when it passes four
+hours. The measuring has not been built, because the database lets a person read only approvals they raised
+or decided, so nobody on the Install page can see the whole queue's timings, and the count of approvals is
+itself something the system keeps from people who may not see them.
+
+**Option A: a counts-free view of when each approval was raised and decided.** One database view that
+carries two times per decided approval and no person, no agent, no capability and no count shown to anybody.
+The Install page shows one figure ("typical wait: 1 hour 40 minutes") and, past four hours, one sentence
+saying push is now worth building. It needs one small database change.
+
+**Option B: measure only what the reader may already see.** The figure is the typical wait of the
+approvals the reader raised or decided. No database change, but an administrator who has decided few
+approvals sees a figure about almost nothing, and the four-hour test would never fire for the install.
+
+**Option C: do not measure; narrow the leaf.** Push stays deferred with no trigger, and I say so on the
+page. I would not recommend it: the point of deferring was to let a measurement decide.
+
+**My recommendation:** A. The figure discloses a duration and not who waited or how many, and it is the
+only way the deferral's own trigger can ever fire.
+
+**What I need from you:** reply "222: A", "222: B" or "222: C".
+
+**Decided 2026-10-13: "222: A".** The install measures how long approvals wait across everybody through a counts-free view that holds only when each approval was raised and decided, and shows the typical figure and whether push for approvals is worth building. Tasks M35.4.5 and M35.3.2.2; the view is migration 0227, already on main.
+
+## 221. Who is told, and on which channel, when a safety mechanism has not run? - DECIDED 2026-10-13: C
+
+**In plain terms:** the system knows twenty-seven things that must keep running (the job that puts a stopped
+worker's jobs back, the sweep that reads back an interrupted action, the backup, and so on) and it can tell
+when one has not run for longer than it should. Today that knowledge goes nowhere: the sentence is composed
+and nothing sends it, because nobody chose who hears it or where. The same is true of the alert that no
+backup exists. These are the two alerts that matter most on the day something quietly breaks.
+
+**Option A: the people who hold the operations alert, in the chat tool each last wrote on.** Told once per
+episode, naming the mechanism and how long, never what it protects or any data. For the worst ones, the
+people who hold the incident capability as well. Nothing is sent to anybody who cannot already open the
+Install page.
+
+**Option B: the email address you set during setup.** One message per episode to one named mailbox. It works
+if the chat tools are down, and fails quietly if the mailbox is not watched.
+
+**Option C: both.** A in chat, and B as the fallback when nobody holding the alert has used a chat tool in
+the last week.
+
+**My recommendation:** C. A mechanism that has stopped may be the one that carries the chat message, so the
+mailbox is the second route that does not depend on the first. I will build it behind a switch that ships
+off, and prove it on your install by pausing one mechanism and reading the message.
+
+**What I need from you:** reply "221: A", "221: B" or "221: C".
+
+**Decided 2026-10-13: "221: C".** When a safety mechanism has not run, the people who hold the operations alert are told in the chat tool each last used, and the email address set during setup is the fallback when nobody holding the alert has used a chat tool lately. Tasks M17.7.2 and M17.7.6 are built to that.
+
+## 220. Which speech service turns a person's dictation into text on the Ask page? - DECIDED 2026-10-13: B
+
+**In plain terms:** task M40.7.3 says a person can attach a file to a question, which works today, and
+speak a question, which does not: no speech-to-text tool is registered on the install, so there is nothing
+to send the recording to. A recording is a person's voice, so choosing the service decides who hears it.
+
+**Option A: a speech service you name, called through the tool catalogue like any other tool.** Dictation
+is switched off until you name one and set its key in the vault. The text it returns is read at the
+person's own reach and kept nowhere but in the question they send.
+
+**Option B: speech built into the person's browser.** Nothing leaves the person's computer for our side
+to see, and quality and language support depend on their browser. There is no key and no vendor, and the
+task is closed by what it is for.
+
+**Option C: no dictation.** The task is closed as not wanted and the Ask page keeps typing and files.
+
+**My recommendation:** B first, because it needs no vendor, no key and no decision about who hears a
+voice; A can be added later behind the same button if the browsers prove too patchy.
+
+**What I need from you:** reply "220: A" (and say which service), "220: B" or "220: C".
+
+**Decided 2026-10-13: "220: B".** Dictation uses the speech built into the person's browser: nothing leaves the person's computer for our side, there is no vendor and no key. Task M40.7.3 is built to that.
+
 ## 181. Where should the audit screen's count of redactions come from? - DECIDED 2026-10-12: A
 
 **In plain terms:** the Activity screen is meant to show an auditor two statistics: how often each kind of
@@ -2601,112 +2810,6 @@ safe either way: B only ever adds to it.
 **What I need from you:** reply "233: A" for all four recommendations, or the letters you prefer, for example "233: 1A 2A 3A 4B".
 
 **Decided 2026-10-13: "233: A", and the window approved:** the deploy script is updated from the release once and kept current; the pooler line is written narrowly and only the pooler recreated; the canvas is switched on internal-only; the object store and the canvas wait for the product change that gives them a release step, then run. Tonight from 23:00 SGT the order is the sandbox (after the script update), the pooler, then the vault self-open last, because it restarts the app and worker; the object store and canvas follow once their release step has landed.
-
-## 223. What may start an automation besides the clock, and who vouches for an event that arrives from outside? - DECIDED 2026-10-13: B
-
-**In plain terms:** your brief says an automation can start three ways: on a schedule, when a connected
-system reports a change, and when something outside calls a web address we give it. Today only the schedule
-works. The other two exist as words in a list and nothing starts a run on either. Building them is not
-plumbing, because each one lets something other than a person on the clock make an agent act as its owner:
-a connector change is only as trustworthy as the connector's own notion of "changed", and a web address that
-starts work is a door onto the internet that needs a secret, a size limit and a rule for repeats.
-
-**Option A: schedule only, for now.** I narrow the leaf to say so and the Automations page offers one way to
-start. Nothing new is exposed. A weekly report and a morning summary are covered, which is every template in
-the gallery.
-
-**Option B: schedule and connector change.** A run starts when the minimal index of a connector reports a
-changed record id (never its content), and the run reads the record live as its owner, as every run does.
-Nothing new faces the internet.
-
-**Option C: all three.** B, and a signed inbound address per automation: a long secret in the address,
-one body size limit, and the same body refused a second time within a day. It is the one that lets a
-form on your website start work, and the one with a public door.
-
-**My recommendation:** B now, C when a real automation needs it. B costs no new exposure and covers "when a
-deal changes in HubSpot"; C is worth building the day somebody names the outside thing that should call it.
-I will build either behind a switch that ships off, and prove it on your install with a changed record.
-
-**What I need from you:** reply "223: A", "223: B" or "223: C".
-
-**Decided 2026-10-13: "223: B".** What starts an automation besides the clock is a change a connector's index reports (schedule and connector change). A signed inbound address per automation is not built until a real automation needs it. Task M17.4.1 is built to that.
-
-## 222. May the install measure how long approvals wait across everybody, and show only the typical figure? - DECIDED 2026-10-13: A
-
-**In plain terms:** your brief says push notifications for approvals are held back until approvals wait
-long enough to need them, and that the install should measure that wait and tell you when it passes four
-hours. The measuring has not been built, because the database lets a person read only approvals they raised
-or decided, so nobody on the Install page can see the whole queue's timings, and the count of approvals is
-itself something the system keeps from people who may not see them.
-
-**Option A: a counts-free view of when each approval was raised and decided.** One database view that
-carries two times per decided approval and no person, no agent, no capability and no count shown to anybody.
-The Install page shows one figure ("typical wait: 1 hour 40 minutes") and, past four hours, one sentence
-saying push is now worth building. It needs one small database change.
-
-**Option B: measure only what the reader may already see.** The figure is the typical wait of the
-approvals the reader raised or decided. No database change, but an administrator who has decided few
-approvals sees a figure about almost nothing, and the four-hour test would never fire for the install.
-
-**Option C: do not measure; narrow the leaf.** Push stays deferred with no trigger, and I say so on the
-page. I would not recommend it: the point of deferring was to let a measurement decide.
-
-**My recommendation:** A. The figure discloses a duration and not who waited or how many, and it is the
-only way the deferral's own trigger can ever fire.
-
-**What I need from you:** reply "222: A", "222: B" or "222: C".
-
-**Decided 2026-10-13: "222: A".** The install measures how long approvals wait across everybody through a counts-free view that holds only when each approval was raised and decided, and shows the typical figure and whether push for approvals is worth building. Tasks M35.4.5 and M35.3.2.2; the view is migration 0227, already on main.
-
-## 221. Who is told, and on which channel, when a safety mechanism has not run? - DECIDED 2026-10-13: C
-
-**In plain terms:** the system knows twenty-seven things that must keep running (the job that puts a stopped
-worker's jobs back, the sweep that reads back an interrupted action, the backup, and so on) and it can tell
-when one has not run for longer than it should. Today that knowledge goes nowhere: the sentence is composed
-and nothing sends it, because nobody chose who hears it or where. The same is true of the alert that no
-backup exists. These are the two alerts that matter most on the day something quietly breaks.
-
-**Option A: the people who hold the operations alert, in the chat tool each last wrote on.** Told once per
-episode, naming the mechanism and how long, never what it protects or any data. For the worst ones, the
-people who hold the incident capability as well. Nothing is sent to anybody who cannot already open the
-Install page.
-
-**Option B: the email address you set during setup.** One message per episode to one named mailbox. It works
-if the chat tools are down, and fails quietly if the mailbox is not watched.
-
-**Option C: both.** A in chat, and B as the fallback when nobody holding the alert has used a chat tool in
-the last week.
-
-**My recommendation:** C. A mechanism that has stopped may be the one that carries the chat message, so the
-mailbox is the second route that does not depend on the first. I will build it behind a switch that ships
-off, and prove it on your install by pausing one mechanism and reading the message.
-
-**What I need from you:** reply "221: A", "221: B" or "221: C".
-
-**Decided 2026-10-13: "221: C".** When a safety mechanism has not run, the people who hold the operations alert are told in the chat tool each last used, and the email address set during setup is the fallback when nobody holding the alert has used a chat tool lately. Tasks M17.7.2 and M17.7.6 are built to that.
-
-## 220. Which speech service turns a person's dictation into text on the Ask page? - DECIDED 2026-10-13: B
-
-**In plain terms:** task M40.7.3 says a person can attach a file to a question, which works today, and
-speak a question, which does not: no speech-to-text tool is registered on the install, so there is nothing
-to send the recording to. A recording is a person's voice, so choosing the service decides who hears it.
-
-**Option A: a speech service you name, called through the tool catalogue like any other tool.** Dictation
-is switched off until you name one and set its key in the vault. The text it returns is read at the
-person's own reach and kept nowhere but in the question they send.
-
-**Option B: speech built into the person's browser.** Nothing leaves the person's computer for our side
-to see, and quality and language support depend on their browser. There is no key and no vendor, and the
-task is closed by what it is for.
-
-**Option C: no dictation.** The task is closed as not wanted and the Ask page keeps typing and files.
-
-**My recommendation:** B first, because it needs no vendor, no key and no decision about who hears a
-voice; A can be added later behind the same button if the browsers prove too patchy.
-
-**What I need from you:** reply "220: A" (and say which service), "220: B" or "220: C".
-
-**Decided 2026-10-13: "220: B".** Dictation uses the speech built into the person's browser: nothing leaves the person's computer for our side, there is no vendor and no key. Task M40.7.3 is built to that.
 
 ## 120. Memory on your server - DECIDED 2026-10-05: A, take down Dify, the old Langfuse and the old v1 worker
 

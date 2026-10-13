@@ -110,6 +110,7 @@ import { Badge } from "../ui/Badge";
 import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import { Notice } from "../ui/Notice";
 import { AskAttach, AttachedFiles } from "./AskAttach";
+import { AskWelcome } from "./AskWelcome";
 import { SOMETHING_DID_NOT_WORK } from "./Overview";
 import {
   ANSWER_API_PATH,
@@ -176,7 +177,7 @@ export const ASKING = "Asking.";
 /** The heading over what the answer stands on. Never a count, and never a source list. */
 export const BASED_ON = "What this is based on";
 
-/** Before anybody has asked anything. It names no entity and suggests no question. */
+/** Before anybody has asked anything. It names no entity; the questions offered under it come from the welcome route. */
 export const NOTHING_ASKED_YET = "Nothing has been asked yet.";
 
 /**
@@ -772,6 +773,10 @@ export function Ask() {
       {failure ? <FailureNotice failure={failure} fields={[QUESTION_NAME]} /> : null}
 
       {!busy && !asked && failure === null ? <p className="note">{NOTHING_ASKED_YET}</p> : null}
+
+      {!busy && !asked && failure === null && question === "" ? (
+        <AskWelcome onChoose={setQuestion} />
+      ) : null}
 
       {thread !== "" ? (
         <div className="ask__thread">

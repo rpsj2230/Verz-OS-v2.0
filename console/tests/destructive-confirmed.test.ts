@@ -39,6 +39,13 @@ import { CONTROL_DIRECTORIES, everyConfirmation, everyWrite } from "./support/wr
  * why each one is not destructive.
  */
 const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
+  "src/pages/install/PluginsPanel.tsx PLUGINS_API_PATH":
+    "Recording a plugin writes a switched-off record and loads or runs nothing: brain.plugin_routes.install_plugin " +
+    "arrives installed and is behind the plugin_registry switch, and enabling it is a separate act.",
+  "src/pages/install/PluginsPanel.tsx verbPath(row.plugin_id, verb)":
+    "Switching a plugin on or off and removing a disabled one change a record and nothing that runs, because no " +
+    "runner exists for the points that take code; a removed plugin is a retired row that keeps every version it " +
+    "ran, so recording its manifest again brings it back, which tests/unit/test_acceptance_checks_plugin_registry.py holds.",
   "src/pages/agents/AutomationAuthoring.tsx authoringPreviewApiPath(agentId)":
     "Reviewing a new automation writes nothing: brain.automation_authoring_routes.authoring_preview " +
     "returns what saving would store and what it would have done, keeps no row, and the save is a " +
@@ -163,6 +170,12 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/FirstRun.tsx FINISH_PATH":
     "Binds the installer's own sign-in to the first administrator on an install that has none, " +
     "once; a second use is refused, so nothing existing is replaced.",
+  "src/pages/FirstRun.tsx DRAFT_PATH":
+    "Keeps the answers given so far, behind the setup code and without any credential, so closing the browser " +
+    "continues where it stopped; it replaces only that draft, which the person is still writing, and ends nothing else.",
+  "src/pages/FirstRun.tsx DRAFT_READ_PATH":
+    "Reads the kept draft back with the setup code, sent as a POST so the code stays out of the address; " +
+    "it writes nothing, so there is nothing for it to end or replace.",
   "src/pages/FirstRun.tsx APPOINTMENT_PATH":
     "Appoints the first administrator of an install that has none. The wizard's review screen is " +
     "the statement of everything sent, and nothing existing is ended or replaced.",

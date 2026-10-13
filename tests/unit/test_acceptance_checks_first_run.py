@@ -3,7 +3,7 @@ failing with the wizard broken the way it would plausibly break.
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M42.5.3, M42.5.4, M42.5.10, M42.5.11, M42.5.13, M42.5.8, M42.6.2
+Task ids: M42.5.3, M42.5.4, M42.5.10, M42.5.11, M42.5.13, M42.5.8, M42.6.2, M42.5.12
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ STEPS = "the_wizard_counts_steps_and_reviews_everything_before_writing"
 CLOSED = "a_closed_wizard_answers_as_a_path_that_does_not_exist"
 VALUES = "the_wizard_s_values_are_held_in_the_install_s_settings"
 KEY = "a_provider_key_the_wizard_was_given_is_held_in_the_vault"
+DRAFT = "a_half_finished_setup_is_kept_behind_the_code_and_read_back"
 
 
 def test_the_module_declares_the_leaves_each_check_proves() -> None:
@@ -34,8 +35,9 @@ def test_the_module_declares_the_leaves_each_check_proves() -> None:
         CLOSED: ("M42.5.11",),
         VALUES: ("M42.6.2",),
         KEY: ("M42.5.8",),
+        DRAFT: ("M42.5.12",),
     }
-    assert checks_in(MODULE) == [CODE, STEPS, CLOSED, VALUES, KEY]
+    assert checks_in(MODULE) == [CODE, STEPS, CLOSED, VALUES, KEY, DRAFT]
 
 
 @pytest.fixture(scope="module")
@@ -58,8 +60,8 @@ def test_the_checks_pass_on_an_install_and_leave_nothing(install: str, issuer: N
     administrator on the owner's server."""
     before = counts(install)
     results = run_module(install, MODULE)
-    assert {name: results[name] for name in (CODE, STEPS, CLOSED)} == dict.fromkeys(
-        (CODE, STEPS, CLOSED), (PASSED, "")
+    assert {name: results[name] for name in (CODE, STEPS, CLOSED, DRAFT)} == dict.fromkeys(
+        (CODE, STEPS, CLOSED, DRAFT), (PASSED, "")
     )
     # A scratch database was not set up through the wizard and names no vault.
     assert results[VALUES][0] == NOT_RUN and results[KEY][0] == NOT_RUN
@@ -184,3 +186,18 @@ def test_the_vault_check_passes_on_a_held_provider_key_and_is_not_run_otherwise(
         monkeypatch.setattr(vault_status, "report", reporting(seal, state))
         with pytest.raises(CheckNotRunError):
             asyncio.run(body(harness(address)))
+
+
+@pytest.mark.needs_db
+def test_a_draft_kept_on_an_install_with_an_administrator_fails_the_draft_check(
+    install: str, issuer: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A draft route that works after the wizard has closed lets whoever holds the code write to
+    an install that is finished. Delete this and M42.5.12 closes on a door that never shuts."""
+    from brain import setup_routes, setup_wizard
+
+    # The route asks and so does every screen it records through, so both are opened.
+    monkeypatch.setattr(setup_routes, "assert_open", lambda administrators: None)
+    monkeypatch.setattr(setup_wizard, "assert_open", lambda administrators: None)
+    outcome, reason = run_module(install, MODULE)[DRAFT]
+    assert outcome == FAILED, reason

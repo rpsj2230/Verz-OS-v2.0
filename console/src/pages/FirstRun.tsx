@@ -89,6 +89,8 @@ import { ConnectSourcesStep, namedSources } from "../setup/ConnectSourcesStep";
 import {
   APPOINTMENT_PATH,
   DATA_STEWARD_EXPLAINED,
+  DRAFT_PATH,
+  DRAFT_READ_PATH,
   FINISH_PATH,
   FINISH_TITLE,
   FIRST_RUN_PATH,
@@ -96,12 +98,15 @@ import {
   SCREENS,
   SETUP_REFUSED_MESSAGE,
   appointmentBody,
+  draftBody,
   finishBody,
   messageFor,
   placeProblems,
+  readDraft,
   stores,
   type AppointedView,
   type Answers,
+  type DraftView,
   type Placed,
   type ProblemsView,
   type Question,
@@ -333,18 +338,56 @@ function Wizard() {
     }));
   }
 
+  // Kept on the server, best effort and told to nobody: a draft that was not kept costs the
+  // person the screens they have already filled in if they close the browser, and nothing else.
+  function keepDraft(screen: Screen, nowSkipped: ReadonlySet<StepKey>): void {
+    if (screen.key === "setup_code") {
+      return;
+    }
+    void request(DRAFT_PATH, {
+      method: "POST",
+      body: draftBody(code, answers, nowSkipped, screen.key),
+      atRoot: true,
+    });
+  }
+
+  // Asked once, as the setup code is passed on. A draft that comes back puts the person at the
+  // first screen not finished with what they answered before; none, or a refusal, changes nothing.
+  async function resume(): Promise<void> {
+    const kept = await request<DraftView>(DRAFT_READ_PATH, {
+      method: "POST",
+      body: { setup_code: code },
+      atRoot: true,
+    });
+    const found = kept.ok ? readDraft(kept.data) : null;
+    if (found !== null) {
+      setAnswers(found.answers);
+      setSkipped(found.skipped);
+      setAt(found.at);
+    }
+  }
+
   function carryOn(screen: Screen): void {
+    let nowSkipped = skipped;
     if (screen.skippable && skipped.has(screen.key)) {
       const next = new Set(skipped);
       next.delete(screen.key);
       setSkipped(next);
+      nowSkipped = next;
     }
     setAt(at + 1);
+    if (screen.key === "setup_code") {
+      void resume();
+    } else {
+      keepDraft(screen, nowSkipped);
+    }
   }
 
   function skipScreen(screen: Screen): void {
-    setSkipped(new Set([...skipped, screen.key]));
+    const nowSkipped = new Set([...skipped, screen.key]);
+    setSkipped(nowSkipped);
     setAt(at + 1);
+    keepDraft(screen, nowSkipped);
   }
 
   async function finish(principalId: string, kept: ProviderKeyKept, restart: boolean): Promise<void> {

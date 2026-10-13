@@ -528,6 +528,8 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # sentence the check wrote: `0133` keeps no principal, and the people a check acts as are
         # reserved ones that exist only inside its rolled-back transaction.
         "ops.acceptance_result",
+        # A run's record keeps a commit, an occasion, a status and three instants (`0231`).
+        "ops.acceptance_run",
         "ops.model_attempt",
         # A provider's terms and a matrix change name the administrator who wrote them, an actor
         # and not an owner (`0097`).

@@ -30,6 +30,37 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         plugins_have_no_loader: true,
         every_change_is_in_the_audit_trail: true,
       },
+      "/api/v1/install/plugins": {
+        points: [
+          {
+            name: "connector",
+            leaf: "M29.1.2",
+            answer: "plugin",
+            tier: "sidecar",
+            direction: "produces",
+            carries: "code",
+            contract: UNBROKEN,
+            why: UNBROKEN,
+          },
+        ],
+        plugins: [
+          {
+            plugin_id: "stand-in",
+            version: "1.0.0",
+            point: "connector",
+            state: "installed",
+            since: "2019-03-04T09:00:00Z",
+            history: ["1.0.0"],
+            requires: [],
+            config: [],
+            core_min: "0.1.0",
+            core_max: "9.0.0",
+          },
+        ],
+        registry_is_on: true,
+        no_plugin_is_loaded: true,
+        core_version: "0.1.0",
+      },
     },
   },
 };
