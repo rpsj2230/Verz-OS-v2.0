@@ -49,6 +49,8 @@ import {
 } from "../src/pages/approvalsQuery";
 import {
   KEEP_IT_LABEL,
+  NEEDS_TWO_SENTENCE,
+  SECOND_OF_TWO_SENTENCE,
   TAKE_OVER_CONSEQUENCE,
   TAKE_OVER_LABEL,
   TAKEN_OVER_SENTENCE,
@@ -594,11 +596,45 @@ describe("the approvals queue", () => {
     expect(baseRule(parseCss(readConsoleFile(SHEET)), "approval-card__unsent").declarations["overflow-wrap"]).toBe("anywhere");
   });
 
+  test("a card that needs two people says whether this approval is the first or the second, and others say nothing", async () => {
+    // What breaks if this is deleted: an approver approving an irreversible action believing it
+    // will run, or believing they alone decided it, when it waits for a second person (M13.7.7).
+    // The note is the API's flag drawn, so the sibling with no flag draws none.
+    const { container } = await consoleAt(APPROVALS_ADDRESS, {
+      [QUEUE_API]: {
+        body: {
+          items: [
+            wireCard("sus_first", { needs_second: true }),
+            wireCard("sus_second", { needs_second: true, first_approved: true }),
+            wireCard("sus_one"),
+          ],
+        },
+      },
+    });
+    const [first, second, one] = [...page(container).querySelectorAll("article.approval-card")];
+
+    expect(first?.querySelector(".approval-card__second")?.textContent).toBe(NEEDS_TWO_SENTENCE);
+    expect(second?.querySelector(".approval-card__second")?.textContent).toBe(SECOND_OF_TWO_SENTENCE);
+    expect(one?.querySelector(".approval-card__second")).toBeNull();
+    expect(readApprovalCard(wireCard("sus_one"))).toMatchObject({ needsSecond: false, firstApproved: false });
+  });
+
   test("every name the page reads is a name the routes declare, and a card declares no more", () => {
     // What breaks if this is deleted: the page and the routes drifting apart on a name, or a
     // route that started sending a card's call or state. The card's set is exact.
     const queue = declaredResponseSchema(QUEUE_ROUTE, "get");
-    const card = ["agent_id", "expires_at", "may_take_over", "raised_at", "request", "runs_as", "suspension_id", "unsent_because"];
+    const card = [
+      "agent_id",
+      "expires_at",
+      "first_approved",
+      "may_take_over",
+      "needs_second",
+      "raised_at",
+      "request",
+      "runs_as",
+      "suspension_id",
+      "unsent_because",
+    ];
 
     expect(declaredPropertyNames(queue)).toEqual(expect.arrayContaining(["items", "truncated"]));
     expect(declaredPropertyNames(declaredProperty(queue, "items"))).toEqual(card);
@@ -788,8 +824,10 @@ describe("deciding an approval", () => {
     expect(decisionBody({ verdict: "rejected", reasonCode: "constructor" })).toBeNull();
     expect(decisionBody({ verdict: "taken_over", reasonCode: "" })).toBeNull();
 
-    expect(declaredPropertyNames(declaredResponseSchema(DECISION_ROUTE, "post"))).toEqual(["suspension_id", "verdict"]);
+    expect(declaredPropertyNames(declaredResponseSchema(DECISION_ROUTE, "post"))).toEqual(["awaiting_second", "suspension_id", "verdict"]);
     expect(readDecision({ suspension_id: "sus_1", verdict: "approved" }, "sus_1")).toBe("approved");
+    expect(readDecision({ suspension_id: "sus_1", verdict: "approved", awaiting_second: true }, "sus_1")).toBe("approved_first");
+    expect(readDecision({ suspension_id: "sus_1", verdict: "rejected", awaiting_second: true }, "sus_1")).toBe("rejected");
     expect(readDecision({ suspension_id: "sus_2", verdict: "approved" }, "sus_1")).toBeNull();
     expect(readDecision({ suspension_id: "sus_1", verdict: "taken_over" }, "sus_1")).toBe("taken_over");
     expect(readDecision({ suspension_id: "sus_1", verdict: "amended" }, "sus_1")).toBeNull();

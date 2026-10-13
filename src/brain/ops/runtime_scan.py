@@ -36,6 +36,7 @@ CALLS_A_MODEL_WITHOUT_TOOLS: Final[frozenset[str]] = frozenset(
         "brain.gate.model_lane",
         "brain.builder.coauthor",
         "brain.agent_coauthor_routes",
+        "brain.skill_draft_routes",
         "brain.ops.model_probe_run",
         "brain.provider_routes",
         "brain.models.adapter",

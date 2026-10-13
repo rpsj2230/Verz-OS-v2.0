@@ -3,7 +3,7 @@
 - **Screens:** `/skills`, `/skills/:name`, `/skills/:name/:view`, `/tools`, `/tools/:name`
 - **Tables:** `agent.skill`, `agent.skill_review`, `agent.skill_assignment`, `agent.tool_definition`, `agent.tool_switch`, `agent.skill_category`, `agent.skill_invocation`, `agent.skill_retirement`, `agent.skill_script`, `agent.skill_detachment`, `agent.skill_export`, `agent.skill_rehearsal`
 - **Installation values:** `INSTALL_ACCEPTANCE_SKILL_SOURCE`
-- **Measured here:** 17 routes, 0 called by no screen; 13 write routes, 13 with all three proofs; 2 gaps.
+- **Measured here:** 18 routes, 0 called by no screen; 14 write routes, 14 with all three proofs; 2 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -12,6 +12,7 @@
 | `GET /api/v1/skills/library` | `/skills` |
 | `GET /api/v1/tools` | `/tools`, `/tools/:name` |
 | `POST /api/v1/skills` | `/skills`, `/skills/:name`, `/skills/:name/:view` |
+| `POST /api/v1/skills/drafts` | `/skills`, `/skills/:name`, `/skills/:name/:view` |
 | `POST /api/v1/skills/imports` | `/skills`, `/skills/:name`, `/skills/:name/:view` |
 | `POST /api/v1/skills/procedures` | `/skills`, `/skills/:name`, `/skills/:name/:view` |
 | `POST /api/v1/skills/{digest}/assignments` | `/agents/:agentId`, `/agents/:agentId/:tab`, `/skills`, `/skills/:name`, `/skills/:name/:view` |
@@ -33,6 +34,7 @@
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
 | `POST /api/v1/skills` | `/skills`, `/skills/:name`, `/skills/:name/:view` | `test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent` in `tests/unit/test_skill_routes.py` |
+| `POST /api/v1/skills/drafts` | `/skills`, `/skills/:name`, `/skills/:name/:view` | `test_on_a_real_database_a_described_skill_lands_as_a_draft_and_nothing_is_left_behind` in `tests/unit/test_acceptance_skill_draft.py` (database, in CI) | `test_on_a_real_database_a_described_skill_lands_as_a_draft_and_nothing_is_left_behind` in `tests/unit/test_acceptance_skill_draft.py` (database, in CI) | `test_a_described_skill_lands_undecided_and_is_refused_every_assignment` in `tests/unit/test_skill_routes.py` |
 | `POST /api/v1/skills/imports` | `/skills`, `/skills/:name`, `/skills/:name/:view` | `test_every_way_in_an_edit_a_self_approval_and_categories_reach_the_ledger` in `tests/unit/test_skill_store.py` (database, in CI) | `test_every_way_in_an_edit_a_self_approval_and_categories_reach_the_ledger` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_administrator_imports_a_skill_from_a_repository_at_a_commit_and_it_waits` in `tests/unit/test_skill_routes.py` |
 | `POST /api/v1/skills/procedures` | `/skills`, `/skills/:name`, `/skills/:name/:view` | `test_on_a_real_database_the_procedure_check_passes_and_leaves_nothing_behind` in `tests/unit/test_acceptance_procedures.py` (database, in CI) | `test_on_a_real_database_the_procedure_check_passes_and_leaves_nothing_behind` in `tests/unit/test_acceptance_procedures.py` (database, in CI) | `test_an_administrator_imports_a_word_procedure_and_it_waits_with_its_findings` in `tests/unit/test_skill_procedures.py` |
 | `POST /api/v1/skills/{digest}/assignments` | `/agents/:agentId`, `/agents/:agentId/:tab`, `/skills`, `/skills/:name`, `/skills/:name/:view` | `test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent` in `tests/unit/test_skill_routes.py` | `test_the_database_refuses_an_unsaid_self_decision_and_an_assignment_nobody_approved` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent` in `tests/unit/test_skill_routes.py` |

@@ -339,7 +339,7 @@ async def _cost_is_recorded(h: Harness, by: str) -> None:
 
 
 @check(
-    leaves=("M33.2.1.3", "M33.2.1.4"),
+    leaves=("M33.2.1.3", "M33.2.1.4", "M21.3.5"),
     sentence=(
         "The person who leads acceptance_a is shown its day ceiling against the part of the day "
         "gone and the knowledge it holds by freshness; a member of it, the lead of acceptance_b "

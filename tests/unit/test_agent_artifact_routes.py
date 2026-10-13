@@ -43,7 +43,14 @@ from brain.ops.retention import DataClass
 from brain.ops.storage import Backend, config_for
 from brain.session import make_session_factory
 from brain.tables.agent import AgentRow
-from tests.fixtures.console_http import Stub, console_client, gate_wiring, get, headers
+from tests.fixtures.console_http import (
+    Stub,
+    console_client,
+    gate_wiring,
+    get,
+    headers,
+    no_audience_extras,
+)
 from tests.fixtures.fake_s3 import FakeS3
 from tests.fixtures.retirable import retirable
 from tests.fixtures.scratch_postgres import run, sql
@@ -87,6 +94,7 @@ def served() -> Iterator[tuple[TestClient, Stub]]:
         client,
         stub,
     ):
+        stub.answerers.append(no_audience_extras)
         stub.answerers.append(answer)
         # The lifespan attaches a store over whatever database the environment names; this
         # process is the one with no store, whatever the environment says.

@@ -1,9 +1,9 @@
 ### Usage, activity and system statistics
 
 - **Screens:** `/usage`, `/adoption`, `/spend`, `/questions`, `/quality`, `/service-levels`, `/me`, `/company/estate`, `/company/activity`, `/company/consumption`
-- **Tables:** `ops.question_asked`, `ops.question_gap`, `ops.report_refresh`, `ops.spend_actual`, `obs.request_telemetry`
+- **Tables:** `ops.question_asked`, `ops.question_gap`, `ops.report_refresh`, `ops.spend_actual`, `obs.request_telemetry`, `ops.answer_flag`, `ops.regression_case`, `ops.quality_reading`, `ops.quality_annotation`, `ops.golden_score`, `ops.evaluation_candidate`, `ops.positive_example`, `ops.tier_decision`
 - **Installation values:** none
-- **Measured here:** 16 routes, 5 called by no screen; 2 write routes, 2 with all three proofs; 0 gaps.
+- **Measured here:** 23 routes, 12 called by no screen; 2 write routes, 2 with all three proofs; 1 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -15,6 +15,9 @@
 | `GET /api/v1/me/reads` | **no screen** |
 | `GET /api/v1/me/stored` | **no screen** |
 | `GET /api/v1/me/workspace` | `/me` |
+| `GET /api/v1/quality/candidates` | **no screen** |
+| `GET /api/v1/quality/flags` | **no screen** |
+| `GET /api/v1/quality/sample` | **no screen** |
 | `GET /api/v1/report/adoption` | `/adoption` |
 | `GET /api/v1/report/quality` | `/quality` |
 | `GET /api/v1/report/questions` | `/department`, `/questions` |
@@ -22,9 +25,13 @@
 | `GET /api/v1/report/spend` | `/spend` |
 | `GET /api/v1/report/usage` | `/adoption`, `/department`, `/usage` |
 | `POST /api/v1/me/devices/end` | `/me` |
+| `POST /api/v1/quality/annotations` | **no screen** |
+| `POST /api/v1/quality/candidates/{candidate_id}/decision` | **no screen** |
+| `POST /api/v1/quality/flags` | **no screen** |
+| `POST /api/v1/quality/flags/{flag_id}/case` | **no screen** |
 | `PUT /api/v1/company/budget` | **no screen** |
 
-No gap recorded.
+- **Gap.** Flagging an answer, annotating a day's sample and deciding a candidate have no screen: the Quality screen draws the canary run and not the findings. Recorded: brain.quality_routes serves each as a door and no page presses them yet (M28.3.1, M28.3.3, M28.4.1); a captured case, a golden score and an example are stored and read by the install checks only.
 
 **Every write to this area, followed to the system.**
 

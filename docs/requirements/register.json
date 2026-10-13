@@ -17864,7 +17864,7 @@
     "M39.9.2.5",
     "M39.9.2.6"
    ],
-   "decision": null
+   "decision": "needs-rupash 209: a connector event or a webhook can be chosen and saved, and nothing fires one yet; needs-rupash 210: an instruction a person writes is saved and cannot be run yet"
   },
   {
    "id": "ANY-033",

@@ -175,9 +175,10 @@ def test_a_missing_agent_and_an_agent_outside_the_audience_are_one_404_on_the_ab
 def test_nothing_about_an_agent_the_caller_may_not_see_is_read_on_their_behalf(
     client: TestClient, stored: Stored, schedules: Schedules
 ) -> None:
-    """A refused caller holding every tab's read causes one statement, for the agent row, and the
-    automation store is never asked; the owner, holding nothing but the audience, causes the install
-    read and still no automation read.
+    """A refused caller holding every tab's read causes two statements, the agent row and the
+    audience's offers (read for every slug alike, found or not, so a missing slug causes the same
+    two), and the automation store is never asked; the owner, holding nothing but the audience,
+    causes the install read and still no automation read.
 
     Delete this and a refusal comes after reading another person's install or automations, which is
     a read made for somebody never entitled to it and a timing that says the agent exists."""
@@ -191,12 +192,16 @@ def test_nothing_about_an_agent_the_caller_may_not_see_is_read_on_their_behalf(
         return [str(one.column_descriptions[-1]["entity"].__name__) for one in stored.statements]
 
     assert about_of(client, "u_elsewhere", "their_notes").status_code == 404
-    assert tables() == ["AgentRow"]
+    assert tables() == ["AgentRow", "AudienceExtraRow"]
     assert schedules.asked == []
 
     stored.statements.clear()
+    assert about_of(client, "u_elsewhere", "nothing_here").status_code == 404
+    assert tables() == ["AgentRow", "AudienceExtraRow"]
+
+    stored.statements.clear()
     assert about_of(client, "u_wide", "their_notes").status_code == 200
-    assert tables() == ["AgentRow", "TemplateVersionRow"]
+    assert tables() == ["AgentRow", "AudienceExtraRow", "TemplateVersionRow"]
     assert schedules.asked == []
 
 

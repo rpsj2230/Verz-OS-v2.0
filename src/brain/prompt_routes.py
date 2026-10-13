@@ -270,6 +270,8 @@ def signed_of(version: TemplateVersionRow) -> SignedManifest:
         signature=version.signature,
         signed_by=version.signed_by,
         signed_at=version.signed_at,
+        schema_version=version.schema_version or 1,
+        overview_path=version.overview_path or "",
     )
 
 

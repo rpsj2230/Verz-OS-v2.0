@@ -11,7 +11,7 @@
  * **The acts are the ones the API offered on this document, and only those.** Verify, a newer
  * version, asking for the whole company and handing over each open a drawer from the header; an act
  * the API did not offer is not drawn, because it is this reader's reach that withholds it and not the
- * product. Archive is drawn inert with its reason, because no route archives a document yet.
+ * product. Archive is one of them, and a document already archived is offered none.
  *
  * **The figures are what is recorded**: how many versions the reader may see, when it was last
  * verified (only when the badge may say so), its review date, and the reader's own open tasks on it.
@@ -20,7 +20,7 @@
  * Task ids: M27.15.40, M27.16.1, M7.4.4, M7.4.5, M7.4.6, M7.7.2
  */
 
-import { ArrowRightLeft, CheckCircle2, ChevronDown, FilePlus2, Globe2, IdCard, Info, LayoutDashboard } from "lucide-react";
+import { Archive, ArrowRightLeft, CheckCircle2, ChevronDown, FilePlus2, Globe2, IdCard, Info, LayoutDashboard } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useResource } from "../../api/useResource";
 import {
@@ -39,15 +39,13 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
 import { itemPath, TASKS_API_PATH } from "../knowledgeLifecycleQuery";
-import { HandOverForm, NewVersionForm, ProposeForm, VerifyForm } from "./actForms";
+import { ArchiveForm, HandOverForm, NewVersionForm, ProposeForm, VerifyForm } from "./actForms";
 import { KnowledgeAbout } from "./KnowledgeAbout";
 import { KnowledgeDashboard } from "./KnowledgeDashboard";
-import { UNAVAILABLE, type DocumentAct } from "./knowledgeActions";
+import { type DocumentAct } from "./knowledgeActions";
 import {
   dayWords,
   KNOWLEDGE_HEADING,
@@ -89,6 +87,7 @@ export const ACTS: Readonly<Record<DocumentAct, { readonly label: string; readon
     description: "A card waits on the Approvals screen for somebody else to approve.",
   },
   handOver: { label: "Hand to another steward", description: "Name who answers for it being right from now on." },
+  archive: { label: "Archive", description: "Withdraw it with nothing replacing it. Answers stop using it and it stays on file." },
 });
 type Act = DocumentAct;
 
@@ -137,6 +136,7 @@ function DocumentAnswer({ itemId, view }: { readonly itemId: string; readonly vi
       ["version", offered.newVersion],
       ["propose", offered.propose],
       ["handOver", offered.handOver],
+      ["archive", offered.archive],
     ] as const
   )
     .filter(([, on]) => on)
@@ -162,6 +162,7 @@ function DocumentAnswer({ itemId, view }: { readonly itemId: string; readonly vi
     version: FilePlus2,
     propose: Globe2,
     handOver: ArrowRightLeft,
+    archive: Archive,
   };
 
   const header = (
@@ -210,12 +211,6 @@ function DocumentAnswer({ itemId, view }: { readonly itemId: string; readonly vi
                     </DropdownMenuItem>
                   );
                 })}
-              {acts.some((act) => act !== "verify") ? <DropdownMenuSeparator /> : null}
-              <DropdownMenuLabel className="text-[11px] font-normal text-dim">Coming soon</DropdownMenuLabel>
-              <DropdownMenuItem disabled className="flex-col items-start gap-0.5">
-                <span>Archive</span>
-                <span className="text-[11px] leading-snug text-dim">{UNAVAILABLE.archive.reason}</span>
-              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </>
@@ -267,6 +262,7 @@ function DocumentAnswer({ itemId, view }: { readonly itemId: string; readonly vi
         {shown === "version" ? <NewVersionForm itemId={itemId} title={document.title} onDone={done} /> : null}
         {shown === "propose" ? <ProposeForm itemId={itemId} waits={page.promotionWaits} onDone={done} /> : null}
         {shown === "handOver" ? <HandOverForm itemId={itemId} title={document.title} onDone={done} /> : null}
+        {shown === "archive" ? <ArchiveForm itemId={itemId} title={document.title} onDone={done} /> : null}
       </Drawer>
     </DetailPage>
   );
