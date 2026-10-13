@@ -544,6 +544,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # How many answers of an agent cited a document on a day (`0213`): no question, no
         # principal and no text, so a count is about the agent's use of a document and nobody's.
         "ops.agent_item_use",
+        # An alert acknowledgement names a source and an instant, and the person who pressed: an
+        # actor and not an owner, and `0217` grants no way for a row to leave (M27.15.45).
+        "ops.alert_acknowledgement",
         "ops.retention_release",
         "ops.retention_report",
         "ops.routing_change",

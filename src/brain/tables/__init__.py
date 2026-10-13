@@ -53,6 +53,7 @@ from brain.tables.agent import AgentRow
 from brain.tables.agent_automation import AgentAutomationRow
 from brain.tables.agent_item_use import AgentItemUseRow
 from brain.tables.agent_run import AgentRunRow
+from brain.tables.alert_acknowledgement import AlertAcknowledgementRow
 from brain.tables.application_log import ApplicationLogRow
 from brain.tables.artifact import ArtifactChangeRow, ArtifactRow
 from brain.tables.attachment import ToolAttachmentRow
@@ -511,6 +512,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "ops.budget_stop",
     # 0213_agent_item_use. Points at nothing: the agent and the document are values.
     "ops.agent_item_use",
+    # 0217_alert_acknowledgement. Points at nothing: the subject is a source's name and the person
+    # is a value, so an acknowledgement outlives both.
+    "ops.alert_acknowledgement",
 )
 
 __all__ = [
@@ -524,6 +528,7 @@ __all__ = [
     "AgentItemUseRow",
     "AgentRow",
     "AgentRunRow",
+    "AlertAcknowledgementRow",
     "ApiKeyRow",
     "ApplicationLogRow",
     "ArtifactChangeRow",

@@ -504,6 +504,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/connectors/{connector}/steward",
       "/api/v1/console/connectors",
       "/api/v1/console/incidents",
+      "/api/v1/console/incidents/acknowledgement",
       "/api/v1/console/connectors/{connector}",
       "/api/v1/console/connectors/{connector}/export",
       "/api/v1/console/connectors/{connector}/probe",
@@ -527,6 +528,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "ops.channel_delivery",
       "ops.connector_connection",
       "ops.connector_sync",
+      // Who acknowledged an incident, and when (M27.15.45).
+      "ops.alert_acknowledgement",
       // A consent started at a vendor, held until it is answered once (M11.8.6).
       "ops.oauth_consent",
       // A connector for a new API, as submitted, and who reviewed it (M11.7.8).
