@@ -406,9 +406,10 @@ def _shard_step() -> tuple[int, dict[Any, Any]]:
 def test_the_unit_suite_runs_as_shards_that_between_them_run_every_test_file() -> None:
     """**The unit job was split on 2026-09-17, and a split is the easiest place in CI to lose
     a test without a red check.** So the matrix, the command and the helper are held together:
-    the matrix counts shards from one with no gap, the step asks `brain.ops.test_shards` for
-    its own shard out of the matrix's own total and hands the answer to pytest, and the shards
-    that matrix produces cover every file pytest would collect, each exactly once.
+    the matrix counts shards from one with no gap, the step asks `brain.ops.test_plan` for its
+    own shard out of the matrix's own total (falling back to `brain.ops.test_shards`, the whole
+    share, if the plan cannot run) and hands the answer to pytest, and the shards that matrix
+    produces cover every file pytest would collect, each exactly once.
 
     Delete this and the matrix can lose a shard, or the step can pass a literal count that no
     longer matches it, and a quarter of the suite stops running with every job green."""
@@ -418,15 +419,18 @@ def test_the_unit_suite_runs_as_shards_that_between_them_run_every_test_file() -
     numbers = job["strategy"]["matrix"]["shard"]
     _, step = _shard_step()
     lines = _live_lines(step)
-    asked = [line for line in lines if "brain.ops.test_shards" in line]
+    planned = [line for line in lines if "brain.ops.test_plan" in line]
+    fallback = [line for line in lines if "brain.ops.test_shards" in line]
 
     assert numbers == list(range(1, len(numbers) + 1)) and len(numbers) > 1
     # `strategy.job-total` counts every combination, so it is the shard count only while the
     # shard is the matrix's one dimension.
     assert set(job["strategy"]["matrix"]) == {"shard"}
-    assert len(asked) == 1
-    assert asked[0].startswith("files=$(uv run python -m brain.ops.test_shards ")
-    assert "--shard ${{ matrix.shard }} --of ${{ strategy.job-total }}" in asked[0]
+    assert len(planned) == 1 and len(fallback) == 1
+    assert planned[0].startswith("files=$(uv run python -m brain.ops.test_plan ")
+    assert fallback[0].startswith("files=$(uv run python -m brain.ops.test_shards ")
+    for asked in (planned[0], fallback[0]):
+        assert "--shard ${{ matrix.shard }} --of ${{ strategy.job-total }}" in asked
     assert '[ -n "$files" ]' in "\n".join(lines), "an empty shard would run the whole suite"
     assert lines[-1].split()[:4] == ["uv", "run", "pytest", "--cov"]
     assert lines[-1].endswith(" $files")
