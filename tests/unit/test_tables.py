@@ -177,6 +177,7 @@ MIGRATION_QUALITY = VERSIONS / "0222_quality_and_learning.py"
 MIGRATION_TEMPLATES_AUDIENCE = VERSIONS / "0223_templates_and_audience.py"
 MIGRATION_MEMBER_PREFERENCE = VERSIONS / "0229_member_preference.py"
 MIGRATION_MEMBER_SHARE = VERSIONS / "0230_member_share_and_agent_request.py"
+MIGRATION_ACCEPTANCE_RUN = VERSIONS / "0231_acceptance_run_record.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -521,6 +522,8 @@ QUALITY_TABLES: tuple[str, ...] = (
 TEMPLATES_AUDIENCE_TABLES: tuple[str, ...] = ("agent.template_draft", "agent.audience_extra")
 MEMBER_PREFERENCE_TABLES: tuple[str, ...] = ("auth.member_preference",)
 MEMBER_SHARE_TABLES: tuple[str, ...] = ("agent.artifact_share", "agent.agent_request")
+#: And the one 0231 adds: a run of the acceptance checks, so it can be finished after a restart.
+ACCEPTANCE_RUN_TABLES: tuple[str, ...] = ("ops.acceptance_run",)
 
 ALL_TABLES = (
     CORE_TABLES
@@ -621,6 +624,7 @@ ALL_TABLES = (
     + TEMPLATES_AUDIENCE_TABLES
     + MEMBER_PREFERENCE_TABLES
     + MEMBER_SHARE_TABLES
+    + ACCEPTANCE_RUN_TABLES
 )
 
 
@@ -1505,6 +1509,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert member_preference.TABLES == MEMBER_PREFERENCE_TABLES
     member_share = migration_module(MIGRATION_MEMBER_SHARE)
     assert member_share.TABLES == MEMBER_SHARE_TABLES
+    acceptance_run = migration_module(MIGRATION_ACCEPTANCE_RUN)
+    assert acceptance_run.TABLES == ACCEPTANCE_RUN_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1627,6 +1633,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(templates_audience.TABLES)
         + tuple(member_preference.TABLES)
         + tuple(member_share.TABLES)
+        + tuple(acceptance_run.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1730,6 +1737,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(templates_audience.TABLES),
         set(member_preference.TABLES),
         set(member_share.TABLES),
+        set(acceptance_run.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

@@ -23,6 +23,19 @@ judgement about each check, not something a row says, so it lives in
 (`A_RESULT_ON_SOMETHING_MADE_UP_IS_HELD`). Rejected: inferring it from the check's sentence,
 which would hold or release a task because of a word in a description.
 
+**A run counts only when it is complete, and a run is never two releases.** The worker records
+each check as it finishes and finishes a run a restart interrupted
+(`brain.ops.acceptance_resume`), so a run that is still going, or was abandoned because a newer
+release replaced it, has some rows and is not a run that was seen
+(`brain.ops.acceptance_resume.ONLY_A_COMPLETE_RUN_COUNTS`). `ROWS_QUERY` reads complete runs only
+and says each row's run status, `runs_from_rows` ignores any row whose status is not complete as a
+second line, and a run whose rows name two commits is refused (`A_RUN_NAMES_ONE_RELEASE`), because
+a resumed run is of the commit that began it and anything else is a mistake that would close a task
+on a mixture.
+A run with no record in `ops.acceptance_run` was written whole before that table existed and is
+complete. Rejected: inferring completeness from a count of rows, which this reader cannot make
+because it knows no registry.
+
 **It reads, and never writes.** From a database URL it reads inside a read-only transaction;
 from a file it reads the rows a read-only query printed as JSON lines. It knows no install: the
 URL or file is the caller's, and nothing about an install is in this repository.
@@ -58,6 +71,15 @@ A_RESULT_ON_SOMETHING_MADE_UP_IS_HELD: Final = (
     "with its reason, until the install shows them on its own."
 )
 
+#: Why a run whose rows name two commits is refused.
+A_RUN_NAMES_ONE_RELEASE: Final = (
+    "One run is one release's. A run whose rows name two commits has results of two builds in it, "
+    "and a task closed on it would be closed on a mixture nobody saw as a whole."
+)
+
+#: What a run's status is called when it is complete, and what a row of one with no record says.
+COMPLETE_RUN: Final = "complete"
+
 PASSED: Final = "passed"
 NOT_RUN: Final = "not run"
 FAILED: Final = "failed"
@@ -67,9 +89,15 @@ HOLDS_PATH: Final = Path("docs/proof-sweep-holds.json")
 #: The read-only query whose output `rows_from_lines` reads: the two newest runs, one JSON object
 #: per row. Written so a look that refuses any statement but a SELECT can run it as it is.
 ROWS_QUERY: Final = (
-    "select to_jsonb(r) - 'id' from ops.acceptance_result r where run_id in ("
-    "select run_id from ops.acceptance_result group by run_id "
-    "order by max(started_at) desc limit 2) order by started_at, check_name"
+    "select (to_jsonb(r) - 'id') || "
+    "jsonb_build_object('run_status', coalesce(u.status, 'complete')) "
+    "from ops.acceptance_result r left join ops.acceptance_run u on u.run_id = r.run_id "
+    "where r.run_id in ("
+    "select x.run_id from ops.acceptance_result x "
+    "left join ops.acceptance_run y on y.run_id = x.run_id "
+    "where coalesce(y.status, 'complete') = 'complete' "
+    "group by x.run_id order by max(x.started_at) desc limit 2) "
+    "order by r.started_at, r.check_name"
 )
 
 
@@ -121,12 +149,21 @@ def leaf_key(leaf: str) -> tuple[int, ...]:
 
 
 def runs_from_rows(rows: Iterable[Mapping[str, Any]]) -> tuple[Run, Run]:
-    """The newest run and the one before it, from rows of `ops.acceptance_result`."""
+    """The newest run and the one before it, from rows of `ops.acceptance_result`.
+
+    Rows of a run that is not complete are skipped, and a run naming two commits is refused. See
+    `brain.ops.acceptance_resume.ONLY_A_COMPLETE_RUN_COUNTS` and `A_RUN_NAMES_ONE_RELEASE`.
+    """
     by_run: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for row in rows:
+        if str(row.get("run_status", COMPLETE_RUN)) != COMPLETE_RUN:
+            continue
         by_run[str(row["run_id"])].append(row)
     runs = []
     for run_id, its in by_run.items():
+        if len({str(one["commit"]) for one in its}) > 1:
+            msg = f"run {run_id} names more than one commit. {A_RUN_NAMES_ONE_RELEASE}"
+            raise SweepError(msg)
         started = min(_instant(one["started_at"]) for one in its)
         results = {
             str(one["check_name"]): Result(
