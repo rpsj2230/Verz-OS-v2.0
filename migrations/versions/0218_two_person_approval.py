@@ -14,9 +14,9 @@ not decide it. It writes these two columns and leaves the row pending, and a dif
 decides it, which is the existing update and the existing ledger entry. The ledger holds the second
 person's decision as it always did; the first is on the row.
 
-**The checks are the rule, and the route is the message.** Four, in the words of the leaf:
+**The checks are the rule, and the route is the message.** Five, in the words of the leaf:
 
-- the endorsement is a person and an instant together, or neither;
+- the endorsement is a person and an instant together, or neither (two checks, one each way);
 - only a `two_person` row is endorsed;
 - whoever asked (`principal_id`, whose reach the action would run under) never endorses it;
 - a `two_person` row is approved only by somebody who is neither the one who endorsed it nor the one
@@ -57,7 +57,8 @@ APPROVABLE = "string_to_array(current_setting('app.approvable', true), ',')"
 PRINCIPAL = "current_setting('app.principal_id', true)"
 
 CHECKS: tuple[tuple[str, str], ...] = (
-    ("an_endorsement_is_a_person_and_an_instant", "(endorsed_by IS NULL) = (endorsed_at IS NULL)"),
+    ("an_endorsement_names_its_instant", "endorsed_by IS NULL OR endorsed_at IS NOT NULL"),
+    ("an_endorsement_instant_names_its_person", "endorsed_at IS NULL OR endorsed_by IS NOT NULL"),
     ("only_a_two_person_row_is_endorsed", "endorsed_by IS NULL OR two_person"),
     ("the_asker_does_not_endorse", "endorsed_by IS NULL OR endorsed_by <> principal_id"),
     (

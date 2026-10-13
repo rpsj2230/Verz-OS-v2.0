@@ -37,7 +37,7 @@ approved in their name.
 
 **Two people, when the action is one that cannot be taken back (`0218`).** `two_person` is set when
 the action is raised, and then a first approval writes `endorsed_by` and `endorsed_at` and leaves
-the row pending, so that a different person has to decide it. The four checks below are the rule in
+the row pending, so that a different person has to decide it. The checks below are the rule in
 the database, beside the route's, because a statement run by hand reaches the table and not the
 route: the asker never endorses, only a two-person row is endorsed, an endorsement is a person and
 an instant together, and a two-person row is approved only by somebody who is neither its endorser
@@ -182,8 +182,12 @@ class SuspensionRow(TimestampMixin, Base):
             name="every_verdict_but_an_approval_says_why",
         ),
         CheckConstraint(
-            "(endorsed_by IS NULL) = (endorsed_at IS NULL)",
-            name="an_endorsement_is_a_person_and_an_instant",
+            "endorsed_by IS NULL OR endorsed_at IS NOT NULL",
+            name="an_endorsement_names_its_instant",
+        ),
+        CheckConstraint(
+            "endorsed_at IS NULL OR endorsed_by IS NOT NULL",
+            name="an_endorsement_instant_names_its_person",
         ),
         CheckConstraint(
             "endorsed_by IS NULL OR two_person", name="only_a_two_person_row_is_endorsed"

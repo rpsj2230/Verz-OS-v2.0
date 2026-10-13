@@ -123,6 +123,15 @@ A_RESTRICTION_ON_A_COLUMN_THE_PREVIOUS_RELEASE_NEVER_WRITES_IS_NOT_A_NARROWING: 
     "column from not null, since the previous release could write nothing else."
 )
 
+#: Why a restriction that binds only rows whose added flag is true is not a narrowing.
+A_RESTRICTION_ON_A_FLAG_THE_PREVIOUS_RELEASE_NEVER_SETS_IS_NOT_A_NARROWING: Final = (
+    "A check reading `NOT <flag> OR ...` over a boolean column this migration added with a default "
+    "of false is true for every row whose flag is false. The previous release never names the "
+    "column, so every row it writes holds false there and the new check binds none of them; it "
+    "binds only the rows the new release marks, which is how a rule is given to a state the old "
+    "release cannot produce. 0218 is the first to need it."
+)
+
 #: Why a restriction that binds only a word the previous release could not write is not a narrowing.
 A_RESTRICTION_ON_A_WORD_THE_PREVIOUS_RELEASE_NEVER_WRITES_IS_NOT_A_NARROWING: Final = (
     "A check reading `<column> <> 'word' OR ...` is true for every row whose column is not that "
@@ -880,8 +889,42 @@ def _columns(calls: tuple[_Call, ...], name: str, flag: str, value: object) -> f
     return frozenset(found)
 
 
+def _false_flags(calls: tuple[_Call, ...]) -> frozenset[str]:
+    """`schema.table.column` for every boolean column added not null with a default of false.
+
+    Read off the column's own call: a `sa.Boolean()` type, `nullable=False` and a
+    `server_default` that unparses as `sa.false()` or `sa.text("false")`. A column with any other
+    default is not one, because the previous release's rows would hold something else.
+    """
+    found: set[str] = set()
+    for call in calls:
+        if call.name != "add_column" or len(call.node.args) < 2:
+            continue
+        column = call.node.args[1]
+        if not (isinstance(column, ast.Call) and len(column.args) >= 2):
+            continue
+        kind = ast.unparse(column.args[1]).replace(" ", "")
+        default = _keyword(column, "server_default")
+        said = "" if default is None else ast.unparse(default).replace(" ", "").replace("'", '"')
+        if (
+            kind in {"sa.Boolean()", "sa.Boolean"}
+            and _one(_keyword(column, "nullable"), call.names) is False
+            and said in {"sa.false()", 'sa.text("false")'}
+        ):
+            table = _one(call.node.args[0], call.names)
+            schema = _one(_keyword(call.node, "schema"), call.names)
+            named = _one(column.args[0], call.names)
+            if isinstance(table, str) and isinstance(schema, str) and isinstance(named, str):
+                found.add(f"{schema}.{table}.{named}".lower())
+    return frozenset(found)
+
+
 def _never_written(
-    node: ast.Call, names: _Names, added: frozenset[str], widened: frozenset[str]
+    node: ast.Call,
+    names: _Names,
+    added: frozenset[str],
+    widened: frozenset[str],
+    flags: frozenset[str] = frozenset(),
 ) -> bool:
     """Whether a unique index or check binds only rows the previous release cannot write.
 
@@ -899,6 +942,13 @@ def _never_written(
     condition = _strings_of(node.args[2], names) if len(node.args) > 2 else None
     if not condition or len(condition) != 1:
         return False
+    flag = re.match(r"^\s*NOT (\w+) OR ", condition[0])
+    if flag is not None:
+        # `NOT <added flag> OR ...`: true for every row whose flag is false, and the previous
+        # release writes none other, since it never names the column and a flag added with a
+        # default of false holds false.
+        # See `A_RESTRICTION_ON_A_FLAG_THE_PREVIOUS_RELEASE_NEVER_SETS_IS_NOT_A_NARROWING`.
+        return f"{prefix}{flag.group(1)}".lower() in flags
     head = re.match(r"^\s*(\w+) IS (NOT )?NULL OR ", condition[0])
     if head is None:
         return False
@@ -912,11 +962,12 @@ def _from_call(
     reversed_by: dict[tuple[str, str, str], str],
     added: frozenset[str] = frozenset(),
     widened: frozenset[str] = frozenset(),
+    flags: frozenset[str] = frozenset(),
 ) -> Change:
     """One `op.<something>` call that is not `execute`."""
     node = call.node
     if call.name in {"create_index", "create_check_constraint"} and _never_written(
-        node, call.names, added, widened
+        node, call.names, added, widened, flags
     ):
         return Change(
             Verdict.SAFE,
@@ -1103,6 +1154,7 @@ def changes_in(
     reversed_by = _check_predicates(counterpart)
     added = _columns(calls, "add_column", "nullable", True)
     widened = _columns(calls, "alter_column", "nullable", True)
+    flags = _false_flags(calls)
     out: list[Change] = []
     if not complete:
         out.append(
@@ -1115,7 +1167,7 @@ def changes_in(
         )
     for call in calls:
         if call.name != "execute":
-            out.append(_from_call(call, made, reversed_by, added, widened))
+            out.append(_from_call(call, made, reversed_by, added, widened, flags))
             continue
         if not call.readable:
             out.append(
