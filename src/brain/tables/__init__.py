@@ -177,6 +177,7 @@ from brain.tables.skill import (
     SkillScriptRow,
 )
 from brain.tables.skill_invocation import SkillInvocationRow
+from brain.tables.skill_personal import SkillPersonalRow
 from brain.tables.spend import ReportRefreshRow, SpendActualRow
 from brain.tables.staff import StaffMemberRow, StaffSyncRunRow
 from brain.tables.stewardship import ConnectorStewardRow, SelfGrantRow
@@ -540,6 +541,8 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0223_templates_and_audience. A draft and an offer each name an agent and a person as values.
     "agent.template_draft",
     "agent.audience_extra",
+    # 0231_skill_personal. Points at nothing: the digest and the person are values.
+    "agent.skill_personal",
 )
 
 __all__ = [
@@ -680,6 +683,7 @@ __all__ = [
     "SkillDetachmentRow",
     "SkillExportRow",
     "SkillInvocationRow",
+    "SkillPersonalRow",
     "SkillRehearsalRow",
     "SkillRetirementRow",
     "SkillReviewRow",

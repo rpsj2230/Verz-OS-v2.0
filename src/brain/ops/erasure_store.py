@@ -251,6 +251,10 @@ DRAIN_LIMIT: Final = 20
 SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
     {
         "agent.agent": "owner_id",
+        # A skill a person added for themselves and whether they offered it (`0231`). `0231` grants
+        # no way for a row to leave, so an erasure keeps these and reports them kept: the skill is
+        # in the library under its digest and a decision about it is not the person's to undo.
+        "agent.skill_personal": "owner_id",
         # What an agent produced, for the person it was produced for. `0058` grants no way for a
         # row to leave, so an erasure keeps these and reports them kept.
         "agent.artifact": "caller_id",
