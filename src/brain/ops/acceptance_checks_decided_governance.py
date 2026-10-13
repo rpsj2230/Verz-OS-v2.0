@@ -21,6 +21,7 @@ Task ids: M33.4.1.3, M33.2.2.4, M39.8.1, M33.8.3, M13.7.3, M13.7.4, M13.9.1, M20
 from __future__ import annotations
 
 import json
+import secrets
 from typing import Any, Final
 
 from brain.core.scope import Scope
@@ -408,10 +409,11 @@ async def the_widget_is_offered_only_to_an_agent_reading_public_knowledge(
 async def the_builder_links_the_parts_of_an_agent_it_does_not_hold(h: Harness) -> None:
     from brain.agent_builder_routes import builder_form
     from brain.ops.acceptance_checks_builder import _builder
-    from brain.ops.acceptance_checks_templates import _asking
+    from brain.ops.acceptance_checks_templates import _asking, _gallery, _request
 
     builder = await _builder(h, "linker")
-    answer = _body(await builder_form(await _asking(h, builder)))
+    form_app = _gallery(h, secrets.token_hex(32))
+    answer = _body(await builder_form(_request(form_app), await _asking(h, builder)))
     linked = answer.get("set_elsewhere") or []
     if [one.get("part") for one in linked] != ["knowledge", "workflows", "memory", "channels"]:
         raise CheckFailedError("the builder did not name where each part it does not hold is set")

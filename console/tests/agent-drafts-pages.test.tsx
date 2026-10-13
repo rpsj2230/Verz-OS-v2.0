@@ -173,6 +173,7 @@ function aDraft(overrides: Readonly<Record<string, unknown>> = {}): Record<strin
       { name: "lark", label: "Lark" },
     ],
     channels_note: "NO-CHANNEL-SENTENCE",
+    agent_kinds: ["personal", "team"],
     ...overrides,
   };
 }
@@ -457,7 +458,7 @@ describe("one draft", () => {
     await confirmIn(PUBLISH_QUESTION("Invoice helper"), PUBLISH_LABEL);
 
     expect(posts(idp)).toEqual([
-      { path: `${DRAFT_API}/publish`, body: { revision: 2, for_department: false, channels: [] } },
+      { path: `${DRAFT_API}/publish`, body: { revision: 2, for_department: false, agent_kind: "personal", channels: [] } },
     ]);
   });
 
@@ -471,17 +472,41 @@ describe("one draft", () => {
         body: { state: "waiting", agent_id: "invoice_helper_ab12cd", sentence: "It waits for a second person.", widened: [] },
       },
     });
-    fireEvent.click(screen.getByRole("radio", { name: "My department" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Team agent: my department" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Lark" }));
     fireEvent.click(button(PUBLISH_LABEL));
     await confirmIn(PUBLISH_QUESTION("Invoice helper"), PUBLISH_LABEL);
 
     expect(posts(idp)).toEqual([
-      { path: `${DRAFT_API}/publish`, body: { revision: 2, for_department: true, channels: ["lark"] } },
+      { path: `${DRAFT_API}/publish`, body: { revision: 2, for_department: true, agent_kind: "team", channels: ["lark"] } },
     ]);
     await waitFor(() => {
       expect(document.body.textContent).toContain("It waits for a second person.");
     });
+  });
+
+  test("a person who may only make their own agent is offered the personal choice alone", async () => {
+    // What breaks if this is deleted: a person with no authority over a team is offered a team
+    // agent, presses it, and is refused only afterwards (M39.10.7).
+    const { idp } = await consoleAt(draftAddress(DRAFT_ID, "publish"), {
+      [`GET ${DRAFT_API}`]: { body: aDraft({ state: "checked", agent_kinds: ["personal"] }) },
+      [`POST ${DRAFT_API}/publish`]: {
+        status: 201,
+        body: { state: "published", agent_id: "invoice_helper_ab12cd", sentence: "Published.", widened: [] },
+      },
+    });
+    const choices = (await screen.findAllByRole("radio")).filter(
+      (one) => one.getAttribute("name") === "draft-audience",
+    );
+    expect(choices).toHaveLength(1);
+    expect(screen.queryByRole("radio", { name: "Team agent: my department" })).toBeNull();
+    expect(screen.getByRole("radio", { name: "Personal agent: only me" })).toBeTruthy();
+    fireEvent.click(button(PUBLISH_LABEL));
+    await confirmIn(PUBLISH_QUESTION("Invoice helper"), PUBLISH_LABEL);
+
+    expect(posts(idp)).toEqual([
+      { path: `${DRAFT_API}/publish`, body: { revision: 2, for_department: false, agent_kind: "personal", channels: [] } },
+    ]);
   });
 
   test("on an install that cannot publish, Publish is inert with the API's reason", async () => {

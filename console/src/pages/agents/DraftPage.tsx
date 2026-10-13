@@ -141,8 +141,8 @@ export const PUBLISH_LABEL = "Publish";
 export const APPROVE_LABEL = "Approve and publish";
 export const DECLINE_LABEL = "Send back";
 export const WHO_CAN_FIND = "Who can find the new agent";
-export const ONLY_ME = "Only me";
-export const MY_DEPARTMENT = "My department";
+export const ONLY_ME = "Personal agent: only me";
+export const MY_DEPARTMENT = "Team agent: my department";
 export const HISTORY_HEADING = "History";
 export const REACHES_FURTHER = "Reaches further than before";
 export const SECOND_PERSON = "It will wait for a second person who is not you and whose own access covers all of it.";
@@ -195,6 +195,12 @@ function questionFor(pending: Pending, draft: Draft): { question: string; conseq
   }
 }
 
+/** A reader who may make only their own agent is offered the personal choice alone. A server that
+ * names no kinds is an older one, and it offers both as it always did. */
+function mayMakeTeam(draft: Draft): boolean {
+  return draft.agentKinds.length === 0 || draft.agentKinds.includes("team");
+}
+
 function bodyFor(
   pending: Pending,
   draft: Draft,
@@ -210,6 +216,7 @@ function bodyFor(
       return {
         revision: draft.revision,
         for_department: forDepartment,
+        agent_kind: forDepartment ? "team" : "personal",
         // An edit keeps the agent's own channels, so only a new agent sends the boxes.
         ...(draft.kind === "new" ? { channels: ticked(draft.channels, channels) } : {}),
       };
@@ -709,17 +716,19 @@ function DraftAnswer({ draftId, step }: { readonly draftId: string; readonly ste
                     />
                     {ONLY_ME}
                   </label>
-                  <label className="flex min-h-11 items-center gap-2 text-sm sm:min-h-8">
-                    <input
-                      type="radio"
-                      name="draft-audience"
-                      checked={forDepartment}
-                      onChange={() => {
-                        setForDepartment(true);
-                      }}
-                    />
-                    {MY_DEPARTMENT}
-                  </label>
+                  {mayMakeTeam(draft) ? (
+                    <label className="flex min-h-11 items-center gap-2 text-sm sm:min-h-8">
+                      <input
+                        type="radio"
+                        name="draft-audience"
+                        checked={forDepartment}
+                        onChange={() => {
+                          setForDepartment(true);
+                        }}
+                      />
+                      {MY_DEPARTMENT}
+                    </label>
+                  ) : null}
                 </fieldset>
               )}
               {draft.kind !== "new" ? null : (

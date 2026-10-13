@@ -461,9 +461,10 @@ async def the_form_is_the_manifest_and_a_template_installs_in_one_press(h: Harne
     from brain.tables.template import TemplateVersionRow
 
     builder = await _builder(h, "gallery")
+    form_app = _gallery(h, secrets.token_hex(32))
     # The served form against the generator run over the manifest's schema as it is now: a form
     # kept by hand, or cut from an older schema, differs from it.
-    form = _body(await builder_form(await _asking(h, builder)))
+    form = _body(await builder_form(_request(form_app), await _asking(h, builder)))
     # Beside the form the answer names the parts the builder links to and does not hold
     # (needs-rupash 170 A); they are not the manifest's, so the comparison is over the form.
     form.pop("set_elsewhere", None)
@@ -472,7 +473,7 @@ async def the_form_is_the_manifest_and_a_template_installs_in_one_press(h: Harne
     stranger = h.principal(A, "stranger")
     await h.person(stranger, department=A, grants=())
     try:
-        await builder_form(await _asking(h, stranger))
+        await builder_form(_request(form_app), await _asking(h, stranger))
     except Absent:
         pass
     else:

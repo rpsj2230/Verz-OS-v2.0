@@ -175,7 +175,10 @@ def _stale_form(monkeypatch: pytest.MonkeyPatch) -> None:
 def _form_for_anybody(monkeypatch: pytest.MonkeyPatch) -> None:
     import brain.agent_builder_routes as routes
 
-    monkeypatch.setattr(routes, "_builds", lambda asked: None)
+    async def open_to_anybody(request: object, asked: object) -> None:
+        return None
+
+    monkeypatch.setattr(routes, "_may_build", open_to_anybody)
 
 
 def _renamed_on_install(monkeypatch: pytest.MonkeyPatch) -> None:
