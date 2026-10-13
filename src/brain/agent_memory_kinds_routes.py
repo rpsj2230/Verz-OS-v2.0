@@ -14,7 +14,7 @@ agent was made, which had all five. See
 `brain.agent_lifecycle_routes.A_STEWARD_OR_AN_ADMINISTRATOR_SWITCHES_AN_AGENT_S_CHANNELS`.
 
 **The page sends the kinds it drew, and a row that moved since is a 409 and nothing is written.**
-The write is a compare and set on the array the decision was read from, `0228`'s trigger appends
+The write is a compare and set on the array the decision was read from, `0225`'s trigger appends
 one `compose_change` entry for each kind added or taken, and the reason code the entry carries is
 `memory_kinds_set`.
 
@@ -154,7 +154,7 @@ class StoredMemoryKinds:
         ent_hash: str,
         trace_id: str,
     ) -> bool:
-        """A compare and set, as `StoredAgentLifecycles.change_channels`. `0228`'s trigger appends
+        """A compare and set, as `StoredAgentLifecycles.change_channels`. `0225`'s trigger appends
         one `compose_change` entry for each kind added or taken, attributed by the three settings
         and carrying `REASON_CODE`."""
         async with self._sessions() as session, session.begin():

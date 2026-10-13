@@ -105,7 +105,7 @@ CHANNEL_CHARS = 32
 #: The widest kind of memory is seven characters; this leaves room. See `brain.agents.memory_kinds`.
 MEMORY_KIND_CHARS = 16
 
-#: `0228`. An agent's memory kinds are among the five and no others. `<@` is array containment, as
+#: `0225`. An agent's memory kinds are among the five and no others. `<@` is array containment, as
 #: in `REQUIRED_WITHIN_ALLOWED`, and the right side is cast so both sides are the same type.
 MEMORY_KINDS_KNOWN = (
     "memory_kinds <@ ARRAY['conversation', 'own', 'person', 'project', 'task']::character varying[]"
@@ -261,7 +261,7 @@ class AgentRow(TimestampMixin, Base):
         ARRAY(String(CHANNEL_CHARS)), nullable=False, server_default=text("'{}'")
     )
 
-    #: The kinds of memory this agent may read and write (M39.7.1), since `0228`: the conversation,
+    #: The kinds of memory this agent may read and write (M39.7.1), since `0225`: the conversation,
     #: the task, the project, the person and its own. All five by default, so no agent loses what it
     #: remembered the day this lands. Constrained to those five and no other.
     memory_kinds: Mapped[list[str]] = mapped_column(

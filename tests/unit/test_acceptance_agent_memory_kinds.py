@@ -56,7 +56,7 @@ def test_the_memory_kinds_check_is_listed_with_the_leaf_it_proves() -> None:
 
 @pytest.mark.needs_db
 def test_on_a_real_database_a_kind_left_out_is_kept_and_obeyed_and_nothing_is_left() -> None:
-    """**The check as the worker runs it**, over a schema carrying `0228`. Delete this and the
+    """**The check as the worker runs it**, over a schema carrying `0225`. Delete this and the
     column, the route and the assembler can stop agreeing with nothing on an install saying so."""
     with at_head("brain_acceptance_memory_kinds") as url:
         before = counts(url)

@@ -1,9 +1,9 @@
 ### Agents and their configuration, including templates
 
 - **Screens:** `/agents`, `/agents/:agentId`, `/agents/:agentId/:tab`, `/agent-templates`, `/agent-templates/:templateId`, `/approvals`, `/approvals/:suspensionId`, `/agents/new`, `/agents/drafts`, `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step`
-- **Tables:** `agent.agent`, `agent.template_instance`, `agent.template_version`, `agent.upgrade_decline`, `agent.leash_change`, `agent.supervised_action`, `agent.action_verdict`, `agent.supervision_pin`, `agent.tool_attachment`, `ops.agent_item_use`, `agent.group_install`, `ops.channel_room`, `agent.browser_envelope`, `gate.suspension`, `agent.manifest_draft`, `agent.manifest_revision`, `agent.manifest_act`, `agent.learning_pause`, `ops.agent_run`
+- **Tables:** `agent.agent`, `agent.template_instance`, `agent.template_version`, `agent.template_draft`, `agent.audience_extra`, `agent.upgrade_decline`, `agent.leash_change`, `agent.supervised_action`, `agent.action_verdict`, `agent.supervision_pin`, `agent.tool_attachment`, `ops.agent_item_use`, `agent.group_install`, `ops.channel_room`, `agent.browser_envelope`, `gate.suspension`, `agent.manifest_draft`, `agent.manifest_revision`, `agent.manifest_act`, `agent.learning_pause`, `ops.agent_run`
 - **Installation values:** none
-- **Measured here:** 70 routes, 12 called by no screen; 40 write routes, 37 with all three proofs; 4 gaps.
+- **Measured here:** 72 routes, 13 called by no screen; 41 write routes, 38 with all three proofs; 4 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -28,6 +28,7 @@
 | `GET /api/v1/agents/{agent_id}/lifecycle` | `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/manifest` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/memory` | **no screen** |
+| `GET /api/v1/agents/{agent_id}/memory-kinds` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/publications` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/upgrade` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/workspace` | `/agents/:agentId`, `/agents/:agentId/:tab` |
@@ -64,6 +65,7 @@
 | `POST /api/v1/agents/{agent_id}/knowledge/{item_id}/retire` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/learning` | **no screen** |
 | `POST /api/v1/agents/{agent_id}/leash/moves` | `/agents/:agentId`, `/agents/:agentId/:tab` |
+| `POST /api/v1/agents/{agent_id}/memory-kinds` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/memory/{memory_id}/deletion` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/memory/{memory_id}/edit` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/preview` | `/agents/:agentId`, `/agents/:agentId/:tab`, `/people`, `/people/:personId`, `/people/:personId/:view` |
@@ -114,6 +116,7 @@
 | `POST /api/v1/agents/{agent_id}/knowledge/{item_id}/refetch` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_a_link_is_fetched_again_only_when_a_person_asks_and_the_newer_page_replaces_the_old` in `tests/unit/test_agent_knowledge_finish_db.py` (database, in CI) | `test_a_link_is_fetched_again_only_when_a_person_asks_and_the_newer_page_replaces_the_old` in `tests/unit/test_agent_knowledge_finish_db.py` (database, in CI) | `test_a_link_is_fetched_again_only_when_a_person_asks_and_the_newer_page_replaces_the_old` in `tests/unit/test_agent_knowledge_finish_db.py` (database, in CI) |
 | `POST /api/v1/agents/{agent_id}/knowledge/{item_id}/retire` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_a_retired_document_leaves_the_section_and_every_search_at_once_and_stays_on_file` in `tests/unit/test_agent_knowledge_finish_db.py` (database, in CI) | `test_a_retired_document_leaves_the_section_and_every_search_at_once_and_stays_on_file` in `tests/unit/test_agent_knowledge_finish_db.py` (database, in CI) | `test_a_retired_document_leaves_the_section_and_every_search_at_once_and_stays_on_file` in `tests/unit/test_agent_knowledge_finish_db.py` (database, in CI) |
 | `POST /api/v1/agents/{agent_id}/leash/moves` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_a_rung_rises_on_counted_evidence_by_two_people_falls_at_once_and_trips_on_a_verdict` in `tests/unit/test_agent_leash_routes.py` (database, in CI) | `test_a_rung_rises_on_counted_evidence_by_two_people_falls_at_once_and_trips_on_a_verdict` in `tests/unit/test_agent_leash_routes.py` (database, in CI) | `test_a_rung_rises_on_counted_evidence_by_two_people_falls_at_once_and_trips_on_a_verdict` in `tests/unit/test_agent_leash_routes.py` (database, in CI) |
+| `POST /api/v1/agents/{agent_id}/memory-kinds` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_leaving_a_kind_out_reaches_the_row_and_the_ledger_and_a_stale_page_writes_neither` in `tests/unit/test_agent_memory_kinds_store.py` (database, in CI) | `test_leaving_a_kind_out_reaches_the_row_and_the_ledger_and_a_stale_page_writes_neither` in `tests/unit/test_agent_memory_kinds_store.py` (database, in CI) | `test_an_agents_steward_leaves_a_kind_out_and_the_store_is_told_who_did_it` in `tests/unit/test_agent_memory_kinds_routes.py` |
 | `POST /api/v1/agents/{agent_id}/memory/{memory_id}/deletion` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_the_steward_corrects_and_the_person_deletes_and_each_reaches_the_ledger` in `tests/unit/test_agent_memory_routes.py` (database, in CI) | `test_the_steward_corrects_and_the_person_deletes_and_each_reaches_the_ledger` in `tests/unit/test_agent_memory_routes.py` (database, in CI) | `test_a_memory_the_reader_is_not_shown_cannot_be_deleted_and_is_answered_as_missing` in `tests/unit/test_agent_memory_routes.py` |
 | `POST /api/v1/agents/{agent_id}/memory/{memory_id}/edit` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_the_steward_corrects_and_the_person_deletes_and_each_reaches_the_ledger` in `tests/unit/test_agent_memory_routes.py` (database, in CI) | `test_the_steward_corrects_and_the_person_deletes_and_each_reaches_the_ledger` in `tests/unit/test_agent_memory_routes.py` (database, in CI) | `test_a_colleague_shown_a_memory_they_may_not_change_is_told_who_may` in `tests/unit/test_agent_memory_routes.py` (database, in CI) |
 | `POST /api/v1/agents/{agent_id}/preview` | `/agents/:agentId`, `/agents/:agentId/:tab`, `/people`, `/people/:personId`, `/people/:personId/:view` | Not applicable: A preview writes no row: it asks the gate what one person's run would be handed and keeps nothing. | Not applicable: A preview changes nothing, so there is nothing for the ledger to record. | `test_a_previewer_who_may_not_read_grants_is_answered_as_a_missing_agent` in `tests/unit/test_agent_capability_routes.py` |

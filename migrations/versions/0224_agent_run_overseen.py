@@ -24,17 +24,17 @@ read two agents' runs at once by accident, and an unset setting reads no row but
 
 Task ids: M39.11.1
 
-Revision ID: 0227
-Revises: 0212
+Revision ID: 0224
+Revises: 0223
 """
 
 from __future__ import annotations
 
 from alembic import op
 
-revision = "0227"
+revision = "0224"
 # main's head at the time of writing. Re-pointed at whichever migration is the head when it lands.
-down_revision = "0212"
+down_revision = "0223"
 branch_labels = None
 depends_on = None
 

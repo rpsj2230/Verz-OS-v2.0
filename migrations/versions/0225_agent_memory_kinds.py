@@ -24,8 +24,8 @@ read again by every agent, which is the state an install downgraded past this is
 
 Task ids: M39.7.1
 
-Revision ID: 0228
-Revises: 0227
+Revision ID: 0225
+Revises: 0224
 """
 
 from __future__ import annotations
@@ -37,8 +37,8 @@ from types import ModuleType
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0228"
-down_revision = "0227"
+revision = "0225"
+down_revision = "0224"
 branch_labels = None
 depends_on = None
 

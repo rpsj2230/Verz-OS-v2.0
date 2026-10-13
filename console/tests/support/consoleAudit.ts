@@ -356,6 +356,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.agent",
       "agent.template_instance",
       "agent.template_version",
+      "agent.template_draft",
+      "agent.audience_extra",
       "agent.upgrade_decline",
       "agent.leash_change",
       "agent.supervised_action",

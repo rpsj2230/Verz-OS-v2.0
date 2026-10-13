@@ -56,7 +56,7 @@ def test_the_oversight_check_is_listed_with_the_leaves_it_proves() -> None:
 
 @pytest.mark.needs_db
 def test_on_a_real_database_a_steward_is_told_and_a_colleague_is_not_and_nothing_is_left() -> None:
-    """**The check as the worker runs it**, over a schema carrying `0227`'s policy. Delete this and
+    """**The check as the worker runs it**, over a schema carrying `0224`'s policy. Delete this and
     the policy, the route and the page can stop agreeing with nothing on an install saying so."""
     with at_head("brain_acceptance_agent_oversight") as url:
         before = counts(url)
