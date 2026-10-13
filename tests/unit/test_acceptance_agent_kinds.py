@@ -4,7 +4,7 @@ The database half builds PostgreSQL to head and runs the check as the worker wou
 against the product broken where it proves: a team agent made by a person with no authority, an
 agent listed to somebody who does not own it, and a builder that refuses a person their own agent.
 
-Task ids: M39.10.1, M39.10.2, M39.10.3, M39.10.6
+Task ids: M39.10.1, M39.10.2, M39.10.6
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ def test_the_agent_kinds_check_is_listed_with_the_leaves_it_proves() -> None:
     """Delete this and the check can drop out of the module, or claim a leaf it does not prove."""
     assert checks_in(MODULE) == [NAME]
     assert MODULE in check_modules()
-    assert mine()[NAME].leaves == ("M39.10.1", "M39.10.2", "M39.10.3", "M39.10.6")
+    assert mine()[NAME].leaves == ("M39.10.1", "M39.10.2", "M39.10.6")
 
 
 @pytest.mark.needs_db

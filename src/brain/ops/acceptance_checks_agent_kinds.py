@@ -18,12 +18,17 @@ does not hold it either: the install authority is not an audience. The member's 
 agent is refused in a sentence of its own and stores nothing, and the administrator's is made, with
 their department as its audience.
 
+**Not claimed here: M39.10.3's second clause.** A personal agent is found by its owner and by
+nobody else, which is proved here; that a reader holding the audit capability may also be shown it,
+for oversight, is not built, and the leaf is left open for it. The ledger already records every
+change to a personal agent, which an auditor reads without the roster listing it.
+
 **Not proved here: a person connecting their own Google account.** That needs the owner's own
 Google Cloud project (needs item 173), and a check cannot invent a mailbox. What is proved of
 mail is the structural half, in `tests/unit/test_agent_kinds.py`: a team agent's ceiling carries
 none of a person's own workspace.
 
-Task ids: M39.10.1, M39.10.2, M39.10.3, M39.10.6
+Task ids: M39.10.1, M39.10.2, M39.10.6
 """
 
 from __future__ import annotations
@@ -121,7 +126,7 @@ async def _made(h: Harness, app: FastAPI, who: str, kind: str) -> tuple[int, dic
 
 
 @check(
-    leaves=("M39.10.1", "M39.10.2", "M39.10.3", "M39.10.6"),
+    leaves=("M39.10.1", "M39.10.2", "M39.10.6"),
     sentence=(
         "With the switch off a member of acceptance_a is refused the builder; with it on they make "
         "an agent that is personal and theirs, which a colleague and an administrator are neither "

@@ -30,7 +30,7 @@ department and a super administrator for any.
 reach intersected with the agent's ceiling, so a personal agent whose ceiling is wide still
 reaches only what its owner reaches. This module adds no second rule about reach.
 
-Task ids: M39.10.1, M39.10.2, M39.10.3
+Task ids: M39.10.1, M39.10.2
 """
 
 from __future__ import annotations

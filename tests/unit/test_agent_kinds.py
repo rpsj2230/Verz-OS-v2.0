@@ -5,7 +5,7 @@ no install authority may make an agent only they can find, and only while `perso
 an administrator makes both kinds either way. These tests drive the real application's builder
 routes through the same in-memory store `tests/unit/test_agent_builder_routes.py` uses.
 
-Task ids: M39.10.1, M39.10.2, M39.10.3
+Task ids: M39.10.1, M39.10.2
 """
 
 from __future__ import annotations
