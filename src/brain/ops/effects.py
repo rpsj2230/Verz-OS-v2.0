@@ -354,6 +354,17 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.browsing.runner:Browser.capture": Repeat.READS,
         "brain.browsing.runner:Channel.receive": Repeat.READS,
         "brain.browsing.runner:Channel.emit": Repeat.DERIVED_STATE,
+        # The worker's half of a run (`brain.browsing.driver`). The decision of the next instruction
+        # reads; a line put to the launcher is keyed by its receiver, because the launcher spends a
+        # run id once and the runner carries each instruction out once per index inside
+        # `issue_once`; a hang-up leaves the link as the first one did; a session's open and close
+        # are rows in this system's own table, where a second open is refused by the key.
+        "brain.browsing.driver:Actor.next": Repeat.READS,
+        "brain.browsing.driver:RunnerLink.put_line": Repeat.KEYED_BY_THE_RECEIVER,
+        "brain.browsing.driver:RunnerLink.next_line": Repeat.READS,
+        "brain.browsing.driver:RunnerLink.hang_up": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.browsing.driver:Ledger.opened": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.browsing.driver:Ledger.closed": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.browsing.verification:ReadBackPort.look": Repeat.READS,
         # The cache.
         "brain.cache:ValkeyClient.get": Repeat.READS,

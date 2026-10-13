@@ -192,13 +192,13 @@ class ReadOnlyActor:
 class RunnerLink(Protocol):
     """One connection to a launcher: one line at a time, in both directions."""
 
-    async def send(self, line: bytes) -> None: ...
+    async def put_line(self, line: bytes) -> None: ...
 
-    async def receive(self) -> bytes:
+    async def next_line(self) -> bytes:
         """The next line, or empty bytes when the other side has closed."""
         ...
 
-    async def close(self) -> None: ...
+    async def hang_up(self) -> None: ...
 
 
 class Ledger(Protocol):
@@ -407,17 +407,17 @@ class StreamLink:
     reader: asyncio.StreamReader
     writer: asyncio.StreamWriter
 
-    async def send(self, line: bytes) -> None:
+    async def put_line(self, line: bytes) -> None:
         self.writer.write(line)
         await self.writer.drain()
 
-    async def receive(self) -> bytes:
+    async def next_line(self) -> bytes:
         try:
             return await self.reader.readuntil(b"\n")
         except (asyncio.IncompleteReadError, asyncio.LimitOverrunError):
             return b""
 
-    async def close(self) -> None:
+    async def hang_up(self) -> None:
         self.writer.close()
 
 
@@ -471,13 +471,13 @@ async def run_envelope(
     ended = ""
     try:
         start = encode(Kind.START, **start_fields(envelope, target, approved=approval is not None))
-        await link.send(start)
+        await link.put_line(start)
         exchanged.append((Direction.TO_RUNNER, start))
         ended = await _relay(link, envelope, deps, exchanged, records, values)
     except OSError:
         ended = "the channel to the launcher failed"
     finally:
-        await link.close()
+        await link.hang_up()
     return await _finish(
         envelope, approval, deps, rubric, started_at, exchanged, records, values, ended
     )
@@ -507,14 +507,14 @@ async def _relay(
         instruction = None if stopping else deps.actor.next(index, last)
         if instruction is None:
             stop = encode(Kind.STOP)
-            await link.send(stop)
+            await link.put_line(stop)
             exchanged.append((Direction.TO_RUNNER, stop))
             return await _until_ended(link, exchanged) or stopping or "stopped"
         try:
             text = _value_for(instruction, last, deps, values)
         except CredentialError:
             stop = encode(Kind.STOP)
-            await link.send(stop)
+            await link.put_line(stop)
             exchanged.append((Direction.TO_RUNNER, stop))
             await _until_ended(link, exchanged)
             return "a credential was refused for this action"
@@ -528,10 +528,10 @@ async def _relay(
             placeholder=instruction.placeholder,
             text=text,
         )
-        await link.send(act)
+        await link.put_line(act)
         exchanged.append((Direction.TO_RUNNER, act))
         while True:
-            line = await link.receive()
+            line = await link.next_line()
             if not line:
                 return "the channel closed before the run ended"
             exchanged.append((Direction.FROM_RUNNER, line))
@@ -557,7 +557,7 @@ async def _relay(
 
 async def _until_ended(link: RunnerLink, exchanged: list[tuple[Direction, bytes]]) -> str:
     """Read to the run's last line, keeping every line, and return its reason."""
-    while line := await link.receive():
+    while line := await link.next_line():
         exchanged.append((Direction.FROM_RUNNER, line))
         try:
             message = decode(line)

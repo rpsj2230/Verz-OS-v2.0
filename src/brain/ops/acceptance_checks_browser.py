@@ -128,13 +128,13 @@ class InProcessRunner:
         self._out.put(b"")
 
     # The driver's link.
-    async def send(self, line: bytes) -> None:
+    async def put_line(self, line: bytes) -> None:
         self._in.put(line)
 
-    async def receive_line(self) -> bytes:
+    async def next_line(self) -> bytes:
         return await asyncio.to_thread(self._out.get, True, 10)
 
-    async def close(self) -> None:
+    async def hang_up(self) -> None:
         self.closed = True
         self._in.put(b"")
 
@@ -143,14 +143,14 @@ class _Link:
     def __init__(self, runner: InProcessRunner) -> None:
         self._runner = runner
 
-    async def send(self, line: bytes) -> None:
-        await self._runner.send(line)
+    async def put_line(self, line: bytes) -> None:
+        await self._runner.put_line(line)
 
-    async def receive(self) -> bytes:
-        return await self._runner.receive_line()
+    async def next_line(self) -> bytes:
+        return await self._runner.next_line()
 
-    async def close(self) -> None:
-        await self._runner.close()
+    async def hang_up(self) -> None:
+        await self._runner.hang_up()
 
 
 @dataclass

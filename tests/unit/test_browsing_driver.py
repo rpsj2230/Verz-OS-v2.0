@@ -173,14 +173,14 @@ class Pipe:
         self.from_runner.put(b"")
 
     # The driver's side.
-    async def send(self, line: bytes) -> None:
+    async def put_line(self, line: bytes) -> None:
         self.sent.append(line)
         self.to_runner.put(line)
 
     async def next_line(self) -> bytes:
         return await asyncio.to_thread(self.from_runner.get, True, 5)
 
-    async def close(self) -> None:
+    async def hang_up(self) -> None:
         self.closed = True
         self.to_runner.put(b"")
 
@@ -189,14 +189,14 @@ class PipeLink:
     def __init__(self, pipe: Pipe) -> None:
         self.pipe = pipe
 
-    async def send(self, line: bytes) -> None:
-        await self.pipe.send(line)
+    async def put_line(self, line: bytes) -> None:
+        await self.pipe.put_line(line)
 
-    async def receive(self) -> bytes:
+    async def next_line(self) -> bytes:
         return await self.pipe.next_line()
 
-    async def close(self) -> None:
-        await self.pipe.close()
+    async def hang_up(self) -> None:
+        await self.pipe.hang_up()
 
 
 @dataclass
