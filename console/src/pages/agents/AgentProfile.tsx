@@ -24,7 +24,11 @@
  * principal ids and the template's id are how the system names them; the cards show names and
  * words, and `kit/parts.tsx`' `Advanced` holds the rest for a support request.
  *
- * Task ids: M27.10.2, M5.7.3, M27.11.6, M13.7.4
+ * **Tools and workflows are parts of an agent in their own right** (needs-rupash 180, option B). The
+ * tools an agent carries are the block under its reach, and a Workflows card says what a workflow is
+ * and that none is stored yet, rather than leaving the part off the page until one is.
+ *
+ * Task ids: M27.10.2, M5.7.3, M27.11.6, M13.7.4, M39.1.1.1
  */
 
 import { Brain, Globe, MonitorX, Plug, Radio, ShieldCheck, Sparkles } from "lucide-react";
@@ -302,6 +306,19 @@ function Permissions({
   );
 }
 
+export const WORKFLOWS_HEADING = "Workflows";
+export const WORKFLOWS_LEDE = "Stored, versioned procedures this agent follows, referred to and never copied in.";
+export const NO_WORKFLOWS = "No workflows are stored on this install yet. When one is, it is attached here, by name and version, and the agent follows exactly that version.";
+
+/** The agent's workflows: a part of its own, and honestly empty until a workflow can be stored. */
+export function WorkflowsCard() {
+  return (
+    <SectionCard title={WORKFLOWS_HEADING} lede={WORKFLOWS_LEDE}>
+      <Note>{NO_WORKFLOWS}</Note>
+    </SectionCard>
+  );
+}
+
 function Availability({
   facts,
   profile,
@@ -544,6 +561,7 @@ export function AgentProfile({
             onDetailsChanged={onDetailsChanged}
             onEditDraft={onEditDraft}
           />
+          <WorkflowsCard />
           <AgentChannels agentId={agent.agentId} />
           <AgentGroups agentId={agent.agentId} />
           {details?.knowledge === undefined ? null : <KnowledgeCard knowledge={details.knowledge} onWiden={onEditDraft} />}
