@@ -794,7 +794,7 @@ async def an_agents_knowledge_is_a_predicate_over_the_readers_documents(
 
 # ------------------------------------------- 6. who can use it, its ceiling, and a preview
 @check(
-    leaves=("M39.3.1.1", "M39.3.1.2", "M39.3.1.3", "M39.3.1.4"),
+    leaves=("M39.3.1.1", "M39.3.1.2", "M39.3.1.3", "M39.3.1.4", "M27.15.61"),
     sentence=(
         "An agent of acceptance_a is found by its department and not by acceptance_b, saying that "
         "finding it gives no access; its ceiling is shown whole to a reader of capabilities and "
@@ -1329,6 +1329,7 @@ def report_cells(found: bytes) -> list[list[str]]:
         "M39.5.2.5",
         "M39.8.4",
         "M39.8.5",
+        "M27.7.23",
         "M27.15.42",
     ),
     sentence=(

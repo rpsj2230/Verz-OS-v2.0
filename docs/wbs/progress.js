@@ -4249,94 +4249,64 @@ const PROGRESS = {
     why: "TRIAGE 2026-10-13 class 4 (unbuilt): Not built: fanout.Verdict has only SINGLE_LOOP and PARALLEL, and nothing says SINGLE_LOOP for a coordinator means running specialists in sequence rather than the coordinator doing their work. No orchestrator exists to hold the rule (register OWN2-5).",
     updated: "2026-10-13",
   },
-  "M30.4.3": {
+  "M19.8.1": {
     status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No chaos suite exists: nothing in src, tests, ops or CI matches chaos, and no script kills Postgres, provider, connector, browser or worker. Related: ops/crash.py durable_machines, ops/recovery_run.py, ops.reliability.MATRIX.",
+    why: "TRIAGE 2026-10-13 class 4 (unbuilt): Nothing found by subject (desktop, virtual desktop, computer use, xvfb) in src or ops; only register rows (ARC-B-028, OWN-98, CONA-25) name it, as 'deferred behind browser checks'.",
     updated: "2026-10-13",
   },
-  "M30.4.6": {
+  "M19.9.1": {
+    status: "IN PROGRESS",
+    why: "TRIAGE 2026-10-13 class 2 (partly built): enforcer.authorise refuses an out-of-envelope action and the run ends on it (runner.py); approval.py deliberately approves the envelope up front and rejects mid-run cards (A_PERSON_APPROVES_THE_CONTRACT_BEFORE_THE_CONTAINER_STARTS). Suspend and re-approve naming the breach does not exist. NEXT: Either build a breach suspension (a new leash approval naming the refusal) or record the narrowing as a docs/needs-rupash.md question and name it in register row ARC-B-021's decision.",
+    updated: "2026-10-13",
+  },
+  "M19.9.2": {
+    status: "IN PROGRESS",
+    why: "TRIAGE 2026-10-13 class 2 (partly built): Read-only website check exists and is wired (tools/website_check.py, app.py HttpsProber); envelope approval primitives exist (approval.py). No readable diff of an envelope on the card and no in-envelope or out-of-envelope run, so approve-once and ask-again cannot be shown. NEXT: Needs the driver plus an envelope diff in the approval card; then a check that runs a read, an approved write and a breach and records each.",
+    updated: "2026-10-13",
+  },
+  "M19.9.3": {
     status: "READY FOR TESTING",
-    why: "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): gate/runtime.py re-resolves the reach before every tool call (A_RUN_IS_JUDGED_AGAIN_AT_EVERY_TOOL_CALL) and leash.resume re-judges; tests: test_agent_runtime.py test_a_grant_revoked_mid_run_refuses_the_next_call, test_crash.py M30.4.6 cases. NEXT: write check naming M30.4.6: start a run, change policy (revoke a grant or lower the rung) mid-run, assert the next tool call is refused in the one sentence",
+    why: "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): sandbox.py gives each run a fresh container with read-only root, tmpfs only and no volume; sandbox_gaps refuses any volume or bind; test_browsing_sandbox.py test_every_way_out_of_the_sandbox_is_a_gap asserts it. No product code reads a staff browser profile. NEXT: Write a check naming M19.9.3 that builds sandbox_for(...), requires no gaps, then adds a volume and a bind and requires sandbox_gaps to refuse each.",
     updated: "2026-10-13",
   },
-  "M30.4.7": {
-    status: "READY FOR TESTING",
-    why: "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): Same per-call re-resolution; test_crash.py test_a_caller_disabled_between_two_attempts_is_refused_at_the_second and test_a_reader_disabled_between_two_attempts_is_judged_at_the_instant_it_is_asked cover the rule; the request path applies EntitlementSet expiry via intersect. NEXT: write check naming M30.4.7: disable a person (directory change or session end) mid-run and assert the run's next step is refused",
-    updated: "2026-10-13",
-  },
-  "M30.4.9": {
-    status: "BLOCKED",
-    why: "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Overlays docker-compose.split*.yml, ops/split.py (host_services, address_refusals) and docs/install/scaling.md exist and are tested; scaling.md says the rehearsal steps have not been run. Needs-rupash lists M36.1.4.2 merged into M30.4.9.",
-    updated: "2026-10-13",
-  },
-  "M30.6.1": {
-    status: "BLOCKED",
-    why: "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Proof leaf for backups on an install: seven consecutive nights, a missed night alerting a person, never verified until a drill, drill checking schema, RLS and permissions, erasure horizon. Needs elapsed time on a real install and the unbuilt pieces M30.3.2, 3.3, 3.4, 3.6, 3.7, 3.10.",
-    updated: "2026-10-13",
-  },
-  "M30.6.2": {
+  "M19.9.4": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): GET /report/service-levels shows per lane objective_p95_ms, p95_ms, success_rate, requests (report_routes.py, ops/service_levels.py). Missing: p50, permission and redaction latency, connector timeout in force; missed-window and aged-backup alerts unwired (M37.5.1.3, M30.3.10); worker-stop and canary delivery unbuilt. NEXT: add p50, permission and redaction latency and connector timeout to the service levels reading, wire the alert runners, then write the check",
+    why: "TRIAGE 2026-10-13 class 2 (partly built): HTTP half is built and wired (tools/website_check.py, ops/website_probe.py). Missing: rendered-page read in the sandbox (launcher never called), portal login with a vault credential (credentials.resolve has no caller), recording kept under retention, target registration. NEXT: Depends on the driver, REHEARSAL.md proof and target storage; then one install check over a declared test site plus the HTTP check.",
     updated: "2026-10-13",
   },
-  "M30.6.4": {
+  "M19.9.5": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): docs/install/network.md states Cloudflare reads every request and decrypts at its edge. No install-level residency constraint exists (residency is a model-routing setting) and nothing requires or records an administrator's acceptance before a tunnel or edge proxy is enabled. NEXT: add an acceptance record (table, route, console prompt) shown when the tunnel overlay is enabled on an install declaring a residency constraint; needs a decision on what declares one",
+    why: "TRIAGE 2026-10-13 class 2 (partly built): Pieces exist (planning, envelope, approval, enforcer, grading, verification.read_back) but there is no driver, no judge, no ReadBackPort implementation and no target declares read_back; a form-filling run at Assisted cannot happen. NEXT: Needs the driver, judge and a ReadBackPort over a registered target; then a check that runs one approved form fill, a refused extra step and a read-back.",
     updated: "2026-10-13",
   },
-  "M30.6.5": {
+  "M19.9.6": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): docker-compose.replica.yml runs a hot standby Postgres; profile full has a one-hour RPO (reliability.RECOVERY_OBJECTIVES). Missing: object store replication off the host, a promote or failover procedure and recorded failover drill, and any gate stopping the profile being offered without them. NEXT: build object-store replication, a failover runbook and drill record, and make launch.service_level refuse an under-four-hour profile without them; needs a second server to rehearse",
+    why: "TRIAGE 2026-10-13 class 2 (partly built): docker-compose.browser.yml and launcher --check give a launcher whose health is gVisor present; agent browser tools are defined (sessions.READ_SURFACE) but no handler is registered, so no agent opens a page in the sandbox. Never run on a daemon. NEXT: Run the REHEARSAL.md first build on a runsc host, build the driver and register the read handler, then check an agent with the browse capability fetches one page.",
     updated: "2026-10-13",
   },
-  "M30.6.6": {
+  "M19.9.7": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): launch.service_level() is produced only with a verified Drill and a newest copy inside the RPO, otherwise raises with the reason (four refusals, tested in test_launch.py, DEC-31). Nothing calls it and no route serves the statement or its refusal. NEXT: same route as M30.5.4; the check asks for the statement on an install with no verified drill and expects the stated reason",
+    why: "TRIAGE 2026-10-13 class 2 (partly built): autonomy.SurfaceException and skill_gate.Exemption are value types with sign and expiry rules (test_browsing_autonomy.py). No store, no console screen or route for an administrator to grant one, no ledger leash_change entry, no listing until lapse. NEXT: Build a table, routes and a console page for grants with approver and expiry, write the audit leash_change on grant, pass live grants into compile_envelope and may_load.",
     updated: "2026-10-13",
   },
-  "M30.6.7": {
-    status: "BLOCKED",
-    why: "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Multi-part proof: backups off-host with client key, timed restore drill, worker killed mid-task, chaos suite, capacity and scaling readbacks. Chaos suite is unbuilt (M30.4.3) and backup encryption and off-host enforcement are unbuilt (M30.3.3, 3.4); the worker-kill piece has recovery_run.",
-    updated: "2026-10-13",
-  },
-  "M30.6.8": {
-    status: "BLOCKED",
-    why: "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Person-run demonstration of every hosting and delivery requirement in the register, each check recorded against its requirement; register rows cite M30.6.8 as proof for dozens of requirements.",
-    updated: "2026-10-13",
-  },
-  "M30.6.9": {
-    status: "READY FOR TESTING",
-    why: "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): Telemetry is written for every request by gate/finish.py and GET /report/service-levels returns each lane's requests, p95 and success rate (ops/service_levels.py, report_routes.py); test_a_lane_nothing_was_asked_through_is_present_and_unmeasured. A lane with traffic carries requests above zero. NEXT: write check naming M30.6.9: ask one question, GET /report/service-levels and assert the answer lane shows requests of at least one",
-    updated: "2026-10-13",
-  },
-  "M30.6.10": {
+  "M19.9.8": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): controls.backup_exposure (daily, WOKEN) and recovery.alerts() exist; Runner backup_exposure in schedule_runner.py has needs= and no run, so the control never runs on its cadence and alerts nobody. Includes the not-verified-last-rehearsal case via last_attempt (tested). NEXT: same wiring as M30.3.10; then the check reads the control's last run from the Jobs route and an alert addressed to the named person",
+    why: "TRIAGE 2026-10-13 class 2 (partly built): grading.build_rubric and verification.verify_run exist and are tested; grading.verification_gaps states no judge is built and no target declares a read_back tool. Nothing scores a real run. NEXT: Build the judge and the read-back port, call verify_run at run end, then a check that scores a recorded run against its prior rubric.",
     updated: "2026-10-13",
   },
-  "M36.2.4.3": {
+  "M19.9.9": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): ops/load_peak.judge compares each lane's p95 and success rate with reliability.LANE_OBJECTIVES (tested) and prints them; no store keeps a run's result and no screen shows it. A run needs the owner's sign-off (needs-rupash item 194). NEXT: add a table and route that record a load_peak result per run and show it beside the service level table; the first real result waits on item 194",
+    why: "TRIAGE 2026-10-13 class 2 (partly built): sessions.may_start (global admission budget) and concurrency.may_open (domain, agent) decide with reasons; concurrency docstring: the counter that records sessions as they start and end is not built, and nothing calls either decision. NEXT: Build the counter from browser_session rows (session_store.start/end), call both decisions from the driver, then a check that fills a limit and sees a refusal naming it.",
     updated: "2026-10-13",
   },
-  "M36.3.1": {
-    status: "BLOCKED",
-    why: "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): ops/load_peak.py (python -m brain.ops.load_peak) runs the peak at a live install and judges per lane; it spends real model calls so it is the owner's command, needs-rupash item 194 asks whether to run it. It does not measure memory headroom under load.",
-    updated: "2026-10-13",
-  },
-  "M37.7.5": {
+  "M19.9.10": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): migration/decommission.py CompletedCutover cannot be built while CUTOVER_GATED_ACTS are unrecorded and decommission_gaps names which (tested; DEC-35). Nothing records a cutover: no table, route or page, and nothing imports it. NEXT: build the cutover record store and route that constructs CompletedCutover and returns the refusal text naming the unrecorded act; then check reads the refusal",
+    why: "TRIAGE 2026-10-13 class 2 (partly built): compile_envelope, approval, credentials.resolve and enforcer exist as separate tested modules but no code joins them for a run; no vault credential binding source for browser targets exists; no run has happened. NEXT: Needs the driver plus Bindings backed by the vault; then a check that approves one write envelope and shows the credential absent from plan, trace and recording.",
     updated: "2026-10-13",
   },
-  "M37.7.6": {
-    status: "BLOCKED",
-    why: "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): A throwaway-install rehearsal of the whole migration (skills re-reviewed, agents at Shadow, cutover refused) is a person-run demonstration that needs the migration package wired first (M37.1.x, M37.2.x are unwired). Register DEC-35 and DEC-59 name it as proof.",
-    updated: "2026-10-13",
-  },
-  "M37.7.8": {
-    status: "BLOCKED",
-    why: "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Person-run demonstration of every migration requirement on an install, recorded against the requirement it proves; register rows GAP2-25 and others name it as proof. Depends on the migration package being wired and on the owner or a tester running it.",
+  "M19.9.11": {
+    status: "IN PROGRESS",
+    why: "TRIAGE 2026-10-13 class 2 (partly built): recording.write and remove_expired are built and tested, with the recordings bucket in ops/storage.py and RECORDING_RETENTION_DAYS; no caller writes a recording at run end and no scheduled job calls remove_expired. NEXT: Call recording.write in the driver and register a scheduled remove_expired in ops/schedule_runner.py (holds from the legal hold store); then a check that writes, ages and sweeps.",
     updated: "2026-10-13",
   },
   "M21.4.2": {
@@ -4404,6 +4374,71 @@ const PROGRESS = {
     why: "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Person-run demonstration of every modularity requirement recorded against its row; not code.",
     updated: "2026-10-13",
   },
+  "M30.4.3": {
+    status: "OPEN",
+    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No chaos suite exists: nothing in src, tests, ops or CI matches chaos, and no script kills Postgres, provider, connector, browser or worker. Related: ops/crash.py durable_machines, ops/recovery_run.py, ops.reliability.MATRIX.",
+    updated: "2026-10-13",
+  },
+  "M30.4.6": {
+    status: "READY FOR TESTING",
+    why: "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): gate/runtime.py re-resolves the reach before every tool call (A_RUN_IS_JUDGED_AGAIN_AT_EVERY_TOOL_CALL) and leash.resume re-judges; tests: test_agent_runtime.py test_a_grant_revoked_mid_run_refuses_the_next_call, test_crash.py M30.4.6 cases. NEXT: write check naming M30.4.6: start a run, change policy (revoke a grant or lower the rung) mid-run, assert the next tool call is refused in the one sentence",
+    updated: "2026-10-13",
+  },
+  "M30.4.7": {
+    status: "READY FOR TESTING",
+    why: "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): Same per-call re-resolution; test_crash.py test_a_caller_disabled_between_two_attempts_is_refused_at_the_second and test_a_reader_disabled_between_two_attempts_is_judged_at_the_instant_it_is_asked cover the rule; the request path applies EntitlementSet expiry via intersect. NEXT: write check naming M30.4.7: disable a person (directory change or session end) mid-run and assert the run's next step is refused",
+    updated: "2026-10-13",
+  },
+  "M30.4.9": {
+    status: "BLOCKED",
+    why: "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Overlays docker-compose.split*.yml, ops/split.py (host_services, address_refusals) and docs/install/scaling.md exist and are tested; scaling.md says the rehearsal steps have not been run. Needs-rupash lists M36.1.4.2 merged into M30.4.9.",
+    updated: "2026-10-13",
+  },
+  "M30.6.1": {
+    status: "BLOCKED",
+    why: "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Proof leaf for backups on an install: seven consecutive nights, a missed night alerting a person, never verified until a drill, drill checking schema, RLS and permissions, erasure horizon. Needs elapsed time on a real install and the unbuilt pieces M30.3.2, 3.3, 3.4, 3.6, 3.7, 3.10.",
+    updated: "2026-10-13",
+  },
+  "M30.6.2": {
+    status: "IN PROGRESS",
+    why: "TRIAGE 2026-10-13 class 2 (partly built): GET /report/service-levels shows per lane objective_p95_ms, p95_ms, success_rate, requests (report_routes.py, ops/service_levels.py). Missing: p50, permission and redaction latency, connector timeout in force; missed-window and aged-backup alerts unwired (M37.5.1.3, M30.3.10); worker-stop and canary delivery unbuilt. NEXT: add p50, permission and redaction latency and connector timeout to the service levels reading, wire the alert runners, then write the check",
+    updated: "2026-10-13",
+  },
+  "M30.6.4": {
+    status: "IN PROGRESS",
+    why: "TRIAGE 2026-10-13 class 2 (partly built): docs/install/network.md states Cloudflare reads every request and decrypts at its edge. No install-level residency constraint exists (residency is a model-routing setting) and nothing requires or records an administrator's acceptance before a tunnel or edge proxy is enabled. NEXT: add an acceptance record (table, route, console prompt) shown when the tunnel overlay is enabled on an install declaring a residency constraint; needs a decision on what declares one",
+    updated: "2026-10-13",
+  },
+  "M30.6.5": {
+    status: "IN PROGRESS",
+    why: "TRIAGE 2026-10-13 class 2 (partly built): docker-compose.replica.yml runs a hot standby Postgres; profile full has a one-hour RPO (reliability.RECOVERY_OBJECTIVES). Missing: object store replication off the host, a promote or failover procedure and recorded failover drill, and any gate stopping the profile being offered without them. NEXT: build object-store replication, a failover runbook and drill record, and make launch.service_level refuse an under-four-hour profile without them; needs a second server to rehearse",
+    updated: "2026-10-13",
+  },
+  "M30.6.6": {
+    status: "IN PROGRESS",
+    why: "TRIAGE 2026-10-13 class 3 (built, not wired): launch.service_level() is produced only with a verified Drill and a newest copy inside the RPO, otherwise raises with the reason (four refusals, tested in test_launch.py, DEC-31). Nothing calls it and no route serves the statement or its refusal. NEXT: same route as M30.5.4; the check asks for the statement on an install with no verified drill and expects the stated reason",
+    updated: "2026-10-13",
+  },
+  "M30.6.7": {
+    status: "BLOCKED",
+    why: "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Multi-part proof: backups off-host with client key, timed restore drill, worker killed mid-task, chaos suite, capacity and scaling readbacks. Chaos suite is unbuilt (M30.4.3) and backup encryption and off-host enforcement are unbuilt (M30.3.3, 3.4); the worker-kill piece has recovery_run.",
+    updated: "2026-10-13",
+  },
+  "M30.6.8": {
+    status: "BLOCKED",
+    why: "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Person-run demonstration of every hosting and delivery requirement in the register, each check recorded against its requirement; register rows cite M30.6.8 as proof for dozens of requirements.",
+    updated: "2026-10-13",
+  },
+  "M30.6.9": {
+    status: "READY FOR TESTING",
+    why: "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): Telemetry is written for every request by gate/finish.py and GET /report/service-levels returns each lane's requests, p95 and success rate (ops/service_levels.py, report_routes.py); test_a_lane_nothing_was_asked_through_is_present_and_unmeasured. A lane with traffic carries requests above zero. NEXT: write check naming M30.6.9: ask one question, GET /report/service-levels and assert the answer lane shows requests of at least one",
+    updated: "2026-10-13",
+  },
+  "M30.6.10": {
+    status: "IN PROGRESS",
+    why: "TRIAGE 2026-10-13 class 3 (built, not wired): controls.backup_exposure (daily, WOKEN) and recovery.alerts() exist; Runner backup_exposure in schedule_runner.py has needs= and no run, so the control never runs on its cadence and alerts nobody. Includes the not-verified-last-rehearsal case via last_attempt (tested). NEXT: same wiring as M30.3.10; then the check reads the control's last run from the Jobs route and an alert addressed to the named person",
+    updated: "2026-10-13",
+  },
   "M34.4.1": {
     status: "IN PROGRESS",
     why: "TRIAGE 2026-10-13 class 2 (partly built): Runbooks per screen exist (36 files) with a gap sweep (launch.screen_runbook_gaps); alert runbooks via ops.controls.runbook_gaps. The incident playbook is a Python table (ops.reliability.MATRIX) nothing renders, and no help route serves any of it. NEXT: Build GET help pages serving runbooks, alert runbooks and a rendered playbook; extend the sweep to fail when a screen or alert has none.",
@@ -4454,64 +4489,29 @@ const PROGRESS = {
     why: "TRIAGE 2026-10-13 class 2 (partly built): console/tests/phone-width.test.tsx asserts the cascade for every registered route at 360px (wrapping, link height) but the file says it cannot measure widths; no 44px target or 320px width measurement exists. NEXT: Add a headless browser measurement (iframe at 320px as the test's author did) over every route and assert 44px targets and no overflow; or relax to the measured figures and ask.",
     updated: "2026-10-13",
   },
-  "M19.8.1": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): Nothing found by subject (desktop, virtual desktop, computer use, xvfb) in src or ops; only register rows (ARC-B-028, OWN-98, CONA-25) name it, as 'deferred behind browser checks'.",
-    updated: "2026-10-13",
-  },
-  "M19.9.1": {
+  "M36.2.4.3": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): enforcer.authorise refuses an out-of-envelope action and the run ends on it (runner.py); approval.py deliberately approves the envelope up front and rejects mid-run cards (A_PERSON_APPROVES_THE_CONTRACT_BEFORE_THE_CONTAINER_STARTS). Suspend and re-approve naming the breach does not exist. NEXT: Either build a breach suspension (a new leash approval naming the refusal) or record the narrowing as a docs/needs-rupash.md question and name it in register row ARC-B-021's decision.",
+    why: "TRIAGE 2026-10-13 class 2 (partly built): ops/load_peak.judge compares each lane's p95 and success rate with reliability.LANE_OBJECTIVES (tested) and prints them; no store keeps a run's result and no screen shows it. A run needs the owner's sign-off (needs-rupash item 194). NEXT: add a table and route that record a load_peak result per run and show it beside the service level table; the first real result waits on item 194",
     updated: "2026-10-13",
   },
-  "M19.9.2": {
+  "M36.3.1": {
+    status: "BLOCKED",
+    why: "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): ops/load_peak.py (python -m brain.ops.load_peak) runs the peak at a live install and judges per lane; it spends real model calls so it is the owner's command, needs-rupash item 194 asks whether to run it. It does not measure memory headroom under load.",
+    updated: "2026-10-13",
+  },
+  "M37.7.5": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Read-only website check exists and is wired (tools/website_check.py, app.py HttpsProber); envelope approval primitives exist (approval.py). No readable diff of an envelope on the card and no in-envelope or out-of-envelope run, so approve-once and ask-again cannot be shown. NEXT: Needs the driver plus an envelope diff in the approval card; then a check that runs a read, an approved write and a breach and records each.",
+    why: "TRIAGE 2026-10-13 class 3 (built, not wired): migration/decommission.py CompletedCutover cannot be built while CUTOVER_GATED_ACTS are unrecorded and decommission_gaps names which (tested; DEC-35). Nothing records a cutover: no table, route or page, and nothing imports it. NEXT: build the cutover record store and route that constructs CompletedCutover and returns the refusal text naming the unrecorded act; then check reads the refusal",
     updated: "2026-10-13",
   },
-  "M19.9.3": {
-    status: "READY FOR TESTING",
-    why: "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): sandbox.py gives each run a fresh container with read-only root, tmpfs only and no volume; sandbox_gaps refuses any volume or bind; test_browsing_sandbox.py test_every_way_out_of_the_sandbox_is_a_gap asserts it. No product code reads a staff browser profile. NEXT: Write a check naming M19.9.3 that builds sandbox_for(...), requires no gaps, then adds a volume and a bind and requires sandbox_gaps to refuse each.",
+  "M37.7.6": {
+    status: "BLOCKED",
+    why: "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): A throwaway-install rehearsal of the whole migration (skills re-reviewed, agents at Shadow, cutover refused) is a person-run demonstration that needs the migration package wired first (M37.1.x, M37.2.x are unwired). Register DEC-35 and DEC-59 name it as proof.",
     updated: "2026-10-13",
   },
-  "M19.9.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): HTTP half is built and wired (tools/website_check.py, ops/website_probe.py). Missing: rendered-page read in the sandbox (launcher never called), portal login with a vault credential (credentials.resolve has no caller), recording kept under retention, target registration. NEXT: Depends on the driver, REHEARSAL.md proof and target storage; then one install check over a declared test site plus the HTTP check.",
-    updated: "2026-10-13",
-  },
-  "M19.9.5": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Pieces exist (planning, envelope, approval, enforcer, grading, verification.read_back) but there is no driver, no judge, no ReadBackPort implementation and no target declares read_back; a form-filling run at Assisted cannot happen. NEXT: Needs the driver, judge and a ReadBackPort over a registered target; then a check that runs one approved form fill, a refused extra step and a read-back.",
-    updated: "2026-10-13",
-  },
-  "M19.9.6": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): docker-compose.browser.yml and launcher --check give a launcher whose health is gVisor present; agent browser tools are defined (sessions.READ_SURFACE) but no handler is registered, so no agent opens a page in the sandbox. Never run on a daemon. NEXT: Run the REHEARSAL.md first build on a runsc host, build the driver and register the read handler, then check an agent with the browse capability fetches one page.",
-    updated: "2026-10-13",
-  },
-  "M19.9.7": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): autonomy.SurfaceException and skill_gate.Exemption are value types with sign and expiry rules (test_browsing_autonomy.py). No store, no console screen or route for an administrator to grant one, no ledger leash_change entry, no listing until lapse. NEXT: Build a table, routes and a console page for grants with approver and expiry, write the audit leash_change on grant, pass live grants into compile_envelope and may_load.",
-    updated: "2026-10-13",
-  },
-  "M19.9.8": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): grading.build_rubric and verification.verify_run exist and are tested; grading.verification_gaps states no judge is built and no target declares a read_back tool. Nothing scores a real run. NEXT: Build the judge and the read-back port, call verify_run at run end, then a check that scores a recorded run against its prior rubric.",
-    updated: "2026-10-13",
-  },
-  "M19.9.9": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): sessions.may_start (global admission budget) and concurrency.may_open (domain, agent) decide with reasons; concurrency docstring: the counter that records sessions as they start and end is not built, and nothing calls either decision. NEXT: Build the counter from browser_session rows (session_store.start/end), call both decisions from the driver, then a check that fills a limit and sees a refusal naming it.",
-    updated: "2026-10-13",
-  },
-  "M19.9.10": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): compile_envelope, approval, credentials.resolve and enforcer exist as separate tested modules but no code joins them for a run; no vault credential binding source for browser targets exists; no run has happened. NEXT: Needs the driver plus Bindings backed by the vault; then a check that approves one write envelope and shows the credential absent from plan, trace and recording.",
-    updated: "2026-10-13",
-  },
-  "M19.9.11": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): recording.write and remove_expired are built and tested, with the recordings bucket in ops/storage.py and RECORDING_RETENTION_DAYS; no caller writes a recording at run end and no scheduled job calls remove_expired. NEXT: Call recording.write in the driver and register a scheduled remove_expired in ops/schedule_runner.py (holds from the legal hold store); then a check that writes, ages and sweeps.",
+  "M37.7.8": {
+    status: "BLOCKED",
+    why: "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Person-run demonstration of every migration requirement on an install, recorded against the requirement it proves; register rows GAP2-25 and others name it as proof. Depends on the migration package being wired and on the owner or a tester running it.",
     updated: "2026-10-13",
   },
   "M42.2.10": {
