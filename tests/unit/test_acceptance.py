@@ -9,7 +9,7 @@ nothing else a check wrote is left, which is `NOTHING_A_CHECK_WRITES_IS_EVER_COM
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M38.5.1
+Task ids: M38.5.1, M17.7.9
 """
 
 from __future__ import annotations
@@ -183,7 +183,7 @@ def test_the_first_two_modules_hold_their_checks_in_order() -> None:
     ]
     oversight = {one.name: one.leaves for one in registered()}
     assert oversight["unusual_volume_is_found_per_person"] == ("M23.2.1",)
-    assert oversight["repeated_refusals_raise_a_denial_notice"] == ("M23.2.2",)
+    assert oversight["repeated_refusals_raise_a_denial_notice"] == ("M23.2.2", "M17.7.9")
     assert oversight["a_head_reads_their_own_peoples_audit_entries_only"] == (
         "M1.8.3",
         "M33.2.1.2",
