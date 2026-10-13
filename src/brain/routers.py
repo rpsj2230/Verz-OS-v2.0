@@ -458,6 +458,10 @@ from brain.sign_in_routes import router as sign_in_router
 # `attach_skill`, each asking its `admin:` authority first. See `brain.skill_routes`.
 from brain.skill_routes import router as skill_router
 
+# The Spend report's other readings: what an answer costs as a distribution, the question shapes
+# that cost most, and the budget stops in force. See `brain.spend_detail_routes`.
+from brain.spend_detail_routes import router as spend_detail_router
+
 # The Staff sources screen and the trial run behind it. A router of its own because it
 # refuses nobody on its listing: a source sits at `brain.console.govern.NOWHERE`, so the
 # answer for a reader who reaches none of them is the empty page rather than the refusal
