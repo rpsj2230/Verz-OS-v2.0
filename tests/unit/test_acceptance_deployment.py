@@ -8,7 +8,7 @@ need no database and run without one; the connection budget and the trace store 
 PostgreSQL at head. Each check is then broken the way it would break in practice and fails with
 its own sentence, and a process that is not a worker is told so by the three that read one.
 
-Task ids: M32.4.1.4, M32.7.3, M32.1.2.1, M32.1.2.2, M32.1.2.5, M32.2.2.4, M32.2.1.3
+Task ids: M32.4.1.4, M17.1.3, M32.7.3, M32.1.2.1, M32.1.2.2, M32.1.2.5, M32.2.2.4, M32.2.1.3
 Task ids: M27.1.3, M27.1.4
 """
 
@@ -38,7 +38,7 @@ ROOT = Path(__file__).resolve().parents[2]
 MODULE = "brain.ops.acceptance_checks_deployment"
 
 LEAVES = {
-    "the_worker_serves_each_traffic_class_from_its_own_slots": ("M32.4.1.4",),
+    "the_worker_serves_each_traffic_class_from_its_own_slots": ("M32.4.1.4", "M17.1.3"),
     "every_database_client_is_bounded_within_the_install_s_ceiling": ("M32.7.3",),
     "a_run_s_trace_is_stored_masked_and_read_only_after_its_row": (
         "M32.1.2.1",
