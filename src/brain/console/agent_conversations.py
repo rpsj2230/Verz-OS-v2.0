@@ -34,10 +34,21 @@ them.** Their own history is theirs without a grant, as Ask lists it; `read:ques
 workspace's Conversations tab is read under, governs other people's questions and stays for option
 B. See `brain.agent_conversation_routes.A_PERSONS_OWN_THREADS_NEED_NO_GRANT`.
 
+**The owner and the administrators are also told that other people's conversations happened, never
+what was said** (needs-rupash 121, option B, decided 2026-10-13). Each is a person, a time and
+whether the agent answered, declined or failed, read from the run record
+(`ops.agent_run`: counts and names from closed lists, no question and no answer), and never from a
+thread, which only its own person can read. A person's words were answered at that person's reach,
+which may be wider than the viewer's, so showing them would be reading through the Brain what the
+viewer could not read themselves. See
+`OTHERS_CONVERSATIONS_SAY_THAT_THEY_HAPPENED_AND_NOTHING_THEY_SAID`.
+Who may be told is the steward and a holder of the lifecycle authority over the agent's row, and a
+personal agent has no such reader at all, because what a personal agent did is its owner's alone.
+
 Built on `brain.member_activity.recent_threads`, which decides which of a person's threads are
 listed and in what order, so this section and the Ask page's list cannot disagree about that.
 
-Task ids: M39.8.9
+Task ids: M39.8.9, M39.11.1
 """
 
 from __future__ import annotations
@@ -50,6 +61,7 @@ from typing import Final
 from brain.chat.threads import Thread
 from brain.core.entitlement import EntitlementSet
 from brain.gate.context import Channel
+from brain.gate.stop import StopReason
 from brain.member_activity import RECENT_THREADS, recent_threads
 from brain.tables.chat import MessageRole, RunState
 
@@ -59,6 +71,42 @@ EVERY_THREAD_A_READER_SEES_IS_ONE_THEY_TOOK_PART_IN: Final = (
     "is one the reader wrote every question in. A filter to the threads they took part in would "
     "never change the list, and a control that never changes anything is not drawn."
 )
+
+
+#: Why another person's conversation is a person, a time and an outcome, and nothing else.
+OTHERS_CONVERSATIONS_SAY_THAT_THEY_HAPPENED_AND_NOTHING_THEY_SAID: Final = (
+    "The agent's owner and its administrators are told who asked it, when, and whether it "
+    "answered, declined or failed. They are never told the question or the answer, because the "
+    "answer was built from what the asker may see, which may be more than the viewer may. The "
+    "rows are read from the run record, which holds no words, and never from a thread."
+)
+
+#: The words a run's outcome is told in, and the only three.
+OUTCOME_WORDS: Final = ("answered", "declined", "failed")
+
+
+@dataclass(frozen=True)
+class OtherConversation:
+    """Another person's use of this agent: who, when it started and ended, and how it ended."""
+
+    principal_id: str
+    started_at: datetime
+    ended_at: datetime
+    #: One of `OUTCOME_WORDS`.
+    outcome: str
+
+
+def outcome_of(stop_reason: str) -> str:
+    """How a run's stop reason reads to a person: it answered, it declined, or it failed.
+
+    Every bound a run can reach and a refusal or a fault is a failure to the person who watches an
+    agent for failing; the model declining on content is its own word.
+    """
+    if stop_reason == StopReason.ANSWERED.value:
+        return OUTCOME_WORDS[0]
+    if stop_reason == StopReason.DECLINED.value:
+        return OUTCOME_WORDS[1]
+    return OUTCOME_WORDS[2]
 
 
 @dataclass(frozen=True)

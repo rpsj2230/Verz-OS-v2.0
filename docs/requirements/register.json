@@ -18703,6 +18703,20 @@
     "M39.10.7"
    ],
    "decision": "needs-rupash 189: how a team agent may use mail; open until answered"
+  },
+  {
+   "id": "DEC-121B",
+   "source": "needs-rupash 121 (decided 2026-10-13, option B)",
+   "area": "Agents",
+   "requirement": "On an agent's page the owner and administrators also see that other people's conversations happened: who, when, and whether the agent failed, never the question or the answer.",
+   "leaves": [
+    "M39.11.1",
+    "M39.8.9"
+   ],
+   "proof": [
+    "M39.11.2"
+   ],
+   "decision": null
   }
  ]
 }
