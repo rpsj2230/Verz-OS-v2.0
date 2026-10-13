@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-13T10:50:16.089246+00:00",
-  "commit": "8a7cc29e",
-  "commit_subject": "Two narrowings in the client template and the joiner leaver work become needs items 215 and 216 (#563)",
+  "generated_at": "2026-10-13T11:26:21.211342+00:00",
+  "commit": "6e52997d",
+  "commit_subject": "Install checks: automation run reach, outbox delivery, approval resume (7 leaves) (#562)",
   "total": 1622,
   "done": 864,
   "percent": 53.3,
