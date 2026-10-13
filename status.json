@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-13T06:22:48.975545+00:00",
-  "commit": "dcfddda6",
-  "commit_subject": "Three narrowings in the member application become needs items 218 to 220 (#555)",
+  "generated_at": "2026-10-13T07:08:28.791269+00:00",
+  "commit": "1259322d",
+  "commit_subject": "Tools and workflows are parts of an agent in their own right, so an agent is composed of twelve (#549)",
   "total": 1620,
   "done": 831,
   "percent": 51.3,
