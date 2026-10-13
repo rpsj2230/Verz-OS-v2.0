@@ -20,7 +20,7 @@ Rejected: reading `.env` on the host. The worker does not mount it, and an insta
 a second mount is an install that cannot be checked until somebody changes its compose file.
 
 Task ids: M42.1.2, M42.1.3, M42.1.4, M42.2.3, M42.2.8, M42.3.1, M42.3.6
-Task ids: M42.3.9, M42.5.1, M42.5.2, M42.5.15, M42.3.3
+Task ids: M42.3.9, M42.5.1, M42.5.2, M42.5.15, M42.3.3, M42.1.1, M42.3.2
 """
 
 from __future__ import annotations
@@ -348,3 +348,64 @@ async def the_database_is_at_the_head_the_migrate_command_brings_it_to(h: Harnes
         chapter.read_text(encoding="utf-8"), commands=database.COMMANDS, module=database.__name__
     ):
         raise CheckFailedError("the operations chapter and the database commands disagree")
+
+
+@check(
+    leaves=("M42.1.1", "M42.3.2"),
+    sentence=(
+        "The template this release generates for an install's variables file carries every "
+        "credential-shaped setting blank, documents each setting it emits, and refuses a "
+        "variable with no meaning; the check for the variables repository names a directory of "
+        "product code and a credential set to one value on two installs, and says neither value."
+    ),
+)
+async def the_variables_template_is_blank_and_the_repository_is_checked(
+    h: Harness,
+) -> None:
+    del h
+    import tempfile
+
+    from brain.deployment.variables import (
+        VariablesError,
+        check_directory,
+        is_secret_name,
+        parse_env,
+        template_for,
+    )
+
+    text = template_for(
+        "acceptance-install",
+        also={"APP_IMAGE": "the image tag", "POSTGRES_PASSWORD": "the database password"},
+    )
+    values = parse_env(text)
+    if "APP_IMAGE" not in values or not any(is_secret_name(name) for name in values):
+        raise CheckFailedError("the template does not describe the deployment's variables")
+    if any(value.strip() for name, value in values.items() if is_secret_name(name)):
+        raise CheckFailedError("the template ships a value for a credential")
+    lines = text.splitlines()
+    for at, line in enumerate(lines):
+        name = line.partition("=")[0]
+        if name in values and (at == 0 or not lines[at - 1].startswith("#")):
+            raise CheckFailedError("the template emits a setting with nothing saying what it is")
+    try:
+        template_for("acceptance-install", also={"UNEXPLAINED": " "})
+    except VariablesError:
+        pass
+    else:
+        raise CheckFailedError("the template emitted a variable it could not explain")
+
+    shared = "x" * 48
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / "first.env").write_text(f"POSTGRES_PASSWORD={shared}\n", encoding="utf-8")
+        (root / "second.env").write_text(f"POSTGRES_PASSWORD={shared}\n", encoding="utf-8")
+        (root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+        found = check_directory(root)
+    if not found or any(shared in one for one in found):
+        raise CheckFailedError(
+            "the repository check missed a fork or a shared credential, or said it"
+        )
+    if not any("pyproject.toml" in one for one in found) or not any(
+        "first" in one for one in found
+    ):
+        raise CheckFailedError("the repository check did not name what it found")

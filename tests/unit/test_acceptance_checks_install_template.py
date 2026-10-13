@@ -6,7 +6,7 @@ read; the Updates screen's check signs a reserved person in and runs against Pos
 and skips where `DATABASE_URL` is unset.
 
 Task ids: M42.1.2, M42.1.3, M42.1.4, M42.2.3, M42.2.8, M42.3.1, M42.3.6
-Task ids: M42.3.9, M42.5.1, M42.5.2, M42.5.15, M42.3.3
+Task ids: M42.3.9, M42.5.1, M42.5.2, M42.5.15, M42.3.3, M42.1.1, M42.3.2
 """
 
 from __future__ import annotations
@@ -39,6 +39,7 @@ PIN = "the_install_runs_one_published_image_at_a_named_release"
 UPDATE = "the_update_refuses_latest_and_the_rollback_reads_the_previous"
 SCREEN = "the_updates_screen_names_the_version_and_whether_newer_exists"
 HEAD = "the_database_is_at_the_head_the_migrate_command_brings_it_to"
+VARIABLES = "the_variables_template_is_blank_and_the_repository_is_checked"
 
 IMAGE = "ghcr.io/rpsj2230/verz-brain-v2.0"
 
@@ -62,8 +63,9 @@ def test_the_module_declares_the_leaves_each_check_proves() -> None:
         UPDATE: ("M42.3.6",),
         SCREEN: ("M42.3.9",),
         HEAD: ("M42.3.3",),
+        VARIABLES: ("M42.1.1", "M42.3.2"),
     }
-    assert checks_in(MODULE) == [STEPS, SECRETS, GUIDES, PIN, UPDATE, SCREEN, HEAD]
+    assert checks_in(MODULE) == [STEPS, SECRETS, GUIDES, PIN, UPDATE, SCREEN, HEAD, VARIABLES]
 
 
 def test_the_installer_and_the_update_checks_pass_on_the_plan_this_release_carries() -> None:
@@ -71,6 +73,26 @@ def test_the_installer_and_the_update_checks_pass_on_the_plan_this_release_carri
     test below is satisfied by a check that refuses everything."""
     ran(STEPS)
     ran(UPDATE)
+
+
+def test_the_variables_check_passes_at_head_and_fails_when_the_template_ships_a_credential(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The template and the repository check at head pass; a template that ships a password
+    fails. Delete this and M42.3.2 closes on a generator that stopped blanking credentials."""
+    ran(VARIABLES)
+    from brain.deployment import variables
+
+    real = variables.template_for
+
+    def shipping(install: str, *, also: Any = None) -> str:
+        return real(install, also=also).replace(
+            "POSTGRES_PASSWORD=", "POSTGRES_PASSWORD=hunter2hunter2"
+        )
+
+    monkeypatch.setattr(variables, "template_for", shipping)
+    with pytest.raises(CheckFailedError, match="ships a value"):
+        ran(VARIABLES)
 
 
 def test_the_guides_check_passes_on_the_guides_this_release_carries() -> None:
