@@ -6,12 +6,12 @@ leaves out. `brain.agents.memory_kinds` holds the five and why, `AgentRecord.mem
 setting, and `brain.gate.turn_context.assemble` is where it is enforced; this is the screen's half:
 what is set now, and the one write that changes it.
 
-**The authority is the channels'**, for the same reason: the agent's steward and a holder of the
-lifecycle authority over its row, and nobody else, and anybody else is answered as an agent that
-does not exist. A kind switched off narrows what a run is shown and never what a caller may reach,
-so it asks nothing of the caller's own reach, and switching one on is no wider than it was when the
-agent was made, which had all five. See
-`brain.agent_lifecycle_routes.A_STEWARD_OR_AN_ADMINISTRATOR_SWITCHES_AN_AGENT_S_CHANNELS`.
+**The authority is the agent's steward's and the lifecycle authority's**, as the channels' was until
+needs-rupash 178 A: memory is the owner's part of an agent, and nobody else may change it, and
+anybody else is answered as an agent that does not exist. A kind switched off narrows what a run
+is shown and never what a caller may reach, so it asks nothing of the caller's own reach, and
+switching one on is no wider than it was when the agent was made, which had all five. See
+`brain.agent_lifecycle_routes.may_steward_or_administer`.
 
 **The page sends the kinds it drew, and a row that moved since is a 409 and nothing is written.**
 The write is a compare and set on the array the decision was read from, `0225`'s trigger appends
@@ -40,7 +40,7 @@ from brain.agent_lifecycle_routes import (
     _not_changed,
     _trace_id,
     lifecycles_of,
-    may_change_channels,
+    may_steward_or_administer,
     visible,
 )
 from brain.agents.memory_kinds import ALL_KINDS, MemoryKind, memory_kinds_of
@@ -199,7 +199,7 @@ async def agent_memory_kinds(request: Request, agent_id: str, asked: Asked) -> M
     found = await lifecycles_of(request).agent(agent_id)
     if found is None or not visible(found.record, asked):
         raise _no_agent_here(asked, "agent")
-    return view_of(found.record, may_change=may_change_channels(found.record, asked))
+    return view_of(found.record, may_change=may_steward_or_administer(found.record, asked))
 
 
 @router.post(
@@ -217,7 +217,7 @@ async def set_agent_memory_kinds(
     found = await lifecycles_of(request).agent(agent_id)
     if found is None or not visible(found.record, asked):
         raise _no_agent_here(asked, "agent")
-    if not may_change_channels(found.record, asked):
+    if not may_steward_or_administer(found.record, asked):
         raise _no_agent_here(asked, "scope")
     before = found.record
     if tuple(body.expected) != before.memory_kinds:

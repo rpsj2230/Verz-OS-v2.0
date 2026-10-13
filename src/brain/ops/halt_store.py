@@ -199,20 +199,38 @@ async def refusal_for(sessions: async_sessionmaker[AsyncSession] | None, work: W
     return refusal_in(await read_state(sessions), work)
 
 
-def halt_row(scope: HaltScope, target: str) -> dict[str, str]:
-    """A halt as the stop grant's scope is matched against it. See the rule above."""
+def halt_row(scope: HaltScope, target: str, *, department: str = "") -> dict[str, str]:
+    """A halt as the stop grant's scope is matched against it. See the rule above.
+
+    `department` is the department of the agent a halt on one agent names, looked up by whoever
+    asks at the moment they ask (needs-rupash 160 A). The row carries it for an agent only, and
+    only when there is one: an agent with no department, or one shared across departments, has a
+    row naming none, so a department-scoped grant matches nothing and the stop stays a
+    company-wide administrator's. A department a caller supplies for any other axis is ignored.
+    """
     row = {"scope": scope.value, "target": target}
     if scope is HaltScope.DEPARTMENT:
         row["department"] = target
+    elif scope is HaltScope.AGENT and department:
+        row["department"] = department
     return row
 
 
 def may_act(
-    reader: EntitlementSet, scope: HaltScope, target: str, now: datetime | None = None
+    reader: EntitlementSet,
+    scope: HaltScope,
+    target: str,
+    now: datetime | None = None,
+    *,
+    department: str = "",
 ) -> bool:
-    """Whether this reader may stop or resume this scope and target."""
+    """Whether this reader may stop or resume this scope and target.
+
+    `department` is the stopped agent's own department when the scope is one agent (needs-rupash
+    160 A); see `halt_row`.
+    """
     where = reader.scope_for(HALT_CAPABILITY, now)
-    return where is not None and where.matches(halt_row(scope, target))
+    return where is not None and where.matches(halt_row(scope, target, department=department))
 
 
 def _authority(reader: EntitlementSet, now: datetime) -> str:
@@ -267,12 +285,19 @@ async def stop(
     reason: str,
     now: datetime,
     attributed: Sequence[Executable] = (),
+    agent_department: str = "",
 ) -> Halt:
-    """Stop one scope and target, as this reader, at once. Refused rather than stored as inert."""
+    """Stop one scope and target, as this reader, at once. Refused rather than stored as inert.
+
+    `agent_department` is the department of the agent being stopped, looked up by the caller at
+    the moment of the press (needs-rupash 160 A), so a department's administrator may stop one
+    agent of their own department. It decides who may stop and is not stored: a stopped agent is
+    still recorded as the agent alone.
+    """
     if scope not in ENFORCED_AXES:
         msg = f"nothing that starts work asks the {scope.value} axis yet, so it cannot be stopped"
         raise HaltRefusedError(msg)
-    if not may_act(reader, scope, target, now):
+    if not may_act(reader, scope, target, now, department=agent_department):
         msg = "this reader may not stop that"
         raise HaltRefusedError(msg)
     try:
@@ -308,6 +333,7 @@ async def resume(
     reason: str,
     now: datetime,
     attributed: Sequence[Executable] = (),
+    agent_department: str = "",
 ) -> Resume:
     """Lift the halt in force on this scope and target, with a written reason, naming whose it was.
 
@@ -315,7 +341,7 @@ async def resume(
     when nothing is in force there, since a resume that lifts nothing would be a row saying
     somebody restarted a system nobody had stopped.
     """
-    if not may_act(reader, scope, target, now):
+    if not may_act(reader, scope, target, now, department=agent_department):
         msg = "this reader may not resume that"
         raise HaltRefusedError(msg)
     state = await read_state(sessions)

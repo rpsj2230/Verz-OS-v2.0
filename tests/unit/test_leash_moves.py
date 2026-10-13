@@ -16,7 +16,9 @@ import pytest
 
 from brain.agents.leash_moves import (
     A_MOVED_RUNG_AND_A_TAKEOVER_DEMOTION_BOTH_SHOW_AND_THE_LOWER_ONE_BINDS,
+    A_RUNG_IS_NEVER_RAISED_BEYOND_THE_RUNG_THE_AGENT_WAS_PUBLISHED_AT,
     BREAKER_METRIC,
+    RAISING_BEYOND_THE_PUBLISHED_RUNG,
     RAISING_WAITS_FOR_THE_REVIEW,
     THE_EVIDENCE_DOES_NOT_MEET_THE_BAR,
     THE_PROPOSER_CANNOT_CONFIRM,
@@ -111,6 +113,7 @@ def press(
     by: str = "p_admin",
     pending: LeashMove | None = None,
     supervision: PinOutcome | None = None,
+    published: AutonomyTier = AutonomyTier.AUTONOMOUS,
 ) -> LeashMove:
     """A press to raise the everywhere entry, as the move route makes one."""
     return raising(
@@ -125,6 +128,7 @@ def press(
         record=record,
         pending=pending,
         supervision=supervision,
+        published=published,
     )
 
 
@@ -336,6 +340,7 @@ def test_a_supervised_agent_is_held_down_and_cannot_rise_until_its_review_found_
                 record=good,
                 pending=None,
                 supervision=outcome,
+                published=AutonomyTier.AUTONOMOUS,
             )
         assert str(waits.value) == RAISING_WAITS_FOR_THE_REVIEW
     assert held_while_supervised(LEASH, AGENT, PinOutcome.ELIGIBLE) == LEASH
@@ -353,6 +358,7 @@ def test_a_supervised_agent_is_held_down_and_cannot_rise_until_its_review_found_
             record=good,
             pending=None,
             supervision=PinOutcome.ELIGIBLE,
+            published=AutonomyTier.AUTONOMOUS,
         ).kind
         is MoveKind.RAISED
     )
@@ -416,3 +422,41 @@ def test_no_demotion_is_shown_below_the_threshold_at_the_bottom_or_for_another_a
     assert takeover_demotions(other, AGENT, {"quote.send": standing(*many)}, now) == ()
     with pytest.raises(ValueError, match="filed under"):
         takeover_demotions(LEASH, AGENT, {"quote.send": standing(*many, target="x.y")}, now)
+
+
+def test_a_rung_is_never_raised_beyond_the_rung_the_agent_was_published_at() -> None:
+    """**Needs-rupash 179 A (M33.2.2.4).** The everywhere entry went out at Assisted. A press to
+    Autonomous with every bit of evidence is refused in words that say to publish again, a press
+    to Assisted that the evidence and the entry's own rung allow is a raise, and a press to
+    Autonomous on an entry published at Autonomous is a raise: the ceiling is the published rung
+    and not a refusal of every raise. Delete this and the leash can be raised past the rung an
+    approver signed for, so publishing is no longer where an agent's autonomy is approved."""
+    good = Record(clean_runs=MINIMUM_CLEAN_RUNS, agreement_rate=1.0, reviewed=10)
+    lowered = effective_leash(LEASH, [lowered_to(AutonomyTier.SHADOW)])
+    assert A_RUNG_IS_NEVER_RAISED_BEYOND_THE_RUNG_THE_AGENT_WAS_PUBLISHED_AT
+
+    with pytest.raises(LeashMoveError) as refused:
+        press(
+            AutonomyTier.AUTONOMOUS, good, effect=SideEffect.NONE, published=AutonomyTier.ASSISTED
+        )
+    assert str(refused.value) == RAISING_BEYOND_THE_PUBLISHED_RUNG
+
+    back = raising(
+        lowered,
+        agent_id=AGENT,
+        target="quote.send",
+        scope=EVERYWHERE,
+        to=AutonomyTier.ASSISTED,
+        by="p_admin",
+        at=AT,
+        effect=SideEffect.NONE,
+        record=good,
+        pending=None,
+        supervision=None,
+        published=AutonomyTier.ASSISTED,
+    )
+    assert back.kind is MoveKind.RAISED and back.became is AutonomyTier.ASSISTED
+    up = press(
+        AutonomyTier.AUTONOMOUS, good, effect=SideEffect.NONE, published=AutonomyTier.AUTONOMOUS
+    )
+    assert up.became is AutonomyTier.AUTONOMOUS

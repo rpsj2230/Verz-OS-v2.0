@@ -260,7 +260,8 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         belongs=Belongs.IDENTITY,
         meaning=(
             "The client id of the application registered with that directory: a Google OAuth "
-            "client or a Microsoft Entra app registration. `unset` means nobody has said, and "
+            "client, a Microsoft Entra app registration or the App ID of a Lark application. "
+            "`unset` means nobody has said, and "
             "sign-in is then not brokered. Its secret is never a setting: it is a file in the "
             "identity provider's vault, see docs/install/authentication.md."
         ),
