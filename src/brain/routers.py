@@ -470,6 +470,11 @@ from brain.stewardship_routes import router as stewardship_router
 # `brain.storage_routes`.
 from brain.storage_routes import router as storage_router
 
+# System health: every part, the worker, the vault, object storage, the breakers and which
+# guarantees are held, for a reader of Incidents over the whole installation. See
+# `brain.system_health_routes`.
+from brain.system_health_routes import router as system_health_router
+
 # A person's own threads, listed, searched and reopened at the reach held now. See
 # `brain.thread_routes`.
 from brain.thread_routes import router as thread_router
