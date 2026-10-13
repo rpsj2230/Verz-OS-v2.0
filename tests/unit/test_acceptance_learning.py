@@ -29,6 +29,7 @@ MODULE = "brain.ops.acceptance_checks_learning"
 #: Each learning check and the leaves it proves.
 LEAVES = {
     "a_person_edits_and_forgets_their_own_memory": ("M16.4.2", "M33.3.1.4"),
+    "a_person_forgets_everything_learned_about_them_in_one_press": ("M40.4.1.2",),
     "every_learned_change_is_held_at_the_tier_its_reach_needs": ("M16.3.5", "M16.3.6"),
     "a_conversation_learning_is_reviewed_and_undone": ("M27.7.21",),
     "learning_figures_are_set_in_bounds_and_move_no_tier": ("M16.6.8",),
@@ -97,6 +98,7 @@ def test_the_learning_checks_are_listed_in_their_page_order() -> None:
     page simply listing one fewer row."""
     assert checks_in(MODULE) == [
         "a_person_edits_and_forgets_their_own_memory",
+        "a_person_forgets_everything_learned_about_them_in_one_press",
         "every_learned_change_is_held_at_the_tier_its_reach_needs",
         "a_conversation_learning_is_reviewed_and_undone",
         "learning_figures_are_set_in_bounds_and_move_no_tier",
@@ -205,6 +207,29 @@ def test_the_edit_check_fails_when_an_edit_leaves_the_old_words_in_use(
     assert refused(database, "a_person_edits_and_forgets_their_own_memory") == (
         FAILED,
         "an edited memory was not what the person was shown afterwards",
+    )
+
+
+@pytest.mark.needs_db
+def test_the_undo_all_check_fails_when_an_undo_of_everything_marks_nothing(
+    database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An undo of everything that reads the list and writes no mark. Delete this and M40.4.1.2
+    closes on a button that says it forgot what is still in use."""
+    from brain.ops import memory_store
+
+    class Nothing:
+        took_effect = False
+        reason = "Nothing was done."
+
+    async def does_nothing(self: Any, learning: Any, **kwargs: Any) -> Any:
+        return Nothing()
+
+    monkeypatch.setattr(memory_store.StoredMemoryRecords, "undo", does_nothing)
+
+    assert refused(database, "a_person_forgets_everything_learned_about_them_in_one_press") == (
+        FAILED,
+        "a memory was left in use by an undo of everything",
     )
 
 
