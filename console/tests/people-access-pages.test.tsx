@@ -436,6 +436,25 @@ describe("one person's page", () => {
     expect(old.container.querySelector('[data-slot="detail-header"] h1')?.textContent).toBe("Ada Okafor");
   });
 
+  test("the automations a person owns are listed from the automations list narrowed to them, and an empty answer is said without a figure", async () => {
+    // What breaks if this is deleted: a person's page that lists their agents and nothing they run
+    // on a schedule, which is the half of "what they own" an administrator most needs to hand on
+    // when somebody leaves (M27.15.18).
+    const around = { [PERSON_API]: { body: detail() }, [`${API}/agents`]: { body: { items: [] } }, [`${API}/govern/staff_sources/transfers`]: { body: { transfers: [] } } };
+    const owned = await consoleAt("/people/p_ada", {
+      ...around,
+      [`${API}/console/automations`]: {
+        body: { items: [{ automation_id: "auto_1", name: "Weekly unanswered questions", agent_id: "helper", agent_name: "Helper", owner_name: "Ada Okafor", schedule: "Every Monday", state: "running", next_run_at: null, last_run_at: null, last_outcome: null }], next_cursor: null },
+      },
+    });
+    const section = sectionTitled(owned.container, "Automations they own");
+    expect(textOf(section)).toContain("Weekly unanswered questions");
+    expect(section?.querySelector('a[href="/automations/auto_1"]')).not.toBeNull();
+    expect(asked(owned.idp).some((url) => url.pathname.endsWith("/console/automations") && url.searchParams.get("filter")?.includes("owner_id"))).toBe(true);
+    const none = await consoleAt("/people/p_ada", { ...around, [`${API}/console/automations`]: { body: { items: [], next_cursor: null } } });
+    expect(textOf(sectionTitled(none.container, "Automations they own"))).toContain("No automation you may open runs as them.");
+  });
+
   test("a person the staff list keeps out says why on their Overview, in the API's words, and one it lets in says nothing", async () => {
     // What breaks if this is deleted: an administrator sees a disabled person with no reason (M1.6.14),
     // re-enables them, and the next sync disables them again.

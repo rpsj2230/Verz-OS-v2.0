@@ -30,7 +30,7 @@
  */
 
 import { ArrowUpRight, BookPlus, KeyRound, MessageSquare, Plug } from "lucide-react";
-import { Fragment, useId, type ReactNode } from "react";
+import { Fragment, useId, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { ApiFailure } from "../../api/errors";
 import type { Resource } from "../../api/useResource";
@@ -57,7 +57,8 @@ import {
   ACTIVITY_API_PATH,
   AGENTS_API_PATH,
   AUDIT_PATH,
-  FIGURES_API_PATH,
+  FIGURE_RANGES,
+  figuresApiPath,
   HALTS_UNKNOWN,
   HALTS_UNKNOWN_SUB,
   HEALTH_FIGURES,
@@ -235,10 +236,14 @@ function FigureRow({
   figures,
   agents,
   sources,
+  range,
+  onRange,
 }: {
   readonly figures: Resource<unknown>;
   readonly agents: Resource<unknown>;
   readonly sources: Resource<unknown>;
+  readonly range: string;
+  readonly onRange: (range: string) => void;
 }) {
   const busy = figures.busy || agents.busy || sources.busy;
   const failure = isNotTheirs(figures.failure) ? null : figures.failure;
@@ -287,10 +292,31 @@ function FigureRow({
   if (!busy && failure === null && cards.length === 0) {
     return null;
   }
+  const label = FIGURE_RANGES.find(([value]) => value === range)?.[1] ?? FIGURES_LABEL;
   return (
-    <section aria-label={FIGURES_LABEL} className="flex min-w-0 flex-col gap-2">
-      <h2 className="m-0 text-sm font-semibold text-ink">{FIGURES_LABEL}</h2>
-      <StatsStrip label={FIGURES_LABEL} busy={busy} failure={failure} count={cards.length}>
+    <section aria-label={label} className="flex min-w-0 flex-col gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="m-0 text-sm font-semibold text-ink">{label}</h2>
+        <div role="group" aria-label="Window the figures cover" className="inline-flex rounded-md border border-line bg-sunk p-0.5">
+          {FIGURE_RANGES.map(([value, words]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={value === range}
+              onClick={() => {
+                onRange(value);
+              }}
+              className={cn(
+                "min-h-8 rounded-[4px] px-2.5 text-[12px]",
+                value === range ? "bg-surface font-medium text-ink shadow-sm" : "text-dim hover:text-ink",
+              )}
+            >
+              {words}
+            </button>
+          ))}
+        </div>
+      </div>
+      <StatsStrip label={label} busy={busy} failure={failure} count={cards.length}>
         {cards.map((one) => (
           <Fragment key={one.key}>{one.node}</Fragment>
         ))}
@@ -479,7 +505,8 @@ function SignedIn() {
 
 export function OverviewPage() {
   const overview = useResource<unknown>(OVERVIEW_API_PATH);
-  const figures = useResource<unknown>(FIGURES_API_PATH);
+  const [range, setRange] = useState<string>(FIGURE_RANGES[0]?.[0] ?? "7d");
+  const figures = useResource<unknown>(figuresApiPath(range));
   const agents = useResource<unknown>(AGENTS_API_PATH);
   const sources = useResource<unknown>(SOURCES_API_PATH);
   const audit = useResource<unknown>(ACTIVITY_API_PATH);
@@ -488,7 +515,7 @@ export function OverviewPage() {
     <div data-slot="overview-page" className="flex min-w-0 flex-col gap-4">
       <PageHeader crumbs={[{ label: HOME_CRUMB }]} title={OVERVIEW_HEADING} lede={OVERVIEW_LEDE} />
       <HealthStrip overview={overview} />
-      <FigureRow figures={figures} agents={agents} sources={sources} />
+      <FigureRow figures={figures} agents={agents} sources={sources} range={range} onRange={setRange} />
       <div
         className={cn(
           "[display:grid] min-w-0 items-start gap-4",
