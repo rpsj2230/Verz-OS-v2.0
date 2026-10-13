@@ -543,7 +543,7 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "ops.budget_stop",
         # What a lead flagged, what was read of answers, how golden questions scored and who agreed
         # to a change: each names an actor and a reference and is a fact about a moment, not
-        # anybody's record, and `0221` grants no way for a row to leave.
+        # anybody's record, and `0222` grants no way for a row to leave.
         "ops.answer_flag",
         "ops.regression_case",
         "ops.quality_reading",

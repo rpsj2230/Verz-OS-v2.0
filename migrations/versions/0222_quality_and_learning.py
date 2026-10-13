@@ -31,8 +31,8 @@ direction.
 
 Task ids: M28.3.1, M28.3.2, M28.3.3, M28.4.1, M28.5.3, M16.6.7, M16.7.14
 
-Revision ID: 0221
-Revises: 0220
+Revision ID: 0222
+Revises: 0221
 """
 
 from __future__ import annotations
@@ -41,9 +41,9 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision = "0221"
-# The plan's number, after 0220. Re-pointed at whichever migration is the head when it lands.
-down_revision = "0220"
+revision = "0222"
+# The plan's number, after 0221. Re-pointed at whichever migration is the head when it lands.
+down_revision = "0221"
 branch_labels = None
 depends_on = None
 

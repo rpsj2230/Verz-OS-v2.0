@@ -4,7 +4,7 @@ the outputs people approved unchanged, and who agreed to a change that needed mo
 
 The rows behind `brain.ops.feedback` (`Flag`, `CapturedCase`), `brain.ops.sampling`
 (`AutomatedReading`, `HumanAnnotation`), `brain.ops.evaluation` (`CaseResult`) and the learning
-tiers of `brain.memory.tiers`. `0221` builds them; `brain.ops.quality_store` is their one writer.
+tiers of `brain.memory.tiers`. `0222` builds them; `brain.ops.quality_store` is their one writer.
 
 **Every one of them is a pointer and a word, and none holds what an answer said.** A flag names a
 trace reference and a question id, a reading names a request id and a fault from the machine's
