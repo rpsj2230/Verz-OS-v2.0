@@ -71,6 +71,8 @@
     "M7.7.11": "shows the worker's start-up finding and the request ceiling; the half that parses the largest upload in the layout service's container needs the model server and the owner's choice of upload limit (needs-rupash 119 and 120)",
     "M32.2.1.2": "passes over entity spans the check made up; GLiNER is not served on the owner's host (needs-rupash 120), and nothing yet sends a text to it",
     "M7.3.5": "passes over a model server the check made (a transport answering as the server's contract says); held until a rebuild has run on an install whose model server answers (needs-rupash 120)",
-    "M15.3.3": "passes over results the check made: nothing on an answer's path links a passage to a record, so no answer draws on a row and a passage stating one claim; held until a source of claims exists and the groups are drawn on an answer (needs-rupash 195)"
+    "M15.3.3": "passes over results the check made: nothing on an answer's path links a passage to a record, so no answer draws on a row and a passage stating one claim; held until a source of claims exists and the groups are drawn on an answer (needs-rupash 195)",
+    "M17.5.1": "passes over a wire the check answered for and a signing secret it made up, so the retry and backoff are shown on this install's database and no receiver was reached; held until the install shows a real subscriber receiving a real delivery",
+    "M17.5.2": "passes over a wire the check answered for and a signing secret it made up, so the signature and the one send are shown on this install's database and no receiver verified one; held until the install shows a real subscriber verifying a real delivery"
   }
 }
