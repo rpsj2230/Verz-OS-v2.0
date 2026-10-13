@@ -11,6 +11,7 @@ import { myCodeApiPath, myUnbindApiPath } from "../../../src/pages/channelsQuery
 import { myConsentPath } from "../../../src/pages/connectors/consentAtVendor";
 import { LEARNING_UNDO_API_PATH } from "../../../src/pages/learningUndoQuery";
 import { EDIT_API_PATH, FORGET_API_PATH } from "../../../src/pages/myWorkspaceQuery";
+import { LEARNING_API_PATH, QUIET_API_PATH, REACH_API_PATH } from "../../../src/pages/myPreferencesQuery";
 import { A_BINDING_CHANGE_IS_AUDITED, at, type Proofs, t, type WriteRoute } from "../auditClaims";
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
@@ -22,6 +23,15 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/components/MyAccounts.tsx myConsentPath(row.connector)": [
     at("POST /api/v1/me/accounts/{connector}/consent", "myConsentPath", myConsentPath("xero")),
+  ],
+  "src/components/MyPreferences.tsx LEARNING_API_PATH": [
+    at("POST /api/v1/me/preferences/learning", "LEARNING_API_PATH", LEARNING_API_PATH),
+  ],
+  "src/components/MyPreferences.tsx REACH_API_PATH": [
+    at("POST /api/v1/me/preferences/reach", "REACH_API_PATH", REACH_API_PATH),
+  ],
+  "src/components/MyPreferences.tsx QUIET_API_PATH": [
+    at("POST /api/v1/me/preferences/quiet-hours", "QUIET_API_PATH", QUIET_API_PATH),
   ],
   "src/pages/MyWorkspace.tsx FORGET_API_PATH": [
     at("POST /api/v1/me/memory/forget", "FORGET_API_PATH", FORGET_API_PATH),
@@ -68,6 +78,25 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: A_BINDING_CHANGE_IS_AUDITED,
     audit: A_BINDING_CHANGE_IS_AUDITED,
     behaviour: t("test_channel_binding", "test_a_person_unbinds_their_own_chat_and_it_is_recorded_as_theirs"),
+  },
+  // A person's own setting is a row in `auth.member_preference` that the person alone may write,
+  // and what it changes is read where a memory is formed, a message is sent and a card is planned,
+  // so the install check follows each to that place. It writes no ledger entry: a setting about how
+  // the person is reached is not a change to what anybody may see or do.
+  "POST /api/v1/me/preferences/learning": {
+    row: t("test_acceptance_checks_member_preferences", "test_every_member_preference_check_passes_on_an_install_and_leaves_nothing", true),
+    audit: { notApplicable: "A person's own setting about being reached changes nobody's access and is not written to the ledger." },
+    behaviour: t("test_acceptance_checks_member_preferences", "test_a_person_learnt_from_after_switching_it_off_fails_the_learning_check", true),
+  },
+  "POST /api/v1/me/preferences/reach": {
+    row: t("test_acceptance_checks_member_preferences", "test_every_member_preference_check_passes_on_an_install_and_leaves_nothing", true),
+    audit: { notApplicable: "A person's own setting about being reached changes nobody's access and is not written to the ledger." },
+    behaviour: t("test_acceptance_checks_member_preferences", "test_a_card_sent_to_an_approver_who_chose_the_console_fails_the_approval_check", true),
+  },
+  "POST /api/v1/me/preferences/quiet-hours": {
+    row: t("test_acceptance_checks_member_preferences", "test_every_member_preference_check_passes_on_an_install_and_leaves_nothing", true),
+    audit: { notApplicable: "A person's own setting about being reached changes nobody's access and is not written to the ledger." },
+    behaviour: t("test_acceptance_checks_member_preferences", "test_a_digest_sent_inside_quiet_hours_fails_the_held_digest_check", true),
   },
   // A forget is the Learning screen's undo written for the person the memory is about, through the
   // same store, so the same database test follows it to the row, the ledger and the next recall.

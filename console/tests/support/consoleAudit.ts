@@ -787,8 +787,15 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/company/activity",
       "/company/consumption",
     ],
-    routes: ["/api/v1/report/*", "/api/v1/me/workspace", "/api/v1/company/*", "/api/v1/quality/*"],
+    routes: [
+      "/api/v1/report/*",
+      "/api/v1/me/workspace",
+      "/api/v1/me/preferences*",
+      "/api/v1/company/*",
+      "/api/v1/quality/*",
+    ],
     tables: [
+      "auth.member_preference",
       "ops.question_asked",
       "ops.question_gap",
       "ops.report_refresh",
