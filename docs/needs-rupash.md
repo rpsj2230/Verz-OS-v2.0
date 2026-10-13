@@ -2558,6 +2558,21 @@ safe either way: B only ever adds to it.
 
 **Decided 2026-10-13: "121: B".** On an agent's page the owner and administrators also see that other people's conversations happened: who, when, and whether the agent failed, never the question or the answer.
 
+## 234. The install's worker runs out of memory every half hour: raise its limit, and replace the token that was shown - DECIDED 2026-10-13: A
+
+**In plain terms:** reading your server for tonight's changes, I found two things that are not in the five changes you approved.
+
+1. **The worker is killed for using too much memory, about 30 times today.** Its limit is 384 MiB and the acceptance run alone reaches about 340 MiB, so roughly every 25 to 35 minutes the kernel kills a process in it, and a run in progress dies. That is the second reason (after my own merges restarting the install) that no acceptance run has completed since yesterday, and so why your task percentage has not moved. The host has about 7,300 MiB free, so there is room.
+   - **Option A: raise the worker's limit to 768 MiB now**, through Coolify's stored copy the same way as the pooler line, recreating only the worker, before tonight's vault step. I recommend this. The repository's own limit is being raised too, so every install gets it.
+   - **Option B: leave it.** Acceptance runs keep dying and tasks keep not closing.
+2. **The worker's secrets-vault token was printed once.** An environment check I ran on your server did not hide it, so it appeared in full in my session's output (it was not written to any file or the server). It is a worker token for reading the vault, not your unseal key or a person's password. Treat it as seen.
+   - **Option A: replace it after tonight's vault step**, by minting a new worker token and updating Coolify's stored copy, in the same window. I recommend this.
+   - **Option B: leave it** and accept the exposure.
+
+**What I need from you:** reply "234: A" for both recommendations, or "234: 1A 2B" and so on.
+
+**Decided 2026-10-13: "234: A".** The worker's memory limit is raised to 768 MiB on the install now, through Coolify's stored copy, recreating only the worker; the repository's own limit is raised too. The worker's vault token that was shown is replaced after the vault step in tonight's window.
+
 ## 233. Four decisions before the server changes you approved can finish - DECIDED 2026-10-13: A
 
 **In plain terms:** you said I may run the five server changes (122, 124, 129, 154 and 157) whenever I like. I prepared them and read the server first, changing nothing. Four things came up that you have not decided. None of them is a secret or a risk to your data; they change what I am allowed to touch and what the canvas costs.
