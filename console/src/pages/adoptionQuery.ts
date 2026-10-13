@@ -65,6 +65,7 @@ export const ADOPTION_SORTS: readonly SortChoice[] = [
   { value: "", label: "By department" },
   { value: "-questions", label: "Most questions first" },
   { value: "-people", label: "Most people first" },
+  { value: "-stopped", label: "Most who stopped first" },
 ];
 
 /** One page of adoption, as this console holds it. Two fields, deliberately. */
