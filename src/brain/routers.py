@@ -123,6 +123,7 @@ from brain.audit_statistics_routes import router as audit_statistics_router
 # The automation gallery on an agent's Automations tab, and its one confirmed install. Its own
 # router because the write is: an `admin:` authority asked before the agent is read, a
 # confirmation recomputed on the server, and a row whose trigger writes the ledger entry.
+from brain.automation_authoring_routes import router as automation_authoring_router
 from brain.automation_gallery_routes import router as automation_gallery_router
 
 # The endpoint an automation step calls. A sixth router because the caller differs: it

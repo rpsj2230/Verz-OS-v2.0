@@ -55,6 +55,7 @@ import { ChevronDown, IdCard, Info, LayoutDashboard, Settings } from "lucide-rea
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
+import { AutomationAuthoring } from "../../components/AutomationAuthoring";
 import { AutomationGallery } from "../../components/AutomationGallery";
 import { AgentAutomations } from "../../components/AgentAutomations";
 import { ROSTER_ADDRESS } from "../../components/agentWorkspaceState";
@@ -483,6 +484,7 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
         <SectionCard title={AUTOMATIONS_SECTION} lede="What this agent runs on a schedule, and what can be installed for it.">
           <div className="flex min-w-0 flex-col gap-4">
             <AgentAutomations agentId={agentId} automations={automations} onChanged={onChanged} />
+            <AutomationAuthoring agentId={agentId} onSaved={onChanged} />
             <AutomationGallery agentId={agentId} gallery={gallery} onShown={onShown} onInstalled={onChanged} />
           </div>
         </SectionCard>

@@ -38,6 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.sql.dml import ReturningInsert
 
 from brain.console.agent_automations import RegistryEntry
+from brain.console.automation_authoring import AUTHORED_TEMPLATE, Authoring
 from brain.console.automation_gallery import Installation
 from brain.ops.automation_owner_store import PRINCIPAL_SETTING
 from brain.tables.agent_automation import AgentAutomationRow
@@ -46,6 +47,10 @@ from brain.tables.audit import ENT_HASH_SETTING, TRACE_ID_SETTING
 #: The columns the unique constraint names, in its order. One install per agent, template and
 #: person; see `brain.console.automation_gallery.INSTALLING_TWICE_IS_ANSWERED_WITH_THE_FIRST`.
 ONE_INSTALL: tuple[str, str, str] = ("agent_id", "template_id", "runs_as_id")
+
+#: The predicate the unique index carries, which `ON CONFLICT` has to repeat to infer it. An
+#: authored automation has no template, so it is outside the index.
+NOT_AUTHORED: str = f"template_id <> '{AUTHORED_TEMPLATE}'"
 
 
 @dataclass(frozen=True)
@@ -96,7 +101,42 @@ def installing(installation: Installation) -> ReturningInsert[tuple[str]]:
     return (
         insert(AgentAutomationRow)
         .values(**row_values(installation))
-        .on_conflict_do_nothing(index_elements=list(ONE_INSTALL))
+        .on_conflict_do_nothing(index_elements=list(ONE_INSTALL), index_where=text(NOT_AUTHORED))
+        .returning(AgentAutomationRow.automation_id)
+    )
+
+
+def authored_values(authoring: Authoring) -> dict[str, Any]:
+    """What writing an automation a person wrote stores: an install's columns and the authored ones.
+
+    The install's columns first, through `row_values`, so the two kinds of row cannot disagree
+    about what an automation is, and then the eleven `0225` added. A schedule's cadence is three
+    columns and any other trigger's is none, which the migration's checks hold.
+    """
+    one = authoring.authored
+    cadence = one.trigger.cadence
+    return {
+        **row_values(authoring.installation),
+        "trigger_kind": one.trigger.kind.value,
+        "trigger_source": one.trigger.source or None,
+        "cadence_every": None if cadence is None else cadence.every.value,
+        "cadence_hour": None if cadence is None else cadence.hour_utc,
+        "cadence_weekday": None if cadence is None else cadence.weekday,
+        "condition_field": None if one.condition is None else one.condition.field,
+        "condition_op": None if one.condition is None else one.condition.op.value,
+        "condition_value": None if one.condition is None else one.condition.value.strip(),
+        "instruction": one.instruction_text,
+        "tools": list(one.tools),
+        "from_template_id": one.template_id,
+    }
+
+
+def authoring_insert(authoring: Authoring) -> ReturningInsert[tuple[str]]:
+    """The insert for an authored automation. Nothing conflicts but the key, which is fresh."""
+    return (
+        insert(AgentAutomationRow)
+        .values(**authored_values(authoring))
+        .on_conflict_do_nothing()
         .returning(AgentAutomationRow.automation_id)
     )
 
@@ -145,3 +185,21 @@ class StoredAgentAutomations:
                 return Installed(automation_id=str(written), created=True)
             existing = (await session.execute(already_installed(installation))).scalar_one()
         return Installed(automation_id=str(existing), created=False)
+
+    async def author(self, authoring: Authoring, *, ent_hash: str, trace_id: str) -> str:
+        """Write an automation a person wrote, in their own name, and return its id.
+
+        The same transaction-local settings as an install, so the policy admits the row and the
+        trigger records it in the ledger as `authored_install`. There is no conflict to answer: an
+        authored automation is outside the one-per-template rule, and its id is derived from what
+        was confirmed, so the same request twice is answered with the first and writes nothing.
+        """
+        installation = authoring.installation
+        async with self._sessions() as session, session.begin():
+            await session.execute(_set_config(PRINCIPAL_SETTING, installation.installed_by))
+            await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
+            await session.execute(_set_config(ENT_HASH_SETTING, ent_hash))
+            written = (await session.execute(authoring_insert(authoring))).scalar_one_or_none()
+        # None means the id was already there: the same confirmed request, pressed twice, and the
+        # first one is the answer. PostgreSQL fires no row trigger for a row it did not insert.
+        return installation.automation.automation_id if written is None else str(written)

@@ -444,6 +444,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
     screens: ["/agents/:agentId/:tab", "/automations", "/automations/:automationId", "/automations/:automationId/:view"],
     routes: [
       "/api/v1/agents/{agent_id}/automation-templates*",
+      "/api/v1/agents/{agent_id}/automation-authoring*",
+      "/api/v1/agents/{agent_id}/automations/authored",
       "/api/v1/agents/{agent_id}/automations",
       "/api/v1/agents/{agent_id}/automations/{automation_id}/start",
       "/api/v1/agents/{agent_id}/automations/{automation_id}/stop",

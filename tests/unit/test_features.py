@@ -112,6 +112,7 @@ def test_every_declared_reader_asks_about_its_feature_and_nothing_else_asks() ->
         "brain.ops.agent_item_use",
         "brain.skill_routes",
         "brain.skill_draft_routes",
+        "brain.automation_authoring_routes",
     }
 
 
@@ -233,6 +234,7 @@ def test_switching_a_feature_on_writes_its_row_and_the_next_read_sees_it(
         "agent_item_counts": False,
         "skill_needs": False,
         "skill_drafting": False,
+        "automation_authoring": False,
     }
 
 

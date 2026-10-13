@@ -361,6 +361,25 @@ SKILL_DRAFTING: Final = Feature(
     read_by=("brain.skill_draft_routes:draft_skill",),
 )
 
+#: Writing a new automation on an agent's own page. Off because it is a new way to start unattended
+#: work, and the owner decided what a trigger and a condition may be (needs-rupash 177, option A)
+#: and asked that it ship off until proved on his install with two real people.
+AUTOMATION_AUTHORING: Final = Feature(
+    name="automation_authoring",
+    title="Write a new automation on an agent's page",
+    what=(
+        "The agent's Automations section offers New automation: start from a named outcome or from "
+        "words, choose when it runs and whether something must be true first, name what the agent "
+        "may use, read what it would have done at its last few triggers, and save it. It is saved "
+        "paused, runs as the person who wrote it, and somebody else has to start it."
+    ),
+    while_off=(
+        "Automations are installed from the gallery as they are and nothing new can be written. "
+        "One written while this was on stays, is shown on the page, and can still be stopped."
+    ),
+    read_by=("brain.automation_authoring_routes:authoring_is_on",),
+)
+
 #: Every feature this product can switch on, in the order the screen lists them.
 FEATURES: Final[tuple[Feature, ...]] = (
     PROMPT_EDITING,
@@ -373,6 +392,7 @@ FEATURES: Final[tuple[Feature, ...]] = (
     AGENT_ITEM_COUNTS,
     SKILL_NEEDS,
     SKILL_DRAFTING,
+    AUTOMATION_AUTHORING,
 )
 
 
