@@ -153,7 +153,9 @@ from brain.console.govern import _in_reach
 from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.core.entitlement import Capability
+from brain.core.envelope import SideEffect
 from brain.core.errors import Absent, Failed
+from brain.core.field_policy import Classification, FieldPolicy
 from brain.core.principal import Principal
 from brain.gate.context import Channel
 from brain.gate.leash import Leash
@@ -848,8 +850,41 @@ A_CHANNEL_IS_SWITCHED_ON_ONLY_WHERE_ITS_RUN_COULD_BE_CARRIED: Final = (
     "session, through the gate's redaction at their reach, and declare no adapter; they are "
     "offered by name. Every other surface with no adapter (the website widget today) is not "
     "offered until it declares what it can carry. Only switching a channel on is judged: one "
-    "already on may stay on or be switched off."
+    "already on may stay on or be switched off. The website widget is offered, since needs-rupash "
+    "162 A, only to an agent whose ceiling holds nothing but what is public: see "
+    "`A_WIDGET_IS_OFFERED_ONLY_TO_AN_AGENT_WHOSE_CEILING_HOLDS_ONLY_PUBLIC_KNOWLEDGE`."
 )
+
+#: Why the widget is offered to some agents and never to one that reads more.
+A_WIDGET_IS_OFFERED_ONLY_TO_AN_AGENT_WHOSE_CEILING_HOLDS_ONLY_PUBLIC_KNOWLEDGE: Final = (
+    "The website widget answers visitors who are not signed in, and the owner decided it gives "
+    "public knowledge only (item 26). So it is offered on an agent whose ceiling reads nothing but "
+    "fields the field policy classifies public, calls no tool, reaches no connector and may do "
+    "nothing with a side effect, and on no agent that reads anything more. The question is asked "
+    "of the policy's own classification, the same one that decides what any channel may carry, "
+    "and of the ceiling and never of the person switching it on."
+)
+
+
+def ceiling_holds_only_public_knowledge(record: AgentRecord, policy: FieldPolicy) -> bool:
+    """Whether this agent's ceiling reads nothing beyond public fields and does nothing else.
+
+    See `A_WIDGET_IS_OFFERED_ONLY_TO_AN_AGENT_WHOSE_CEILING_HOLDS_ONLY_PUBLIC_KNOWLEDGE`. An agent
+    naming no capability at all reads nothing, which is public by the floor `highest_classification`
+    gives a reach that holds nothing.
+    """
+    authority = record.authority
+    public = {
+        rule.required_capability
+        for rule in policy.rules
+        if rule.classification is Classification.PUBLIC
+    }
+    return (
+        not authority.allowed_tools
+        and not authority.connectors
+        and authority.max_side_effect is SideEffect.NONE
+        and all(one in public for one in authority.capabilities)
+    )
 
 
 def switchable_channels(record: AgentRecord, asked: Asking) -> frozenset[str]:
@@ -866,7 +901,10 @@ def switchable_channels(record: AgentRecord, asked: Asking) -> frozenset[str]:
         enabled=(),
         now=asked.now,
     )
-    return frozenset(row.channel.value for row in rows) | ANSWERED_IN_THE_ASKERS_OWN_SESSION
+    offered = frozenset(row.channel.value for row in rows) | ANSWERED_IN_THE_ASKERS_OWN_SESSION
+    if ceiling_holds_only_public_knowledge(record, product_field_policy()):
+        return offered | {Channel.WIDGET.value}
+    return offered
 
 
 #: What a switch onto a channel that cannot carry this agent's answers is told.

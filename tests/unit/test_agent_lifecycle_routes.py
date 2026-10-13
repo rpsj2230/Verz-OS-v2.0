@@ -1278,3 +1278,90 @@ def test_a_channel_it_could_be_carried_on_is_switched_on_and_one_already_on_may_
     assert "widget" in [one["name"] for one in kept.json()["channel_choices"]]
     assert off.status_code == 200, off.text
     assert console.memory.agents[COMPANY].record.channels == ("lark",)
+
+
+def the_widget_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A field policy with one public field, one internal, and a Lark-only deployment."""
+    from brain.core.field_policy import Classification, FieldPolicy, FieldRule
+
+    only_lark_is_declared(monkeypatch)
+    policy = FieldPolicy(
+        rules=(
+            FieldRule(
+                entity="faq",
+                field="answer",
+                required_capability=Capability(value="read:faq.answer"),
+                classification=Classification.PUBLIC,
+            ),
+            FieldRule(
+                entity="client",
+                field="name",
+                required_capability=Capability(value="read:client.name"),
+                classification=Classification.INTERNAL,
+            ),
+        )
+    )
+    monkeypatch.setattr(lifecycle_routes, "product_field_policy", lambda: policy)
+
+
+def with_ceiling(console: Console, **ceiling: object) -> None:
+    from brain.agents.model import AgentAuthority
+
+    found = console.memory.agents[COMPANY]
+    record = found.record.model_copy(update={"authority": AgentAuthority(**ceiling)})  # type: ignore[arg-type]
+    console.memory.agents[COMPANY] = replace(found, record=record)
+
+
+def test_the_website_widget_is_offered_to_an_agent_that_reads_only_public_knowledge(
+    console: Console, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**Needs-rupash 162 A.** An agent whose ceiling names one public field and nothing else is
+    switched onto the website widget; the sibling below is the agent that reads more. Delete this
+    and the widget can never be offered, which strands the website's agent behind a release."""
+    the_widget_policy(monkeypatch)
+    with_ceiling(console, capabilities=(Capability(value="read:faq.answer"),))
+
+    done = console.post(
+        "u_admin",
+        path(CHANNELS_PATH, agent_id=COMPANY),
+        {"channels": ["widget"], "expected": []},
+    )
+
+    assert done.status_code == 200, done.text
+    assert console.memory.agents[COMPANY].record.channels == ("widget",)
+
+
+def test_the_website_widget_is_never_offered_to_an_agent_that_reads_more_than_public_knowledge(
+    console: Console, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**Needs-rupash 162 A, the refusal.** An agent reading one internal field, one calling a
+    tool, one bound to a connector and one that may write are each refused the widget in the
+    domain's own sentence, and nothing is written. Delete this and an agent that reads company
+    data can be put in front of visitors who never signed in."""
+    from brain.core.envelope import SideEffect
+
+    the_widget_policy(monkeypatch)
+    reading_more = (
+        {
+            "capabilities": (
+                Capability(value="read:faq.answer"),
+                Capability(value="read:client.name"),
+            )
+        },
+        {"capabilities": (Capability(value="read:faq.answer"),), "allowed_tools": frozenset({"t"})},
+        {"capabilities": (Capability(value="read:faq.answer"),), "connectors": ("freshdesk",)},
+        {
+            "capabilities": (Capability(value="read:faq.answer"),),
+            "max_side_effect": SideEffect.WRITE,
+        },
+    )
+    for ceiling in reading_more:
+        with_ceiling(console, **ceiling)
+        refused = console.post(
+            "u_admin",
+            path(CHANNELS_PATH, agent_id=COMPANY),
+            {"channels": ["widget"], "expected": []},
+        )
+        assert refused.status_code != 200, ceiling
+        assert refused.json()["sentence"] == CANNOT_CARRY_IT
+    assert console.memory.changes == []
