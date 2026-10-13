@@ -735,6 +735,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert (
         outcomes.pop("a_joiner_gets_a_department_pack_and_a_mover_or_leaver_loses_it")[0] == NOT_RUN
     )
+    # The scratch database is not an install started from a release, so no image reference was
+    # handed in; `tests/unit/test_acceptance_checks_install_template.py` hands it one.
+    assert outcomes.pop("the_install_runs_one_published_image_at_a_named_release")[0] == NOT_RUN
     # No cache here either; `tests/unit/test_acceptance_cache.py` runs it with a store in its place.
     assert outcomes.pop("a_cached_answer_reaches_only_the_reach_it_was_computed_for")[0] == NOT_RUN
     # Nor the plan and freshness checks, which ask the same cache;
