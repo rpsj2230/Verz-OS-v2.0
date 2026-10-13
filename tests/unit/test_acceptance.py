@@ -905,6 +905,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
             NOT_RUN,
             acceptance_checks_recovery.NO_SCHEDULED_RUN_YET,
         )
+    # A test image may carry no built console, in which case the shell check says so; the install's
+    # own image does, and `tests/unit/test_acceptance_checks_localisation.py` serves a bundle.
+    assert outcomes.pop("the_console_is_served_as_an_installable_shell")[0] in (PASSED, NOT_RUN)
     # Nothing started the application against this database, so nothing furnished it;
     # `tests/unit/test_acceptance_operations_console.py` furnishes one and the check passes.
     assert outcomes.pop("the_install_was_furnished_once_by_the_product") == (

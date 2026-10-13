@@ -596,9 +596,14 @@ describe("Backup and recovery, Rate limits and Capacity", () => {
       connections: [{ database: "application", admissible: 100, demand: 60, headroom: 40 }],
       sizings: [{ name: "SIZING-NAME", peak_per_second: 2, service_seconds: 4, in_flight_at_peak: 8, slots_needed: 8, reason: "SIZING-REASON" }],
       first_limit: "FIRST-LIMIT-SENTENCE",
+      moves: [
+        { move: "partition_the_ledger", observable: "retained_window_days", unit: "days", threshold: 31, measured: 1825, due: true, said: "MOVE-DUE-SENTENCE" },
+        { move: "materialised_reports", observable: "report_p95_ms", unit: "ms", threshold: 8000, measured: null, due: null, said: "MOVE-NOT-MEASURED-SENTENCE" },
+      ],
     };
     expect(Object.keys(body).sort()).toEqual(backendModelFields(INSTALL_ROUTES, "CapacityView").sort());
     expect(Object.keys(body.sizings[0] ?? {}).sort()).toEqual(backendModelFields(INSTALL_ROUTES, "SizingView").sort());
+    expect(Object.keys(body.moves[0] ?? {}).sort()).toEqual(backendModelFields(INSTALL_ROUTES, "MoveView").sort());
     const { container } = await open("/connections", { "GET /api/v1/install/capacity": () => ({ body }) });
     const reserved = [...container.querySelectorAll('main [data-slot="stat-card"]')].find((card) =>
       card.textContent?.startsWith("Reserved by the compose files"),
@@ -613,6 +618,14 @@ describe("Backup and recovery, Rate limits and Capacity", () => {
     expect(mainText(container)).toContain("SIZING-NAME");
     expect(mainText(container)).toContain("2 a second");
     expect(mainText(container)).toContain("FIRST-LIMIT-SENTENCE");
+    // M36.1.1.4, M36.1.2.4, M36.1.3.3, M36.1.4.3: a move that is due says so, and one nothing
+    // measures is "Not measured" and never "Not due". What breaks if deleted: a report nobody
+    // timed read as a report that is fast.
+    expect(mainText(container)).toContain("MOVE-DUE-SENTENCE");
+    expect(mainText(container)).toContain("MOVE-NOT-MEASURED-SENTENCE");
+    const rows = [...container.querySelectorAll("main tr")].map((row) => row.textContent ?? "");
+    expect(rows.find((row) => row.includes("report p95 ms"))).toContain("Not measured");
+    expect(rows.find((row) => row.includes("report p95 ms"))).not.toContain("Not due");
   });
 });
 
