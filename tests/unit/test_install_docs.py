@@ -47,7 +47,7 @@ from brain.deployment.requirements import (
     spec_for,
 )
 from brain.deployment.variables import parse_env
-from brain.ops.controls import control
+from brain.ops.controls import Invocation, control
 from brain.ops.install_docs import (
     A_BLANK_DEFAULT_AND_AN_EMPTY_ONE_ARE_THE_SAME_LINE_ON_A_SERVER,
     CHECKLIST_SECTIONS,
@@ -963,6 +963,13 @@ def test_the_operations_chapter_names_every_scheduled_mechanism_and_what_starts_
     assert mechanism_gaps(guide("operations.md")) == ()
 
 
+def an_unstarted_mechanism() -> Any:
+    """`backup_exposure` as it was before the worker ran it: a registry row nothing starts, because
+    every real row now has a caller and these tests are about what the chapter says of one that
+    has none."""
+    return replace(control("backup_exposure"), invoked_by=Invocation.NOTHING)
+
+
 def test_a_mechanism_the_chapter_does_not_name_is_a_finding() -> None:
     """A mechanism this install carries and the client was never told about. It is the
     direction that matters most, because the chapter reads as complete either way.
@@ -975,7 +982,7 @@ def test_a_mechanism_the_chapter_does_not_name_is_a_finding() -> None:
             MECHANISMS_HEADER,
             "| `backup_exposure` | that the gate still refuses what it refused | `nothing` |",
         ),
-        controls=(control("backup_exposure"), control("restore_drill")),
+        controls=(an_unstarted_mechanism(), control("restore_drill")),
     )
 
     assert found == (
@@ -996,7 +1003,7 @@ def test_a_row_for_a_mechanism_this_install_does_not_carry_is_a_finding() -> Non
             "| `backup_exposure` | that the gate still refuses what it refused | `nothing` |",
             "| `gone_away` | something that was removed | `nothing` |",
         ),
-        controls=(control("backup_exposure"),),
+        controls=(an_unstarted_mechanism(),),
     )
 
     assert found == (
@@ -1018,7 +1025,7 @@ def test_a_row_that_disagrees_about_what_starts_a_mechanism_is_a_finding() -> No
             MECHANISMS_HEADER,
             "| `backup_exposure` | that the gate still refuses what it refused | `on_a_route` |",
         ),
-        controls=(control("backup_exposure"),),
+        controls=(an_unstarted_mechanism(),),
     )
 
     assert found == (

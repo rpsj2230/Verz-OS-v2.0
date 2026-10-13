@@ -33,7 +33,7 @@ that and compares the frames the asker was sent with those of a record that does
 transaction, with a word nothing else holds in its template, so the lane reads it the way it reads
 every rule and no real question could match it.
 
-Task ids: M38.5.1
+Task ids: M38.5.1, M42.6.3
 """
 
 from __future__ import annotations
@@ -320,7 +320,7 @@ async def _cited(h: Harness, app: FastAPI, principal_id: str, document_id: str) 
 
 # ------------------------------------------------------ 2. a record's citation (M8.1.1, M9.2.1)
 @check(
-    leaves=("M8.1.1", "M9.2.1"),
+    leaves=("M8.1.1", "M9.2.1", "M42.6.3"),
     sentence=(
         "A member of acceptance_a asks Ask a question an uploaded table answers, with no model: "
         "the answer is the column they may read from the one row, assembled from the rows read and "
