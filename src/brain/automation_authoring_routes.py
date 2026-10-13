@@ -296,6 +296,14 @@ class AuthoringNotWrittenView(BaseModel):
 REFUSED: Final = "refused"
 UNCONFIRMED: Final = "unconfirmed"
 
+_REFUSABLE: Final[dict[int | str, dict[str, object]]] = {
+    **COMMON_RESPONSES,
+    422: {
+        "model": AuthoringRefusedView,
+        "description": "What was written cannot be an automation.",
+    },
+}
+
 _TOLD: Final[dict[int | str, dict[str, object]]] = {
     **COMMON_RESPONSES,
     409: {"model": AuthoringNotWrittenView, "description": "Nothing was written, and why."},
@@ -548,7 +556,7 @@ async def authoring_options(request: Request, agent_id: str, asked: Asked) -> Au
     )
 
 
-@router.post(PREVIEW_PATH, response_model=AuthoringPreviewView, responses=_TOLD)
+@router.post(PREVIEW_PATH, response_model=AuthoringPreviewView, responses=_REFUSABLE)
 async def authoring_preview(
     request: Request, agent_id: str, body: AuthoringAsked, asked: Asked
 ) -> JSONResponse:

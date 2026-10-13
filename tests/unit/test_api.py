@@ -334,6 +334,12 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
             f"{API_PREFIX}/agents/{{agent_id}}/automations",
             "409",
         ): "#/components/schemas/NotInstalledView",
+        # New automation's write answers a confirmation that no longer matches with its own
+        # `AuthoringNotWrittenView`, for the same reason the install does.
+        (
+            f"{API_PREFIX}/agents/{{agent_id}}/automations/authored",
+            "409",
+        ): "#/components/schemas/AuthoringNotWrittenView",
         (
             f"{API_PREFIX}/agents/{{agent_id}}/automations/{{automation_id}}/start",
             "409",

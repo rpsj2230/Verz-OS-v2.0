@@ -54,6 +54,8 @@ THE_CADENCE_WAS_THE_TEMPLATES: Final = "the automation did not run on the cadenc
 THE_CARD_SAID_NOTHING: Final = "the card did not say the trigger and the condition in words"
 IT_DID_NOT_RUN_AS_ITS_WRITER: Final = "the due automation did not run as the person who wrote it"
 A_REACH_WAS_INVENTED: Final = "a person without the read the task needs was not refused at the run"
+A_KIND_DID_NOT_READ_BACK: Final = "a trigger did not read back as the kind that was written"
+A_KIND_HAD_THE_WRONG_CADENCE: Final = "a trigger carried a cadence its kind does not have"
 A_KIND_RAN: Final = "a trigger nothing fires was run"
 A_KIND_WAS_STARTABLE: Final = "a trigger nothing fires was offered a start"
 
@@ -388,9 +390,9 @@ async def each_kind_of_trigger_is_saved_and_only_a_schedule_can_be_started(h: Ha
     for kind, trigger in triggers.items():
         one = held.get(ids[kind])
         if one is None or one.authored is None or one.authored.trigger != trigger:
-            raise CheckFailedError(f"a {kind.value} trigger did not read back as written")
+            raise CheckFailedError(A_KIND_DID_NOT_READ_BACK)
         if (one.cadence is None) != (kind is not TriggerKind.SCHEDULE):
-            raise CheckFailedError(f"a {kind.value} trigger carried the wrong cadence")
+            raise CheckFailedError(A_KIND_HAD_THE_WRONG_CADENCE)
         if one.authored.trigger.fires is not (kind is TriggerKind.SCHEDULE):
             raise CheckFailedError(A_KIND_WAS_STARTABLE)
     if "cannot be started" not in NOTHING_FIRES_THIS_YET:
