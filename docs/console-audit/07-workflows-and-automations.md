@@ -3,17 +3,20 @@
 - **Screens:** `/agents/:agentId/:tab`, `/automations`, `/automations/:automationId`, `/automations/:automationId/:view`
 - **Tables:** `agent.automation`, `agent.automation_run`, `agent.automation_schedule`, `agent.automation_change`, `gate.automation_owner`
 - **Installation values:** none
-- **Measured here:** 14 routes, 0 called by no screen; 8 write routes, 8 with all three proofs; 3 gaps.
+- **Measured here:** 17 routes, 0 called by no screen; 10 write routes, 10 with all three proofs; 3 gaps.
 
 | Route | Called by |
 | --- | --- |
+| `GET /api/v1/agents/{agent_id}/automation-authoring` | `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/automation-templates` | `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/automation-templates/{template_id}/preview` | `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/automations` | `/agents/:agentId` |
 | `GET /api/v1/console/automations` | `/automations`, `/people/:personId` |
 | `GET /api/v1/console/automations/{automation_id}` | `/automations/:automationId`, `/automations/:automationId/:view` |
 | `GET /api/v1/console/automations/{automation_id}/stats` | `/automations/:automationId` |
+| `POST /api/v1/agents/{agent_id}/automation-authoring/preview` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/automations` | `/agents/:agentId`, `/agents/:agentId/:tab` |
+| `POST /api/v1/agents/{agent_id}/automations/authored` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/automations/{automation_id}/start` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/automations/{automation_id}/stop` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/automations/{automation_id}/adopt` | `/automations/:automationId`, `/automations/:automationId/:view` |
@@ -30,7 +33,9 @@
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
+| `POST /api/v1/agents/{agent_id}/automation-authoring/preview` | `/agents/:agentId`, `/agents/:agentId/:tab` | Not applicable: A preview writes no row: it shows what saving would store and what it would have done, and keeps nothing. | Not applicable: A preview changes nothing, so there is nothing for the ledger to record. | `test_the_preview_shows_the_terms_the_rehearsal_and_a_digest_and_writes_nothing` in `tests/unit/test_automation_authoring_routes.py` |
 | `POST /api/v1/agents/{agent_id}/automations` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_one_confirmed_request_writes_the_automation_its_registry_entry_and_its_audit_context` in `tests/unit/test_automation_gallery_routes.py` | `test_an_install_writes_one_row_one_ledger_entry_and_a_second_install_writes_neither` in `tests/unit/test_agent_automation_store.py` (database, in CI) | `test_one_confirmed_request_writes_the_automation_its_registry_entry_and_its_audit_context` in `tests/unit/test_automation_gallery_routes.py` |
+| `POST /api/v1/agents/{agent_id}/automations/authored` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_one_confirmed_request_writes_one_paused_automation_as_the_caller` in `tests/unit/test_automation_authoring_routes.py` | `test_a_written_automation_reads_back_arrives_in_the_ledger_and_install_is_still_once` in `tests/unit/test_automation_authoring_store.py` (database, in CI) | `test_a_confirmation_for_other_words_is_refused_and_writes_nothing` in `tests/unit/test_automation_authoring_routes.py` |
 | `POST /api/v1/agents/{agent_id}/automations/{automation_id}/start` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who` in `tests/unit/test_automation_run_store.py` (database, in CI) | `test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who` in `tests/unit/test_automation_run_store.py` (database, in CI) | `test_a_confirmed_start_is_written_as_the_approver_and_a_stale_one_writes_nothing` in `tests/unit/test_automation_schedule_routes.py` |
 | `POST /api/v1/agents/{agent_id}/automations/{automation_id}/stop` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who` in `tests/unit/test_automation_run_store.py` (database, in CI) | `test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who` in `tests/unit/test_automation_run_store.py` (database, in CI) | `test_the_owner_stops_their_own_without_approval_and_a_bystander_cannot` in `tests/unit/test_automation_schedule_routes.py` |
 | `POST /api/v1/automations/{automation_id}/adopt` | `/automations/:automationId`, `/automations/:automationId/:view` | `test_an_ownerless_automation_stops_and_waits_and_once_adopted_runs_as_the_adopter` in `tests/unit/test_automation_change_store.py` (database, in CI) | `test_an_ownerless_automation_stops_and_waits_and_once_adopted_runs_as_the_adopter` in `tests/unit/test_automation_change_store.py` (database, in CI) | `test_an_ownerless_automation_is_adopted_in_the_adopters_name_and_stays_paused` in `tests/unit/test_automations_routes.py` |

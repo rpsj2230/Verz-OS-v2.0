@@ -18,12 +18,13 @@ not "interactive" but "unknown", and a default would quietly pick one.
 **The steps are ordered and the order is checked.** Skipping a step is not a performance
 optimisation, it is a permission bypass, and it does not look like one in a diff.
 
-Task ids: M3.1.1, M3.1.2, M3.1.3, M3.1.4
+Task ids: M3.1.1, M3.1.2, M3.1.3, M3.1.4, M27.15.6
 """
 
 from __future__ import annotations
 
 import enum
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import assert_never
@@ -187,6 +188,12 @@ class Recorder:
     #: through, or None for the asker's own reach and for a request that never got that far.
     #: Read by whoever keeps the asker's thread, on an answer and on a failure alike.
     agent_id: str | None = None
+    #: Reads the instant a step is entered at, handed in by the caller that owns a clock, so
+    #: the recorder times its own steps without the gate reading the wall clock itself. None
+    #: on a recorder built without one, which then names no time for any step (M27.15.6).
+    clock: Callable[[], datetime] | None = None
+    #: When each step in `steps` was entered, in the same order. Empty when there is no clock.
+    entered_at: list[datetime] = field(default_factory=list)
 
     def enter(self, step: GateStep) -> None:
         """Record a step, refusing to run one out of order.
@@ -200,6 +207,24 @@ class Recorder:
                 "the gate's order is what makes each step's guarantee hold"
             )
         self.steps.append(step)
+        if self.clock is not None:
+            self.entered_at.append(self.clock())
+
+    def stage_ms(self, until: datetime) -> dict[str, float] | None:
+        """Milliseconds spent in each step the request entered, or None when nothing was timed.
+
+        A step runs from the instant it was entered to the instant the next was, and the last one
+        until `until`, the instant the lane finished. A step the request skipped, such as ROUTE on
+        a cache hit, is absent rather than zero: zero would claim it ran and was quick. Keys are
+        the step names in lower case, a closed vocabulary that carries no value from a request.
+        """
+        if not self.entered_at or len(self.entered_at) != len(self.steps):
+            return None
+        ends = [*self.entered_at[1:], until]
+        return {
+            step.name.lower(): max((end - start).total_seconds() * 1000.0, 0.0)
+            for step, start, end in zip(self.steps, self.entered_at, ends, strict=True)
+        }
 
     def identified(self, principal_id: str, channel: Channel) -> None:
         """Enter IDENTIFY with who is asking and the channel their credential names.
@@ -230,7 +255,12 @@ AN_ARRIVAL_IS_RECORDED_BEFORE_ITS_CHANNEL_IS_KNOWN = (
 )
 
 
-def open_trace(trace_id: str, received_at: datetime, channel: Channel) -> Recorder:
+def open_trace(
+    trace_id: str,
+    received_at: datetime,
+    channel: Channel,
+    clock: Callable[[], datetime] | None = None,
+) -> Recorder:
     """Construct the recorder. Called at ingress, before identification.
 
     This function exists so there is one obvious place to look for the answer to "was this
@@ -242,6 +272,7 @@ def open_trace(trace_id: str, received_at: datetime, channel: Channel) -> Record
         received_at=received_at,
         channel=channel,
         traffic_class=traffic_class_for(channel),
+        clock=clock,
     )
     recorder.enter(GateStep.RECORD)
     return recorder

@@ -51,10 +51,13 @@ from brain.tables.access_request import AccessRequestHandledRow, AccessRequestRo
 from brain.tables.adoption import QuestionAskedRow
 from brain.tables.agent import AgentRow
 from brain.tables.agent_automation import AgentAutomationRow
+from brain.tables.agent_item_use import AgentItemUseRow
 from brain.tables.agent_run import AgentRunRow
+from brain.tables.alert_acknowledgement import AlertAcknowledgementRow
 from brain.tables.application_log import ApplicationLogRow
 from brain.tables.artifact import ArtifactChangeRow, ArtifactRow
 from brain.tables.attachment import ToolAttachmentRow
+from brain.tables.audience_extra import AudienceExtraRow
 from brain.tables.audit import AuditEntryRow, ElevationEntryRow
 from brain.tables.automation import AutomationOwnerRow
 from brain.tables.automation_change import AutomationChangeRow
@@ -133,6 +136,16 @@ from brain.tables.organisation import DepartmentLeadRow, TeamMembershipRow
 from brain.tables.outbox import OutboxDeliveryRow, OutboxEventRow, WebhookSubscriberRow
 from brain.tables.plugin import PluginInstallRow, PluginVersionRow
 from brain.tables.projection import ProjectedRecordRow, RetiredRecordRow, SourceEpochRow
+from brain.tables.quality import (
+    AnswerFlagRow,
+    EvaluationCandidateRow,
+    GoldenScoreRow,
+    PositiveExampleRow,
+    QualityAnnotationRow,
+    QualityReadingRow,
+    RegressionCaseRow,
+    TierDecisionRow,
+)
 from brain.tables.question_gap import QuestionGapRow
 from brain.tables.requirement_check import RequirementCheckRow
 from brain.tables.resolution import (
@@ -170,6 +183,7 @@ from brain.tables.stewardship import ConnectorStewardRow, SelfGrantRow
 from brain.tables.suspension import SuspensionRow
 from brain.tables.telemetry import RequestTelemetryRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
+from brain.tables.template_draft import TemplateDraftRow
 from brain.tables.tool_definition import ToolDefinitionRow, ToolSwitchRow
 from brain.tables.upgrade import UpgradeDeclineRow
 from brain.tables.vault_access import VaultAccessRow
@@ -508,6 +522,24 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0211_budget_stop. Points at nothing: the ceiling, the principal and the recipients are
     # values, so a stop's row outlives a ceiling's next version and a person leaving.
     "ops.budget_stop",
+    # 0213_agent_item_use. Points at nothing: the agent and the document are values.
+    "ops.agent_item_use",
+    # 0217_alert_acknowledgement. Points at nothing: the subject is a source's name and the person
+    # is a value, so an acknowledgement outlives both.
+    "ops.alert_acknowledgement",
+    # 0222_quality_and_learning. A case points at the flag it came from and nothing else points at
+    # anything: every reference is a value, so a trace aging out or a person leaving deletes none.
+    "ops.answer_flag",
+    "ops.regression_case",
+    "ops.quality_reading",
+    "ops.quality_annotation",
+    "ops.golden_score",
+    "ops.evaluation_candidate",
+    "ops.positive_example",
+    "ops.tier_decision",
+    # 0223_templates_and_audience. A draft and an offer each name an agent and a person as values.
+    "agent.template_draft",
+    "agent.audience_extra",
 )
 
 __all__ = [
@@ -518,12 +550,16 @@ __all__ = [
     "ActionVerdictRow",
     "AdaptiveMemoryRow",
     "AgentAutomationRow",
+    "AgentItemUseRow",
     "AgentRow",
     "AgentRunRow",
+    "AlertAcknowledgementRow",
+    "AnswerFlagRow",
     "ApiKeyRow",
     "ApplicationLogRow",
     "ArtifactChangeRow",
     "ArtifactRow",
+    "AudienceExtraRow",
     "AuditEntryRow",
     "AutomationChangeRow",
     "AutomationOwnerRow",
@@ -572,9 +608,11 @@ __all__ = [
     "ErasureOutcome",
     "ErasureRequestRow",
     "EscalationRow",
+    "EvaluationCandidateRow",
     "FastPathRuleRow",
     "FieldPolicyRow",
     "GoldenQuestionRow",
+    "GoldenScoreRow",
     "GrantsVersionRow",
     "GroupInstallRow",
     "GroupRoleRuleRow",
@@ -603,12 +641,16 @@ __all__ = [
     "PluginInstallRow",
     "PluginVersionRow",
     "PolicyEpochRow",
+    "PositiveExampleRow",
     "PrincipalIdentityRow",
     "PrincipalRow",
     "ProjectedRecordRow",
     "ProviderHealthRow",
+    "QualityAnnotationRow",
+    "QualityReadingRow",
     "QuestionAskedRow",
     "QuestionGapRow",
+    "RegressionCaseRow",
     "ReportRefreshRow",
     "RequestTelemetryRow",
     "RequirementCheckRow",
@@ -654,8 +696,10 @@ __all__ = [
     "SuspensionRow",
     "TeamMembershipRow",
     "TeamRow",
+    "TemplateDraftRow",
     "TemplateInstanceRow",
     "TemplateVersionRow",
+    "TierDecisionRow",
     "ToolAttachmentRow",
     "ToolDefinitionRow",
     "ToolSwitchRow",

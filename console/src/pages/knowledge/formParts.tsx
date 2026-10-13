@@ -37,6 +37,7 @@ export const VERIFY = "Verify";
 export const ADD_VERSION = "Add as the newer version";
 export const ASK_COMPANY = "Ask for approval";
 export const HAND_OVER = "Hand over";
+export const ARCHIVE = "Archive";
 
 export const ADDING = "Adding the document.";
 export const FETCHING = "Fetching and reading the page.";
@@ -68,6 +69,9 @@ export const NEW_VERSION_CONSEQUENCE =
   "This version stays in the history, readable by the people who could read it.";
 export const HAND_OVER_CONSEQUENCE =
   "They become its steward, are told so, and are asked when it falls due for review. The change is recorded in the audit trail.";
+
+export const ARCHIVE_CONSEQUENCE =
+  "Answers stop using it from now on. It stays on file with its history, readable by the people who could read it, and the change is recorded in the audit trail.";
 
 /** Said for a file the bulk form did not send, and why. */
 export const NOT_SENT_TYPE = "not sent: it is not one of the types listed.";

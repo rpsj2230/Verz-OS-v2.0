@@ -254,11 +254,15 @@ def test_connector_access_is_compiled_in_the_ceiling_and_decided_nowhere_else() 
     assert callers == {"brain.agents.model": {"entitlement_ceiling"}}
     # `brain.agents.attachments` edits the list a connector press writes, through `connectors_of`,
     # and decides nothing from it: what a connector opens is asked of `entitlement_ceiling`.
+    # `brain.automation_authoring_routes` names which of the agent's serving connectors an event
+    # trigger may be offered and which projected fields a condition may name, so the authoring
+    # form draws a list; what the stored automation may then read is still the ceiling's.
     assert readers == {
         "brain.agents.model",
         "brain.agents.install",
         "brain.agents.install_store",
         "brain.agents.attachments",
+        "brain.automation_authoring_routes",
     }
 
 

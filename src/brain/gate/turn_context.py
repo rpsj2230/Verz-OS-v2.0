@@ -37,16 +37,23 @@ in would then be the order of the lane's lines, and the runtime would have to re
 Rejected: putting the project and the agent's memory in once something holds them, and leaving
 them out of the type until then. See above.
 
-Task ids: M16.6.1
+**An agent's configuration may leave a kind of memory out, and then it is not read at all**
+(M39.7.1). `assemble` takes the kinds the agent is set up for and does not call a reader for a
+part whose kind is left out, so a run cannot be shown what its configuration excludes, and the
+trace names the part as left out by configuration. See `brain.agents.memory_kinds`.
+
+Task ids: M16.6.1, M39.7.1
 """
 
 from __future__ import annotations
 
 import enum
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Final, Protocol
 
+from brain.agents.memory_kinds import ALL_KINDS, MemoryKind
 from brain.core.redaction import ChannelPayload
 from brain.tools.skills import SkillCard
 
@@ -110,11 +117,30 @@ class LeftOut(enum.StrEnum):
     NO_SOURCE = "no_source"
     #: Read during the run by the tools the agent was handed, not assembled up front.
     BY_TOOLS = "tools"
+    #: The agent's configuration leaves this kind of memory out, so it was not read at all
+    #: (M39.7.1). Short, for the reason above.
+    NOT_CONFIGURED = "off"
 
 
 #: The parts nothing holds yet. Read by `ContextParts.note`, and by a test that fails the day one
 #: of them gets a source and this line is not changed.
 WITHOUT_A_SOURCE: Final[frozenset[Part]] = frozenset({Part.PROJECT, Part.AGENT_MEMORY})
+
+#: Which kind of memory each part is, for the parts that are memory: what an agent's configuration
+#: may leave out (M39.7.1). The conversation is the thread's earlier questions and what the person
+#: said for this conversation only; the task is the skill cards; the project is the client project;
+#: the person is what the asker said about themselves; and the agent's own is its own memory. The
+#: knowledge is not memory and no setting leaves it out. See `brain.agents.memory_kinds`.
+KIND_OF_PART: Final[Mapping[Part, MemoryKind]] = MappingProxyType(
+    {
+        Part.CONVERSATION: MemoryKind.CONVERSATION,
+        Part.SESSION: MemoryKind.CONVERSATION,
+        Part.TASK: MemoryKind.TASK,
+        Part.PROJECT: MemoryKind.PROJECT,
+        Part.ASKER_MEMORY: MemoryKind.PERSON,
+        Part.AGENT_MEMORY: MemoryKind.OWN,
+    }
+)
 
 #: The two trace attributes, both on `brain.ops.tracing.SAFE_ATTRIBUTES`.
 INCLUDED_ATTRIBUTE: Final = "context_included"
@@ -172,6 +198,8 @@ class ContextParts:
     asker_memory: tuple[str, ...] = ()
     agent_memory: tuple[str, ...] = ()
     knowledge: ChannelPayload | None = None
+    #: The parts this agent's configuration left out and that were therefore never read (M39.7.1).
+    configured_out: frozenset[Part] = frozenset()
 
     def _held(self) -> Mapping[Part, bool]:
         return {
@@ -192,6 +220,8 @@ class ContextParts:
         return ContextNote(included=included, left_out=left_out)
 
     def _why(self, part: Part) -> LeftOut:
+        if part in self.configured_out:
+            return LeftOut.NOT_CONFIGURED
         if part in WITHOUT_A_SOURCE:
             return LeftOut.NO_SOURCE
         if part is Part.KNOWLEDGE and self.knowledge is None:
@@ -207,6 +237,7 @@ async def assemble(
     task: Sequence[SkillCard] = (),
     asker: Recollection | None = None,
     knowledge: ChannelPayload | None = None,
+    kinds: Collection[str] | None = None,
 ) -> ContextParts:
     """The one assembly of a turn's context. See `ONE_PLACE_ASSEMBLES_WHAT_A_MODEL_IS_SHOWN`.
 
@@ -215,11 +246,18 @@ async def assemble(
     reach and the knowledge is the redacted payload. The project and the agent's memory have no
     parameter, because nothing holds them: see `A_PART_WITH_NO_SOURCE_IS_SAID_TO_HAVE_NONE`.
     """
+    allowed = frozenset(ALL_KINDS if kinds is None else kinds)
+    out = frozenset(part for part, kind in KIND_OF_PART.items() if kind.value not in allowed)
+
+    def held(part: Part) -> bool:
+        return part not in out
+
     return ContextParts(
         question=question,
-        conversation=tuple(conversation),
-        session=() if session is None else await session.hints(),
-        task=tuple(task),
-        asker_memory=() if asker is None else await asker.hints(),
+        conversation=tuple(conversation) if held(Part.CONVERSATION) else (),
+        session=await session.hints() if session is not None and held(Part.SESSION) else (),
+        task=tuple(task) if held(Part.TASK) else (),
+        asker_memory=await asker.hints() if asker is not None and held(Part.ASKER_MEMORY) else (),
         knowledge=knowledge,
+        configured_out=out,
     )

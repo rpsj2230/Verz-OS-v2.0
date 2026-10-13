@@ -50,6 +50,7 @@ def _finished(
     front: FrontRecord | None = None,
     trace: str = "t-front-row",
     route: ModelRoute | None = None,
+    stage_ms: dict[str, float] | None = None,
 ) -> Finished:
     origin = Origin(trace_id=trace, principal=asker("u_one"), channel=Channel.CONSOLE)
     return Finished(
@@ -62,6 +63,7 @@ def _finished(
         tool_calls=0,
         front=front,
         route=route,
+        stage_ms=stage_ms,
     )
 
 
@@ -195,6 +197,9 @@ def database() -> Iterator[str]:
         migrate(DATABASE, "upgrade", "0100")
         migrate(DATABASE, "stamp", "0108")
         migrate(DATABASE, "upgrade", "0113")
+        # 0215 adds the reasoning tokens and the time spent in each gate step (M27.15.6).
+        migrate(DATABASE, "stamp", "0214")
+        migrate(DATABASE, "upgrade", "0215")
         yield scratch
     finally:
         drop(DATABASE)
@@ -255,6 +260,49 @@ def test_the_front_halfs_columns_are_written_as_the_application_role(database: s
         ("t-front-row", 55, "answer", "addressed", "finance", "fast_refused", "heavy", "pinned"),
         ("t-plain", None, None, None, None, None, None, None),
     ]
+
+
+def test_the_stage_times_and_reasoning_tokens_are_written_and_read_back(database: str) -> None:
+    """0215's two columns, run for real: a stage map lands as a JSON object keyed by gate step,
+    a request with none lands null, and a stage map that is not an object is refused by its
+    check.
+
+    Delete this and the columns can be added with a type the driver cannot fill, or a check
+    copied wrongly admits an array, and the first timed request is the one that finds out."""
+    import psycopg
+
+    sql(database, "TRUNCATE obs.request_telemetry")
+    timed = request_telemetry_of(
+        _finished(trace="t-timed", stage_ms={"record": 1.0, "identify": 2.5})
+    )
+
+    async def go() -> None:
+        bound = engine(database)
+        try:
+            async with async_sessionmaker(bound)() as session:
+                await session.execute(text("SET ROLE brain_app"))
+                await record(session, timed)
+                await record(session, request_telemetry_of(_finished(trace="t-plain")))
+                await session.commit()
+        finally:
+            await bound.dispose()
+
+    run(go)
+    assert sql(
+        database,
+        "SELECT trace_id, stage_ms, reasoning_tokens FROM obs.request_telemetry ORDER BY trace_id",
+    ) == [("t-plain", None, None), ("t-timed", {"record": 1.0, "identify": 2.5}, None)]
+    with pytest.raises(psycopg.errors.CheckViolation) as refused:
+        sql(
+            database,
+            "INSERT INTO obs.request_telemetry (received_at, trace_id, traffic_class, principal, "
+            "entitlement_hash, lane, cache_hit, status, duration_ms, stage_ms) VALUES "
+            "(%s, 't-array', 'human_interactive', 'u_one', %s, 'fast', false, 'answered', 1, "
+            "'[1]'::jsonb)",
+            AT,
+            EntitlementSet(principal_id="u_one").ent_hash(),
+        )
+    assert refused.value.diag.constraint_name == "ck_request_telemetry_stage_ms_object"
 
 
 @pytest.mark.parametrize(

@@ -240,7 +240,7 @@ async def usage_and_adoption_count_the_departments_a_reader_may_see(
 
 # --------------------------------------------- 3. the questions nothing answered (M27.7.18)
 @check(
-    leaves=("M27.7.18",),
+    leaves=("M27.7.18", "M34.2.2.3"),
     sentence=(
         "A question from acceptance_a that no connected source could answer, naming the source "
         "that would have, is shown by the Questions route to a reader of questions in "
