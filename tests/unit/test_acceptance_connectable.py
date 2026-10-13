@@ -1,6 +1,6 @@
 """The connectable-source acceptance checks: registered, passing on a real schema, and able to fail.
 
-The database half builds PostgreSQL to head and runs the ten checks as the worker would, then runs
+The database half builds PostgreSQL to head and runs the eleven checks as the worker would, and runs
 them against the product broken where each proves something: the source's own half (its records
 answering nothing on Ask, a Drive file or a Slack channel never read, a Slack member matched to
 nobody, Connect Lark's save switching no Base on), the
@@ -10,7 +10,7 @@ answers from the source). Each fails with its own sentence, and every table the 
 afterwards what it held before.
 
 Task ids: M11.9.3, M11.9.4, M11.9.5, M11.9.6, M11.9.7, M11.9.8
-Task ids: M11.9.10, M11.9.11, M11.9.13, M11.9.14
+Task ids: M11.9.10, M11.9.11, M11.9.13, M11.9.14, M11.9.9
 """
 
 from __future__ import annotations
@@ -40,6 +40,7 @@ LEAVES = {
     "cloudflare_is_ready_for_a_person_and_its_agent_once_connected": "M11.9.11",
     "analytics_is_ready_for_a_person_and_its_agent_once_connected": "M11.9.13",
     "search_console_is_ready_for_a_person_and_an_agent_once_connected": "M11.9.14",
+    "the_maintenance_portal_is_ready_once_connected": "M11.9.9",
 }
 
 #: Each row source's check, by the connector its records are classified under.
@@ -51,6 +52,7 @@ ROW_SOURCES = {
     "cloudflare": "cloudflare_is_ready_for_a_person_and_its_agent_once_connected",
     "google_analytics": "analytics_is_ready_for_a_person_and_its_agent_once_connected",
     "search_console": "search_console_is_ready_for_a_person_and_an_agent_once_connected",
+    "laravel": "the_maintenance_portal_is_ready_once_connected",
 }
 
 DRIVE = "google_drive_is_ready_for_a_person_and_its_agent_once_connected"
@@ -82,7 +84,7 @@ def test_the_connectable_checks_are_listed_in_their_page_order() -> None:
 
 @pytest.mark.needs_db
 def test_on_a_real_database_each_source_is_ready_for_a_person_and_an_agent() -> None:
-    """**The ten checks as the worker runs them, against PostgreSQL at head.** Each passes, and
+    """**The eleven checks as the worker runs them, against PostgreSQL at head.** Each passes, and
     every table a check writes holds afterwards what it held before. Delete this and a source can
     be connected from the console and still need a server step before a person or an agent can
     use it, with nothing on the owner's install saying so."""

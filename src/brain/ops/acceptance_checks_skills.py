@@ -32,7 +32,7 @@ skills fetched from GitHub keep their public names, because renaming them would 
 the import pins; if the install's library already holds either, the check says not run rather than
 asking an import the library would refuse for a reason that is not the product's.
 
-Task ids: M38.5.1, M27.15.57
+Task ids: M38.5.1, M27.15.57, M12.4.9
 """
 
 from __future__ import annotations
@@ -267,7 +267,7 @@ async def _changes(
 
 # ------------------------------------------------------ 1. a paste or an upload (M12.2.1)
 @check(
-    leaves=("M12.2.1", "M12.2.4", "M12.2.5", "M12.4.12"),
+    leaves=("M12.2.1", "M12.2.4", "M12.2.5", "M12.4.9", "M12.4.12"),
     sentence=(
         "A SKILL.md pasted and one uploaded in a zip land in the library and the review queue "
         "undecided, their instructions withheld from every agent and no pin possible; a SKILL.md "
@@ -394,7 +394,7 @@ def _transport() -> tuple[Fetcher, Resolver]:
 
 
 @check(
-    leaves=("M12.2.2", "M12.2.3", "M27.15.57"),
+    leaves=("M12.2.2", "M12.2.3", "M12.4.9", "M27.15.57"),
     sentence=(
         "A public skill fetched by the install's own transport from a GitHub repository at a full "
         "commit, and another from a raw address, both land undecided, keeping the commit and "
@@ -677,7 +677,7 @@ async def _pins(h: Harness, agent_id: str) -> dict[str, str]:
 
 
 @check(
-    leaves=("M12.2.6", "M12.3.2", "M12.4.6"),
+    leaves=("M12.2.6", "M12.3.2", "M12.4.6", "M12.4.9"),
     sentence=(
         "An administrator approves a skill they imported and the ledger says self_approved; an "
         "edit by somebody who may not review is a new undecided version beside the old one, which "
