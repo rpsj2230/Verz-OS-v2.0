@@ -130,3 +130,56 @@ describe("who has read my record", () => {
     });
   });
 });
+
+
+describe("sharing a file with a colleague", () => {
+  test("a share sends the colleague's id and nothing else, for the file chosen, and an empty box sends nothing", async () => {
+    // What breaks if this is deleted: a share that names the wrong file, sends a name with
+    // whitespace the API refuses, or goes with no colleague typed.
+    const sent: { path: string; body: unknown }[] = [];
+    const idp = fakeIdentityProvider({
+      api(url, init) {
+        const path = new URL(url, ORIGIN).pathname;
+        if ((init?.method ?? "GET").toUpperCase() === "POST") {
+          sent.push({ path, body: typeof init?.body === "string" ? (JSON.parse(init.body) as unknown) : null });
+          return json({});
+        }
+        return path === "/api/v1/me/artifacts"
+          ? json({
+              artifacts: [
+                {
+                  artifact_id: "art_1",
+                  kind: "report",
+                  agent_id: "a_one",
+                  produced_for: "u_me",
+                  produced_at: "2019-03-01T09:00:00Z",
+                  state: "current",
+                  superseded_by: "",
+                  run_id: "r",
+                  agent_version: "1",
+                  kept_as: "x",
+                  kept_until: "",
+                  kept_because: "kept",
+                },
+              ],
+              more: false,
+            })
+          : null;
+      },
+    });
+    const loaded = await loadConsole({ idp });
+    await signIn(loaded);
+    const { MyArtifacts } = await import("../src/components/MyAccountCards");
+    const { container } = render(<MyArtifacts />);
+    await waitFor(() => {
+      expect(container.textContent).toContain("report by a_one");
+    });
+    const share = buttonNamed(container, "Share: art_1");
+    expect(share.disabled).toBe(true);
+    fireEvent.change(container.querySelector("input") as HTMLInputElement, { target: { value: "  u_friend " } });
+    fireEvent.click(buttonNamed(container, "Share: art_1"));
+    await waitFor(() => {
+      expect(sent).toEqual([{ path: "/api/v1/me/artifacts/art_1/share", body: { colleague: "u_friend" } }]);
+    });
+  });
+});

@@ -12,6 +12,9 @@
 | `GET /api/v1/company/estate` | `/company/estate` |
 | `GET /api/v1/me/preferences` | **no screen** |
 | `GET /api/v1/me/workspace` | `/me` |
+| `GET /api/v1/quality/candidates` | **no screen** |
+| `GET /api/v1/quality/flags` | **no screen** |
+| `GET /api/v1/quality/sample` | **no screen** |
 | `GET /api/v1/report/adoption` | `/adoption` |
 | `GET /api/v1/report/quality` | `/quality` |
 | `GET /api/v1/report/questions` | `/department`, `/questions` |
@@ -27,7 +30,7 @@
 | `POST /api/v1/quality/flags/{flag_id}/case` | **no screen** |
 | `PUT /api/v1/company/budget` | **no screen** |
 
-No gap recorded.
+- **Gap.** Flagging an answer, annotating a day's sample and deciding a candidate have no screen: the Quality screen draws the canary run and not the findings. Recorded: brain.quality_routes serves each as a door and no page presses them yet (M28.3.1, M28.3.3, M28.4.1); a captured case, a golden score and an example are stored and read by the install checks only.
 
 **Every write to this area, followed to the system.**
 

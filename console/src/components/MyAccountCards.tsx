@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useState } from "react";
-import { request } from "../api/client";
+import { request, requestFile } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
 import { when } from "../pages/artifactsQuery";
@@ -20,8 +20,16 @@ import {
   MY_ARTIFACTS_API_PATH,
   MY_DEVICES_API_PATH,
   MY_READS_API_PATH,
+  MY_SHARES_API_PATH,
   MY_STORED_API_PATH,
+  SHARED_WITH_ME_API_PATH,
+  colleagueBody,
   endBody,
+  shareApiPath,
+  sharedFileApiPath,
+  unshareApiPath,
+  type MySharesBody,
+  type SharedWithMeBody,
   type MyArtifactsBody,
   type MyDevice,
   type MyDevicesBody,
@@ -43,6 +51,15 @@ export const END_DEVICE_CONSEQUENCE =
   "ledger.";
 export const NO_READS = "Nobody has read your record.";
 export const NO_ARTIFACTS = "No agent has made anything for you.";
+export const SHARE_LABEL = "Share";
+export const TAKE_BACK_LABEL = "Take back";
+export const OPEN_LABEL = "Download";
+export const SHARED_CAPTION = "Shared with me";
+export const SHARES_CAPTION = "I shared";
+export const NOTHING_SHARED_WITH_ME = "Nothing has been shared with you that you can open.";
+export const NOTHING_SHARED = "You have not shared anything.";
+export const COLLEAGUE_LABEL = "Colleague's person id";
+export const CANNOT_SAVE_FILE = "This browser could not save the file.";
 export const MORE_ROWS = "There are more than are shown here.";
 
 function Reading({ what }: { readonly what: string }) {
@@ -161,11 +178,49 @@ export function MyReads() {
   );
 }
 
+function saveFile(name: string, body: Blob): boolean {
+  if (typeof URL.createObjectURL !== "function") {
+    return false;
+  }
+  const address = URL.createObjectURL(body);
+  const link = document.createElement("a");
+  link.href = address;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(address);
+  return true;
+}
+
 export function MyArtifacts() {
-  const answer = useResource<MyArtifactsBody>(MY_ARTIFACTS_API_PATH, 0);
+  const [version, setVersion] = useState(0);
+  const answer = useResource<MyArtifactsBody>(MY_ARTIFACTS_API_PATH, version);
+  const [colleague, setColleague] = useState<Record<string, string>>({});
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const shareWith = useCallback((artifactId: string, who: string) => {
+    setBusy(true);
+    setFailure(null);
+    void (async () => {
+      const result = await request<unknown>(shareApiPath(artifactId), {
+        method: "POST",
+        body: colleagueBody(who),
+      });
+      setBusy(false);
+      if (result.ok) {
+        setColleague((was) => ({ ...was, [artifactId]: "" }));
+        setVersion((current) => current + 1);
+        return;
+      }
+      setFailure(result.failure);
+    })();
+  }, []);
   return (
     <section className="card">
       <h2>{ARTIFACTS_CAPTION}</h2>
+      {failure === null ? null : <FailureNotice failure={failure} />}
       {answer.failure ? (
         <FailureNotice failure={answer.failure} />
       ) : answer.data === null ? (
@@ -177,7 +232,25 @@ export function MyArtifacts() {
           <ul aria-label={ARTIFACTS_CAPTION}>
             {answer.data.artifacts.map((one) => (
               <li key={one.artifact_id}>
-                {`${one.kind} by ${one.agent_id}, ${when(one.produced_at)}, ${one.kept_because}.`}
+                {`${one.kind} by ${one.agent_id}, ${when(one.produced_at)}, ${one.kept_because}. `}
+                <input
+                  aria-label={`${COLLEAGUE_LABEL}: ${one.artifact_id}`}
+                  value={colleague[one.artifact_id] ?? ""}
+                  onChange={(event) => {
+                    setColleague((was) => ({ ...was, [one.artifact_id]: event.target.value }));
+                  }}
+                />{" "}
+                <button
+                  type="button"
+                  className="button"
+                  aria-label={`${SHARE_LABEL}: ${one.artifact_id}`}
+                  disabled={busy || (colleague[one.artifact_id] ?? "").trim() === ""}
+                  onClick={() => {
+                    shareWith(one.artifact_id, colleague[one.artifact_id] ?? "");
+                  }}
+                >
+                  {SHARE_LABEL}
+                </button>
               </li>
             ))}
           </ul>
@@ -206,6 +279,100 @@ export function MyStored() {
           </ul>
           <p className="note">{answer.data.told}</p>
         </>
+      )}
+    </section>
+  );
+}
+
+export function MyShared() {
+  const [version, setVersion] = useState(0);
+  const received = useResource<SharedWithMeBody>(SHARED_WITH_ME_API_PATH, version);
+  const sent = useResource<MySharesBody>(MY_SHARES_API_PATH, version);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const [said, setSaid] = useState<string | null>(null);
+
+  const open = useCallback((artifactId: string, kind: string) => {
+    setSaid(null);
+    void (async () => {
+      const got = await requestFile(sharedFileApiPath(artifactId));
+      if (!got.ok) {
+        setFailure(got.failure);
+        return;
+      }
+      setSaid(saveFile(`${kind}-${artifactId}`, got.body) ? null : CANNOT_SAVE_FILE);
+    })();
+  }, []);
+
+  const takeBack = useCallback((artifactId: string, who: string) => {
+    setFailure(null);
+    void (async () => {
+      const result = await request<unknown>(unshareApiPath(artifactId), {
+        method: "POST",
+        body: colleagueBody(who),
+      });
+      if (result.ok) {
+        setVersion((current) => current + 1);
+        return;
+      }
+      setFailure(result.failure);
+    })();
+  }, []);
+
+  return (
+    <section className="card">
+      <h2>{SHARED_CAPTION}</h2>
+      {failure === null ? null : <FailureNotice failure={failure} />}
+      {said === null ? null : <p className="note">{said}</p>}
+      {received.failure ? (
+        <FailureNotice failure={received.failure} />
+      ) : received.data === null ? (
+        <Reading what="what was shared with you" />
+      ) : received.data.items.length === 0 ? (
+        <p className="note">{NOTHING_SHARED_WITH_ME}</p>
+      ) : (
+        <ul aria-label={SHARED_CAPTION}>
+          {received.data.items.map((one) => (
+            <li key={one.artifact.artifact_id}>
+              {`${one.artifact.kind} from ${one.shared_by}, ${when(one.shared_at)}. `}
+              <button
+                type="button"
+                className="button"
+                aria-label={`${OPEN_LABEL}: ${one.artifact.artifact_id}`}
+                onClick={() => {
+                  open(one.artifact.artifact_id, one.artifact.kind);
+                }}
+              >
+                {OPEN_LABEL}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <h3>{SHARES_CAPTION}</h3>
+      {sent.failure ? (
+        <FailureNotice failure={sent.failure} />
+      ) : sent.data === null ? (
+        <Reading what="what you shared" />
+      ) : sent.data.shares.length === 0 ? (
+        <p className="note">{NOTHING_SHARED}</p>
+      ) : (
+        <ul aria-label={SHARES_CAPTION}>
+          {sent.data.shares.map((one) => (
+            <li key={`${one.artifact_id}-${one.shared_with}`}>
+              {`${one.artifact_id} with ${one.shared_with}, ${when(one.shared_at)}. `}
+              <button
+                type="button"
+                className="button"
+                aria-label={`${TAKE_BACK_LABEL}: ${one.artifact_id} from ${one.shared_with}`}
+                onClick={() => {
+                  takeBack(one.artifact_id, one.shared_with);
+                }}
+              >
+                {TAKE_BACK_LABEL}
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );

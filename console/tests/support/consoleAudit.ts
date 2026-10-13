@@ -801,6 +801,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/quality/*",
     ],
     tables: [
+      "agent.artifact_share",
+      "agent.agent_request",
       "auth.member_preference",
       "ops.question_asked",
       "ops.question_gap",
