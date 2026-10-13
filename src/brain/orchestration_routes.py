@@ -120,7 +120,7 @@ def may_rehearse(reach: EntitlementSet, now: datetime) -> bool:
 
 
 # ------------------------------------------------------------------------------- the body
-class FieldAsked(BaseModel):
+class PromisedFieldAsked(BaseModel):
     """One field a subtask promises to return. A name and one of the six kinds; never prose."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -139,7 +139,7 @@ class SubtaskAsked(BaseModel):
     depends_on: list[Annotated[str, Field(min_length=1, max_length=64)]] = Field(
         default_factory=list, max_length=MOST_SUBTASKS
     )
-    output: list[FieldAsked] = Field(min_length=1, max_length=16)
+    output: list[PromisedFieldAsked] = Field(min_length=1, max_length=16)
     capabilities: list[Annotated[str, Field(min_length=1, max_length=128)]] = Field(
         default_factory=list, max_length=16
     )
@@ -202,7 +202,7 @@ class GateView(BaseModel):
     verdict: str
 
 
-class ReportView(BaseModel):
+class SubtaskCostView(BaseModel):
     """What one subtask cost and how long it took."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -218,7 +218,7 @@ class MergedView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     values: dict[str, dict[str, Any]]
-    reports: list[ReportView]
+    reports: list[SubtaskCostView]
     #: The sum of the rows above, never a figure carried beside them.
     total_minor: int
     complete: bool
@@ -226,7 +226,7 @@ class MergedView(BaseModel):
     notice: str
 
 
-class RehearsalView(BaseModel):
+class PlanWeighedView(BaseModel):
     """One rehearsal: what the gate decided and what was merged."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -335,7 +335,7 @@ def merged_view(answer: MergedAnswer, ids: frozenset[str]) -> MergedView:
             key: {k: _plain(v) for k, v in held.items()} for key, held in answer.values.items()
         },
         reports=[
-            ReportView(subtask_id=one.subtask_id, minor=one.minor, seconds=one.seconds)
+            SubtaskCostView(subtask_id=one.subtask_id, minor=one.minor, seconds=one.seconds)
             for one in answer.reports
         ],
         total_minor=answer.total_minor,
@@ -421,10 +421,10 @@ async def decisions(request: Request, asked: Asked) -> DecisionsPage:
 @router.post(
     "/orchestration/rehearsals",
     status_code=201,
-    response_model=RehearsalView,
+    response_model=PlanWeighedView,
     responses=COMMON_RESPONSES,
 )
-async def rehearse(request: Request, body: RehearsalAsked, asked: Asked) -> RehearsalView:
+async def rehearse(request: Request, body: RehearsalAsked, asked: Asked) -> PlanWeighedView:
     """Weigh a plan, keep how the gate decided, and merge what was handed in.
 
     The authority, then the switch, then the plan, in that order: a caller without the authority
@@ -455,7 +455,7 @@ async def rehearse(request: Request, body: RehearsalAsked, asked: Asked) -> Rehe
         verdict=record.verdict.value,
         principal=asked.caller.principal.id,
     )
-    return RehearsalView(
+    return PlanWeighedView(
         run_id=run_id,
         gate=gate_view(record, asked.caller.principal.id),
         merged=merged,
