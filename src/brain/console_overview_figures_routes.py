@@ -69,10 +69,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime
-from typing import Final
+from typing import Annotated, Final
 
 import structlog
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -83,7 +83,9 @@ from brain.console.agent_profile import RUN_SPEND_IS_RECORDED
 from brain.console.agent_tabs import usage_basis
 from brain.console.reads import permitted
 from brain.console.screens import screen
+from brain.console.spend_view import may_read_spend
 from brain.console.workspace import Basis, Range, basis_for, window
+from brain.core.department import SLUG_PATTERN
 from brain.core.errors import Absent, Failed
 from brain.locale import LocaleError
 from brain.locale import currency as install_currency
@@ -91,6 +93,7 @@ from brain.models.pricing import Price
 from brain.ops.price_store import read_prices
 from brain.ops.telemetry import RequestStatus
 from brain.routing_routes import sessions_of
+from brain.tables.identity import PrincipalRow
 from brain.tables.spend import SpendActualRow
 from brain.tables.telemetry import RequestTelemetryRow
 
@@ -173,6 +176,9 @@ class OverviewFiguresView(BaseModel):
     range: str
     since: datetime
     until: datetime
+    #: The department the figures were narrowed to by the reader's own asking, or null for the
+    #: whole of what the reader is counted over (M27.15.17).
+    department: str | None = None
     basis: str
     answered: int
     nothing_returned: int
@@ -188,7 +194,12 @@ def _not_answerable() -> Absent:
 
 
 def request_outcomes(
-    since: datetime, until: datetime, *, basis: Basis, caller_id: str
+    since: datetime,
+    until: datetime,
+    *,
+    basis: Basis,
+    caller_id: str,
+    department: str | None = None,
 ) -> Select[tuple[str, int]]:
     """How many requests ended each way inside the window, the caller's alone on `own`.
 
@@ -201,11 +212,23 @@ def request_outcomes(
     )
     if basis is not Basis.EVERYONE:
         statement = statement.where(RequestTelemetryRow.principal == caller_id)
+    if department is not None:
+        # The people who sit in the department now: a request row carries no department of its own.
+        statement = statement.where(
+            RequestTelemetryRow.principal.in_(
+                select(PrincipalRow.id).where(PrincipalRow.primary_department == department)
+            )
+        )
     return statement.group_by(RequestTelemetryRow.status)
 
 
 def request_cost(
-    since: datetime, until: datetime, *, basis: Basis, caller_id: str
+    since: datetime,
+    until: datetime,
+    *,
+    basis: Basis,
+    caller_id: str,
+    department: str | None = None,
 ) -> Select[tuple[int]]:
     """What the requests finished inside the window cost, the caller's alone on `own`.
 
@@ -218,6 +241,8 @@ def request_cost(
     ).where(SpendActualRow.at >= since, SpendActualRow.at <= until)
     if basis is not Basis.EVERYONE:
         statement = statement.where(SpendActualRow.principal_id == caller_id)
+    if department is not None:
+        statement = statement.where(SpendActualRow.department == department)
     return statement
 
 
@@ -254,7 +279,13 @@ async def cost_recorded_in(
 
 
 async def week_cost(
-    session: AsyncSession, since: datetime, until: datetime, *, basis: Basis, caller_id: str
+    session: AsyncSession,
+    since: datetime,
+    until: datetime,
+    *,
+    basis: Basis,
+    caller_id: str,
+    department: str | None = None,
 ) -> tuple[int | None, str | None, FigureNotRecordedView | None]:
     """The window's cost and its currency, or no figure and the sentence saying why.
 
@@ -264,7 +295,9 @@ async def week_cost(
     if code is None:
         return None, None, unrecorded
     ((summed,),) = (
-        await session.execute(request_cost(since, until, basis=basis, caller_id=caller_id))
+        await session.execute(
+            request_cost(since, until, basis=basis, caller_id=caller_id, department=department)
+        )
     ).all()
     return int(summed), code, None
 
@@ -273,10 +306,24 @@ router = APIRouter(prefix=API_PREFIX, tags=["console"])
 
 
 @router.get(FIGURES_PATH, response_model=OverviewFiguresView, responses=COMMON_RESPONSES)
-async def overview_figures(request: Request, asked: Asked) -> OverviewFiguresView:
-    """Answered, nothing returned and cost over the last seven days, each at the reader's basis."""
+async def overview_figures(
+    request: Request,
+    asked: Asked,
+    range: Annotated[Range, Query(description="The window the figures cover.")] = FIGURES_RANGE,  # noqa: A002
+    department: Annotated[str | None, Query(pattern=SLUG_PATTERN, max_length=64)] = None,
+) -> OverviewFiguresView:
+    """Answered, nothing returned and cost over a window, each at the reader's basis (M27.15.17).
+
+    The window is the front page's four, seven days unless asked. A department narrows the figures
+    to the people who sit in it, and only a reader whose usage grant admits that department may
+    ask: anybody else is answered as for a department that is not there, because a figure for a
+    department the reader may not read is the disclosure the usage grant exists to refuse.
+    """
     if not permitted(screen(OVERVIEW_SCREEN).read, asked.reach, asked.now):
         log.info("overview figures not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    if department is not None and not may_read_spend(department, asked.reach, now=asked.now):
+        log.info("overview figures department not answerable", principal=asked.caller.principal.id)
         raise _not_answerable()
     factory = sessions_of(request)
     if factory is None:
@@ -284,19 +331,24 @@ async def overview_figures(request: Request, asked: Asked) -> OverviewFiguresVie
     caller_id = asked.caller.principal.id
     basis = usage_basis(asked.reach, asked.now)
     cost_basis = basis_for(asked.reach, asked.now)
-    since, until = window(FIGURES_RANGE, asked.now)
+    since, until = window(range, asked.now)
     async with factory() as session:
         rows = (
-            await session.execute(request_outcomes(since, until, basis=basis, caller_id=caller_id))
+            await session.execute(
+                request_outcomes(
+                    since, until, basis=basis, caller_id=caller_id, department=department
+                )
+            )
         ).all()
         cost_minor, currency, unrecorded = await week_cost(
-            session, since, until, basis=cost_basis, caller_id=caller_id
+            session, since, until, basis=cost_basis, caller_id=caller_id, department=department
         )
     ended = {str(status): int(count) for status, count in rows}
     return OverviewFiguresView(
-        range=FIGURES_RANGE.value,
+        range=range.value,
         since=since,
         until=until,
+        department=department,
         basis=basis.value,
         answered=ended.get(RequestStatus.ANSWERED.value, 0),
         nothing_returned=ended.get(RequestStatus.NOTHING_RETURNED.value, 0),

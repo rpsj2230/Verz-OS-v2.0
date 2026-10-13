@@ -465,6 +465,20 @@ export function forgetSession(): void {
 }
 
 /**
+ * Stop, because the API said this account is not linked to anybody here (M27.15.4).
+ *
+ * Forgets the tokens as `forgetSession` does, but lands on `failed` with the API's own sentence and
+ * the names of the people who can link the account, so the person is told once what has to happen
+ * and nothing starts a sign-in again: the guard that reacts to `unknown` is not woken, and the
+ * attempt counter is not what ends this. "Try again" on that screen is the person's own choice.
+ */
+export function refusedAsUnlinked(told: string, administrators: readonly string[]): void {
+  tokens = null;
+  const who = administrators.length === 0 ? "" : ` Ask ${administrators.join(", ")}.`;
+  setState({ status: "failed", message: `${told}${who}` });
+}
+
+/**
  * Leave, and tell Keycloak to end the session rather than only forgetting it here.
  *
  * A local-only sign-out is the bug that looks like a feature: the console forgets the

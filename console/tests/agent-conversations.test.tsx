@@ -5,7 +5,7 @@
  * **Mounted through the application's own route table** and answered by a stand-in API that
  * records every request, as `agent-tools.test.tsx` mounts the tools block.
  *
- * Task ids: M39.8.9
+ * Task ids: M39.8.9, M39.11.1
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -13,10 +13,13 @@ import { render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import {
   NO_CONVERSATIONS,
+  OTHERS_HEADING,
+  OUTCOME_WORDS,
   STATE_NOT_RECORDED,
   STATE_WORDS,
   agentConversationsApiPath,
   readConversations,
+  readOthers,
   relativeWhen,
 } from "../src/pages/agents/AgentConversations";
 import { CONVERSATIONS_TAB, viewAddress, viewFor } from "../src/pages/agents/AgentDetailPage";
@@ -46,8 +49,8 @@ function workspaceWire(): unknown {
   };
 }
 
-function conversationsWire(items: readonly unknown[]): unknown {
-  return { agent_id: AGENT, items };
+function conversationsWire(items: readonly unknown[], extra: Readonly<Record<string, unknown>> = {}): unknown {
+  return { agent_id: AGENT, items, ...extra };
 }
 
 async function sectionOf(conversations: unknown): Promise<HTMLElement> {
@@ -132,5 +135,35 @@ describe("the conversations section", () => {
     const now = new Date("2019-03-06T12:00:00Z");
     expect(relativeWhen("2019-03-06T09:00:00Z", now)).toBe("3 hours ago");
     expect(relativeWhen("2019-03-04T12:00:00Z", now)).toBe("2 days ago");
+  });
+
+  test("the steward is told that other people's conversations happened, with who, when and how, and nothing said", async () => {
+    // What breaks if this is deleted: M39.11.1's page, or a list of other people's conversations
+    // that carried words, or one drawn for a reader the route did not say oversees the agent.
+    const section = await sectionOf(
+      conversationsWire([], {
+        oversees: true,
+        others: [
+          { person: "Priya Nair", started_at: "2019-03-06T09:00:00Z", ended_at: "2019-03-06T09:01:00Z", outcome: "failed" },
+          { person: "Sam Tan", started_at: "2019-03-05T09:00:00Z", ended_at: "2019-03-05T09:01:00Z", outcome: "answered" },
+        ],
+      }),
+    );
+    const others = section.querySelector('[data-slot="others-conversations"]');
+    expect(others?.textContent).toContain(OTHERS_HEADING);
+    const rows = [...(others?.querySelectorAll("li") ?? [])];
+    expect(rows.map((one) => one.getAttribute("data-outcome"))).toEqual(["failed", "answered"]);
+    expect(rows[0]?.textContent).toContain("Priya Nair");
+    expect(rows[0]?.textContent).toContain(OUTCOME_WORDS["failed"]);
+  });
+
+  test("a reader the route does not say oversees the agent is shown no list of other people's conversations", () => {
+    // The sibling: with `oversees` absent or false the answer's `others` are never read.
+    expect(readOthers({ oversees: false, others: [{ person: "x", started_at: "2019-03-06T09:00:00Z", outcome: "failed" }] })).toEqual({
+      oversees: false,
+      others: [],
+    });
+    expect(readOthers({ items: [] }).oversees).toBe(false);
+    expect(Object.keys(OUTCOME_WORDS).sort()).toEqual(["answered", "declined", "failed"]);
   });
 });
