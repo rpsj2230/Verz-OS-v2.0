@@ -472,7 +472,22 @@ class HeldRows:
                 f"its recorder drafted. {THE_RECORDER_DRAFTS_THE_ENTRY_AND_THE_ROW_KEEPS_IT}"
             )
             raise SuspensionStoreError(msg)
+        await self._record_browser_envelope(decided)
         return kept
+
+    async def _record_browser_envelope(self, decided: SuspendedAction) -> None:
+        """A browser run's envelope is approved by this same decision, written in its transaction.
+
+        The envelope row holds the approval the driver reads back at the envelope's own digest, so
+        a decision that moved the card and not the row would leave an approved run that never
+        starts, and one that moved the row and not the card would start a run nobody decided.
+        Imported here because the browsing package imports this store's neighbours.
+        """
+        from brain.browsing.envelope_store import record_decision
+        from brain.browsing.sessions import ACT_ON_SURFACE
+
+        if decided.action.tool.name == ACT_ON_SURFACE.name:
+            await record_decision(self.session, decided)
 
     async def _kept(self, subject: str) -> AuditEntry | None:
         """The newest approval entry about this subject, which the trigger has just appended.

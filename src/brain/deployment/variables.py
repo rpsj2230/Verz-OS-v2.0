@@ -52,7 +52,9 @@ Task ids: M42.1.1, M42.1.2, M42.3.2, M42.5.2, M30.1.4, M30.1.5
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Mapping
+import sys
+from collections.abc import Iterable, Mapping, Sequence
+from pathlib import Path
 from typing import Final
 
 from brain.firstrun import _CREDENTIAL_NAME, _NAMES_A_PLACE, MIN_SECRET_CHARS
@@ -355,3 +357,86 @@ def unminted_secrets(values: Mapping[str, str]) -> tuple[str, ...]:
             "reaches, it reaches everywhere it is accepted"
         )
     return tuple(found)
+
+
+# ------------------------------------------------------------------------- the command line
+#: What the command prints when it is called wrongly.
+USAGE: Final = (
+    "usage: python -m brain.deployment.variables template <install> [NAME=meaning ...]\n"
+    "       python -m brain.deployment.variables check <directory>"
+)
+
+#: The exit statuses a wrapper acts on.
+EXIT_CLEAN: Final = 0
+EXIT_FOUND: Final = 1
+EXIT_USAGE: Final = 2
+
+#: What `check` leaves out of a variables directory, because it is the repository's own.
+NOT_THE_REPOSITORY_S_CONTENT: Final = frozenset({".git"})
+
+
+def check_directory(directory: Path) -> tuple[str, ...]:
+    """Everything wrong with a variables repository checked out at `directory`.
+
+    The repository is read from a directory somebody checked out, never over the network, for the
+    reason in the module docstring. It is the three checks written for it and nothing new: what
+    the repository holds besides install files (`variables_repository_gaps`), a credential set
+    to one value on two installs (`shared_secrets`), and a credential that is set and too short
+    to have been generated (`unminted_secrets`, with the blank ones left out, because a blank
+    credential is what the template emits and the installer mints on the server). Findings name
+    an install and a setting and never a value.
+    """
+    names = sorted(
+        one.name for one in directory.iterdir() if one.name not in NOT_THE_REPOSITORY_S_CONTENT
+    )
+    found = list(variables_repository_gaps(names))
+    installs: dict[str, dict[str, str]] = {}
+    for name in names:
+        if name.endswith(ENV_FILE_SUFFIX) and (directory / name).is_file():
+            installs[name[: -len(ENV_FILE_SUFFIX)]] = parse_env(
+                (directory / name).read_text(encoding="utf-8")
+            )
+    found.extend(shared_secrets(installs))
+    for install, values in sorted(installs.items()):
+        set_only = {name: value for name, value in values.items() if value.strip()}
+        found.extend(f"{install}: {one}" for one in unminted_secrets(set_only))
+    return tuple(found)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Print an install's blank template, or check a variables repository, and say which.
+
+    The two things the module's functions were written to be asked and nothing asked: a person
+    setting up the variables repository for an install runs `template`, and the repository's own
+    job runs `check` on every push. Neither reads the network or the environment.
+    """
+    args = list(sys.argv[1:] if argv is None else argv)
+    if len(args) >= 2 and args[0] == "template":
+        meanings: dict[str, str] = {}
+        for one in args[2:]:
+            name, _, meaning = one.partition("=")
+            meanings[name] = meaning
+        try:
+            print(template_for(args[1], also=meanings), end="")
+        except VariablesError as refused:
+            print(str(refused), file=sys.stderr)
+            return EXIT_USAGE
+        return EXIT_CLEAN
+    if len(args) == 2 and args[0] == "check":
+        where = Path(args[1])
+        if not where.is_dir():
+            print(f"{args[1]} is not a directory", file=sys.stderr)
+            return EXIT_USAGE
+        findings = check_directory(where)
+        for one in findings:
+            print(one)
+        if findings:
+            return EXIT_FOUND
+        print("the variables repository holds install files only, and no credential repeats")
+        return EXIT_CLEAN
+    print(USAGE, file=sys.stderr)
+    return EXIT_USAGE
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
