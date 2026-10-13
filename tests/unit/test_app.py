@@ -27,6 +27,7 @@ from brain.app import TRACE_ID_RE, Settings, create_app
 from brain.channels.widget import WidgetConfigurationError
 from brain.core.errors import Absent, Degraded, Denied, Unresolved
 from brain.ops.release_manifest import ReleaseManifest
+from brain.tools.skill_tools import INSTRUCTIONS_TOOL
 from brain.tools.website_check import WEBSITE_CHECK_TOOL
 
 
@@ -620,11 +621,12 @@ def test_readiness_says_the_same_thing_whether_the_catalogue_can_answer_or_not()
         assert body["checks"]["tools"] is True
 
         had_a_source = app.state.db_sessions is not None
-        # The row-backed tools, which is every tool but the website check: that one reads a
-        # site rather than a row, so it is registered with or without a database (see the test
-        # below), and counting it here made this test red on every machine with no database
-        # from the day it was added.
-        reads_rows = set(app.state.tools.names()) - {WEBSITE_CHECK_TOOL}
+        # The row-backed tools, which is every tool but the two that read no row: the website
+        # check reads a site, and the skill instructions tool reads what a run was offered, so
+        # both are registered with or without a database (see the test below), and counting
+        # the first here made this test red on every machine with no database from the day it
+        # was added.
+        reads_rows = set(app.state.tools.names()) - {WEBSITE_CHECK_TOOL, INSTRUCTIONS_TOOL}
         assert bool(reads_rows) is had_a_source, (
             "the catalogue no longer follows whether a row source was available, so either a "
             "tool is registered with nothing to read or a source was passed and dropped"
@@ -635,20 +637,21 @@ def test_readiness_says_the_same_thing_whether_the_catalogue_can_answer_or_not()
 def test_a_tool_that_reads_no_rows_is_registered_with_no_database(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The website check is in the catalogue on an install with no database at all.
+    """The website check and the skill instructions tool are in the catalogue with no database.
 
-    It reads a site over HTTPS, not a row, so whether a row source exists has nothing to say about
-    it. The test above holds the row tools to the database and this holds the one tool that is not
-    a row tool to being there anyway, so the two together pin the line between them. Delete this
-    and the website check could be gated on a database it never reads, and a lite install would
-    lose it with readiness still green.
+    One reads a site over HTTPS and the other what a run was offered, neither a row, so whether a
+    row source exists has nothing to say about them. The test above holds the row tools to the
+    database and this holds the tools that are not row tools to being there anyway, so the two
+    together pin the line between them. The script tool is not among them: it is registered only
+    where an install runs a sandbox. Delete this and either could be gated on a database it never
+    reads, and a lite install would lose it with readiness still green.
     """
     for name in ("DATABASE_URL", "BRAIN_DATABASE_URL"):
         monkeypatch.delenv(name, raising=False)
     app = create_app(Settings(env="development", commit_sha="abc1234"))
     with TestClient(app):
         assert app.state.db_sessions is None
-        assert app.state.tools.names() == (WEBSITE_CHECK_TOOL,)
+        assert app.state.tools.names() == (INSTRUCTIONS_TOOL, WEBSITE_CHECK_TOOL)
 
 
 def test_the_gap_between_a_valid_catalogue_and_a_useful_one_is_written_down() -> None:
