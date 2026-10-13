@@ -159,6 +159,9 @@ class StoredItem:
     review_by: datetime | None = None
     supersedes: str = ""
     added_at: datetime | None = None
+    #: How it came onto the install: `file`, `link`, or empty when nothing recorded it (every
+    #: document added before `0226`). Never guessed from the text. See `brain.knowledge.item`.
+    arrived_as: str = ""
 
     @property
     def is_retrievable(self) -> bool:

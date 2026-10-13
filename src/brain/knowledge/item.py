@@ -43,10 +43,18 @@ the clock passes it and is then a control that is silently off; the state is der
 architecture for the reason it is rejected here: one person curating everything is one
 person doing nothing, so stewardship is per object.
 
+**How a document arrived, and from where, is recorded since `0226`, and never guessed.** A
+document added as a file records `file`; one added from a link records `link` and the address the
+person gave, which is what lets a person ask for the page to be fetched again. Every document
+added before that records neither, and a list says so rather than reading its text to guess: the
+first line of a link's text is its address, but a file may begin with anything. The address is
+kept on the row for the refetch and is never returned by a list, because a share link carries a
+token (`brain.api_routes.A_QUESTION_IN_A_URL_IS_A_QUESTION_IN_EVERY_LOG`).
+
 The record here is the domain shape only. No SQLAlchemy model and no migration is written
 in this package, the same division `brain.core.department` draws for its own table shapes.
 
-Task ids: M7.4.1, M7.4.5, M7.4.6, M7.4.7, M7.6.1
+Task ids: M7.4.1, M7.4.5, M7.4.6, M7.4.7, M7.6.1, M39.9.1.5
 """
 
 from __future__ import annotations
@@ -103,6 +111,16 @@ class KnowledgeState(enum.StrEnum):
     ARCHIVED = "archived"
 
 
+#: How a document arrived. Empty when nothing recorded it, which is every document added before
+#: `0226`, and which no code replaces with a guess.
+ARRIVED_AS_FILE: Final = "file"
+ARRIVED_AS_LINK: Final = "link"
+ARRIVALS: Final = frozenset({ARRIVED_AS_FILE, ARRIVED_AS_LINK})
+
+#: The longest address a link may be stored under, which is the longest the link door accepts.
+MAX_SOURCE_URL_CHARS: Final = 2048
+
+
 #: The states an item may be retrieved from. Written out rather than expressed as "not
 #: superseded and not archived", so that adding a fifth state is a decision somebody makes
 #: here rather than a silent inclusion in retrieval.
@@ -144,6 +162,10 @@ class KnowledgeItem(BaseModel):
     #: path that predates kinds or chooses none, which is the connector leg; a default of some
     #: real kind was rejected, because it would be a classification nobody made.
     kind: KnowledgeKind | None = None
+    #: `file` or `link`, or empty when nothing recorded how it arrived (M39.9.1.5).
+    arrived_as: str = Field(default="", max_length=8)
+    #: The address a link was added from, so a person can ask for it again. Only a link has one.
+    source_url: str = Field(default="", max_length=MAX_SOURCE_URL_CHARS)
 
     @field_validator("verified_at", "review_by")
     @classmethod
@@ -160,6 +182,15 @@ class KnowledgeItem(BaseModel):
         return v
 
     def model_post_init(self, _context: object, /) -> None:
+        if self.arrived_as and self.arrived_as not in ARRIVALS:
+            msg = (
+                f"{self.item_id!r} arrived as {self.arrived_as!r}, "
+                "which is neither a file nor a link"
+            )
+            raise ValueError(msg)
+        if self.source_url and self.arrived_as != ARRIVED_AS_LINK:
+            msg = f"{self.item_id!r} names an address and did not arrive as a link"
+            raise ValueError(msg)
         if bool(self.verified_by) != (self.verified_at is not None):
             # Half a verification is worse than none: it renders as verified while naming
             # nobody, or names somebody without saying when, and the badge looks authoritative

@@ -81,6 +81,7 @@ def item(
     verified: bool = False,
     review_by: datetime | None = None,
     owner: str = "u_steward",
+    arrived_as: str = "",
 ) -> StoredItem:
     return StoredItem(
         item_id=item_id,
@@ -95,6 +96,7 @@ def item(
         verified_at=LONG_AGO if verified else None,
         review_by=review_by,
         added_at=LONG_AGO - timedelta(days=added),
+        arrived_as=arrived_as,
     )
 
 
@@ -300,3 +302,52 @@ def test_an_agent_whose_rule_reaches_nothing_is_still_answered_with_its_rule_and
     body = AgentKnowledgeView.model_validate(knowledge(client, "u_admin").json())
     assert (body.items, body.more, body.unread) == ([], False, "")
     assert [(one.field, one.value) for one in body.rule] == [("department", "web")]
+
+
+def test_a_document_says_how_it_arrived_only_where_that_was_recorded_and_never_guesses(
+    served: tuple[TestClient, Stub], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A file reads `file`, a link `link` and a document that recorded nothing `unknown`, and the
+    list sends no address for any of them. Delete this and a list can call an old document a link
+    from what its text begins with, or carry the address a share link keeps its token in."""
+    client, _ = served
+    stock(
+        monkeypatch,
+        [
+            item("a_file", added=1, arrived_as="file"),
+            item("a_link", added=2, arrived_as="link"),
+            item("an_old_one", added=3),
+        ],
+    )
+    sent = knowledge(client, "u_admin").json()
+    by_id = {one["item_id"]: one for one in sent["items"]}
+    assert {name: one["arrived_as"] for name, one in by_id.items()} == {
+        "a_file": "file",
+        "a_link": "link",
+        "an_old_one": "unknown",
+    }
+    assert not any("url" in name or "address" in name for one in by_id.values() for name in one)
+
+
+def test_retiring_is_offered_for_a_document_the_reader_may_act_on_and_a_fetch_only_for_a_link(
+    served: tuple[TestClient, Stub], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A document the reader administers is retirable, and only a link is offered a fetch. The
+    refusal side, a reader who may not act on it, is `test_agent_knowledge_finish_db`'s, against the
+    real policy. Delete this and the page offers a fetch for a file that has no address to fetch."""
+    client, _ = served
+    stock(
+        monkeypatch,
+        [
+            item("a_link", added=1, arrived_as="link"),
+            item("a_file", added=2, arrived_as="file"),
+            item("an_old_one", added=3),
+        ],
+    )
+    by_id = {
+        one.item_id: one
+        for one in AgentKnowledgeView.model_validate(knowledge(client, "u_admin").json()).items
+    }
+    assert (by_id["a_link"].can_retire, by_id["a_link"].can_refetch) == (True, True)
+    assert (by_id["a_file"].can_retire, by_id["a_file"].can_refetch) == (True, False)
+    assert (by_id["an_old_one"].can_retire, by_id["an_old_one"].can_refetch) == (True, False)

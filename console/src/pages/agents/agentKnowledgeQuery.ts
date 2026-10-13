@@ -9,7 +9,7 @@
  * second request and never a pass over a list the browser holds, and `more` says only that a page
  * is full.
  *
- * Task ids: M39.9.1.1, M39.9.1.6
+ * Task ids: M39.9.1.5, M39.9.1.1, M39.9.1.6
  */
 
 import { UPLOADS_API_PATH, uploadPath, type UploadLevel } from "../knowledgeQuery";
@@ -36,6 +36,19 @@ export function agentKnowledgeLinkApiPath(agentId: string): string {
   return `/agents/${encodeURIComponent(agentId)}/knowledge/links`;
 }
 
+/** Where one document is retired from this section: the Knowledge page's own archive, behind it. */
+export function agentKnowledgeRetireApiPath(agentId: string, itemId: string): string {
+  return `/agents/${encodeURIComponent(agentId)}/knowledge/${encodeURIComponent(itemId)}/retire`;
+}
+
+/** Where a link is fetched again, when a person asks. The address is the one recorded, never sent. */
+export function agentKnowledgeRefetchApiPath(agentId: string, itemId: string): string {
+  return `/agents/${encodeURIComponent(agentId)}/knowledge/${encodeURIComponent(itemId)}/refetch`;
+}
+
+/** How a document came onto the install, as the row recorded it. `unknown` is never a guess. */
+export type Arrival = "file" | "link" | "unknown";
+
 export interface KnowledgeItem {
   readonly itemId: string;
   readonly title: string;
@@ -50,6 +63,11 @@ export interface KnowledgeItem {
   readonly verifiedAt?: string;
   readonly reviewBy?: string;
   readonly due: boolean;
+  readonly arrivedAs: Arrival;
+  /** Whether this reader may retire it, as the Knowledge page decides who may act on a document. */
+  readonly canRetire: boolean;
+  /** Whether it is a link this reader may ask to be fetched again. */
+  readonly canRefetch: boolean;
   readonly reached: boolean;
 }
 
@@ -117,6 +135,11 @@ export function readKnowledgeItem(one: Fields): KnowledgeItem | null {
     ...optional("verifiedAt", said(one["verified_at"])),
     ...optional("reviewBy", said(one["review_by"])),
     due: one["due"] === true,
+    // Anything but the two recorded words is unknown, so a body that says something else, or
+    // nothing, is drawn as not recorded and never as a file or a link.
+    arrivedAs: one["arrived_as"] === "file" || one["arrived_as"] === "link" ? one["arrived_as"] : "unknown",
+    canRetire: one["can_retire"] === true,
+    canRefetch: one["can_refetch"] === true,
     // Absent means reached: the list is the documents the rule reaches, so a body that omits the
     // field is the list's own contract and not a document left out.
     reached: one["reached"] !== false,

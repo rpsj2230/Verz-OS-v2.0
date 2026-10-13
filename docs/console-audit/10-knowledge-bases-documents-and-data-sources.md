@@ -3,7 +3,7 @@
 - **Screens:** `/library`, `/library/:itemId`, `/library/:itemId/:view`, `/solutions`, `/corrections`, `/learning`, `/learning/:view`, `/memory`, `/memory/:subject`, `/memory/:subject/:view`, `/me/undo/:memoryId`, `/records`, `/records/:entity`, `/classification`, `/classification/:entity`, `/classification/:entity/:column`, `/duplicates`, `/rules`, `/artifacts`
 - **Tables:** `know.item`, `know.chunk`, `know.steward_task`, `know.solution`, `know.learning_candidate`, `know.candidate_evidence`, `mem.learned_rule`, `mem.rule_occurrence`, `mem.adaptive`, `mem.persistent`, `mem.learning`, `mem.correction`, `gate.fast_path_rule`, `gate.field_policy`, `agent.artifact`, `agent.artifact_change`, `know.classified_table`, `know.classified_row`, `er.review_item`, `er.merge`, `er.unmerge`, `er.observation`, `er.blocked_value`
 - **Installation values:** `INSTALL_VECTOR_STORE`, `INSTALL_EMBEDDING_REVISION`, `INSTALL_KNOWLEDGE_SCANNER`, `INSTALL_CLAMAV_ADDRESS`
-- **Measured here:** 52 routes, 7 called by no screen; 28 write routes, 28 with all three proofs; 7 gaps.
+- **Measured here:** 53 routes, 8 called by no screen; 28 write routes, 28 with all three proofs; 7 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -35,6 +35,7 @@
 | `POST /api/v1/classifications/{entity}/columns/{column}/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
 | `POST /api/v1/govern/learning/undo` | `/agents/:agentId`, `/agents/:agentId/:tab`, `/learning`, `/learning/:view` |
 | `POST /api/v1/knowledge/corrections/{candidate_id}/decision` | `/corrections` |
+| `POST /api/v1/knowledge/items/{item_id}/archive` | **no screen** |
 | `POST /api/v1/knowledge/items/{item_id}/promotion` | `/library/:itemId`, `/library/:itemId/:view` |
 | `POST /api/v1/knowledge/items/{item_id}/steward` | `/library/:itemId`, `/library/:itemId/:view` |
 | `POST /api/v1/knowledge/items/{item_id}/verification` | `/library/:itemId`, `/library/:itemId/:view` |

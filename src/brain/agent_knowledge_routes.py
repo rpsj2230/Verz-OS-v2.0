@@ -31,11 +31,13 @@ only where it names them.** A second reading of a review date is a document that
 screen and current on another, and a verifier named to a reader the badge withholds them from is a
 person disclosed by a list.
 
-**What an item was added by is its steward.** `know.item` records who answers for a document and
-when it was created, and nothing about whether it arrived as a file or as a link: the page's
-address is the first line of its text, which a list does not read. So `place` says where the
-document sits, which is what a person asks next, and the way it arrived is left out rather than
-guessed. See `NO_SOURCE_IS_RECORDED_BESIDE_AN_ITEM_SO_NONE_IS_INVENTED`.
+**What an item was added by is its steward, and how it arrived is shown only where it was
+recorded.** `know.item` has recorded since `0226` whether a document arrived as a file or as a
+link, and for a link the address. A document added before that records neither, so the list says
+`unknown` for it rather than reading its text to guess: the first line of a link's text is its
+address, but a file may begin with anything. See
+`A_WAY_OF_ARRIVING_IS_SHOWN_ONLY_WHERE_IT_WAS_RECORDED`. The address itself is never in a list,
+because a share link carries a token.
 
 **Adding from this page is the Knowledge page's own door, called, not copied.** The two routes
 here check that the reader may open the section, then call `brain.knowledge_routes.upload` and
@@ -50,19 +52,37 @@ where the rule already reaches. **Nothing is added to the agent's reach by the a
 (`brain.console.agent_tabs.ADDING_AN_ITEM_IS_NOT_THE_SAME_AS_REACHING_IT`): an item outside the
 rule is the company's document and stays unreached until a person changes the rule.
 
-Task ids: M39.9.1.1, M39.9.1.2, M39.9.1.3, M39.9.1.4, M39.9.1.6
+**Retiring and fetching again are the Knowledge page's acts, offered here and not copied.** A
+document is the company's and not the agent's, so retiring one withdraws it for every agent and
+every person at once, which is the Knowledge page's own archive
+(`knowledge_lifecycle_routes.archive`, decided by `Authority.may_act`, written by `0220`'s
+function) and is called here, never rewritten. It stops being drawn on in the transaction that
+archives it, because retrieval reads only the states in
+`brain.knowledge.item.RETRIEVABLE_STATES`. **A link is fetched again only when a person asks**: the
+route takes the address recorded when it was added, runs it through the link door's own fetch (the
+address rule on every redirect hop, the same transport, the same scan and parse) and writes what it
+read as a newer version through `knowledge_lifecycle_routes.write_successor`, the one place a
+version is superseded. Nothing here schedules it, polls an address or follows a link on the page.
+See `A_LINK_IS_FETCHED_AGAIN_ONLY_WHEN_A_PERSON_ASKS`. Both are refused, in the one sentence an
+absent document gets, for whoever may not act on the document, and for a document this agent does
+not draw on.
+
+Task ids: M39.9.1.5, M39.9.1.1, M39.9.1.2, M39.9.1.3, M39.9.1.4, M39.9.1.6
 """
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from typing import Annotated, Final
 
 import structlog
-from fastapi import APIRouter, Body, Query, Request
+from fastapi import APIRouter, Body, Path, Query, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import AwareDatetime, BaseModel, ConfigDict
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from brain import knowledge_intake_routes
 from brain.agent_capability_routes import knowledge_item_of, knowledge_scope_of, reader_stored_items
 from brain.agent_routes import _no_agent_here, _require_session_factory, _visible_record
 from brain.agents.model import AgentRecord
@@ -72,14 +92,48 @@ from brain.console.agent_tabs import AddRoute, plan_addition
 from brain.console.reads import permitted
 from brain.console.workspace import Tab, tab
 from brain.console.workspace_capabilities import KnowledgeScope, item_row, matching
+from brain.core.errors import Absent
 from brain.core.scope import Clause, Op, Scope
+from brain.knowledge.ingest import IngestRefused, ParseFailure
+from brain.knowledge.item import ARRIVED_AS_LINK, ITEM_ID_PATTERN
 from brain.knowledge.kinds import KIND_LABELS, KnowledgeKind
-from brain.knowledge.lifecycle import Authority, StoredItem, authority_for
-from brain.knowledge.lifecycle_store import as_person, live_item, names_of
+from brain.knowledge.lifecycle import (
+    NOT_OFFERED,
+    Authority,
+    LifecycleError,
+    StoredItem,
+    authority_for,
+    successor_place,
+)
+from brain.knowledge.lifecycle_store import (
+    as_person,
+    live_item,
+    names_of,
+    source_url_of,
+    versions,
+)
+from brain.knowledge.uploads import OfferedAsATable, receive_page
 from brain.knowledge.verification import disclose
 from brain.knowledge.visibility import Visibility
-from brain.knowledge_intake_routes import LinkAsked, add_link
-from brain.knowledge_routes import UPLOAD_RESPONSES, UploadedView, live_departments, upload
+from brain.knowledge_intake_routes import LinkAsked, add_link, read_link_for
+from brain.knowledge_lifecycle_routes import (
+    LIFECYCLE_RESPONSES,
+    VersionAddedView,
+    archive,
+    in_transaction,
+    refused,
+    write_successor,
+)
+from brain.knowledge_routes import (
+    OFFERED_AS_A_TABLE,
+    UPLOAD_RESPONSES,
+    UploadedView,
+    give_back,
+    live_departments,
+    take_reading_slot,
+    too_busy,
+    upload,
+)
 
 log = structlog.get_logger()
 
@@ -92,11 +146,20 @@ A_SECTION_LISTS_THE_COMPANYS_DOCUMENTS_AND_KEEPS_NONE: Final = (
     "not open anywhere else, and a document added from this page is the company's like any other."
 )
 
-#: Why no way of arriving is shown beside an item.
-NO_SOURCE_IS_RECORDED_BESIDE_AN_ITEM_SO_NONE_IS_INVENTED: Final = (
-    "A document's row records its steward, its place and when it was made, and not whether it "
-    "arrived as a file or as a link, so the list says where it sits and leaves the way it arrived "
-    "out rather than reading its text to guess."
+#: Why a way of arriving is shown only where it was recorded.
+A_WAY_OF_ARRIVING_IS_SHOWN_ONLY_WHERE_IT_WAS_RECORDED: Final = (
+    "A document's row records whether it arrived as a file or as a link only from the release that "
+    "added the columns. A document added earlier is listed as unknown, because the only other "
+    "evidence is its text, and a list that read the text to guess would call a file that begins "
+    "with an address a link and offer to fetch what was never fetched."
+)
+
+#: Why a refetch is a person's act and nothing else.
+A_LINK_IS_FETCHED_AGAIN_ONLY_WHEN_A_PERSON_ASKS: Final = (
+    "A link added from the Knowledge section is fetched again only when a person asks for it. "
+    "Nothing schedules it, nothing polls the address, and a page the link points at is never "
+    "followed further: the document is a snapshot with a date, and a newer snapshot is a newer "
+    "version a person asked for and may refuse."
 )
 
 #: What the section says when the agent's rule is not about where documents sit.
@@ -116,6 +179,23 @@ THE_AGENT_DOES_NOT_DRAW_ON_WHAT_WAS_ADDED: Final = (
     "through a draft. Nothing about any other agent has changed."
 )
 
+#: What a person who retired a document is told.
+THE_DOCUMENT_IS_RETIRED_FOR_EVERY_AGENT: Final = (
+    "Retired. No agent draws on it now, and it stays on file with its history."
+)
+
+#: What they are told when there is no address on record to fetch again.
+THERE_IS_NO_ADDRESS_TO_FETCH_AGAIN: Final = (
+    "This document was not added from a link, or was added before the address was recorded, so "
+    "there is nothing to fetch again. Add the page again from its link, or add a newer version as "
+    "a file."
+)
+
+#: What they are told when the page has not changed since it was last fetched.
+THE_PAGE_HAS_NOT_CHANGED: Final = (
+    "The page has not changed since it was last fetched, so there is no newer version to add."
+)
+
 #: What they are told when the rule is not about where documents sit, so reaching cannot be said.
 THE_AGENT_CANNOT_SAY_WHAT_IT_REACHES: Final = (
     "Added to the company's documents. This agent's rule is not about where documents sit, so "
@@ -126,6 +206,11 @@ THE_AGENT_CANNOT_SAY_WHAT_IT_REACHES: Final = (
 KNOWLEDGE_PATH: Final = "/agents/{agent_id}/knowledge"
 UPLOAD_PATH: Final = "/agents/{agent_id}/knowledge/uploads"
 LINK_PATH: Final = "/agents/{agent_id}/knowledge/links"
+RETIRE_PATH: Final = "/agents/{agent_id}/knowledge/{item_id}/retire"
+REFETCH_PATH: Final = "/agents/{agent_id}/knowledge/{item_id}/refetch"
+
+#: What a list says for a document that records no way of arriving.
+ARRIVED_UNKNOWN: Final = "unknown"
 
 #: The most items one page carries, and how many when nothing asked for fewer. Resource bounds
 #: applied after the narrowing, so raising them discloses nothing.
@@ -172,6 +257,13 @@ class AgentKnowledgeItemView(BaseModel):
     review_by: datetime | None = None
     #: Whether its review date has arrived.
     due: bool = False
+    #: `file`, `link` or `unknown`, from what the row recorded and never from its text.
+    arrived_as: str = ARRIVED_UNKNOWN
+    #: Whether this reader may retire it: the Knowledge page's own answer, `Authority.may_act`.
+    can_retire: bool = False
+    #: Whether this reader may ask for the page to be fetched again: it arrived as a link and they
+    #: may act on it.
+    can_refetch: bool = False
     #: Whether this agent's rule reaches it. Every listed item is reached; the field is the
     #: contract the add answer shares, so the page draws one shape for both.
     reached: bool = True
@@ -243,7 +335,9 @@ def place_of(item: StoredItem) -> str:
     return item.visibility.department or COMPANY_PLACE
 
 
-def item_view(one: StoredItem, *, asked: Asking, names: dict[str, str]) -> AgentKnowledgeItemView:
+def item_view(
+    one: StoredItem, *, asked: Asking, names: dict[str, str], may_act: bool = False
+) -> AgentKnowledgeItemView:
     """One document as this reader is shown it: the badge as they may be told it, never the text."""
     shown = disclose(one, reader=asked.reach, now=asked.now)
     named = shown.verified_by
@@ -262,6 +356,9 @@ def item_view(one: StoredItem, *, asked: Asking, names: dict[str, str]) -> Agent
         verified_at=shown.verified_at,
         review_by=one.review_by,
         due=one.review_by is not None and one.review_by <= asked.now and one.is_retrievable,
+        arrived_as=one.arrived_as or ARRIVED_UNKNOWN,
+        can_retire=may_act,
+        can_refetch=may_act and one.arrived_as == ARRIVED_AS_LINK,
     )
 
 
@@ -385,7 +482,9 @@ async def agent_knowledge(
         )
     return AgentKnowledgeView(
         agent_id=agent_id,
-        items=[item_view(one, asked=asked, names=names) for one in page],
+        items=[
+            item_view(one, asked=asked, names=names, may_act=authority.may_act(one)) for one in page
+        ],
         rule=[
             KnowledgeClauseView(field=clause.field, op=clause.op.value, value=str(clause.value))
             for clause in scope.predicate.clauses
@@ -443,3 +542,157 @@ async def add_link_for_agent(
         scope=knowledge_scope_of(record),
         item=await added_item(request, asked, done.item_id),
     )
+
+
+# ------------------------------------------------------------- retiring and fetching again
+class KnowledgeRetiredView(BaseModel):
+    """What retiring one document answers: which one, and what that means for every agent."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    item_id: str
+    title: str
+    said: str = THE_DOCUMENT_IS_RETIRED_FOR_EVERY_AGENT
+
+
+class RefetchAsked(BaseModel):
+    """What fetching a link again needs of the person: the new version's review date.
+
+    The address is not in it. It is the one recorded when the link was added, so a caller cannot
+    point a refetch at a different address than the document came from.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    review_by: AwareDatetime
+
+
+async def drawn_on_by(
+    request: Request, agent_id: str, item_id: str, asked: Asking
+) -> tuple[Authority, StoredItem]:
+    """The document, when this reader may act on it and this agent's section lists it.
+
+    Absent, in the sentence an act on a document the reader may not touch gets, for a document that
+    does not exist, one they may not act on and one this agent does not draw on, so retiring or
+    fetching again through an agent's page is never a way to learn that a document exists.
+    """
+    record = await answerable_agent(request, agent_id, asked)
+    scope = knowledge_scope_of(record)
+    factory = _require_session_factory(request)
+    authority, seen, _ = await reader_stored_items(factory, asked.reach, asked.now)
+    if scope is None:
+        raise Absent(NOT_OFFERED)
+    listed = frozenset(
+        one.item_id for one in matching(scope, [knowledge_item_of(one) for one in seen])
+    )
+    found = next((one for one in seen if one.item_id == item_id), None)
+    if found is None or found.item_id not in listed or not authority.may_act(found):
+        raise Absent(NOT_OFFERED)
+    return authority, found
+
+
+@router.post(RETIRE_PATH, response_model=KnowledgeRetiredView, responses=LIFECYCLE_RESPONSES)
+async def retire_for_agent(
+    request: Request,
+    agent_id: str,
+    item_id: Annotated[str, Path(pattern=ITEM_ID_PATTERN)],
+    asked: Asked,
+) -> KnowledgeRetiredView | JSONResponse:
+    """Retire one document this agent draws on, through the Knowledge page's own archive.
+
+    The document is withdrawn for every agent and every person, kept on file with its history, and
+    no longer drawn on from the transaction that archives it.
+    """
+    _, found = await drawn_on_by(request, agent_id, item_id, asked)
+    done = await archive(request, asked, item_id)
+    if isinstance(done, JSONResponse):
+        return done
+    log.info("agent knowledge retired", agent=agent_id, item=item_id)
+    return KnowledgeRetiredView(item_id=item_id, title=found.title or item_id)
+
+
+@router.post(
+    REFETCH_PATH,
+    status_code=201,
+    response_model=VersionAddedView,
+    responses=LIFECYCLE_RESPONSES,
+)
+async def refetch_for_agent(
+    request: Request,
+    agent_id: str,
+    item_id: Annotated[str, Path(pattern=ITEM_ID_PATTERN)],
+    asked: Asked,
+    body: Annotated[RefetchAsked, Body()],
+) -> VersionAddedView | JSONResponse:
+    """Fetch the page a link was added from once more, as a newer version, because a person asked.
+
+    See `A_LINK_IS_FETCHED_AGAIN_ONLY_WHEN_A_PERSON_ASKS`. The address is the one recorded when the
+    link was added, through the link door's own fetch.
+    """
+    authority, found = await drawn_on_by(request, agent_id, item_id, asked)
+    if body.review_by <= asked.now:
+        return refused("review_by", "not_ahead", "the new version's review date has to be ahead")
+    if found.kind is None:
+        return refused("kind", "no_kind", "choose what kind of document the new version is")
+    address = ""
+    if found.arrived_as == ARRIVED_AS_LINK:
+
+        async def recorded(session: AsyncSession) -> str:
+            return await source_url_of(session, item_id)
+
+        address = await in_transaction(request, asked, authority, recorded)
+    if not address:
+        return refused("item", "no_address", THERE_IS_NO_ADDRESS_TO_FETCH_AGAIN)
+    try:
+        placement = successor_place(found)
+    except LifecycleError as exc:
+        return refused("item", "no_new_version", str(exc))
+    try:
+        page = await asyncio.to_thread(
+            receive_page,
+            address,
+            # Looked up on the module at the call, as the link door looks them up, so the one
+            # transport and the one resolver are the link door's and a stand-in is stood in once.
+            fetcher=knowledge_intake_routes.make_fetcher(),
+            resolver=knowledge_intake_routes.make_resolver(),
+        )
+    except OfferedAsATable as exc:
+        return refused("url", OFFERED_AS_A_TABLE, str(exc))
+    except IngestRefused as exc:
+        return refused("url", "not_added", str(exc))
+    ledger, taken = await take_reading_slot(request, now=asked.now)
+    if not taken.admitted:
+        return too_busy(taken.decision, field="url")
+    try:
+        read = await asyncio.to_thread(
+            read_link_for,
+            page,
+            kind=found.kind,
+            placement=placement,
+            owner_id=found.owner_id,
+            taken_on=asked.now.date(),
+        )
+    except OfferedAsATable as exc:
+        return refused("url", OFFERED_AS_A_TABLE, str(exc))
+    except IngestRefused as exc:
+        return refused("url", "not_added", str(exc))
+    finally:
+        await give_back(ledger, taken)
+    if isinstance(read, ParseFailure):
+        return refused("url", read.cause.value, read.message())
+    chain = await in_transaction(
+        request, asked, authority, lambda session: versions(session, item_id)
+    )
+    done = await write_successor(
+        request,
+        asked,
+        authority,
+        found,
+        chain,
+        read,
+        body.review_by,
+        already=THE_PAGE_HAS_NOT_CHANGED,
+    )
+    if not isinstance(done, JSONResponse):
+        log.info("agent knowledge fetched again", agent=agent_id, item=done.item_id)
+    return done
