@@ -330,6 +330,10 @@ from brain.log_routes import router as log_router
 # Gated on the member grant. See `brain.member_preference_routes`.
 from brain.member_preference_routes import router as member_preference_router
 
+# A member's artifacts handed to colleagues, and what was handed to them. Gated on the member grant.
+# See `brain.member_share_routes`.
+from brain.member_share_routes import router as member_share_router
+
 # My workspace, the member screen `home`: what the person asking has asked, kept and been
 # given, gated on the member grant and on nothing administrative. See `brain.mine_routes`.
 from brain.mine_routes import router as mine_router
