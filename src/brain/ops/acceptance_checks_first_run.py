@@ -19,7 +19,7 @@ product is here.
 Rejected: posting to the running application. The check runs in the worker, which serves nothing,
 and an HTTP client from a worker to its own application is a second thing to be down.
 
-Task ids: M42.5.3, M42.5.4, M42.5.10, M42.5.11, M42.5.13
+Task ids: M42.5.3, M42.5.4, M42.5.10, M42.5.11, M42.5.13, M42.5.8, M42.6.2
 """
 
 from __future__ import annotations
@@ -261,3 +261,80 @@ async def a_closed_wizard_answers_as_a_path_that_does_not_exist(h: Harness) -> N
     opened = await appointed(_NobodyYet(), with_enrolment=True)
     if not opened.problems or opened.principal_id:
         raise CheckFailedError("an open wizard did not say what was wrong with an empty answer")
+
+
+# ------------------------------------------------------ what the wizard left on this install
+#: Said when this install holds no value the wizard collects.
+NO_WIZARD_VALUES_HERE: Final = (
+    "this install holds none of the values the setup wizard collects in its settings, so it was "
+    "not set up through the wizard and what the wizard writes cannot be read back"
+)
+
+#: Said when no secrets vault is named.
+NO_VAULT_NAMED: Final = (
+    "this install names no secrets vault address or token, so no provider key can be held in one"
+)
+
+#: Said when the vault cannot be read as open.
+THE_VAULT_IS_NOT_OPEN_HERE: Final = (
+    "the secrets vault is not open to this process, so which provider keys it holds is unknown"
+)
+
+#: Said when no provider key is held, which a hosted install cannot answer without.
+NO_PROVIDER_KEY_HELD: Final = (
+    "no model provider key is held in the vault yet, which the hosted profile needs before it can "
+    "answer; enter one in the setup wizard or on the models screen"
+)
+
+
+@check(
+    leaves=("M42.6.2",),
+    sentence=(
+        "Every required value the setup wizard collects is held in this install's own settings "
+        "table and not only in its environment, so a first install needs no hand-edited "
+        "environment file for what the wizard asks."
+    ),
+)
+async def the_wizard_s_values_are_held_in_the_install_s_settings(h: Harness) -> None:
+    from brain.ops.install_settings import load
+    from brain.setup_wizard import WIZARD
+
+    asked = {one.setting for step in WIZARD for one in step.questions if one.setting}
+    required = {
+        one.setting for step in WIZARD for one in step.questions if one.setting and one.required
+    }
+    async with h.sessions() as session:
+        held = {name for name, value in (await load(session)).items() if value and name in asked}
+    if not held:
+        from brain.ops.acceptance import CheckNotRunError
+
+        raise CheckNotRunError(NO_WIZARD_VALUES_HERE)
+    if required - held:
+        raise CheckFailedError(
+            "a value the setup wizard requires is not held in this install's settings"
+        )
+
+
+@check(
+    leaves=("M42.5.8",),
+    sentence=(
+        "The install's secrets vault is open and holds at least one model provider's key in a "
+        "slot of its own, which is where the setup wizard keeps the key it is given and not "
+        "somewhere set beside the server first. The key is never read."
+    ),
+)
+async def a_provider_key_the_wizard_was_given_is_held_in_the_vault(h: Harness) -> None:
+    import asyncio
+
+    from brain.ops.acceptance import CheckNotRunError
+    from brain.ops.openbao import OpenBaoVault
+    from brain.ops.vault_status import Seal, SlotState, report
+
+    address, token = h.settings.vault_address, h.settings.vault_token
+    if not (address and token):
+        raise CheckNotRunError(NO_VAULT_NAMED)
+    vault = await asyncio.to_thread(lambda: report(OpenBaoVault(address, token)))
+    if vault.seal is not Seal.OPEN:
+        raise CheckNotRunError(THE_VAULT_IS_NOT_OPEN_HERE)
+    if not any(one.state is SlotState.HELD for one in vault.providers):
+        raise CheckNotRunError(NO_PROVIDER_KEY_HELD)
