@@ -1335,7 +1335,7 @@ def test_the_website_widget_is_never_offered_to_an_agent_that_reads_more_than_pu
     console: Console, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """**Needs-rupash 162 A, the refusal.** An agent reading one internal field, one calling a
-    tool, one bound to a connector and one that may write are each refused the widget in the
+    tool and one that may write are each refused the widget in the
     domain's own sentence, and nothing is written. Delete this and an agent that reads company
     data can be put in front of visitors who never signed in."""
     from brain.core.envelope import SideEffect
@@ -1349,7 +1349,6 @@ def test_the_website_widget_is_never_offered_to_an_agent_that_reads_more_than_pu
             )
         },
         {"capabilities": (Capability(value="read:faq.answer"),), "allowed_tools": frozenset({"t"})},
-        {"capabilities": (Capability(value="read:faq.answer"),), "connectors": ("freshdesk",)},
         {
             "capabilities": (Capability(value="read:faq.answer"),),
             "max_side_effect": SideEffect.WRITE,

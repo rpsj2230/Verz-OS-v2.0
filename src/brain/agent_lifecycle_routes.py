@@ -134,6 +134,7 @@ from brain.agents.model import (
     answering_on,
     enabled_channels,
     entitlement_ceiling,
+    records_implied_by,
 )
 from brain.agents.model import visible_agent_ids as _visible_agent_ids
 from brain.agents.template import SignedManifest, TemplateError, TemplateInstance
@@ -859,8 +860,9 @@ A_CHANNEL_IS_SWITCHED_ON_ONLY_WHERE_ITS_RUN_COULD_BE_CARRIED: Final = (
 A_WIDGET_IS_OFFERED_ONLY_TO_AN_AGENT_WHOSE_CEILING_HOLDS_ONLY_PUBLIC_KNOWLEDGE: Final = (
     "The website widget answers visitors who are not signed in, and the owner decided it gives "
     "public knowledge only (item 26). So it is offered on an agent whose ceiling reads nothing but "
-    "fields the field policy classifies public, calls no tool, reaches no connector and may do "
-    "nothing with a side effect, and on no agent that reads anything more. The question is asked "
+    "fields the field policy classifies public, calls no tool, and may do nothing with a side "
+    "effect, which keeps out any connector's data through the ceiling, and on no agent that "
+    "reads anything more. The question is asked "
     "of the policy's own classification, the same one that decides what any channel may carry, "
     "and of the ceiling and never of the person switching it on."
 )
@@ -874,16 +876,18 @@ def ceiling_holds_only_public_knowledge(record: AgentRecord, policy: FieldPolicy
     gives a reach that holds nothing.
     """
     authority = record.authority
-    public = {
+    columns = tuple(
         rule.required_capability
         for rule in policy.rules
         if rule.classification is Classification.PUBLIC
-    }
+    )
+    # The ceiling as the one intersection takes it, which is where a connector the agent names
+    # adds what it provides, so nothing here reads the connector list itself.
+    allowed = {*columns, *records_implied_by(columns)}
     return (
         not authority.allowed_tools
-        and not authority.connectors
         and authority.max_side_effect is SideEffect.NONE
-        and all(one in public for one in authority.capabilities)
+        and all(one.capability in allowed for one in entitlement_ceiling(record).grants)
     )
 
 
