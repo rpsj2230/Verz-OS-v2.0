@@ -145,6 +145,13 @@ def version_values(signed: SignedManifest) -> dict[str, Any]:
         "signed_by": signed.signed_by,
         "signed_at": signed.signed_at,
         "document": dict(signed.manifest.document()),
+        # Written only for a manifest signed under a later schema, so a version-one template is
+        # the row it always was and this release still runs against a schema before `0223`.
+        **(
+            {"schema_version": signed.schema_version, "overview_path": signed.overview_path or None}
+            if signed.schema_version != 1
+            else {}
+        ),
     }
 
 

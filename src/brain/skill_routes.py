@@ -940,6 +940,8 @@ def pins_of(
             signature=version_row.signature,
             signed_by=version_row.signed_by,
             signed_at=version_row.signed_at,
+            schema_version=version_row.schema_version or 1,
+            overview_path=version_row.overview_path or "",
         )
         instance = TemplateInstance(
             instance_id=instance_row.id,
