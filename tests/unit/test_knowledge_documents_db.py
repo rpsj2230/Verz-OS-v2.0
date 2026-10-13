@@ -358,3 +358,63 @@ def test_several_documents_are_verified_as_several_single_verifications() -> Non
     reader = said["reader"].json()["outcomes"]
     assert [(one["verified"], one["says"]) for one in reader] == [(False, NOT_OFFERED)] * 3
     assert verified == [WEB_ADMIN]
+
+
+def test_a_document_is_archived_by_whoever_may_act_on_it_and_then_nothing_answers_from_it() -> None:
+    """**Archive on a server (M27.15.40).** Web's administrator archives a verified document. A web
+    reader, who may read it and not act on it, is told the one sentence a document that is not there
+    gets and archives nothing. Afterwards the document has left the list of live documents, its
+    passages are archived, its history reads added, verified and archived, and a second archive is
+    the same sentence as for an invented id.
+
+    Delete this and the route can archive for somebody who may only read, leave a withdrawn
+    document answering, or leave no step in its history."""
+    with company("brain_km_archive") as url:
+
+        async def presses(client: httpx.AsyncClient) -> dict[str, Any]:
+            first = await upload(client, WEB_ADMIN, V1)
+            item = first["item_id"]
+            await verify(client, WEB_ADMIN, item)
+
+            async def archive(who: str, target: str) -> httpx.Response:
+                return await client.post(
+                    api(f"/knowledge/items/{target}/archive"), headers=headers(who)
+                )
+
+            detail = await client.get(api(f"/knowledge/items/{item}"), headers=headers(WEB_ADMIN))
+            reader = await archive(WEB_READER, item)
+            invented = await archive(WEB_ADMIN, "upload.nothing_here")
+            done = await archive(WEB_ADMIN, item)
+            again = await archive(WEB_ADMIN, item)
+            return {
+                "item": item,
+                "offered": detail.json()["offered"],
+                "reader": reader,
+                "invented": invented,
+                "done": done,
+                "again": again,
+                "history": await client.get(
+                    api(f"/knowledge/items/{item}/history"), headers=headers(WEB_ADMIN)
+                ),
+                "list": await client.get(api("/knowledge/documents"), headers=headers(WEB_READER)),
+            }
+
+        said = pressed(url, presses)
+        left = sql(
+            url,
+            "SELECT i.state, c.state FROM know.item i JOIN know.chunk c "
+            "ON c.document_id = i.item_id WHERE i.item_id = %s",
+            said["item"],
+        )
+
+    assert said["offered"]["archive"] is True
+    assert said["done"].status_code == 200, said["done"].text
+    assert said["done"].json()["state"] == "archived"
+    assert said["reader"].status_code == said["invented"].status_code == 404
+    assert said["again"].status_code == 404
+    assert without_trace(said["reader"].json()) == without_trace(said["invented"].json())
+    assert without_trace(said["again"].json()) == without_trace(said["invented"].json())
+    assert left and all(state == ("archived", "archived") for state in left)
+    steps = [one["event"] for one in said["history"].json()["events"]]
+    assert steps[-1] == "archived" and "verified" in steps
+    assert said["item"] not in rows_of(said["list"])

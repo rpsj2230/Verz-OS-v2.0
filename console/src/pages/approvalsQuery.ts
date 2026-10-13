@@ -70,6 +70,10 @@ export interface ApprovalCardView {
   readonly unsentBecause: string;
   /** The agent that raised it, which an agent's own page narrows the queue by (M27.15.30). */
   readonly agentId: string;
+  /** The action cannot be taken back, so two different people approve it (M13.7.7). */
+  readonly needsSecond: boolean;
+  /** The first of the two has approved, so this approval is the second. */
+  readonly firstApproved: boolean;
 }
 
 /** The queue as this console holds it. Two fields, and neither is a count. */
@@ -126,6 +130,8 @@ export function readApprovalCard(payload: unknown): ApprovalCardView | null {
     mayTakeOver: fields?.["may_take_over"] === true,
     unsentBecause: said(fields?.["unsent_because"]) ?? "",
     agentId: said(fields?.["agent_id"]) ?? "",
+    needsSecond: fields?.["needs_second"] === true,
+    firstApproved: fields?.["first_approved"] === true,
   };
 }
 
@@ -212,12 +218,22 @@ export function decisionBody(decision: Decision): Readonly<Record<string, string
     : null;
 }
 
+/**
+ * What an answer confirmed: a verdict, or `approved_first`, an approval that was the first of two
+ * and decided nothing (M13.7.7). Never sent, only read back, so a first approval is never drawn as
+ * a decision.
+ */
+export type Confirmation = Verdict | "approved_first";
+
 /** The verdict an answer confirms for this approval, or `null` when it confirms nothing. */
-export function readDecision(payload: unknown, suspensionId: string): Verdict | null {
+export function readDecision(payload: unknown, suspensionId: string): Confirmation | null {
   const fields = fieldsOf(payload);
   if (fields === undefined || fields["suspension_id"] !== suspensionId) {
     return null;
   }
   const verdict = fields["verdict"];
+  if (verdict === "approved" && fields["awaiting_second"] === true) {
+    return "approved_first";
+  }
   return verdict === "approved" || verdict === "rejected" || verdict === "taken_over" ? verdict : null;
 }

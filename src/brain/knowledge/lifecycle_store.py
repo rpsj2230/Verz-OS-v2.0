@@ -81,11 +81,12 @@ DECIDING_SETTING: Final = "app.deciding_departments"
 #: Written out whole rather than built, so no statement here is assembled from strings.
 ITEM_BY_ID: Final = (
     "SELECT item_id, title, owner_id, visibility, department, state, kind, verified_by, "
-    "verified_at, review_by, supersedes, created_at FROM know.item WHERE item_id = :id"
+    "verified_at, review_by, supersedes, created_at, arrived_as FROM know.item "
+    "WHERE item_id = :id"
 )
 ITEMS_IN_REACH: Final = (
     "SELECT item_id, title, owner_id, visibility, department, state, kind, verified_by, "
-    "verified_at, review_by, supersedes, created_at FROM know.item "
+    "verified_at, review_by, supersedes, created_at, arrived_as FROM know.item "
     "ORDER BY title, item_id LIMIT :limit"
 )
 ITEM_VERSIONS: Final = (
@@ -135,6 +136,9 @@ def stored_item(row: Mapping[Any, Any]) -> StoredItem:
         review_by=row["review_by"],
         supersedes=row["supersedes"] or "",
         added_at=row["created_at"],
+        # The two reads past the policy (`know.item_versions`) do not return it, and a version
+        # that was replaced is not offered a refetch, so a row without it is simply unknown.
+        arrived_as=row.get("arrived_as") or "",
     )
 
 
@@ -179,6 +183,21 @@ async def live_item(session: AsyncSession, item_id: str) -> StoredItem | None:
     return None if row is None else stored_item(row)
 
 
+async def source_url_of(session: AsyncSession, item_id: str) -> str:
+    """The address a link was added from, or empty when this document has none on record.
+
+    Read under the policy of the transaction it is asked in, so it answers only for a live document
+    that transaction's reach admits. Empty means a file, or a document added before `0220`: the
+    caller never guesses an address from the text.
+    """
+    row = (
+        await session.execute(
+            text("SELECT source_url FROM know.item WHERE item_id = :id"), {"id": item_id}
+        )
+    ).scalar_one_or_none()
+    return str(row or "")
+
+
 async def held_item(session: AsyncSession, item_id: str) -> StoredItem | None:
     """`live_item`, locked until the transaction ends, for an act that writes it.
 
@@ -190,8 +209,8 @@ async def held_item(session: AsyncSession, item_id: str) -> StoredItem | None:
             await session.execute(
                 text(
                     "SELECT item_id, title, owner_id, visibility, department, state, kind, "
-                    "verified_by, verified_at, review_by, supersedes, created_at FROM know.item "
-                    "WHERE item_id = :id FOR UPDATE"
+                    "verified_by, verified_at, review_by, supersedes, created_at, arrived_as "
+                    "FROM know.item WHERE item_id = :id FOR UPDATE"
                 ),
                 {"id": item_id},
             )
@@ -388,6 +407,17 @@ async def record_steward(session: AsyncSession, item: StoredItem, *, to: str) ->
         ),
         {"to": to, "id": item.item_id},
     )
+
+
+async def record_archive(session: AsyncSession, item: StoredItem) -> None:
+    """Withdraw a document and its passages through `0216`'s `know.archive_item`.
+
+    The one write that moves a row out of `know.item`'s policy, made by a function that repeats the
+    reach the session was told. When the document moved first, or is no longer within reach, the
+    function raises and the driver's error leaves here untouched: the transaction is the route's to
+    abandon, as it is for a new version whose supersession the database refused.
+    """
+    await session.execute(text("SELECT know.archive_item(:id)"), {"id": item.item_id})
 
 
 async def write_version(

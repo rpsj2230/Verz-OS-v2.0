@@ -132,7 +132,16 @@ M13.3, the upgrade path is M13.4, and there is no route behind the gate anywhere
 repository. Inventing one here would be a second pipeline for the real one to be reconciled
 with, which is what `brain.agents.model` refused for the same reason.
 
-Task ids: M13.2.1, M13.2.2, M13.2.3, M13.2.4, M13.2.5, M13.2.6, M13.2.7
+**A signed manifest carries the schema version it was signed under, and an older one verifies under
+its own (M13.8.17).** Version one is the seventeen paths and nothing else, and its digest and
+signature are exactly what they have always been, so every template already published still
+verifies without being touched. Version two adds one more signed fact, the overview path: which
+single manifest path a gallery card shows as the template's overview. It is signed so that
+nobody can repoint a published template's overview, and it is restricted to a path no model prompt
+is built from (`OVERVIEW_PATHS`), so the overview is for people and never for a model. See
+`THE_OVERVIEW_IS_FOR_PEOPLE_AND_NEVER_FOR_A_MODEL`.
+
+Task ids: M13.2.1, M13.2.2, M13.2.3, M13.2.4, M13.2.5, M13.2.6, M13.2.7, M13.8.17
 """
 
 from __future__ import annotations
@@ -238,6 +247,29 @@ THE_BLANK_TEMPLATE_IS_THE_STRICTEST_ONE: Final = (
 #: digest ever computed, so a signature raised before the change stops matching after it.
 #: That is the correct failure, and it is a migration rather than an edit to this line.
 MANIFEST_SCHEMA: Final = "brain.template.manifest.v1"
+
+#: The schema versions a manifest may be signed under, and the domain each digests in. Version one
+#: is `MANIFEST_SCHEMA` and is never changed: a signature raised under it must go on matching.
+MANIFEST_SCHEMAS: Final[Mapping[int, str]] = {
+    1: MANIFEST_SCHEMA,
+    2: "brain.template.manifest.v2",
+}
+
+#: The version a manifest is signed under unless it names an overview.
+FIRST_SCHEMA_VERSION: Final = 1
+
+#: The manifest paths an overview may be. Both are text written for a person to read in a picker;
+#: neither is `persona`, a golden question, a skill or anything a prompt is assembled from.
+OVERVIEW_PATHS: Final[tuple[str, ...]] = ("identity.display_name", "identity.summary")
+
+#: Why the overview is restricted to those paths.
+THE_OVERVIEW_IS_FOR_PEOPLE_AND_NEVER_FOR_A_MODEL: Final = (
+    "An overview is what a gallery card shows a person choosing a template. If it could name the "
+    "persona it would be a second way to put prompt material in front of people with no say in "
+    "it, and if a prompt could be built from it, a line written for a reader would steer a "
+    "model. So it may name only the display name or the summary, and a path anywhere else is "
+    "refused by the manifest's signing and by the table."
+)
 
 #: Domain separation for the configuration hash, and deliberately not the line above.
 #: An instance with an empty overlay has an effective document identical to its manifest's,
@@ -593,6 +625,24 @@ class TemplateManifest(BaseModel):
         return document
 
 
+def manifest_from_document(document: Mapping[str, Any]) -> TemplateManifest:
+    """A manifest from the flat document `TemplateManifest.document()` produced.
+
+    The inverse of that method, walking the same `MANIFEST_PATHS`, so a path is read back into
+    exactly the section it was taken out of. Nothing here checks the round trip: a caller that
+    signs the result has `SignedManifest` recompute its digest, which refuses a reconstruction
+    that lost or moved a value.
+    """
+    nested: dict[str, Any] = {}
+    for path in MANIFEST_PATHS:
+        head, _, tail = path.partition(".")
+        if tail:
+            nested.setdefault(head, {})[tail] = document[path]
+        else:
+            nested[head] = document[path]
+    return TemplateManifest.model_validate(nested)
+
+
 # --------------------------------------------------------- signing and publishing (M13.2.1)
 def _digest(parts: Iterable[str]) -> str:
     """Length-prefixed concatenation, then sha256.
@@ -626,12 +676,37 @@ def canonical(document: Mapping[str, JsonValue]) -> str:
     return canonical_value(dict(document))
 
 
-def content_digest(manifest: TemplateManifest) -> str:
-    """The digest a signature is taken over, and the third field of an instance's pin."""
-    return _digest((MANIFEST_SCHEMA, canonical(manifest.document())))
+def content_digest(
+    manifest: TemplateManifest,
+    *,
+    schema_version: int = FIRST_SCHEMA_VERSION,
+    overview_path: str = "",
+) -> str:
+    """The digest a signature is taken over, and the third field of an instance's pin.
+
+    Version one digests the document alone, exactly as it always has. Version two digests the
+    overview path as well, so it is signed with everything else (M13.8.17).
+    """
+    if schema_version not in MANIFEST_SCHEMAS:
+        msg = f"schema version {schema_version} is not one this release can sign or verify"
+        raise TemplateError(msg)
+    if schema_version == FIRST_SCHEMA_VERSION:
+        if overview_path:
+            msg = "version one of the schema has no overview path to sign"
+            raise TemplateError(msg)
+        return _digest((MANIFEST_SCHEMA, canonical(manifest.document())))
+    if overview_path and overview_path not in OVERVIEW_PATHS:
+        msg = (
+            f"{overview_path!r} is not a path an overview may be. "
+            f"{THE_OVERVIEW_IS_FOR_PEOPLE_AND_NEVER_FOR_A_MODEL}"
+        )
+        raise TemplateError(msg)
+    return _digest(
+        (MANIFEST_SCHEMAS[schema_version], canonical(manifest.document()), overview_path)
+    )
 
 
-def _signature(digest: str, key: str) -> str:
+def _signature(digest: str, key: str, schema_version: int = FIRST_SCHEMA_VERSION) -> str:
     """HMAC-SHA256 over the digest, domain-separated by the manifest schema.
 
     Symmetric rather than a public-key signature, because the question this answers is
@@ -641,7 +716,7 @@ def _signature(digest: str, key: str) -> str:
     would be a signature that proves nothing about which side wrote it.
     """
     return hmac.new(
-        key.encode("utf-8"), f"{MANIFEST_SCHEMA}:{digest}".encode(), hashlib.sha256
+        key.encode("utf-8"), f"{MANIFEST_SCHEMAS[schema_version]}:{digest}".encode(), hashlib.sha256
     ).hexdigest()
 
 
@@ -661,6 +736,10 @@ class SignedManifest(BaseModel):
     signature: str = Field(pattern=DIGEST)
     signed_by: str = Field(min_length=1, max_length=OWNER_ID_CHARS)
     signed_at: datetime
+    #: The schema this was signed under, and the overview path version two adds. Version one, with
+    #: none, is every manifest published before 0223 (M13.8.17).
+    schema_version: int = FIRST_SCHEMA_VERSION
+    overview_path: str = ""
 
     @field_validator("signed_at")
     @classmethod
@@ -676,7 +755,9 @@ class SignedManifest(BaseModel):
         Recomputed rather than trusted. The alternative is a type that holds a digest
         somebody else calculated, which makes the digest documentation.
         """
-        computed = content_digest(self.manifest)
+        computed = content_digest(
+            self.manifest, schema_version=self.schema_version, overview_path=self.overview_path
+        )
         if not hmac.compare_digest(computed, self.content_digest):
             msg = (
                 f"the manifest body digests to {computed} and this record carries "
@@ -686,7 +767,12 @@ class SignedManifest(BaseModel):
 
 
 def publish(
-    manifest: TemplateManifest, *, key: str, signed_by: str, at: datetime
+    manifest: TemplateManifest,
+    *,
+    key: str,
+    signed_by: str,
+    at: datetime,
+    overview_path: str = "",
 ) -> SignedManifest:
     """Sign a manifest (M13.2.1).
 
@@ -700,13 +786,18 @@ def publish(
             "digest anybody can reproduce, so the signature would be decoration"
         )
         raise TemplateError(msg)
-    digest = content_digest(manifest)
+    # Naming an overview is what makes a template version two. One that names none stays version
+    # one, so a template published the same way as before is byte for byte what it was.
+    schema_version = 2 if overview_path else FIRST_SCHEMA_VERSION
+    digest = content_digest(manifest, schema_version=schema_version, overview_path=overview_path)
     return SignedManifest(
         manifest=manifest,
         content_digest=digest,
-        signature=_signature(digest, key),
+        signature=_signature(digest, key, schema_version),
         signed_by=signed_by,
         signed_at=at,
+        schema_version=schema_version,
+        overview_path=overview_path,
     )
 
 
@@ -720,7 +811,7 @@ def verify(signed: SignedManifest, *, key: str) -> None:
     Raises rather than returning a bool. A caller who forgets to check a `False` installs
     the template anyway, and the failure is a signed catalogue that admits anything.
     """
-    expected = _signature(signed.content_digest, key)
+    expected = _signature(signed.content_digest, key, signed.schema_version)
     if not hmac.compare_digest(expected, signed.signature):
         msg = (
             f"the signature on {signed.manifest.identity.template_id!r} version "

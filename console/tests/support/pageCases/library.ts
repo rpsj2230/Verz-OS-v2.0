@@ -46,7 +46,7 @@ const KNOWLEDGE_DETAIL = {
       readable: true,
     },
   ],
-  offered: { verify: true, new_version: true, propose: true, hand_over: true },
+  offered: { verify: true, new_version: true, propose: true, hand_over: true, archive: true },
   promotion_waits: `Asking puts a card on the Approvals screen for ${UNBROKEN}.`,
 };
 

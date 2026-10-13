@@ -73,6 +73,12 @@
   overflow-wrap: anywhere;
 }
 
+/* That an action which cannot be taken back needs two people, above the buttons (M13.7.7). */
+.approval-card__second {
+  margin: 0 0 var(--space-3);
+  overflow-wrap: anywhere;
+}
+
 /* A thumb is not a cursor. 2.75rem is 44 CSS pixels at the default root size. */
 .approval-card__link {
   display: inline-flex;

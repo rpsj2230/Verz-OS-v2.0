@@ -2,10 +2,11 @@
 
 The creating migration's DDL is compared against the model in several test files, and the model
 describes the database as it is now. A later migration that adds a column (`0097` adds one to
-`ops.model_attempt` and two to `agent.agent`) makes that comparison fail for being accurate. So
-the comparison is made against a copy of the model without the columns a later migration added,
-and without the checks that read them, and the adding migration's own test holds it to adding
-exactly these. A column in the model and in neither migration is still caught.
+`ops.model_attempt` and two to `agent.agent`, and `0225` adds `agent.agent` its memory kinds) makes
+that comparison fail for being accurate. So the comparison is made against a copy of the model
+without the columns a later migration added, and without the checks that read them, and the adding
+migration's own test holds it to adding exactly these. A column in the model and in neither
+migration is still caught.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ ADDED_LATER: Mapping[str, tuple[str, ...]] = MappingProxyType(
             "channels",
             "max_turns",
             "max_tool_calls",
+            "memory_kinds",
         ),
         "agent.manifest_act": ("channels",),
         "gate.fast_path_rule": ("department", "learned_from"),

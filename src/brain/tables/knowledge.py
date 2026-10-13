@@ -42,7 +42,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Index, String, text
+from sqlalchemy import CheckConstraint, DateTime, Index, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from brain.db import Base, TimestampMixin
@@ -89,6 +89,11 @@ class KnowledgeItemRow(TimestampMixin, Base):
     #: both or neither, and never on a personal item. See `brain.knowledge.public`.
     public_by: Mapped[str | None] = mapped_column(String(OWNER_ID_CHARS), nullable=True)
     public_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: How the item came onto the install, `file` or `link`, and for a link the address the person
+    #: gave (M39.9.1.5). Added by `0220`, nullable for every row written before it, and never
+    #: backfilled: an old row's way of arriving is unknown, and a list says so.
+    arrived_as: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         CheckConstraint(f"item_id ~ '{REFERENCE_SQL_PATTERN}'", name="item_id_is_a_reference"),
@@ -119,6 +124,13 @@ class KnowledgeItemRow(TimestampMixin, Base):
         CheckConstraint(
             "public_at IS NULL OR visibility <> 'personal'",
             name="a_personal_item_is_never_public",
+        ),
+        CheckConstraint(
+            "arrived_as IS NULL OR arrived_as IN ('file', 'link')", name="arrived_as_a_file_or_link"
+        ),
+        CheckConstraint(
+            "source_url IS NULL OR (arrived_as = 'link' AND length(source_url) BETWEEN 1 AND 2048)",
+            name="an_address_belongs_to_a_link",
         ),
         # The sweep's access path: it asks for items whose date has arrived, and most items
         # have none.
