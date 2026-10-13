@@ -330,6 +330,22 @@ from brain.lark_connect_routes import router as lark_connect_router
 # paged, behind `admin:application_log` over everything. See `brain.log_routes`.
 from brain.log_routes import router as log_router
 
+# Asking for an agent you can see and cannot run. Gated on the member grant. See
+# `brain.member_agent_request_routes`.
+from brain.member_agent_request_routes import router as member_agent_request_router
+
+# A member's own settings: whether they are learnt from, where they are reached and when not.
+# Gated on the member grant. See `brain.member_preference_routes`.
+from brain.member_preference_routes import router as member_preference_router
+
+# A member's own account: their devices, who read their record, what agents made for them and what
+# is kept about them. Gated on the member grant. See `brain.member_self_routes`.
+from brain.member_self_routes import router as member_self_router
+
+# A member's artifacts handed to colleagues, and what was handed to them. Gated on the member grant.
+# See `brain.member_share_routes`.
+from brain.member_share_routes import router as member_share_router
+
 # My workspace, the member screen `home`: what the person asking has asked, kept and been
 # given, gated on the member grant and on nothing administrative. See `brain.mine_routes`.
 from brain.mine_routes import router as mine_router
