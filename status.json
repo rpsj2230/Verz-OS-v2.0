@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-13T15:07:51.460848+00:00",
-  "commit": "a305a940",
-  "commit_subject": "The daily backup report, its alert and five hosting and recovery install checks (M30) (#576)",
+  "generated_at": "2026-10-13T15:22:14.802119+00:00",
+  "commit": "9a927953",
+  "commit_subject": "Install checks for the first-run wizard, the variables command, release notes and a leaver's personal document (#564)",
   "total": 1625,
   "done": 864,
   "percent": 53.2,
