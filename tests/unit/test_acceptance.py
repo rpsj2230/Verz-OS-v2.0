@@ -857,6 +857,13 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         acceptance_checks_accounts.NO_RELAY_FOR_THE_RESET_EMAIL,
     )
     assert outcomes.pop("a_queued_file_is_kept_in_the_store_and_read_by_the_worker")[0] == NOT_RUN
+    # The agent Knowledge answer check asks a provider through the install's own plan, so on a
+    # database whose plan keeps text on its own hardware it says so and is not run; its own test
+    # file (`tests/unit/test_acceptance_agent_knowledge.py`) gives it a plan that may be asked.
+    assert outcomes.pop("an_agent_answers_from_a_file_added_on_its_page_and_cites_it")[0] in (
+        PASSED,
+        NOT_RUN,
+    )
     assert outcomes.pop("the_install_s_own_store_keeps_and_returns_an_object") == (
         NOT_RUN,
         acceptance_checks_storage.NO_STORE_IS_CONNECTED,
