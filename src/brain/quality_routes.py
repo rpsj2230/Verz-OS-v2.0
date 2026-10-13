@@ -2,7 +2,7 @@
 annotation queue and what a person says of it, and the candidates a failed case opened.
 
 `brain.ops.feedback` and `brain.ops.sampling` decided all of this and had no store and no route
-(each said so in its own docstring); `brain.ops.quality_store` is the store over `0219` and this is
+(each said so in its own docstring); `brain.ops.quality_store` is the store over `0221` and this is
 the door. It adds no rule of its own about what may be flagged or captured: `feedback.may_flag`,
 `feedback.capture` and `sampling.draw` are called, and their refusals are the answers here.
 

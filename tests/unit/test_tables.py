@@ -168,7 +168,7 @@ MIGRATION_LEARNED_RULES = VERSIONS / "0206_learned_rule_promotion.py"
 MIGRATION_ROLE_NOMINATIONS = VERSIONS / "0208_role_nominations.py"
 MIGRATION_ELEVATION_CHAIN = VERSIONS / "0209_elevation_chain.py"
 MIGRATION_BUDGET_STOP = VERSIONS / "0211_budget_stop.py"
-MIGRATION_QUALITY = VERSIONS / "0219_quality_and_learning.py"
+MIGRATION_QUALITY = VERSIONS / "0221_quality_and_learning.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -491,7 +491,7 @@ ROLE_NOMINATION_TABLES: tuple[str, ...] = ("gate.role_nomination",)
 ELEVATION_CHAIN_TABLES: tuple[str, ...] = ("obs.elevation_entry",)
 #: And the one 0211 adds: every used-up budget, stopped or only said.
 BUDGET_STOP_TABLES: tuple[str, ...] = ("ops.budget_stop",)
-#: And the eight 0219 adds: flags and their cases, the two tiers of reading, golden scores, a failed
+#: And the eight 0221 adds: flags and their cases, the two tiers of reading, golden scores, a failed
 #: case's candidate, the positive examples and who agreed to a change that needed a person.
 QUALITY_TABLES: tuple[str, ...] = (
     "ops.answer_flag",

@@ -1,10 +1,10 @@
 """The quality stores: flags, captured cases, readings, annotations, golden scores, candidates,
-examples and the decisions about them. The one writer for `0219`'s eight tables.
+examples and the decisions about them. The one writer for `0221`'s eight tables.
 
 `brain.ops.feedback`, `brain.ops.sampling`, `brain.ops.evaluation` and `brain.memory.tiers` each
 decide something about answer quality and hold nothing, on the split `brain.ops.limits` makes:
 this holds the statements and decides nothing they did not. Every function takes a session already
-in the caller's transaction and sets `app.principal_id` to the person it writes as, which `0219`'s
+in the caller's transaction and sets `app.principal_id` to the person it writes as, which `0221`'s
 insert policies hold the writer column to.
 
 **A candidate is opened and never applied.** `open_candidates` writes rows about an agent and

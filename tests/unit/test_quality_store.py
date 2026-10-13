@@ -1,4 +1,4 @@
-"""The quality tables and their pure rules: `0219` holds the model's shape, every row is a pointer
+"""The quality tables and their pure rules: `0221` holds the model's shape, every row is a pointer
 and a word, and the rules about regressions, decisions and cases hold on their own.
 
 The database half is the install checks' (`tests/unit/test_acceptance_checks_quality.py`), which run
@@ -30,7 +30,7 @@ from brain.ops.quality_store import (
 from brain.tables.quality import CASE_KEYS, ItemKind, TierDecisionWord
 from tests.unit.test_tables import VERSIONS, migration_module, rendered, squash
 
-MIGRATION = VERSIONS / "0219_quality_and_learning.py"
+MIGRATION = VERSIONS / "0221_quality_and_learning.py"
 DIALECT = create_engine("postgresql+psycopg://", poolclass=NullPool).dialect
 WHEN = datetime(2999, 6, 1, 12, 0, tzinfo=UTC)
 

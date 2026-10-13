@@ -518,7 +518,7 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0211_budget_stop. Points at nothing: the ceiling, the principal and the recipients are
     # values, so a stop's row outlives a ceiling's next version and a person leaving.
     "ops.budget_stop",
-    # 0219_quality_and_learning. A case points at the flag it came from and nothing else points at
+    # 0221_quality_and_learning. A case points at the flag it came from and nothing else points at
     # anything: every reference is a value, so a trace aging out or a person leaving deletes none.
     "ops.answer_flag",
     "ops.regression_case",
