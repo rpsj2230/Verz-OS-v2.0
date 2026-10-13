@@ -1176,3 +1176,346 @@ def test_a_check_binding_only_rows_whose_added_flag_is_true_is_not_a_narrowing()
     assert _verdicts(_migration(flagged("sa.false()", column="off") + rule))[-1] is Verdict.BREAKING
     other_table = flagged("sa.false()").replace('"t"', '"u"')
     assert _verdicts(_migration(other_table + rule))[-1] is Verdict.BREAKING
+
+
+# ------------------------------------- a partial unique index that replaces a unique constraint
+
+PARTIAL_RULE = "partial unique index replacing a unique constraint over the same columns"
+GONE = "uq_old"
+
+
+def _drop_block(table: str = "s.t", name: str = GONE) -> str:
+    """The `DO` block `0219` writes, whitespace as the reader normalises it."""
+    return (
+        "DO $$ DECLARE v text; BEGIN SELECT c.conname INTO v FROM pg_constraint c "  # noqa: S608
+        f"WHERE c.conrelid = '{table}'::regclass AND c.contype = 'u' AND c.conname = '{name}'; "
+        f"IF v IS NOT NULL THEN EXECUTE format('ALTER TABLE {table} DROP CONSTRAINT %I', v); "
+        "END IF; END $$"
+    )
+
+
+def _executing(sql: str) -> str:
+    return f"    op.execute({sql!r})\n"
+
+
+def _earlier(upgrade: str, revision: str = "9000", down: str = "8999") -> str:
+    return (
+        "from alembic import op\n"
+        "import sqlalchemy as sa\n"
+        f'revision = "{revision}"\n'
+        f'down_revision = "{down}"\n'
+        f"def upgrade() -> None:\n{upgrade}\n"
+        "def downgrade() -> None:\n    pass\n"
+    )
+
+
+def _chain(tmp_path: Path, *upgrades: str) -> Path:
+    """Earlier migrations in a directory, oldest first, each revising the one before it."""
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    for index, upgrade in enumerate(upgrades):
+        revision = str(9000 - len(upgrades) + 1 + index)
+        down = str(9000 - len(upgrades) + index)
+        (tmp_path / f"{revision}_x.py").write_text(
+            _earlier(upgrade, revision, down), encoding="utf-8", newline="\n"
+        )
+    return tmp_path
+
+
+def _the_index(changes: tuple[Change, ...]) -> Change:
+    """The change a `CREATE UNIQUE INDEX` statement came back as, whatever else the body did."""
+    found = [one for one in changes if "CREATE UNIQUE INDEX" in one.detail]
+    assert len(found) == 1, changes
+    return found[0]
+
+
+NEW_INDEX = _executing(
+    "CREATE UNIQUE INDEX uq_new ON s.t (a, b, c) WHERE c <> 'authored'",
+)
+OLD_BY_CALL = f'    op.create_unique_constraint("{GONE}", "t", ["a", "b", "c"], schema="s")\n'
+DROP_BY_CALL = f'    op.drop_constraint("{GONE}", "t", schema="s", type_="unique")\n'
+
+
+@pytest.mark.parametrize(
+    ("older", "drop"),
+    [
+        pytest.param(OLD_BY_CALL, _executing(_drop_block()), id="a DO block, as 0219 writes it"),
+        pytest.param(OLD_BY_CALL, DROP_BY_CALL, id="op.drop_constraint"),
+        pytest.param(
+            OLD_BY_CALL,
+            _executing(f"ALTER TABLE s.t DROP CONSTRAINT {GONE}"),
+            id="an ALTER TABLE statement",
+        ),
+        pytest.param(
+            _executing(f"CREATE UNIQUE INDEX {GONE} ON s.t (c, a, b)"),
+            _executing(f"DROP INDEX s.{GONE}"),
+            id="a unique index dropped as an index, columns in another order",
+        ),
+        pytest.param(
+            f'    op.create_index("{GONE}", "t", ["a", "b", "c"], unique=True, schema="s")\n',
+            f'    op.drop_index("{GONE}", table_name="t", schema="s")\n',
+            id="op.create_index and op.drop_index",
+        ),
+        pytest.param(
+            _executing(f"ALTER TABLE s.t ADD CONSTRAINT {GONE} UNIQUE (a, b, c)"),
+            DROP_BY_CALL,
+            id="a constraint added by statement",
+        ),
+        pytest.param(
+            '    op.create_table("t", sa.Column("a", sa.Text()), '
+            f'sa.UniqueConstraint("a", "b", "c", name="{GONE}"), schema="s")\n',
+            DROP_BY_CALL,
+            id="a constraint declared inside create_table",
+        ),
+    ],
+)
+def test_a_partial_unique_index_replacing_a_unique_constraint_over_the_same_columns_is_safe(
+    tmp_path: Path, older: str, drop: str
+) -> None:
+    """The one safe shape, in each spelling the repository uses for the old and the new half.
+
+    The old constraint is found in an earlier migration by the name this body drops, and its
+    columns equal the new index's whatever their order, so the index refuses a subset of what
+    the constraint refused. `0219` is the first to need it.
+
+    Delete this and the rule can be removed, or made to read only the `DO` block spelling, and
+    the shipped migration is the only thing that notices, on a day a train is waiting for it.
+    """
+    versions = _chain(tmp_path, older)
+    changes = changes_in(_migration(drop + NEW_INDEX), versions=versions)
+    index = _the_index(changes)
+    assert (index.verdict, index.rule) == (Verdict.SAFE, PARTIAL_RULE)
+
+
+def test_a_partial_unique_index_is_still_a_narrowing_when_the_columns_differ(
+    tmp_path: Path,
+) -> None:
+    """The index covers a set the dropped constraint did not, so it can refuse a row it admitted.
+
+    Three variants, because each is a different way to be wrong: a column added, a column
+    removed and a column swapped. The sibling test above shows the rule still passes the match.
+
+    Delete this and the rule can compare only the table, which passes a unique index over a
+    column nothing was unique over before, which is a narrowing of exactly the kind this gate
+    exists to refuse.
+    """
+    versions = _chain(tmp_path, OLD_BY_CALL)
+    drop = _executing(_drop_block())
+    for columns in ("a, b", "a, b, c, d", "a, b, d"):
+        index = _executing(f"CREATE UNIQUE INDEX uq_new ON s.t ({columns}) WHERE c <> 'x'")
+        changes = changes_in(_migration(drop + index), versions=versions)
+        assert _the_index(changes).verdict is Verdict.BREAKING, columns
+
+
+def test_a_partial_unique_index_with_nothing_dropped_is_still_a_narrowing(tmp_path: Path) -> None:
+    """The old constraint has to be dropped in the same body, by the name an earlier one gave it.
+
+    Neither an empty body, nor a drop of some other name, nor a drop that names the right
+    constraint on another table, replaces anything the index covers.
+
+    Delete this and any partial unique index on an existing table passes whenever the chain
+    happens to contain a unique constraint over the same columns, with no proof that this body
+    removed it.
+    """
+    versions = _chain(tmp_path, OLD_BY_CALL)
+    assert _the_index(changes_in(_migration(NEW_INDEX), versions=versions)).verdict is (
+        Verdict.BREAKING
+    )
+    other_name = '    op.drop_constraint("uq_other", "t", schema="s", type_="unique")\n'
+    changes = changes_in(_migration(other_name + NEW_INDEX), versions=versions)
+    assert _the_index(changes).verdict is Verdict.BREAKING
+    other_table = f'    op.drop_constraint("{GONE}", "u", schema="s", type_="unique")\n'
+    changes = changes_in(_migration(other_table + NEW_INDEX), versions=versions)
+    assert _the_index(changes).verdict is Verdict.BREAKING
+
+
+def test_a_dropped_constraint_on_another_table_does_not_make_an_index_here_safe(
+    tmp_path: Path,
+) -> None:
+    """The old constraint is over the same columns and the same name, on a different table.
+
+    The chain says `u` held it, the body drops it from `u`, and the new index is on `t`: nothing
+    on `t` was replaced, so nothing proves the index is the weaker. Both the table the old
+    constraint was created on and the table the drop names are wrong in turn.
+
+    Delete this and the table is never compared, so a constraint on one table licenses a
+    partial index on any other that shares its column names.
+    """
+    versions = _chain(
+        tmp_path,
+        f'    op.create_unique_constraint("{GONE}", "u", ["a", "b", "c"], schema="s")\n',
+    )
+    drop_on_u = _executing(_drop_block(table="s.u"))
+    changes = changes_in(_migration(drop_on_u + NEW_INDEX), versions=versions)
+    assert _the_index(changes).verdict is Verdict.BREAKING
+    # And the drop names `t` where the constraint the chain knows is on `u`.
+    changes = changes_in(_migration(_executing(_drop_block()) + NEW_INDEX), versions=versions)
+    assert _the_index(changes).verdict is Verdict.BREAKING
+
+
+def test_a_dropped_constraint_no_earlier_migration_created_is_not_shown_to_have_existed(
+    tmp_path: Path,
+) -> None:
+    """A drop that is conditional on the constraint existing proves nothing about it.
+
+    The `DO` block drops only if the name is there, so a body can say it replaced a constraint
+    that never was. With no earlier migration creating the name, with a chain that does not
+    reach one, and with a directory missing the revision this one revises, the index is a
+    finding in every case.
+
+    Delete this and an index whose predecessor cannot be found is trusted, which is the
+    permissive direction and the one this module exists not to take.
+    """
+    drop = _executing(_drop_block())
+    empty = changes_in(_migration(drop + NEW_INDEX), versions=tmp_path)
+    assert _the_index(empty).verdict is Verdict.BREAKING
+    unrelated = _chain(tmp_path / "a", OLD_BY_CALL.replace(GONE, "uq_unrelated"))
+    assert (
+        _the_index(changes_in(_migration(drop + NEW_INDEX), versions=unrelated)).verdict
+        is Verdict.BREAKING
+    )
+    gap = tmp_path / "gap"
+    gap.mkdir()
+    (gap / "8000_x.py").write_text(_earlier(OLD_BY_CALL, "8000", "7999"), encoding="utf-8")
+    changes = changes_in(_migration(drop + NEW_INDEX), versions=gap)
+    assert _the_index(changes).verdict is Verdict.BREAKING
+
+
+def test_the_newest_migration_that_names_the_constraint_decides_what_it_covered(
+    tmp_path: Path,
+) -> None:
+    """A constraint that was dropped, or made again over other columns, is judged as it ended.
+
+    Oldest first: created over `a, b, c`, then dropped; and created over `a, b, c`, then again
+    over `a, b`. The first leaves nothing to replace, the second leaves a constraint over fewer
+    columns than the index, and the older, matching definition must not be what is read.
+
+    Delete this and the walk takes the first definition it meets from the oldest end, or any
+    definition at all, and a constraint that no longer existed licenses a narrowing.
+    """
+    drop = _executing(_drop_block())
+    dropped_since = _chain(tmp_path / "a", OLD_BY_CALL, DROP_BY_CALL)
+    changes = changes_in(_migration(drop + NEW_INDEX), versions=dropped_since)
+    assert _the_index(changes).verdict is Verdict.BREAKING
+    remade = _chain(
+        tmp_path / "b",
+        OLD_BY_CALL,
+        DROP_BY_CALL + f'    op.create_unique_constraint("{GONE}", "t", ["a", "b"], schema="s")\n',
+    )
+    assert _the_index(changes_in(_migration(drop + NEW_INDEX), versions=remade)).verdict is (
+        Verdict.BREAKING
+    )
+    # And the sibling: the older one is still found when the newer migration never names it.
+    quiet = _chain(tmp_path / "c", OLD_BY_CALL, '    op.add_column("x", sa.Column("y", sa.Text()))')
+    assert _the_index(changes_in(_migration(drop + NEW_INDEX), versions=quiet)).verdict is (
+        Verdict.SAFE
+    )
+
+
+@pytest.mark.parametrize(
+    "index",
+    [
+        pytest.param("CREATE UNIQUE INDEX uq_new ON s.t (a, b, c)", id="no WHERE clause"),
+        pytest.param(
+            "CREATE UNIQUE INDEX uq_new ON s.t (a, b, lower(c)) WHERE c <> 'x'",
+            id="an expression among the columns",
+        ),
+        pytest.param(
+            "CREATE UNIQUE INDEX uq_new ON s.t (a, b, c) INCLUDE (d) WHERE c <> 'x'",
+            id="an INCLUDE list",
+        ),
+        pytest.param(
+            "CREATE UNIQUE INDEX uq_new ON s.t (a, b, c) NULLS NOT DISTINCT WHERE c <> 'x'",
+            id="NULLS NOT DISTINCT",
+        ),
+    ],
+)
+def test_an_index_that_is_not_a_plain_partial_one_over_plain_columns_stays_a_finding(
+    tmp_path: Path, index: str
+) -> None:
+    """Only a WHERE clause may be what separates the index from the constraint it replaces.
+
+    A statement with no predicate is not the shape this rule exists for, and an expression, an
+    INCLUDE list or a NULL treatment is a difference this reader does not order, so each of them
+    is read as it was before the rule: a restriction on a table that was already there.
+
+    Delete this and the rule matches on the table and the first few columns, which is the whole
+    of how a unique index that is stricter than the constraint it replaces would slip through.
+    """
+    versions = _chain(tmp_path, OLD_BY_CALL)
+    changes = changes_in(
+        _migration(_executing(_drop_block()) + _executing(index)), versions=versions
+    )
+    assert _the_index(changes).verdict is Verdict.BREAKING
+
+
+def test_a_constraint_this_cannot_read_the_name_of_is_not_found(tmp_path: Path) -> None:
+    """A name held in a variable, an old definition with an option, and a name touched twice.
+
+    Each is something an earlier migration did to the constraint that this reader cannot vouch
+    for: the name reached through a variable, a constraint made deferrable, and one created and
+    then renamed in the same body. None of them may be read as a plain
+    unique over `a, b, c`.
+
+    Delete this and a definition the reader half understood is taken as a whole one.
+    """
+    drop = _executing(_drop_block())
+    deferrable = (
+        f'    op.create_unique_constraint("{GONE}", "t", ["a", "b", "c"], schema="s", '
+        "deferrable=True)\n"
+    )
+    by_variable = (
+        f'    NAME = "{GONE}"\n'
+        '    op.create_unique_constraint(NAME, "t", ["a", "b", "c"], schema="s")\n'
+    )
+    renamed = OLD_BY_CALL + _executing(f"ALTER TABLE s.t RENAME CONSTRAINT {GONE} TO uq_x")
+    for position, held in enumerate((deferrable, renamed, by_variable)):
+        versions = _chain(tmp_path / str(position), held)
+        changes = changes_in(_migration(drop + NEW_INDEX), versions=versions)
+        assert _the_index(changes).verdict is Verdict.BREAKING, held
+
+
+def test_a_do_block_that_does_more_than_drop_the_named_constraint_is_not_read_as_a_drop(
+    tmp_path: Path,
+) -> None:
+    """The `DO` block is matched whole, so a block with anything added to it reads as nothing.
+
+    The rigid reading is what makes a DO block safe to read at all: one more statement in the
+    body, and this reader has no idea what else the block does to the table.
+
+    Delete this and the block is matched on the drop alone, which is the first step towards
+    reading a block that also deletes rows or adds a column as nothing more than a drop.
+    """
+    versions = _chain(tmp_path, OLD_BY_CALL)
+    longer = _drop_block().replace("END IF; END $$", "END IF; DELETE FROM s.t; END $$")
+    changes = changes_in(_migration(_executing(longer) + NEW_INDEX), versions=versions)
+    assert _the_index(changes).verdict is Verdict.BREAKING
+
+
+def test_a_partial_unique_index_on_a_table_this_migration_created_needs_no_old_constraint() -> None:
+    """The older rule is untouched: a restriction on a brand new table is safe without a drop.
+
+    Delete this and the new rule can be placed ahead of the old one in `_from_statement`, so
+    that a unique index on a table created in the same body is judged against a chain it has
+    no business reading.
+    """
+    created = '    op.create_table("t", sa.Column("a", sa.Text()), schema="s")\n' + _executing(
+        "CREATE UNIQUE INDEX uq_new ON s.t (a) WHERE a <> 'x'"
+    )
+    index = _the_index(changes_in(_migration(created), versions=Path("/nonexistent")))
+    assert (index.verdict, index.rule) == (Verdict.SAFE, "restriction on a table created here")
+
+
+def test_the_migration_that_asked_for_this_is_read_as_it_is_written() -> None:
+    """`0219` on this repository's own chain: safe, by the new rule, and not by the old ones.
+
+    And the other half: the same file read with the chain `0055` is in removed finds nothing to
+    have replaced and is refused, with the finding the train reported.
+
+    Delete this and the gate can pass because the rule is lenient while `0219`'s own migration
+    quietly stops matching the shape it was written for.
+    """
+    text = _source("0219_authored_automation.py")
+    index = _the_index(changes_in(text))
+    assert (index.verdict, index.rule) == (Verdict.SAFE, PARTIAL_RULE)
+    empty = changes_in(text, versions=Path("/nonexistent"))
+    assert _the_index(empty).verdict is Verdict.BREAKING
