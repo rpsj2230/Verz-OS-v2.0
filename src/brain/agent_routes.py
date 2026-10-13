@@ -1814,7 +1814,11 @@ async def _visible_record(
     date is read here, after the audience has admitted the caller, like everything else.
     """
     row = (await session.execute(one_agent(agent_id))).scalar_one_or_none()
-    record = record_of(row, (await extras_of(session)).get(agent_id)) if row is not None else None
+    # Read whether or not the agent exists: asked only for a row that was found, the extra read
+    # would be a statement a missing slug never causes, and the difference is the timing that
+    # says which agents exist.
+    offered = await extras_of(session)
+    record = record_of(row, offered.get(agent_id)) if row is not None else None
     if (
         row is None
         or record is None
