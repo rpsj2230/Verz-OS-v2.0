@@ -349,7 +349,6 @@ function MemoryAnswer({ subject, view }: { readonly subject: string; readonly vi
               <StatCard label="Last change" value={last === null ? "None" : dayWords(last.at)} />
             </KpiStrip>
           }
-          footnote={memory.staleness === null ? undefined : <Note>{memory.staleness}</Note>}
         />
       }
       switcher={<ViewSwitch label={VIEWS_LABEL} views={views} current={view} />}

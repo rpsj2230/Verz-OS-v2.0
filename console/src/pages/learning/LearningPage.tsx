@@ -636,7 +636,6 @@ export function LearningPage({ view }: { readonly view: LearningView }) {
     const consequence = undoing === null ? "" : (review.undoSays[undoing.control_writes] ?? "");
     content = (
       <>
-        {review.staleness === null ? null : <Note>{review.staleness}</Note>}
         <Figures review={review} />
         <div>
           <ViewSwitch label={VIEWS_LABEL} views={views} current={view} />

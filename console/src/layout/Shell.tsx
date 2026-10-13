@@ -53,11 +53,18 @@
  * `components/ui/sidebar.tsx` with Tailwind's utilities; the column holding the header and the page
  * carries `data-legacy`, so the pages that exist keep the stylesheets they were drawn with.
  *
- * Task ids: M27.10.1, M27.7.29
+ * **Under the page's own frame, a page read from a copy of the database that is behind says so once.**
+ * `layout/StalenessBanner.tsx` draws the sentence the API sent in a response's `staleness` field, for
+ * every page and not only the two that used to, and it is cleared when the address changes
+ * (M36.1.2.3).
+ *
+ * Task ids: M27.10.1, M27.7.29, M36.1.2.3
  */
 
 import { Suspense } from "react";
-import { Outlet } from "react-router-dom";
+import { useEffect } from "react";
+import { Outlet, useLocation } from "react-router-dom";
+import { clearStaleness } from "../api/staleness";
 import { useResource } from "../api/useResource";
 import { SidebarProvider } from "../components/ui/sidebar";
 import { ThemeControl } from "../theme/ThemeControl";
@@ -70,10 +77,15 @@ import { GlobalSearch } from "./GlobalSearch";
 import { ModuleTabs } from "./ModuleTabs";
 import { NAVIGATION_API_PATH, menuFor, readNavigation } from "./navigationQuery";
 import { SignInStrength } from "./SignInStrength";
+import { StalenessBanner } from "./StalenessBanner";
 
 export { MENU_LOADING, MENU_UNAVAILABLE } from "./ConsoleSidebar";
 
 export function Shell() {
+  const location = useLocation();
+  useEffect(() => {
+    clearStaleness();
+  }, [location.pathname]);
   const answer = useResource<unknown>(NAVIGATION_API_PATH);
   const given = answer.data === null ? null : readNavigation(answer.data);
   const groups = menuFor(given, OWN_WORK);
@@ -113,6 +125,7 @@ export function Shell() {
         <SignInStrength />
 
         <main id="main" className="shell__main">
+          <StalenessBanner />
           <ModuleTabs groups={groups} />
           <Suspense
             fallback={
