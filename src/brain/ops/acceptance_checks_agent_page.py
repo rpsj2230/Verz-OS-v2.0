@@ -21,8 +21,8 @@ reader should see are the ones their grants open among those this install popula
 states them in its own words. Comparing the answer with `tab_strip` would compare the route with
 itself, which is the constant-against-itself mistake CLAUDE.md names.
 
-**What is not checked here, and why.** M39.1.1.1 asks for twelve parts of an agent and the
-composition enumerates ten (`workspace.Part` names no tools and no workflows), so it is left out.
+**What is not checked here, and why.** M39.1.1.1, the twelve parts of an agent, is
+`brain.ops.acceptance_checks_agent_parts`'s.
 M39.1.2.4's server half, `workspace.deep_link` and `workspace.resolve`, is called by no route and
 no alert carries a link yet. M39.1.2.5 is keyboard behaviour in the console, which a server check
 cannot reach and `console/tests/agent-page.test.tsx` holds.

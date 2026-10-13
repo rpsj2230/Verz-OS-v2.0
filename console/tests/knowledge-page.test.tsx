@@ -20,10 +20,12 @@ import { createMemoryRouter, MemoryRouter, RouterProvider } from "react-router-d
 import { beforeAll, describe, expect, test } from "vitest";
 import { ADVANCED_LABEL, UNAVAILABLE_MARK } from "../src/components/kit/parts";
 import { AddFileForm, AddLinkForm, AddManyForm } from "../src/pages/knowledge/addForms";
-import { HandOverForm, NewVersionForm, ProposeForm, VerifyForm } from "../src/pages/knowledge/actForms";
+import { ArchiveForm, HandOverForm, NewVersionForm, ProposeForm, VerifyForm } from "../src/pages/knowledge/actForms";
 import {
   ADD_IT_ON_CLASSIFICATION,
   ADD_VERSION,
+  ARCHIVE,
+  ARCHIVE_CONSEQUENCE,
   HAND_OVER,
   HAND_OVER_CONSEQUENCE,
   NEW_VERSION_CONSEQUENCE,
@@ -47,6 +49,7 @@ import { CAPTURE, CAPTURE_PROBLEMS } from "../src/pages/knowledge/SolutionsPage"
 import { APPROVE, CONFIRM_CONSEQUENCE, OPEN, REASON_MISSING, REJECT } from "../src/pages/knowledge/CorrectionsPage";
 import { QUEUED_FIELDS, QUEUED_STATES, queuedPath, readQueued } from "../src/pages/knowledgeIntakeQuery";
 import {
+  archivePath,
   CORRECTIONS_API_PATH,
   correctionDecisionPath,
   correctionReviewPath,
@@ -128,7 +131,7 @@ const DETAIL = {
     { item_id: OLDER, title: "Site handover", state: "superseded", level: "department", department: "web", added_at: "2019-03-01T09:00:00+00:00", readable: true },
     { item_id: ITEM, title: "Site handover", state: "published", level: "department", department: "web", added_at: "2019-03-04T09:00:00+00:00", readable: true },
   ],
-  offered: { verify: true, new_version: true, propose: false, hand_over: true },
+  offered: { verify: true, new_version: true, propose: false, hand_over: true, archive: true },
   promotion_waits: "Asking puts a card on the Approvals screen.",
 };
 
@@ -590,6 +593,23 @@ describe("the forms", () => {
     expect(bodyOf(writes(hand)[0]?.init as RequestInit)).toEqual({ steward_id: "u_narrow" });
   });
 
+  test("archiving a document is confirmed in a sentence about what it stops, and sends no body", async () => {
+    // What breaks if this is deleted: a document withdrawn from every answer by one press, or an
+    // archive that sends a body the route does not read (M27.15.40).
+    const idp = api({});
+    const form = await alone(idp, <ArchiveForm itemId={ITEM} title="Site handover" onDone={() => undefined} />);
+    fireEvent.submit(form.querySelector("form") as HTMLFormElement);
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain(ARCHIVE_CONSEQUENCE);
+    expect(dialog.textContent).toContain("Archive Site handover?");
+    expect(writes(idp)).toEqual([]);
+    fireEvent.click(within(dialog).getByText(ARCHIVE));
+    await waitFor(() => expect(writes(idp)).toHaveLength(1));
+    expect(writes(idp)[0]?.url.pathname).toBe(`${API}${archivePath(ITEM)}`);
+    expect(writes(idp)[0]?.init?.method).toBe("POST");
+    expect(writes(idp)[0]?.init?.body).toBeUndefined();
+  });
+
   test("asking for the whole company needs a reason, and sends it with the review date", async () => {
     // What breaks if this is deleted: a promotion card on the Approvals screen with no reason on it.
     const idp = api({});
@@ -759,7 +779,7 @@ describe("what the module reads and says", () => {
     for (const [act, { retiredBy }] of Object.entries(UNAVAILABLE)) {
       expect(paths.filter((path) => retiredBy.test(path)), act).toEqual([]);
     }
-    expect(UNAVAILABLE.archive.retiredBy.test("/api/v1/knowledge/items/{item_id}/archive")).toBe(true);
+    expect(paths).toContain(`${API}/knowledge/items/{item_id}/archive`);
     expect(UNAVAILABLE.exportInventory.retiredBy.test("/api/v1/knowledge/inventory")).toBe(true);
     expect(paths).toContain(`${API}${DOCUMENTS_API_PATH}`);
     expect(paths).toContain(`${API}${VERIFICATIONS_API_PATH}`);

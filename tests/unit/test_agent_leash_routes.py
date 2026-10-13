@@ -46,7 +46,14 @@ from brain.ops.leash_store import StoredLeash
 from brain.session import make_session_factory
 from brain.tables.agent import AgentRow
 from brain.tables.leash import PinOutcome
-from tests.fixtures.console_http import Stub, console_client, gate_wiring, get, headers
+from tests.fixtures.console_http import (
+    Stub,
+    console_client,
+    gate_wiring,
+    get,
+    headers,
+    no_audience_extras,
+)
 from tests.fixtures.retirable import retirable
 from tests.fixtures.scratch_postgres import run, sql
 from tests.fixtures.setting_rows import Result
@@ -97,6 +104,7 @@ def answer(statement: Any) -> Result | None:
 @pytest.fixture
 def served() -> Iterator[tuple[TestClient, Stub]]:
     with console_client(GRANTS, routers=(router,)) as (client, stub):
+        stub.answerers.append(no_audience_extras)
         stub.answerers.append(answer)
         yield client, stub
 

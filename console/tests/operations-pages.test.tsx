@@ -596,9 +596,14 @@ describe("Backup and recovery, Rate limits and Capacity", () => {
       connections: [{ database: "application", admissible: 100, demand: 60, headroom: 40 }],
       sizings: [{ name: "SIZING-NAME", peak_per_second: 2, service_seconds: 4, in_flight_at_peak: 8, slots_needed: 8, reason: "SIZING-REASON" }],
       first_limit: "FIRST-LIMIT-SENTENCE",
+      moves: [
+        { move: "partition_the_ledger", observable: "retained_window_days", unit: "days", threshold: 31, measured: 1825, due: true, said: "MOVE-DUE-SENTENCE" },
+        { move: "materialised_reports", observable: "report_p95_ms", unit: "ms", threshold: 8000, measured: null, due: null, said: "MOVE-NOT-MEASURED-SENTENCE" },
+      ],
     };
     expect(Object.keys(body).sort()).toEqual(backendModelFields(INSTALL_ROUTES, "CapacityView").sort());
     expect(Object.keys(body.sizings[0] ?? {}).sort()).toEqual(backendModelFields(INSTALL_ROUTES, "SizingView").sort());
+    expect(Object.keys(body.moves[0] ?? {}).sort()).toEqual(backendModelFields(INSTALL_ROUTES, "MoveView").sort());
     const { container } = await open("/connections", { "GET /api/v1/install/capacity": () => ({ body }) });
     const reserved = [...container.querySelectorAll('main [data-slot="stat-card"]')].find((card) =>
       card.textContent?.startsWith("Reserved by the compose files"),
@@ -613,6 +618,14 @@ describe("Backup and recovery, Rate limits and Capacity", () => {
     expect(mainText(container)).toContain("SIZING-NAME");
     expect(mainText(container)).toContain("2 a second");
     expect(mainText(container)).toContain("FIRST-LIMIT-SENTENCE");
+    // M36.1.1.4, M36.1.2.4, M36.1.3.3, M36.1.4.3: a move that is due says so, and one nothing
+    // measures is "Not measured" and never "Not due". What breaks if deleted: a report nobody
+    // timed read as a report that is fast.
+    expect(mainText(container)).toContain("MOVE-DUE-SENTENCE");
+    expect(mainText(container)).toContain("MOVE-NOT-MEASURED-SENTENCE");
+    const rows = [...container.querySelectorAll("main tr")].map((row) => row.textContent ?? "");
+    expect(rows.find((row) => row.includes("report p95 ms"))).toContain("Not measured");
+    expect(rows.find((row) => row.includes("report p95 ms"))).not.toContain("Not due");
   });
 });
 
@@ -773,11 +786,23 @@ describe("Storage", () => {
           since: "2019-03-06T09:00:00Z",
           blocks: ["xero.list_invoices", "xero.get_invoice"],
           blocks_unknown: "",
+          acknowledged_by: "ACK-PERSON",
+          acknowledged_at: "2019-03-06T10:00:00Z",
         },
-        { subject: "laravel", state: "degraded", since: "2019-03-06T09:00:00Z", blocks: [], blocks_unknown: "BLOCKS-UNKNOWN-SENTENCE" },
+        {
+          subject: "laravel",
+          state: "degraded",
+          since: "2019-03-06T09:00:00Z",
+          blocks: [],
+          blocks_unknown: "BLOCKS-UNKNOWN-SENTENCE",
+          acknowledged_by: "",
+          acknowledged_at: null,
+        },
       ],
       unread: "",
       told: "TOLD-SENTENCE",
+      may_acknowledge: false,
+      acknowledging_means: "ACK-MEANS",
     };
     expect(Object.keys(body).sort()).toEqual(backendModelFields(INCIDENT_ROUTES, "IncidentsView").sort());
     expect(Object.keys(body.items[0] ?? {}).sort()).toEqual(backendModelFields(INCIDENT_ROUTES, "IncidentView").sort());
@@ -788,6 +813,47 @@ describe("Storage", () => {
     expect(text).toContain("Slow or partly failing");
     expect(text).toContain("BLOCKS-UNKNOWN-SENTENCE");
     expect(text).toContain("TOLD-SENTENCE");
+    expect(text).toContain("ACK-PERSON");
+    // The control is the API's flag drawn: a reader it is not offered to is shown none.
+    expect(screen.queryByRole("button", { name: "Acknowledge" })).toBeNull();
+    expect(text).not.toContain("ACK-MEANS");
+  });
+
+  test("Incidents offers Acknowledge only where the API says so, once per incident, and sends the incident as listed", async () => {
+    // What breaks if this is deleted: the control drawn for a reader the API refuses, offered again
+    // for an incident somebody already acknowledged, or sent with anything but the source and the
+    // instant the page drew (M27.15.45).
+    const incident = (subject: string, by: string) => ({
+      subject,
+      state: "down",
+      since: "2019-03-06T09:00:00Z",
+      blocks: ["x.y"],
+      blocks_unknown: "",
+      acknowledged_by: by,
+      acknowledged_at: by === "" ? null : "2019-03-06T10:00:00Z",
+    });
+    const body = {
+      items: [incident("xero", ""), incident("laravel", "SOMEBODY")],
+      unread: "",
+      told: "TOLD",
+      may_acknowledge: true,
+      acknowledging_means: "ACK-MEANS",
+    };
+    const sent: unknown[] = [];
+    const { container } = await open("/incidents", {
+      "GET /api/v1/console/incidents": () => ({ body }),
+      "POST /api/v1/console/incidents/acknowledgement": (_url, init) => {
+        sent.push(JSON.parse(String(init?.body)));
+        return { body: incident("xero", "ME") };
+      },
+    });
+    expect(mainText(container)).toContain("ACK-MEANS");
+    const buttons = screen.getAllByRole("button", { name: "Acknowledge" });
+    expect(buttons).toHaveLength(1);
+    fireEvent.click(buttons[0] as HTMLElement);
+    await waitFor(() => {
+      expect(sent).toEqual([{ subject: "xero", since: "2019-03-06T09:00:00Z" }]);
+    });
   });
 
   test("Incidents says what the API could not read rather than that nothing is degraded", async () => {
