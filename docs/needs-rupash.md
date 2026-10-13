@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**31 items are open: 196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **193,** which formats an agent's generated documents start with and which libraries may be added, **192,** whether sensitive actions that cannot be undone need a second person, **191,** whether an agent may ever answer with nothing behind it, **189,** how a team agent may use mail without one person's mail reaching anybody else, **188,** whether five console tasks that ask for what the design does not do are narrowed, **187,** whether the chat tools show progress while an answer is made, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **167,** whether a chat room or channel belongs to exactly one agent, **163,** the short list of what stops tasks being proved on your install, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **134,** connecting the Slack channel, **132,** connecting the email channel, **131,** making staff accounts work on your install, **127 and 128,** things for you to do (switch on the Lark chat channel, and connect Xero, HubSpot and Freshdesk), **and 91,** the
+**36 items are open: 196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **193,** which formats an agent's generated documents start with and which libraries may be added, **192,** whether sensitive actions that cannot be undone need a second person, **191,** whether an agent may ever answer with nothing behind it, **189,** how a team agent may use mail without one person's mail reaching anybody else, **188,** whether five console tasks that ask for what the design does not do are narrowed, **187,** whether the chat tools show progress while an answer is made, **186,** whether answers keep using the old search index while a new embedding model is built, **185,** which person approves the eight starter skills, **184,** which outside AI services are offered first and what they count as, **183,** whether a skill is refused when its agent lacks one of its tools, **182,** what a skill names when it needs knowledge, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **167,** whether a chat room or channel belongs to exactly one agent, **163,** the short list of what stops tasks being proved on your install, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **134,** connecting the Slack channel, **132,** connecting the email channel, **131,** making staff accounts work on your install, **127 and 128,** things for you to do (switch on the Lark chat channel, and connect Xero, HubSpot and Freshdesk), **and 91,** the
 checks only you can do on your install; it waits for the Knowledge upload grants (item 105) to land.
 Each says in plain terms what it is, what I recommend, and every step.
 
@@ -236,6 +236,124 @@ reassurance the brief is after. I will build it behind a switch that ships off, 
 by asking a real question in Lark and reading the edits.
 
 **What I need from you:** reply "187: A", "187: B" or "187: C".
+
+## 186. While a new embedding model is built, may answers use the old search index?
+
+**In plain terms:** search by meaning works by storing, beside every passage, a list of numbers that
+one model made. If you change the embedding model, every passage has to be done again, which takes
+hours. The task says "answers keep using the previous vectors" while that happens (M7.7.8). The
+product was built the other way round on purpose: a search must never compare numbers from two
+models, because the answer is then wrong with nothing to show it. So while a rebuild runs, search by
+meaning is off and answers come from word search alone, which is thinner but never wrong. Nothing
+rebuilds yet (no rebuild task is registered), so this only matters on the day you change the model.
+
+**Option A: word search only while it rebuilds.** What is built. No change to the database, no extra
+storage. Answers are thinner for the hours a rebuild takes, on the one day you change the model.
+
+**Option B: keep the old numbers until the new ones are complete.** A second column holds the new
+numbers, answers use the old column the whole time, and one step switches over when every passage is
+done. Answers do not change at all during a rebuild. It costs a second copy of every vector while it
+runs (about 4 KB a passage) and a database change, which I would build as one numbered migration.
+
+**My recommendation:** A. Changing the model is rare, the hours are short, and A cannot give a wrong
+answer. B is worth it only if you expect to change the model often, or hold so many passages that a
+rebuild takes more than a day.
+
+**What I need from you:** nothing, or reply "186: B".
+
+## 185. Who approves the eight starter skills a new install is furnished with?
+
+**In plain terms:** your plan says a new install comes with eight ready-made skills: an SEO audit,
+keyword research, a website health check, ticket analysis, complaint analysis, a monthly SEO report,
+proposal generation and website troubleshooting, each approved, assignable to an agent and rehearsed
+against its example tasks (M12.4.7). None of the eight exists yet. A skill is only ever approved by a
+named person who has read it (the library records who, and an approval is of those exact words), so
+"furnished already approved" has to mean that somebody approved it.
+
+**Option A: they arrive waiting for review.** The product ships the eight, each with its example tasks,
+and each lands in the library as undecided, like any import. An administrator of your install reads each
+one, rehearses its examples and approves it, and the library records that person. Nothing runs before a
+person has read it, which is the rule for every other skill.
+
+**Option B: they arrive approved by the product.** The product approves them itself when it furnishes a
+new install. Quicker to use, but a skill is the one part of an agent that arrives from outside the
+company, and an approval nobody on the install gave breaks the rule that every skill has a named
+approver.
+
+**My recommendation:** A. It costs an administrator one review per skill, once, and every skill on every
+install then has a person's name on it. I will write the eight, name only tools the install really has
+(the website check, the knowledge search and the connected figures), and show on your install that they
+land waiting for review.
+
+**What I need from you:** reply "185: A" or "185: B".
+
+## 184. Which outside AI services does the product offer first, and what do they count as?
+
+**In plain terms:** your plan says an agent may use an outside AI service that is not a chat model, such
+as image generation or speech to text, registered as a tool that needs a permission and declares what it
+does (M12.3.7), and that any agent whose ceiling does not name it is refused. The refusal already works
+for every tool. What does not exist is a first service to register: nothing in the product calls an image
+or a speech provider today, and each needs a provider account and a key kept in the vault.
+
+Two things only you can say. **Which service first** (speech to text for recorded calls and voice notes,
+image generation for slides and posts, or both), and **what it counts as.** A call sends your material to
+an outside company, so the product's own rule would class it as a tool that sends something out, whose
+rung is capped at Assisted: a person approves each call.
+
+**Option A: count it as sending something out.** Every call waits for a person. Safe, and slow for speech
+to text, where nothing leaves that the person did not choose to submit.
+
+**Option B: speech to text counts as a read and image generation as a draft.** Fewer approvals. The catch
+is that what is sent is the person's own recording or prompt, which the product cannot check is free of a
+client's details.
+
+**My recommendation:** A for both, and I build nothing until you name the first service and give me the
+provider account, so that no tool is registered that cannot be called.
+
+**What I need from you:** the service and the provider, and "184: A" or "184: B".
+
+## 183. Is a skill refused when the agent it is given to lacks one of the skill's tools?
+
+**In plain terms:** a skill names the tools it expects to use. Today, when an administrator gives a skill
+to an agent, the screen shows which of those tools the agent can actually reach, and the assignment goes
+ahead either way: the skill simply cannot use a tool its agent does not have. Your plan for skill reuse
+(M12.4.10) says the assignment is refused, with the missing tools named. The two differ in what an
+administrator can do in one step.
+
+**Option A: refuse, naming what is missing.** "Not assigned: this agent cannot reach ticket.read."
+Nothing half-working is ever assigned, and the way forward is stated. The administrator widens the agent
+through its normal publish (which a second person approves), then assigns.
+
+**Option B: assign, and show each missing tool as requested but not in the agent's ceiling** (today's
+screen). Quicker to assign. An agent can carry a skill it cannot fully use, and nothing tells it so until
+the skill's steps fail in a run.
+
+**My recommendation:** A. A skill that cannot do what it says is worse than none, and a refusal that names
+the tool is the same sentence the screen already shows. It never widens the agent: only the publish gate
+does that.
+
+**What I need from you:** reply "183: A" or "183: B".
+
+## 182. What does a skill name when it needs knowledge?
+
+**In plain terms:** your plan says a skill declares the knowledge it needs, and giving it to an agent whose
+knowledge does not cover that need is refused, saying what is missing (M12.3.3). Nothing in a skill says
+this yet, so the refusal cannot be written. An agent's knowledge is cut by **department** (the only thing
+a knowledge scope tests), so the natural thing for a skill to name is the departments whose knowledge it
+needs, such as "finance" for a skill that quotes from the pricing notes.
+
+**Option A: departments.** A skill lists the departments whose knowledge it needs. Giving it to an agent
+whose knowledge scope does not include one of them is refused, naming the departments missing. The same
+list is what a skill drafted in conversation (M12.4.14) carries. It needs one new field on the skill,
+which becomes part of what an approval covers; a skill written before it is unchanged.
+
+**Option B: kinds of document** (a standard procedure, a pricing note, a template). This names what the
+skill reads rather than where it sits, but an agent's knowledge is not cut by kind, so there would be no
+scope to compare it with and nothing to refuse on.
+
+**My recommendation:** A.
+
+**What I need from you:** reply "182: A" or "182: B".
 
 ## 173. Connect Google Workspace so each person's own mail, calendar and documents can be asked about
 
