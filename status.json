@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-13T13:54:45.330376+00:00",
-  "commit": "36488356",
-  "commit_subject": "Migration train 4: payload expiry, approval wait, dead letter, member preferences, member sharing (0226 to 0230) (#571)",
+  "generated_at": "2026-10-13T13:59:29.038649+00:00",
+  "commit": "23d88466",
+  "commit_subject": "Needs item 234: worker memory limit and an exposed worker token (#580)",
   "total": 1625,
   "done": 864,
   "percent": 53.2,
