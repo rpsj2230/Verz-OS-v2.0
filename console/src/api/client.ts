@@ -41,6 +41,7 @@
 import { config } from "../config";
 import { accessToken, forgetSession, refusedAsUnlinked, sessionAccepted } from "../auth/session";
 import { failureFrom, transportFailure, type ApiFailure } from "./errors";
+import { noteStaleness } from "./staleness";
 import { EVENT_STREAM, eventsOf, type AnswerEvent } from "./events";
 
 /**
@@ -203,6 +204,7 @@ export async function request<T>(
   // here can prove the two agree, and a runtime validator would be a third description of
   // the same schema. A body that is not what the caller expected, including the `null` from
   // a response with no content, arrives as a wrong-shaped value rather than as an error.
+  noteStaleness(payload);
   return { ok: true, data: payload as T };
 }
 
