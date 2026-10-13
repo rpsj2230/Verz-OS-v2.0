@@ -24,7 +24,7 @@ otherwise pass. See `A_LIBRARY_ACT_IS_A_ROW_AND_NEVER_AN_EDIT`.
 own template key: the check reads nothing from the vault, and what it publishes is rolled back with
 everything else it wrote.
 
-Task ids: M27.11.8, M27.15.55, M27.15.56, M27.15.31
+Task ids: M27.11.8, M27.15.55, M27.15.56, M27.15.31, M42.6.4
 """
 
 from __future__ import annotations
@@ -106,7 +106,7 @@ def _body(response: Any) -> dict[str, Any]:
 
 # ------------------------------------------- 1. the library's acts, each a row
 @check(
-    leaves=("M27.11.8", "M27.15.55", "M27.15.56"),
+    leaves=("M27.11.8", "M27.15.55", "M27.15.56", "M42.6.4"),
     sentence=(
         "An administrator assigns an approved skill to an agent and is told the tools it reaches "
         "through the agent's ceiling; the library finds it by name with the agent counted; "

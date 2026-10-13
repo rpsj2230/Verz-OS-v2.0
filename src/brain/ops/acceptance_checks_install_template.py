@@ -20,7 +20,7 @@ Rejected: reading `.env` on the host. The worker does not mount it, and an insta
 a second mount is an install that cannot be checked until somebody changes its compose file.
 
 Task ids: M42.1.2, M42.1.3, M42.1.4, M42.2.3, M42.2.8, M42.3.1, M42.3.6
-Task ids: M42.3.9, M42.5.1, M42.5.2, M42.5.15
+Task ids: M42.3.9, M42.5.1, M42.5.2, M42.5.15, M42.3.3, M42.1.1, M42.3.2, M42.3.8
 """
 
 from __future__ import annotations
@@ -131,8 +131,8 @@ async def the_installer_steps_say_when_done_and_what_to_do_on_failure(h: Harness
     sentence=(
         "The installer mints the database password, the application role's password and the "
         "setup secret on the client's own server; and every credential this install's "
-        "application holds is non-empty, long enough to have been generated, and not one value "
-        "doing for two credentials."
+        "application holds is long enough to have been generated and not one value doing for "
+        "two credentials."
     ),
 )
 async def every_secret_the_install_holds_was_minted_here_and_none_repeats(h: Harness) -> None:
@@ -150,9 +150,10 @@ async def every_secret_the_install_holds_was_minted_here_and_none_repeats(h: Har
     # else's variables, and a short token of the platform's is not this install's secret.
     environment = process_environment()
     names = {one for accepted in application_reads().values() for one in accepted}
-    found = unminted_secrets(
-        {name: environment[name] for name in sorted(names) if name in environment}
-    )
+    # A credential left blank is a feature nobody configured (Langfuse, say), not one the
+    # installer failed to mint, and the compose files refuse to start without the ones it does.
+    held = {name: environment[name] for name in sorted(names) if environment.get(name, "").strip()}
+    found = unminted_secrets(held)
     if found:
         # Names only, never values, to the worker's log; the result names nothing.
         log.warning("acceptance.secrets_not_minted", findings=list(found))
@@ -307,6 +308,13 @@ async def the_updates_screen_names_the_version_and_whether_newer_exists(
     asked = await c.asked(reader)
     with c.as_route():
         view = await updates(c.request(), asked)
+    watch = getattr(c.app.state, "release_watch", None)
+    if watch is not None:
+        # A look the page started, if the release check is on, is let finish rather than left
+        # running past the check.
+        from brain.ops.acceptance_operations_console import settled as looked
+
+        await looked(watch)
     if not view.running.tag and not view.running.cannot_say:
         raise CheckFailedError("the screen neither names the running release nor says why not")
     if view.running.tag and view.running.cannot_say:
@@ -320,3 +328,156 @@ async def the_updates_screen_names_the_version_and_whether_newer_exists(
         raise CheckFailedError("the screen shows a tick with nothing behind it")
     if set(ANSWERS) != set(Standing):
         raise CheckFailedError("a standing of the Updates screen has no sentence to say")
+
+
+@check(
+    leaves=("M42.3.3",),
+    sentence=(
+        "The database is at the one head the migrate command brings a database to, so running it "
+        "now would apply nothing, and the operations chapter names the create, migrate and seed "
+        "commands that exist and no others."
+    ),
+)
+async def the_database_is_at_the_head_the_migrate_command_brings_it_to(h: Harness) -> None:
+    from alembic.script import ScriptDirectory
+
+    from brain.deployment import database
+    from brain.migrate import _alembic_config
+    from brain.ops.acceptance_operations_console import applied_revisions
+    from brain.ops.install_docs import database_command_gaps
+
+    head = ScriptDirectory.from_config(_alembic_config("postgresql://acceptance.invalid/x"))
+    if await applied_revisions(h) != [head.get_current_head()]:
+        raise CheckFailedError("the database is not at the head the migrate command brings it to")
+    chapter = _guides() / "operations.md"
+    if not chapter.is_file():
+        raise CheckNotRunError(NO_GUIDES_HERE)
+    if database_command_gaps(
+        chapter.read_text(encoding="utf-8"), commands=database.COMMANDS, module=database.__name__
+    ):
+        raise CheckFailedError("the operations chapter and the database commands disagree")
+
+
+@check(
+    leaves=("M42.1.1", "M42.3.2"),
+    sentence=(
+        "The template this release generates for an install's variables file carries every "
+        "credential-shaped setting blank, documents each setting it emits, and refuses a "
+        "variable with no meaning; the check for the variables repository names a directory of "
+        "product code and a credential set to one value on two installs, and says neither value."
+    ),
+)
+async def the_variables_template_is_blank_and_the_repository_is_checked(
+    h: Harness,
+) -> None:
+    del h
+    import tempfile
+
+    from brain.deployment.variables import (
+        VariablesError,
+        check_directory,
+        is_secret_name,
+        parse_env,
+        template_for,
+    )
+
+    text = template_for(
+        "acceptance-install",
+        also={"APP_IMAGE": "the image tag", "POSTGRES_PASSWORD": "the database password"},
+    )
+    values = parse_env(text)
+    if "APP_IMAGE" not in values or not any(is_secret_name(name) for name in values):
+        raise CheckFailedError("the template does not describe the deployment's variables")
+    if any(value.strip() for name, value in values.items() if is_secret_name(name)):
+        raise CheckFailedError("the template ships a value for a credential")
+    lines = text.splitlines()
+    for at, line in enumerate(lines):
+        name = line.partition("=")[0]
+        if name in values and (at == 0 or not lines[at - 1].startswith("#")):
+            raise CheckFailedError("the template emits a setting with nothing saying what it is")
+    try:
+        template_for("acceptance-install", also={"UNEXPLAINED": " "})
+    except VariablesError:
+        pass
+    else:
+        raise CheckFailedError("the template emitted a variable it could not explain")
+
+    shared = "x" * 48
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / "first.env").write_text(f"POSTGRES_PASSWORD={shared}\n", encoding="utf-8")
+        (root / "second.env").write_text(f"POSTGRES_PASSWORD={shared}\n", encoding="utf-8")
+        (root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+        found = check_directory(root)
+    if not found or any(shared in one for one in found):
+        raise CheckFailedError(
+            "the repository check missed a fork or a shared credential, or said it"
+        )
+    if not any("pyproject.toml" in one for one in found) or not any(
+        "first" in one for one in found
+    ):
+        raise CheckFailedError("the repository check did not name what it found")
+
+
+#: Said when the release check is off, which is how every install ships.
+THE_RELEASE_CHECK_IS_OFF: Final = (
+    "this install has not switched on the check for newer releases, so it asks nobody what the "
+    "release it runs says; switch it on under Features and the next run reads it"
+)
+
+#: Said when the release list does not carry the running release.
+THE_RUNNING_RELEASE_IS_NOT_LISTED: Final = (
+    "the release list names no published release matching the one this install runs, so there "
+    "are no notes of it to read"
+)
+
+#: The three questions a published release's notes answer, as `ReleaseNotes.render` heads them.
+WHAT_A_RELEASE_NOTE_ANSWERS: Final = (
+    "## What changed",
+    "## Does this change your database",
+    "## How urgent this is",
+)
+
+
+@check(
+    leaves=("M42.3.8",),
+    sentence=(
+        "The published release this install runs, read from the release list the install is "
+        "switched on to ask, carries notes in plain words that say what changed, whether the "
+        "database changes and how urgent it is."
+    ),
+)
+async def the_release_this_install_runs_says_what_changed_and_how_urgent(h: Harness) -> None:
+    import json
+
+    from brain.console.version_view import image_tag, ordinal
+    from brain.deployment.release_feed import feed_address, https_fetch
+    from brain.ops.features import RELEASE_CHECK, switch_states, switched_on_in
+
+    async with h.sessions() as session:
+        on = h.settings.release_check or RELEASE_CHECK.name in switched_on_in(
+            await switch_states(session), (RELEASE_CHECK,)
+        )
+    address = feed_address(switched_on=on, url=h.settings.release_feed_url)
+    if not address:
+        raise CheckNotRunError(THE_RELEASE_CHECK_IS_OFF)
+    tag = image_tag(h.settings.app_image)
+    if ordinal(tag) is None:
+        raise CheckNotRunError(PINNED_TO_A_BUILD)
+    try:
+        payload = json.loads(await asyncio.to_thread(https_fetch, address))
+    except (OSError, ValueError) as exc:
+        raise CheckNotRunError(THE_RUNNING_RELEASE_IS_NOT_LISTED) from exc
+    entries = payload if isinstance(payload, list) else [payload]
+    notes = [
+        str(one.get("body", ""))
+        for one in entries
+        if isinstance(one, dict) and str(one.get("tag_name", "")).strip() == tag
+    ]
+    if not notes:
+        raise CheckNotRunError(THE_RUNNING_RELEASE_IS_NOT_LISTED)
+    if any(heading not in notes[0] for heading in WHAT_A_RELEASE_NOTE_ANSWERS):
+        raise CheckFailedError(
+            "the notes of the release this install runs do not say what changed, whether the "
+            "database changes and how urgent it is"
+        )

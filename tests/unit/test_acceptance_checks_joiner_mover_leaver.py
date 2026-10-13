@@ -3,7 +3,7 @@ failing with the product broken the way it would plausibly break.
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M26.1.2, M26.1.3, M26.2.6, M26.3.1, M26.3.2, M26.3.3
+Task ids: M26.1.2, M26.1.3, M26.2.6, M26.3.1, M26.3.2, M26.3.3, M26.3.4
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ PACKS = "a_joiner_gets_a_department_pack_and_a_mover_or_leaver_loses_it"
 DISABLE = "a_disabled_person_is_refused_on_the_next_request_and_signed_out"
 AGENT = "a_leaver_s_agent_stops_is_listed_for_adoption_and_is_taken_on"
 AUTOMATION = "an_automation_waits_for_an_owner_when_its_owner_is_disabled"
+PERSONAL = "a_leaver_s_personal_document_stays_and_nobody_else_reaches_it"
 
 #: Tables the checks write that `counts` does not hold.
 ALSO_WRITTEN = ("gate.capability_pack_assignment", "gate.automation_owner")
@@ -35,8 +36,9 @@ def test_the_module_declares_the_leaves_each_check_proves() -> None:
         DISABLE: ("M26.3.1",),
         AGENT: ("M26.3.2",),
         AUTOMATION: ("M26.3.3",),
+        PERSONAL: ("M26.3.4",),
     }
-    assert checks_in(MODULE) == [PACKS, DISABLE, AGENT, AUTOMATION]
+    assert checks_in(MODULE) == [PACKS, DISABLE, AGENT, AUTOMATION, PERSONAL]
 
 
 @pytest.fixture(scope="module")
@@ -75,7 +77,7 @@ def test_the_checks_pass_on_a_furnished_install_and_leave_nothing(
     furnish(install)
     before, also = counts(install), held(install)
     results = run_module(install, MODULE)
-    assert results == dict.fromkeys((PACKS, DISABLE, AGENT, AUTOMATION), (PASSED, ""))
+    assert results == dict.fromkeys((PACKS, DISABLE, AGENT, AUTOMATION, PERSONAL), (PASSED, ""))
     assert counts(install) == before
     assert held(install) == also
 
@@ -140,3 +142,23 @@ def test_an_agent_that_is_not_stopped_when_its_owner_leaves_fails_the_agent_chec
     outcome, reason = run_module(install, MODULE)[AGENT]
     assert outcome == FAILED, reason
     assert "was not stopped" in reason
+
+
+@pytest.mark.needs_db
+def test_a_personal_document_placed_at_the_department_fails_the_personal_check(
+    install: str, issuer: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A document the person kept to themselves that the product places at department level is
+    read by their colleagues. Delete this and M26.3.4 closes on a personal level that is not."""
+    from brain.knowledge import uploads
+    from brain.knowledge.visibility import Visibility
+
+    real = uploads.placement_for_upload
+
+    def widened(level: Any, **kwargs: Any) -> Any:
+        return real(Visibility.DEPARTMENT if level is Visibility.PERSONAL else level, **kwargs)
+
+    monkeypatch.setattr(uploads, "placement_for_upload", widened)
+    outcome, reason = run_module(install, MODULE)[PERSONAL]
+    assert outcome == FAILED, reason
+    assert "somebody else" in reason
