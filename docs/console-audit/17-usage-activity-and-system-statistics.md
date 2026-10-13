@@ -3,13 +3,15 @@
 - **Screens:** `/usage`, `/adoption`, `/spend`, `/questions`, `/quality`, `/service-levels`, `/me`, `/company/estate`, `/company/activity`, `/company/consumption`
 - **Tables:** `agent.artifact_share`, `agent.agent_request`, `auth.member_preference`, `ops.question_asked`, `ops.question_gap`, `ops.report_refresh`, `ops.spend_actual`, `obs.request_telemetry`, `ops.answer_flag`, `ops.regression_case`, `ops.quality_reading`, `ops.quality_annotation`, `ops.golden_score`, `ops.evaluation_candidate`, `ops.positive_example`, `ops.tier_decision`
 - **Installation values:** none
-- **Measured here:** 28 routes, 15 called by no screen; 4 write routes, 4 with all three proofs; 1 gaps.
+- **Measured here:** 31 routes, 17 called by no screen; 5 write routes, 5 with all three proofs; 1 gaps.
 
 | Route | Called by |
 | --- | --- |
 | `GET /api/v1/company/activity` | `/company/activity` |
 | `GET /api/v1/company/consumption` | `/company/consumption` |
 | `GET /api/v1/company/estate` | `/company/estate` |
+| `GET /api/v1/me/agent-requests` | **no screen** |
+| `GET /api/v1/me/agents/requestable` | **no screen** |
 | `GET /api/v1/me/artifacts` | **no screen** |
 | `GET /api/v1/me/devices` | **no screen** |
 | `GET /api/v1/me/reads` | **no screen** |
@@ -27,6 +29,7 @@
 | `GET /api/v1/report/service-levels` | `/service-levels` |
 | `GET /api/v1/report/spend` | `/spend` |
 | `GET /api/v1/report/usage` | `/adoption`, `/department`, `/usage` |
+| `POST /api/v1/me/agents/{agent_id}/request` | `/me` |
 | `POST /api/v1/me/artifacts/{artifact_id}/share` | `/me` |
 | `POST /api/v1/me/artifacts/{artifact_id}/unshare` | `/me` |
 | `POST /api/v1/me/devices/end` | `/me` |
@@ -42,6 +45,7 @@
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
+| `POST /api/v1/me/agents/{agent_id}/request` | `/me` | `test_the_request_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_agent_request.py` (database, in CI) | Not applicable: A request changes nobody's access; what a department decides is written where audiences are changed. | `test_a_lead_told_every_time_fails_the_check` in `tests/unit/test_acceptance_checks_member_agent_request.py` (database, in CI) |
 | `POST /api/v1/me/artifacts/{artifact_id}/share` | `/me` | `test_the_share_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_share.py` (database, in CI) | Not applicable: A share changes nobody's access; opening what was shared is written down as the read it is. | `test_a_share_with_somebody_who_cannot_open_it_fails_the_check` in `tests/unit/test_acceptance_checks_member_share.py` (database, in CI) |
 | `POST /api/v1/me/artifacts/{artifact_id}/unshare` | `/me` | `test_the_share_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_share.py` (database, in CI) | Not applicable: Taking a share back changes nobody's access; it only removes a row that admitted nobody. | `test_the_share_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_share.py` (database, in CI) |
 | `POST /api/v1/me/devices/end` | `/me` | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) | `test_every_member_account_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_account.py` (database, in CI) |
