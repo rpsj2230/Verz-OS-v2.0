@@ -124,6 +124,7 @@ from brain.tables.manifest_draft import (
     ManifestRevisionRow,
 )
 from brain.tables.member_preference import MemberPreferenceRow
+from brain.tables.member_share import AgentRequestRow, ArtifactShareRow
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
 from brain.tables.model_health import (
     ChainDepthAlertRow,
@@ -544,6 +545,10 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0228_member_preference. Points at nothing: the person is a value, so a row outlives a
     # directory row and an erasure removes it by the column.
     "auth.member_preference",
+    # 0229_member_share_and_agent_request. Neither points at anything: an artifact, an agent and a
+    # person are values.
+    "agent.artifact_share",
+    "agent.agent_request",
 )
 
 __all__ = [
@@ -555,6 +560,7 @@ __all__ = [
     "AdaptiveMemoryRow",
     "AgentAutomationRow",
     "AgentItemUseRow",
+    "AgentRequestRow",
     "AgentRow",
     "AgentRunRow",
     "AlertAcknowledgementRow",
@@ -563,6 +569,7 @@ __all__ = [
     "ApplicationLogRow",
     "ArtifactChangeRow",
     "ArtifactRow",
+    "ArtifactShareRow",
     "AudienceExtraRow",
     "AuditEntryRow",
     "AutomationChangeRow",
