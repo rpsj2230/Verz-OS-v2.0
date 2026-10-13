@@ -60,6 +60,8 @@ LEAVES = {
         "M11.5.1",
         "M11.5.4",
         "M11.5.2",
+        "M36.2.1.1",
+        "M36.2.1.2",
     ),
     "a_burst_is_paced_by_the_source_s_documented_ceiling": ("M11.3.1", "M11.3.5", "M11.8.9"),
     "failures_open_the_breaker_and_a_refusal_is_retried_in_budget": (

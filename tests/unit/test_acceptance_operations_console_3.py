@@ -41,7 +41,7 @@ def test_the_module_declares_one_check_per_group_of_leaves() -> None:
     assert [(one.name, one.leaves) for one in registered((MODULE,))] == [
         (LANDING, ("M27.2.1",)),
         (USAGE, ("M27.7.14",)),
-        (GAPS, ("M27.7.18",)),
+        (GAPS, ("M27.7.18", "M34.2.2.3")),
         (CANARIES, ("M27.7.19",)),
         (ERASURE, ("M27.7.24",)),
         (LISTS, ("M27.8.6",)),

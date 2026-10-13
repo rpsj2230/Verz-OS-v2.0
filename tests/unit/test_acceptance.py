@@ -9,7 +9,7 @@ nothing else a check wrote is left, which is `NOTHING_A_CHECK_WRITES_IS_EVER_COM
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M38.5.1
+Task ids: M38.5.1, M17.7.9
 """
 
 from __future__ import annotations
@@ -183,7 +183,7 @@ def test_the_first_two_modules_hold_their_checks_in_order() -> None:
     ]
     oversight = {one.name: one.leaves for one in registered()}
     assert oversight["unusual_volume_is_found_per_person"] == ("M23.2.1",)
-    assert oversight["repeated_refusals_raise_a_denial_notice"] == ("M23.2.2",)
+    assert oversight["repeated_refusals_raise_a_denial_notice"] == ("M23.2.2", "M17.7.9")
     assert oversight["a_head_reads_their_own_peoples_audit_entries_only"] == (
         "M1.8.3",
         "M33.2.1.2",
@@ -746,6 +746,16 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     # Nor a cache to keep a conversation's notes in; `tests/unit/test_acceptance_session.py` runs it
     # with a client in memory standing in the cache's place.
     assert outcomes.pop("session_memory_is_one_conversations_own_and_silent")[0] == NOT_RUN
+    # No worker has run on this database, so there is no retention report to read and no ledger
+    # partition for the months ahead; `tests/unit/test_acceptance_checks_data_governance.py` and
+    # `test_acceptance_checks_scaling_reads.py` write what the worker writes and run them.
+    assert (
+        outcomes.pop("the_retention_report_reaches_every_store_and_says_why_it_did_not")[0]
+        == NOT_RUN
+    )
+    assert (
+        outcomes.pop("the_ledger_has_a_partition_for_this_month_and_each_one_ahead")[0] == NOT_RUN
+    )
     # No currency is set here, so no cost is recorded and a department's pace is withheld by
     # design; `tests/unit/test_acceptance_company_views.py` sets one and runs it.
     assert (
@@ -895,6 +905,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
             NOT_RUN,
             acceptance_checks_recovery.NO_SCHEDULED_RUN_YET,
         )
+    # A test image may carry no built console, in which case the shell check says so; the install's
+    # own image does, and `tests/unit/test_acceptance_checks_localisation.py` serves a bundle.
+    assert outcomes.pop("the_console_is_served_as_an_installable_shell")[0] in (PASSED, NOT_RUN)
     # Nothing started the application against this database, so nothing furnished it;
     # `tests/unit/test_acceptance_operations_console.py` furnishes one and the check passes.
     assert outcomes.pop("the_install_was_furnished_once_by_the_product") == (

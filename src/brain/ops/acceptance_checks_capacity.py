@@ -370,7 +370,7 @@ async def the_rate_limits_screen_lists_the_windows_refusing_now(h: Harness) -> N
 
 # ------------------------------------------ 3. sized for the busiest minute, first limit named
 @check(
-    leaves=("M22.3.1", "M22.3.2", "M22.3.4"),
+    leaves=("M22.3.1", "M22.3.2", "M22.3.4", "M36.2.4.2"),
     sentence=(
         "The Capacity screen's figures, as its route builds them: every sizing is a rate at the "
         "busiest minute with the in-flight figure worked by Little's law, the slots it needs and "
