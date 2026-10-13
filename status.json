@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-13T12:45:46.950426+00:00",
-  "commit": "2b032ac3",
-  "commit_subject": "The website widget's answer can be written by the model from the public passages, under a daily cap the owner sets (#542)",
+  "generated_at": "2026-10-13T13:54:45.330376+00:00",
+  "commit": "36488356",
+  "commit_subject": "Migration train 4: payload expiry, approval wait, dead letter, member preferences, member sharing (0226 to 0230) (#571)",
   "total": 1625,
   "done": 864,
   "percent": 53.2,
