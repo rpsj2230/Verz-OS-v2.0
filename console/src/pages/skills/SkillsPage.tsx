@@ -38,7 +38,7 @@ import { Button } from "../../components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { useListing, type Listing } from "../../components/useListing";
 import { CATEGORY_COLUMN, LIBRARY_API_PATH, skillAddress, type LibraryRow } from "../skillsQuery";
-import { AddSkillForm, ImportProcedureForm, ImportSkillForm, type Told } from "./SkillForms";
+import { AddSkillForm, DescribeSkillForm, ImportProcedureForm, ImportSkillForm, type Told } from "./SkillForms";
 import { ReviewPill, RetiredPill } from "./pills";
 import { retiredWords, reviewPill } from "./skillActions";
 
@@ -56,6 +56,7 @@ export const ADD_SKILL = "Add a skill";
 export const ADD_DESCRIPTION = "A skill is added unreviewed and reaches no agent until it is approved and assigned.";
 /** The drawer's third tab: a Word document or a Confluence page, imported as a draft (M12.2.10). */
 export const PROCEDURE_TAB = "Written procedure";
+export const DESCRIBE_TAB = "Describe it";
 export const CHIPS_LABEL = "Show one category";
 export const EVERY_CATEGORY = "Every category";
 
@@ -220,6 +221,7 @@ function AddDrawer({ open, onOpenChange, onTold }: { readonly open: boolean; rea
           <TabsTrigger value="paste">Paste or upload</TabsTrigger>
           <TabsTrigger value="import">Import</TabsTrigger>
           <TabsTrigger value="procedure">{PROCEDURE_TAB}</TabsTrigger>
+          <TabsTrigger value="describe">{DESCRIBE_TAB}</TabsTrigger>
         </TabsList>
         <TabsContent value="paste" className="pt-2">
           <AddSkillForm onTold={onTold} />
@@ -229,6 +231,9 @@ function AddDrawer({ open, onOpenChange, onTold }: { readonly open: boolean; rea
         </TabsContent>
         <TabsContent value="procedure" className="pt-2">
           <ImportProcedureForm onTold={onTold} />
+        </TabsContent>
+        <TabsContent value="describe" className="pt-2">
+          <DescribeSkillForm onTold={onTold} />
         </TabsContent>
       </Tabs>
     </Drawer>

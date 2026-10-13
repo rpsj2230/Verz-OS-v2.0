@@ -122,6 +122,7 @@ MIGRATION_SERVICE_ACCOUNTS = VERSIONS / "0095_service_accounts_and_partner_reach
 MIGRATION_MODEL_REGISTRY = VERSIONS / "0097_model_registry_and_matrix_gate.py"
 MIGRATION_GATE_FRONT_HALF = VERSIONS / "0100_gate_front_half.py"
 MIGRATION_REQUEST_ROUTE = VERSIONS / "0113_request_route.py"
+MIGRATION_REQUEST_STAGES = VERSIONS / "0215_request_reasoning_and_stages.py"
 MIGRATION_ACCESS_REQUEST = VERSIONS / "0101_access_request.py"
 MIGRATION_SENSITIVE_READ = VERSIONS / "0098_sensitive_reads_and_budget_audit.py"
 MIGRATION_REQUIREMENT_CHECK = VERSIONS / "0099_requirement_check.py"
@@ -135,6 +136,7 @@ MIGRATION_TOOL_CATALOGUE = VERSIONS / "0117_tool_catalogue_and_switch.py"
 MIGRATION_SKILL_CATEGORY = VERSIONS / "0121_skill_sources_versions_and_categories.py"
 MIGRATION_SKILL_INVOCATION = VERSIONS / "0138_skill_invocation.py"
 MIGRATION_KNOWLEDGE_LIFECYCLE = VERSIONS / "0120_knowledge_lifecycle.py"
+MIGRATION_KNOWLEDGE_ARCHIVE = VERSIONS / "0216_knowledge_archive.py"
 MIGRATION_ACCEPTANCE = VERSIONS / "0133_acceptance_result.py"
 MIGRATION_HALT = VERSIONS / "0136_ops_halt.py"
 MIGRATION_BINDING_CODE = VERSIONS / "0118_channel_binding_codes.py"
@@ -168,6 +170,10 @@ MIGRATION_LEARNED_RULES = VERSIONS / "0206_learned_rule_promotion.py"
 MIGRATION_ROLE_NOMINATIONS = VERSIONS / "0208_role_nominations.py"
 MIGRATION_ELEVATION_CHAIN = VERSIONS / "0209_elevation_chain.py"
 MIGRATION_BUDGET_STOP = VERSIONS / "0211_budget_stop.py"
+MIGRATION_AGENT_ITEM_USE = VERSIONS / "0213_agent_item_use.py"
+MIGRATION_ALERT_ACKNOWLEDGEMENT = VERSIONS / "0217_alert_acknowledgement.py"
+MIGRATION_QUALITY = VERSIONS / "0222_quality_and_learning.py"
+MIGRATION_TEMPLATES_AUDIENCE = VERSIONS / "0223_templates_and_audience.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -490,6 +496,25 @@ ROLE_NOMINATION_TABLES: tuple[str, ...] = ("gate.role_nomination",)
 ELEVATION_CHAIN_TABLES: tuple[str, ...] = ("obs.elevation_entry",)
 #: And the one 0211 adds: every used-up budget, stopped or only said.
 BUDGET_STOP_TABLES: tuple[str, ...] = ("ops.budget_stop",)
+#: And the one 0213 adds: how often an agent's answers cited a document, by day (M39.2.3.5).
+AGENT_ITEM_USE_TABLES: tuple[str, ...] = ("ops.agent_item_use",)
+#: And the one 0217 adds: who acknowledged an incident, and when (M27.15.45).
+ALERT_ACKNOWLEDGEMENT_TABLES: tuple[str, ...] = ("ops.alert_acknowledgement",)
+#: And the eight 0222 adds: flags and their cases, the two tiers of reading, golden scores, a failed
+#: case's candidate, the positive examples and who agreed to a change that needed a person.
+QUALITY_TABLES: tuple[str, ...] = (
+    "ops.answer_flag",
+    "ops.regression_case",
+    "ops.quality_reading",
+    "ops.quality_annotation",
+    "ops.golden_score",
+    "ops.evaluation_candidate",
+    "ops.positive_example",
+    "ops.tier_decision",
+)
+#: And the two 0223 adds: a template draft that survives a restart, and an agent offered beyond its
+#: level (M13.8.15, M13.8.19).
+TEMPLATES_AUDIENCE_TABLES: tuple[str, ...] = ("agent.template_draft", "agent.audience_extra")
 
 ALL_TABLES = (
     CORE_TABLES
@@ -583,6 +608,10 @@ ALL_TABLES = (
     + ROLE_NOMINATION_TABLES
     + ELEVATION_CHAIN_TABLES
     + BUDGET_STOP_TABLES
+    + AGENT_ITEM_USE_TABLES
+    + ALERT_ACKNOWLEDGEMENT_TABLES
+    + QUALITY_TABLES
+    + TEMPLATES_AUDIENCE_TABLES
 )
 
 
@@ -1453,6 +1482,14 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert elevation_chain.TABLES == ELEVATION_CHAIN_TABLES
     budget_stop = migration_module(MIGRATION_BUDGET_STOP)
     assert budget_stop.TABLES == BUDGET_STOP_TABLES
+    agent_item_use = migration_module(MIGRATION_AGENT_ITEM_USE)
+    assert agent_item_use.TABLES == AGENT_ITEM_USE_TABLES
+    alert_acknowledgement = migration_module(MIGRATION_ALERT_ACKNOWLEDGEMENT)
+    assert alert_acknowledgement.TABLES == ALERT_ACKNOWLEDGEMENT_TABLES
+    quality = migration_module(MIGRATION_QUALITY)
+    assert quality.TABLES == QUALITY_TABLES
+    templates_audience = migration_module(MIGRATION_TEMPLATES_AUDIENCE)
+    assert templates_audience.TABLES == TEMPLATES_AUDIENCE_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1568,6 +1605,10 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(role_nominations.TABLES)
         + tuple(elevation_chain.TABLES)
         + tuple(budget_stop.TABLES)
+        + tuple(agent_item_use.TABLES)
+        + tuple(alert_acknowledgement.TABLES)
+        + tuple(quality.TABLES)
+        + tuple(templates_audience.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1664,6 +1705,10 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(role_nominations.TABLES),
         set(elevation_chain.TABLES),
         set(budget_stop.TABLES),
+        set(agent_item_use.TABLES),
+        set(alert_acknowledgement.TABLES),
+        set(quality.TABLES),
+        set(templates_audience.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"
@@ -2596,6 +2641,62 @@ def test_0113_adds_the_route_columns_nullable_on_0108_and_drops_them_on_the_way_
         assert table("obs.request_telemetry").columns[column].nullable
         assert f"ALTER TABLE obs.request_telemetry DROP COLUMN {column}" in down
     assert check_file(MIGRATION_REQUEST_ROUTE) == []
+
+
+# ------------------------------------------------------------------ 0215, reasoning and stages
+def test_0219_copies_its_two_checks_from_the_model() -> None:
+    """The migration's copied predicates are the model's, for the object check on `stage_ms` and
+    the non-negative check on `reasoning_tokens`.
+
+    Delete this and the model and the database disagree about what a stage map may be, and the
+    first row carrying one is refused at write time, losing the request's whole record."""
+    stages = migration_module(MIGRATION_REQUEST_STAGES)
+    found = checks("obs.request_telemetry")
+    assert found["ck_request_telemetry_stage_ms_object"] == stages.STAGE_MS_OBJECT
+    assert (
+        found["ck_request_telemetry_reasoning_tokens_not_negative"] == stages.REASONING_NOT_NEGATIVE
+    )
+
+
+def test_0219_adds_both_columns_nullable_and_drops_them_on_the_way_down() -> None:
+    """Nullable, because every row written before 0215 has neither; the downgrade takes both away
+    and the file passes the policy.
+
+    Delete this and a required column is added to a populated ledger, or the downgrade leaves a
+    column no release reads."""
+    stages = migration_module(MIGRATION_REQUEST_STAGES)
+    assert stages.revision == "0215"
+    up = squash(rendered("upgrade", MIGRATION_REQUEST_STAGES))
+    down = squash(rendered("downgrade", MIGRATION_REQUEST_STAGES))
+    for column in ("reasoning_tokens", "stage_ms"):
+        assert f"ALTER TABLE obs.request_telemetry ADD COLUMN {column}" in up
+        assert table("obs.request_telemetry").columns[column].nullable
+        assert f"ALTER TABLE obs.request_telemetry DROP COLUMN {column}" in down
+    assert check_file(MIGRATION_REQUEST_STAGES) == []
+
+
+# ------------------------------------------------------------------ 0216, archiving a document
+def test_0220_archives_through_one_definer_function_the_application_may_only_execute() -> None:
+    """The one write past `know.item`'s policy is a function with a pinned search path, granted to
+    the application role for EXECUTE and for nothing else, which restates the reach as a second
+    wall and moves the document's passages with it; the downgrade drops it and the file passes
+    the policy.
+
+    Delete this and the function can lose its pinned search path, be granted wider than EXECUTE, or
+    stop moving the passages, and a withdrawn document goes on being answered from."""
+    archive = migration_module(MIGRATION_KNOWLEDGE_ARCHIVE)
+    assert archive.revision == "0216"
+    up = squash(rendered("upgrade", MIGRATION_KNOWLEDGE_ARCHIVE))
+    down = squash(rendered("downgrade", MIGRATION_KNOWLEDGE_ARCHIVE))
+    assert "CREATE FUNCTION know.archive_item(p_item character varying)" in up
+    assert "SECURITY DEFINER SET search_path = pg_catalog, know" in up
+    assert "UPDATE know.item SET state = 'archived'" in up
+    assert "UPDATE know.chunk SET state = 'archived'" in up
+    assert "v_item.owner_id = v_principal" in up and "= ANY(v_departments)" in up
+    assert "GRANT EXECUTE ON FUNCTION know.archive_item(character varying) TO brain_app" in up
+    assert "DELETE" not in up
+    assert "DROP FUNCTION know.archive_item(character varying)" in down
+    assert check_file(MIGRATION_KNOWLEDGE_ARCHIVE) == []
 
 
 # ------------------------------------------------------------------ 0101, access requests

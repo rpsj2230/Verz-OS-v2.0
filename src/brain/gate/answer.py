@@ -584,6 +584,7 @@ async def answer_lane(
                 # The skills the model step offered (M27.15.9) and the one source read (M27.1.5).
                 skills=calls.skills,
                 connector=calls.connector,
+                stage_ms=None if recorder is None else recorder.stage_ms(completed_at),
             ),
         )
 

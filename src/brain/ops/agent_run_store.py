@@ -14,7 +14,7 @@ whose principal is `app.principal_id`, set here in the same transaction, so this
 a run under somebody else's name even by mistake.
 
 **Other people's runs of one agent are read for its steward and its administrators, one agent at a
-time** (needs-rupash 121, option B). `0227`'s second select policy admits a row when its agent is
+time** (needs-rupash 121, option B). `0224`'s second select policy admits a row when its agent is
 the one `app.overseen_agent` names and is not a personal agent, so the route that names it has
 decided who may be told, the way `app.approvable` is decided by `EntitlementSet.holds` and not by
 SQL. What is read is who, when and how it ended, never a count of what was left out, and never a

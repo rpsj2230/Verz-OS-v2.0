@@ -47,6 +47,10 @@ export function stewardPath(id: string): string {
   return `${one(id)}/steward`;
 }
 
+export function archivePath(id: string): string {
+  return `${one(id)}/archive`;
+}
+
 export function promotionPath(id: string): string {
   return `${one(id)}/promotion`;
 }

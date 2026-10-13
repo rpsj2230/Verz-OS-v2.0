@@ -281,6 +281,48 @@ capacity rather than a vendor's published figure: thirty bounded reads a minute 
 and every question together. Every read is also bounded by the row count and the timeout you
 give at connect, in a read-only session, one connection per read.
 
+### The maintenance view
+
+**One more view, for whoever looks after your Laravel database**, so a question about a website can
+be told whether its maintenance is still active. Nothing is copied: this system reads the view
+live, when somebody asks, at that person's own reach, and keeps only the record's id, the site's
+name and the department that services it in its index. **This is the exact definition to create,
+and it is yours to adapt to your own table names; it is never part of the product.** The column
+names are the contract, and the view is the only thing this system is granted.
+
+```sql
+CREATE VIEW v_maintenance AS
+SELECT
+    plan.id                                     AS id,
+    plan.client_id                              AS client_id,
+    site.name                                   AS site,
+    client.department                           AS department,
+    CASE WHEN plan.ends_on >= CURRENT_DATE
+         THEN 'active' ELSE 'expired' END       AS status,
+    plan.ends_on                                AS ends_on,
+    plan.updated_at                             AS updated_at
+FROM maintenance_plans AS plan
+JOIN websites AS site   ON site.id = plan.website_id
+JOIN clients  AS client ON client.id = plan.client_id;
+
+GRANT SELECT ON your_database.v_maintenance TO 'the_read_only_user'@'the_servers_address';
+```
+
+Rules the columns follow, so that nothing in the view can carry more than it should:
+
+- `status` is the word `active` or the word `expired` and nothing else, worked out in the view so
+  that this system never reads a date and decides. A plan with no end date is your decision to
+  call one or the other.
+- `department` is the one department that services the website, one value per row, for the same
+  reason a client has one (a record is shown to a department, and a list would be saved and then
+  show nobody anything).
+- No contact detail, no price, no credential and no free text. The product refuses a column named
+  for any of them, as it does for the client and staff views.
+- The view is read-only: a user with SELECT on it and on nothing else.
+
+This system does not read the view until the connector is given it; this section is what to create
+in the meantime, so the day it is, the connection finds it there.
+
 ## `lark_base`
 
 One table of one Base.

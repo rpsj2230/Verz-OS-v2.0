@@ -29,6 +29,12 @@ LEARNING = "the_learning_loop_is_shown_clause_by_clause_in_this_run"
 REACH = "per_person_reach_is_shown_clause_by_clause_in_this_run"
 GATE = "the_evaluation_gate_is_shown_clause_by_clause_in_this_run"
 
+#: The quality module, whose check of a tier-three decision is the one that shows the promotion
+#: roll-up's second clause (M16.7.14). Before it existed the roll-up said no check named the
+#: clause; now it names a check that has to be in the run.
+QUALITY = "brain.ops.acceptance_checks_quality"
+THE_TIER_THREE_CHECK = "an_approved_output_is_an_example_in_effect_only_once_promoted"
+
 #: What the memory roll-ups read, in the order the suite runs them.
 READ = (
     "brain.ops.acceptance_checks_memory",
@@ -133,7 +139,9 @@ def test_the_roll_ups_pass_where_every_clause_is_shown_and_say_what_is_missing_w
     assert seen[TIER_ONE] == (PASSED, "")
     assert seen[OFFERED] == (PASSED, "")
     for name, missing in (
-        (PROMOTED, "tier-three item"),
+        # Its second clause is shown by the quality module's check, which this run leaves out, so
+        # the roll-up names that check as the one it waits for.
+        (PROMOTED, THE_TIER_THREE_CHECK),
         (MEMORY_AND_CONTEXT, "M16.4.3"),
         (LEARNING, "M17.6.7"),
         (GATE, "M28.1.4"),
@@ -142,6 +150,27 @@ def test_the_roll_ups_pass_where_every_clause_is_shown_and_say_what_is_missing_w
         assert outcome == NOT_RUN, name
         assert missing in reason, (name, reason)
     assert FAILED not in {outcome for outcome, _ in seen.values()}
+    assert counts(install) == before
+
+
+@pytest.mark.needs_db
+def test_the_promotion_roll_up_passes_once_the_check_of_its_second_clause_is_in_the_run(
+    install: str,
+) -> None:
+    """**The roll-up that waited for a check closes on it.** Run with the quality module, whose
+    check shows a tier-three decision, the promotion roll-up passes where without it the roll-up is
+    not run and names that check. Delete this and the previous test is satisfied by a roll-up that
+    names a check and never accepts it."""
+    from brain.ops.acceptance import check_modules
+
+    # In the order the page runs them: a roll-up sees only what ran before it, so the quality
+    # module has to stand ahead of the memory roll-ups in the suite itself and not only here.
+    suite = check_modules()
+    assert suite.index(QUALITY) < suite.index(MEMORY)
+    before = counts(install)
+    seen = run_modules(install, (*READ, QUALITY, MEMORY))
+    assert seen[THE_TIER_THREE_CHECK] == (PASSED, "")
+    assert seen[PROMOTED] == (PASSED, "")
     assert counts(install) == before
 
 
