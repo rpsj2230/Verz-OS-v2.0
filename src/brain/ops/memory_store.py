@@ -95,6 +95,7 @@ from brain.memory.review import Edit, edit
 from brain.memory.signals import Signal
 from brain.memory.turn import Held, NotFormed, Turn, propose_memories, worth_forming
 from brain.ops.learning_signal_store import paused_in
+from brain.ops.member_preference_store import preferences_in
 from brain.tables.audit import ENT_HASH_SETTING, TRACE_ID_SETTING
 from brain.tables.learning import CorrectionRow, LearningRow
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
@@ -491,6 +492,12 @@ class StoredFormations:
             # the transaction that would write, so a pause set a moment ago is honoured.
             if turn.agent_id is not None and await paused_in(session, (turn.agent_id,)):
                 return Formed(memory_ids=(), skipped=(NotFormed.PAUSED,))
+            # A person who switched personal learning off is learnt nothing from, in the transaction
+            # that would write, so a switch pressed a moment ago is honoured (M40.4.1.4).
+            if (await preferences_in(session, [turn.principal_id]))[
+                turn.principal_id
+            ].learning_opted_out:
+                return Formed(memory_ids=(), skipped=(NotFormed.OPTED_OUT,))
             await session.execute(lock_on_person(turn.principal_id))
             held = [
                 Held(memory_id=row[0], kind=MemoryKind(row[1]), statement=row[2])

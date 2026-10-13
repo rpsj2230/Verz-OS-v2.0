@@ -37,7 +37,7 @@ import {
   READING_THE_LEDGER,
 } from "../src/pages/audit/AuditPage";
 import { HISTORY_FILLED_A_PAGE, PERMISSIONS_VIEW } from "../src/pages/audit/AuditSubjectPage";
-import { NO_PATTERN, REDACTED_LABEL, STATISTICS_HEADING } from "../src/pages/audit/auditStatistics";
+import { NO_PATTERN, REDACTED_LABEL, REDACTED_REQUESTS_LABEL, STATISTICS_HEADING } from "../src/pages/audit/auditStatistics";
 import { ACTION_LABELS, NO_NAME, whatWords } from "../src/pages/audit/auditWords";
 import { THAT_DID_NOT_WORK, THE_BRAIN_COULD_NOT_BE_REACHED } from "../src/ui/FailureNotice";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
@@ -305,6 +305,7 @@ describe("the refusal and redaction statistics", () => {
         { shape: "enumeration", reads_as: ENUMERATING, occurrences: 37 },
       ],
       redacted_entries: 29,
+      redacted_requests: null,
       read_at_most: 5000,
       ...over,
     };
@@ -338,6 +339,32 @@ describe("the refusal and redaction statistics", () => {
     const sent = asked(idp, STATISTICS_OPERATION);
     expect(sent).toHaveLength(1);
     expect([...(sent[0]?.searchParams.keys() ?? [])]).toEqual([]);
+  });
+
+  test("the count of questions answered with something withheld is drawn only when the API sends one", async () => {
+    // What breaks if this is deleted: a reader told nothing is shown a zero (which says nobody was
+    // refused anything), or a reader who is told the figure never sees it.
+    const told = await mount("/audit", (url) => {
+      if (url.pathname === STATISTICS_OPERATION) {
+        return json(statistics({ redacted_requests: 41 }));
+      }
+      return url.pathname === AUDIT_OPERATION ? json(ledgerPage(ROWS)) : null;
+    });
+    await waitFor(() => {
+      expect(card(told.container)?.textContent ?? "").toContain(REDACTED_REQUESTS_LABEL);
+    });
+    expect(card(told.container)?.textContent ?? "").toContain("41");
+
+    const untold = await mount("/audit", (url) => {
+      if (url.pathname === STATISTICS_OPERATION) {
+        return json(statistics());
+      }
+      return url.pathname === AUDIT_OPERATION ? json(ledgerPage(ROWS)) : null;
+    });
+    await waitFor(() => {
+      expect(card(untold.container)?.textContent ?? "").toContain(REDACTED_LABEL);
+    });
+    expect(card(untold.container)?.textContent ?? "").not.toContain(REDACTED_REQUESTS_LABEL);
   });
 
   test("a card the API answers 404 is left out and the ledger still draws, and no pattern is said in words", async () => {

@@ -650,3 +650,22 @@ def test_0043_comes_down_and_goes_back_up() -> None:
         assert sql(url, present) == [(1,)]
     finally:
         drop(name)
+
+
+def test_a_request_the_redactor_walked_records_a_count_and_one_it_did_not_records_none() -> None:
+    """Needs-rupash 181 A. The request ledger's `redaction_count` is nought for an answer the
+    redactor walked and took nothing out of, and None, not nought, for a cache hit and for a
+    question no rule matched, where the redactor walked nothing: nought would say it looked.
+    (A column the reader may not read never reaches the redactor, so a request refused at the
+    query also carries nought: the count is a lower bound, as `FILLED_BY_THE_REDACTOR` says.)
+    Delete this and every request carries nought or every one carries None, and the audit
+    screen's count of redacted requests can no longer tell what was looked at."""
+    answered = request_telemetry_of(finished("t-y"))
+    cached = request_telemetry_of(
+        finished("t-c", cached=OUTCOMES["served from the cache"]["cached"])
+    )
+    unmatched = request_telemetry_of(finished("t-n", question="what is the weather"))
+
+    assert answered.redaction_count == 0
+    assert cached.redaction_count is None
+    assert unmatched.redaction_count is None

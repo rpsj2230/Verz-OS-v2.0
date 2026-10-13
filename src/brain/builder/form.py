@@ -144,6 +144,70 @@ class Words:
     set_by_the_server: bool = False
 
 
+#: Why four parts of an agent are linked from the builder and are not sections of its definition.
+WORKFLOWS_KNOWLEDGE_AND_CHANNELS_ARE_LINKED_NOT_SECTIONS: Final = (
+    "A section of the builder is a part of the saved definition, the manifest. Workflows, the "
+    "documents an agent reads, memory and channels are not: each is set in exactly one other "
+    "place, so a section for it would be a second description of the same thing that goes stale "
+    "without failing anything (needs-rupash 170 A). The builder says where each is set and "
+    "links there, and stores nothing about it."
+)
+
+
+@dataclass(frozen=True)
+class SetElsewhere:
+    """One part of an agent the builder does not hold, where it is set, and the address to go to.
+
+    `address` is a console path, or empty for a part set on this same page at a later step.
+    """
+
+    part: str
+    title: str
+    sentence: str
+    address: str
+
+
+#: The parts linked from the builder, in the order a person meets them. Words for a person, with no
+#: module or task id in them.
+SET_ELSEWHERE: Final[tuple[SetElsewhere, ...]] = (
+    SetElsewhere(
+        part="knowledge",
+        title="The documents it reads",
+        sentence=(
+            "The Knowledge section above says which records it may read. The documents themselves "
+            "are added and placed on the Library page."
+        ),
+        address="/library",
+    ),
+    SetElsewhere(
+        part="workflows",
+        title="Workflows",
+        sentence=(
+            "A workflow is put on an agent from the Automations page, one at a time, once the "
+            "agent is published."
+        ),
+        address="/automations",
+    ),
+    SetElsewhere(
+        part="memory",
+        title="Memory",
+        sentence=(
+            "What an agent remembers and learns comes from its own runs. It is set on the "
+            "agent's own Memory tab once it is published, including pausing what it learns."
+        ),
+        address="/agents",
+    ),
+    SetElsewhere(
+        part="channels",
+        title="Where it answers",
+        sentence=(
+            "Where the agent answers is chosen when you publish it, and changed later from the "
+            "agent's own page by a department administrator."
+        ),
+        address="",
+    ),
+)
+
 #: What each section is called on the Write step. The console's confirmations and the draft's
 #: problems name a section in these words too, so a sentence never points at a heading that is
 #: not on the screen.
