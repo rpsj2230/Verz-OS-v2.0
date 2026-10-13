@@ -48,12 +48,12 @@ projection to the reader's own spend would produce a confident figure that is wr
 worse than no figure, so `projection` returns `None` on the narrower basis instead. That is
 `brain.ops.spend.A_REFUSAL_CARRIES_NO_FIGURE` in the reporting direction.
 
-**Five of the ten parts an agent is composed of are not in its template at all**, which is
-why the divergence flag is smaller than it looks: channels, memory, automations, availability
-and the knowledge predicate are supplied by the install, so an instance cannot diverge from
-its template on any of them. A sixth, the leash, is in the manifest and sealed, so it cannot
-diverge either. `PARTS_THAT_CAN_DIVERGE` is the four that are left, derived rather than
-listed, so the day `SEALED_PATHS` changes this changes with it.
+**Seven of the twelve parts an agent is composed of are not in its template at all**, which is
+why the divergence flag is smaller than it looks: tools, workflows, channels, memory,
+automations, availability and the knowledge predicate are supplied by the install, so an
+instance cannot diverge from its template on any of them. An eighth, the leash, is in the
+manifest and sealed, so it cannot diverge either. `PARTS_THAT_CAN_DIVERGE` is the four that
+are left, derived rather than listed, so the day `SEALED_PATHS` changes this changes with it.
 
 **The composition diff is produced here, and it is not the upgrade's diff.**
 `brain.agents.upgrade` walks `MANIFEST_PATHS` between a pinned version and a newer candidate
@@ -149,6 +149,16 @@ AN_ATTACHMENT_IS_A_REFERENCE_AND_A_COPY_IS_A_FORK: Final = (
     "has no field a body, a document or a payload could arrive in."
 )
 
+#: Why a part nothing holds yet is listed.
+A_PART_NOTHING_HOLDS_YET_IS_STILL_A_PART: Final = (
+    "The owner decided on needs item 180 that an agent is composed of tools and workflows as parts "
+    "in their own right, each with its own section on the agent's page. Tools are held today, as "
+    "the agent's allowed tools and the presses that attach and detach them. A workflow is a "
+    "stored, versioned procedure (M17.4.2) and nothing stores one yet, so the part is listed and "
+    "its section says there are none, rather than being left out of the type until one exists, "
+    "which would read as the agent having no such thing and not as the product not having built it."
+)
+
 #: Why a version that can move is refused outright.
 A_PIN_THAT_MOVES_IS_NOT_A_PIN: Final = (
     "latest, main, head and a bare star all read as a version and all resolve to whatever "
@@ -188,10 +198,10 @@ A_PROJECTION_IS_MADE_OF_EVERYBODY_ELSES_SPEND: Final = (
     "absent on the narrower basis rather than narrowed."
 )
 
-#: Why the divergence flag covers four parts and not ten.
+#: Why the divergence flag covers four parts and not twelve.
 A_DIVERGENCE_FLAG_ONLY_FIRES_ON_WHAT_THE_TEMPLATE_SUPPLIES: Final = (
-    "Five of the ten parts are not in a manifest at all: channels, memory, automations, "
-    "availability and the knowledge predicate are decided by the install, so there is "
+    "Seven of the twelve parts are not in a manifest at all: tools, workflows, channels, memory, "
+    "automations, availability and the knowledge predicate are decided by the install, so there is "
     "nothing for an instance to disagree with. The leash is in the manifest and is sealed, "
     "so an overlay may not carry it and it cannot diverge either. Four parts are left, and "
     "they are derived from MANIFEST_PATHS and SEALED_PATHS rather than listed, so a change "
@@ -210,9 +220,9 @@ class WorkspaceError(Exception):
 
 # ------------------------------------------------------------- the composition (M39.1.1)
 class Part(enum.StrEnum):
-    """The ten things an agent is composed of (M39.1.1.1).
+    """The twelve things an agent is composed of (M39.1.1.1).
 
-    Exactly the ten the work breakdown names, and the enum is the list rather than a comment
+    Exactly the twelve the work breakdown names, and the enum is the list rather than a comment
     beside one: a part nothing enumerates is a part the workspace has no tab, no diff row and
     no divergence flag for, and it goes missing without anything failing.
     """
@@ -221,6 +231,13 @@ class Part(enum.StrEnum):
     KNOWLEDGE = "knowledge"
     CONNECTORS = "connectors"
     SKILLS = "skills"
+    #: The tools an agent may call, a part of its own and not a footnote to its skills or its
+    #: connectors (needs-rupash 180, option B, decided 2026-10-12).
+    TOOLS = "tools"
+    #: The stored, versioned procedures an agent follows, a part of its own and not an automation
+    #: (needs-rupash 180, option B). Nothing holds one yet. See
+    #: `A_PART_NOTHING_HOLDS_YET_IS_STILL_A_PART`.
+    WORKFLOWS = "workflows"
     CHANNELS = "channels"
     AVAILABILITY = "availability"
     LEASH = "leash"
@@ -261,6 +278,8 @@ SUPPLY: Mapping[Part, Supply] = MappingProxyType(
         Part.KNOWLEDGE: Supply.PREDICATE,
         Part.CONNECTORS: Supply.PINNED,
         Part.SKILLS: Supply.PINNED,
+        Part.TOOLS: Supply.PINNED,
+        Part.WORKFLOWS: Supply.PINNED,
         Part.CHANNELS: Supply.PINNED,
         Part.MEMORY: Supply.PINNED,
         Part.AUTOMATIONS: Supply.PINNED,
