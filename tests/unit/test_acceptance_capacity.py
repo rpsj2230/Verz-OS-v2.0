@@ -50,6 +50,7 @@ LEAVES = {
         "M22.3.1",
         "M22.3.2",
         "M22.3.4",
+        "M36.2.4.2",
     ),
     "three_classes_share_one_budget_and_give_way_in_order": (
         "M22.1.3",
