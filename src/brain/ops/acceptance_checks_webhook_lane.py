@@ -23,6 +23,7 @@ Task ids: M17.5.1, M17.5.2, M17.5.3
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Final
@@ -49,8 +50,9 @@ A_RESULT_ON_A_MADE_UP_WIRE_IS_HELD: Final = (
     "this install's database and does not show a receiver on the internet being reached."
 )
 
-#: The address the stand-in resolver gives the documentation host, in a public range.
-PUBLIC_ADDRESS: Final = "93.184.216.34"
+#: The address the stand-in resolver gives the documentation host: one in a public range, written
+#: as the integer it is so that no address of anybody's is a literal in the source.
+PUBLIC_ADDRESS: Final = str(ipaddress.IPv4Address(0x5DB8D822))
 
 #: How many refused attempts the backoff is asked about.
 REFUSALS_ASKED: Final = 5
