@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-13T16:02:11.325376+00:00",
-  "commit": "b8e40a99",
-  "commit_subject": "An acceptance run is recorded as it goes and finished after a restart, so a deploy no longer kills the evidence (#578)",
+  "generated_at": "2026-10-13T16:11:29.353151+00:00",
+  "commit": "b87cebcc",
+  "commit_subject": "The Spend page shows what one answer costs, the dearest question shapes and the stopped budgets; needs items 224 to 226 (#566)",
   "total": 1625,
   "done": 864,
   "percent": 53.2,
