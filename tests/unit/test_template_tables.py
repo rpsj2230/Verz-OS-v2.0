@@ -89,6 +89,29 @@ def _squash(text: str) -> str:
     return " ".join(text.split())
 
 
+#: What `0223` added to the version table, which the migration that created it cannot hold. Each is
+#: a column or a check the model declares now and the creating migration never saw; the tests in
+#: `test_templates_audience.py` hold `0223` to them.
+ADDED_LATER: tuple[str, ...] = (
+    "schema_version SMALLINT DEFAULT 1 NOT NULL, ",
+    "overview_path VARCHAR(40), ",
+    ", CONSTRAINT ck_template_version_only_version_two_names_an_overview "
+    "CHECK (overview_path IS NULL OR schema_version >= 2)",
+    ", CONSTRAINT ck_template_version_an_overview_is_never_prompt_text "
+    "CHECK (overview_path IS NULL OR overview_path = ANY(ARRAY['identity.display_name', "
+    "'identity.summary']))",
+)
+
+
+def _as_first_created(expected: str) -> str:
+    """The model's DDL without what a later migration added, so the creating one is compared with
+    what it created. Every piece must be there to remove: a model that dropped one is a drift."""
+    for piece in ADDED_LATER:
+        assert piece in expected, piece
+        expected = expected.replace(piece, "")
+    return expected
+
+
 def _table(qualified: str) -> Table:
     mapped = {
         VERSION_TABLE: TemplateVersionRow.__table__,
@@ -131,6 +154,8 @@ def test_the_migration_builds_the_tables_the_models_declare() -> None:
     upgrade = _squash(_rendered("upgrade"))
     for qualified in (VERSION_TABLE, INSTANCE_TABLE):
         expected = _squash(str(CreateTable(_table(qualified)).compile(dialect=_DIALECT)))
+        if qualified == VERSION_TABLE:
+            expected = _as_first_created(expected)
         assert expected in upgrade, qualified
 
 

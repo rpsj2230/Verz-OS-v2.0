@@ -541,6 +541,11 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # request that found it used up and of the people told: actors, and a stop is the budget's
         # period rather than anybody's record (`0211`).
         "ops.budget_stop",
+        # A template draft is its author's own work, kept and never deleted by an application role
+        # (`0223` grants no DELETE), and an audience offer names an agent and the person who made
+        # it: neither is anybody's record to erase, and an erasure reports both kept.
+        "agent.template_draft",
+        "agent.audience_extra",
         "ops.retention_release",
         "ops.retention_report",
         "ops.routing_change",

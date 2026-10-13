@@ -55,6 +55,7 @@ from brain.tables.agent_run import AgentRunRow
 from brain.tables.application_log import ApplicationLogRow
 from brain.tables.artifact import ArtifactChangeRow, ArtifactRow
 from brain.tables.attachment import ToolAttachmentRow
+from brain.tables.audience_extra import AudienceExtraRow
 from brain.tables.audit import AuditEntryRow, ElevationEntryRow
 from brain.tables.automation import AutomationOwnerRow
 from brain.tables.automation_change import AutomationChangeRow
@@ -170,6 +171,7 @@ from brain.tables.stewardship import ConnectorStewardRow, SelfGrantRow
 from brain.tables.suspension import SuspensionRow
 from brain.tables.telemetry import RequestTelemetryRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
+from brain.tables.template_draft import TemplateDraftRow
 from brain.tables.tool_definition import ToolDefinitionRow, ToolSwitchRow
 from brain.tables.upgrade import UpgradeDeclineRow
 from brain.tables.vault_access import VaultAccessRow
@@ -508,6 +510,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0211_budget_stop. Points at nothing: the ceiling, the principal and the recipients are
     # values, so a stop's row outlives a ceiling's next version and a person leaving.
     "ops.budget_stop",
+    # 0223_templates_and_audience. A draft and an offer each name an agent and a person as values.
+    "agent.template_draft",
+    "agent.audience_extra",
 )
 
 __all__ = [
@@ -524,6 +529,7 @@ __all__ = [
     "ApplicationLogRow",
     "ArtifactChangeRow",
     "ArtifactRow",
+    "AudienceExtraRow",
     "AuditEntryRow",
     "AutomationChangeRow",
     "AutomationOwnerRow",
@@ -654,6 +660,7 @@ __all__ = [
     "SuspensionRow",
     "TeamMembershipRow",
     "TeamRow",
+    "TemplateDraftRow",
     "TemplateInstanceRow",
     "TemplateVersionRow",
     "ToolAttachmentRow",
