@@ -76,24 +76,24 @@ async def _run(
     traffic: TrafficClass = TrafficClass.HUMAN_INTERACTIVE,
     lane: Lane = Lane.ANSWER,
 ) -> None:
-    from brain.ops.spend import Actual
-    from brain.ops.spend_store import record
+    from brain.tables.spend import SpendActualRow
 
+    # Inserted as the other install checks insert a cost: the usage recorder is the ledger's one
+    # writer, which a test over the source holds (`tests/unit/test_agent_profile.py`).
     async with h.sessions() as session:
-        await record(
-            session,
-            Actual(
+        await session.execute(
+            insert(SpendActualRow).values(
                 principal_id=who,
-                principal_kind=kind,
-                traffic=traffic,
+                principal_kind=kind.value,
+                traffic=traffic.value,
                 department=A,
                 agent_id=None,
                 model=f"acc-model-{h.run}",
-                lane=lane,
+                lane=lane.value,
                 cost_minor=cost,
                 at=datetime.now(UTC) - timedelta(minutes=5),
                 trace_id=trace,
-            ),
+            )
         )
         await session.commit()
 
