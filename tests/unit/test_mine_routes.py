@@ -596,3 +596,13 @@ def test_the_digests_undo_refuses_somebody_elses_learning_as_a_missing_one(
     assert len({one.json()["message"] for one in refused}) == 1
     assert records.undone == []
     assert post(client, ME, UNDO, {"memory_id": "mem_mine"}).status_code == 200
+
+
+def test_the_corrections_sentence_counts_in_the_words_a_person_reads() -> None:
+    """None, one and several, each said plainly and none of them naming anybody else's. Delete
+    this and M40.2.1.1 can say "1 answers" or say nothing happened after one did."""
+    from brain.mine_routes import corrections_said
+
+    assert corrections_said(0) == "You have not marked an answer wrong this month."
+    assert corrections_said(1) == "You marked 1 answer wrong this month."
+    assert corrections_said(3) == "You marked 3 answers wrong this month."

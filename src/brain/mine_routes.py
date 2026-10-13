@@ -25,8 +25,10 @@ knowledge rows here, and `subject_memory` by the formation's principal.
 
 **Asked.** The questions this person asked this month, counted from `ops.question_asked`, which
 the answer lane writes. A count of one's own questions discloses nothing about anybody else.
-Corrections are not counted, because nothing records one: `brain.member_activity.
-activity_this_month` counts them from chat turns, and no store writes a turn.
+Corrections are counted from the person's own threads (M40.2.1.1): `POST /threads/{id}/
+corrections` keeps one as a note in the thread, `brain.chat.thread_store.StoredThreads.
+corrections` reads them back as the learning signal does, and the page says how many this month.
+Until 2026-10-13 this said nothing records one, which stopped being true when that route landed.
 
 **Kept.** The knowledge items this person stewards, from `know.item`, with how widely each
 reaches; and the memories formed from their own conversations that they may still read back,
@@ -53,7 +55,7 @@ reads as headroom somebody does not have, which is
 bound. So the budget is withheld with a sentence rather than shown short. See
 `A_SPEND_LOAD_THAT_CAME_BACK_FULL_UNDERSTATES_WHAT_WAS_SPENT`.
 
-**What nothing records is said on the page.** Corrections, an undo, which accounts are connected,
+**What nothing records is said on the page.** An undo, which accounts are connected,
 and when an item was verified or how often it was used: each has a sentence, so a card with
 nothing under it is never read as nothing having happened.
 
@@ -95,6 +97,7 @@ from brain.agent_routes import (
 )
 from brain.api import API_PREFIX, COMMON_RESPONSES, bound_trace_id
 from brain.api_routes import Asked
+from brain.chat.thread_store import StoredThreads
 from brain.console.govern_estate import subject_memory
 from brain.console.own_things import OwnThingsError, delete_own_memory, edit_own_memory, is_own
 from brain.console.read_replica import StalenessBanner
@@ -162,11 +165,19 @@ MORE_SPEND_THAN_THIS_PAGE_READS: Final = (
     "can read the full figure."
 )
 
-#: What the questions figure does not include.
-CORRECTIONS_ARE_NOT_RECORDED: Final = (
-    "Corrections are not counted: nothing on this install records when you told it an answer was "
-    "wrong."
-)
+#: What the questions figure says of the answers this person marked wrong this month.
+NO_CORRECTIONS_THIS_MONTH: Final = "You have not marked an answer wrong this month."
+
+
+def corrections_said(made: int) -> str:
+    """The sentence beside the questions figure: how many answers this person marked wrong.
+
+    Their own count of their own acts, so it names nothing of anybody else's and nothing hidden.
+    """
+    if made <= 0:
+        return NO_CORRECTIONS_THIS_MONTH
+    return f"You marked {made} answer{'' if made == 1 else 's'} wrong this month."
+
 
 #: What the learned card says beside its controls.
 FORGET_AND_EDIT_SAY: Final = (
@@ -459,6 +470,9 @@ async def workspace(request: Request, asked: Asked) -> MineWorkspaceView:
 
     served = await _console_reads(request).read(load, now=now)
     questions, runs, agent_rows, item_rows, stored, ceilings = served.value
+    sessions = sessions_of(request)
+    marked = () if sessions is None else await StoredThreads(sessions).corrections(me)
+    corrected = sum(1 for one in marked if this_month <= one.at <= now)
 
     actuals = [one for one in (actual_of(row) for row in runs) if one is not None]
     records = [one for one in (record_of(row) for row in agent_rows) if one is not None]
@@ -515,7 +529,7 @@ async def workspace(request: Request, asked: Asked) -> MineWorkspaceView:
         principal_id=me,
         display_name=asked.caller.principal.display_name,
         asked=MineAskedView(
-            since=this_month, questions=questions, corrections=CORRECTIONS_ARE_NOT_RECORDED
+            since=this_month, questions=questions, corrections=corrections_said(corrected)
         ),
         agents=[
             MineAgentView(
