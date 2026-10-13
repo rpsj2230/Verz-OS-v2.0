@@ -46,7 +46,16 @@ Rejected: offering the approver a count of what they were not shown. `pending_fo
 value for the reason `A_QUEUE_THAT_COUNTS_WHAT_IT_WITHHELD_IS_A_CENSUS_OF_OTHER_DEPARTMENTS`
 gives, and a card view that said "and four others" would put the count back one screen along.
 
-Task ids: M33.6.1.2, M33.6.1.3, M40.6.1.2, M33.8.1
+**An action that cannot be taken back needs two people, and the first approval decides nothing
+(M13.7.7).** `Card.needs_second` says the action is one, `Card.first_approved` says one person has
+given the first approval, and `endorse` is what a first approval does: it moves nothing to
+approved, writes no ledger entry and leaves the row pending for somebody else. The second
+approval is `decide`, unchanged, and `SuspendedAction.approved_by` refuses it unless the first was
+given by somebody else and neither is the person the action runs as, which `pending_for` already
+keeps off the queue of both. A rejection or a takeover needs only one person: refusing to run
+something is never the dangerous half.
+
+Task ids: M33.6.1.2, M33.6.1.3, M40.6.1.2, M33.8.1, M13.7.7
 """
 
 from __future__ import annotations
@@ -158,6 +167,10 @@ class Card:
     #: agent's page can list the cards its reader could decide (M27.15.30). A person's own
     #: request, a promotion, carries the id the gate raised it under. Never a tool or a call.
     agent_id: str = ""
+    #: Whether the action needs two different people (M13.7.7).
+    needs_second: bool = False
+    #: Whether the first of the two has already approved, so this approval is the second.
+    first_approved: bool = False
 
 
 def card_gaps(shape: type = Card) -> tuple[str, ...]:
@@ -261,7 +274,34 @@ def card(
         may_take_over=not is_promotion(suspension),
         unsent_because=unsent_because,
         agent_id=suspension.action.agent_id,
+        needs_second=suspension.two_person,
+        first_approved=bool(suspension.endorsed_by),
     )
+
+
+@dataclass(frozen=True)
+class Endorsed:
+    """A first approval that was given: the suspension as it now stands, still pending.
+
+    No ledger entry rides with it, because nothing was decided: the entry is the second person's.
+    """
+
+    suspension: SuspendedAction
+
+
+def endorse(suspension: SuspendedAction, entitlement: EntitlementSet, *, now: datetime) -> Endorsed:
+    """Give the first approval of a two-person action, or refuse.
+
+    Refused for an approver the queue does not offer it to, which is the one answer every other
+    refusal here is, and for an action that needs one person or has had its first approval.
+    """
+    if not pending_for(entitlement, [suspension], now):
+        msg = f"suspension {suspension.id!r} is not this approver's to approve"
+        raise ApprovalError(msg)
+    try:
+        return Endorsed(suspension=suspension.endorsed(entitlement.principal_id, now))
+    except ValueError as refused:
+        raise ApprovalError(str(refused)) from refused
 
 
 @dataclass(frozen=True)

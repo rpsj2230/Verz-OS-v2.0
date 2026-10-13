@@ -380,6 +380,25 @@ AUTOMATION_AUTHORING: Final = Feature(
     read_by=("brain.automation_authoring_routes:authoring_is_on",),
 )
 
+#: A second person for actions that cannot be taken back. Off until the owner answers needs-rupash
+#: 192, which decides whether it covers every sensitive effect (option A, recommended) or money only
+#: (option B): `brain.gate.suspension_store.needs_second_person` is the one place that changes.
+TWO_PERSON_APPROVAL: Final = Feature(
+    name="two_person_approval",
+    title="Two different people approve an action that cannot be taken back",
+    what=(
+        "An approval of an action with a sensitive effect, such as a client message, a payment or "
+        "a deletion, needs two different people. The first approves and the action waits; the "
+        "second approves and it runs. Neither may be the person who asked for it."
+    ),
+    while_off=(
+        "One person approves such an action, and that person may be the one who asked for it "
+        "where the agent's rung allows it. An approval already waiting for a second person "
+        "still needs one."
+    ),
+    read_by=("brain.gate.suspension_store:put_suspension",),
+)
+
 #: Every feature this product can switch on, in the order the screen lists them.
 FEATURES: Final[tuple[Feature, ...]] = (
     PROMPT_EDITING,
@@ -387,6 +406,7 @@ FEATURES: Final[tuple[Feature, ...]] = (
     RELEASE_CHECK,
     UNATTENDED_ENTITY_MERGE,
     BUDGET_ENFORCEMENT,
+    TWO_PERSON_APPROVAL,
     SUPERVISION_REVIEW,
     SHARED_TOOL_START,
     AGENT_ITEM_COUNTS,

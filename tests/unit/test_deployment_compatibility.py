@@ -1148,3 +1148,31 @@ def test_a_check_binding_only_a_word_the_last_release_could_not_write_is_not_a_n
         " postgresql_not_valid=True)\n",
     )
     assert _verdicts(other_table)[-1] is Verdict.BREAKING
+
+
+def test_a_check_binding_only_rows_whose_added_flag_is_true_is_not_a_narrowing() -> None:
+    """`A_RESTRICTION_ON_A_FLAG_THE_PREVIOUS_RELEASE_NEVER_SETS_IS_NOT_A_NARROWING`, both ways.
+    Delete this and a state added together with its own invariant behind a new flag is refused as
+    a narrowing, or the rule passes a check over a flag the previous release can set, a flag with
+    another default, or one on another table."""
+
+    def flagged(default: str, nullable: str = "False", column: str = "on") -> str:
+        return (
+            f'    op.add_column("t", sa.Column("{column}", sa.Boolean(), nullable={nullable}, '
+            f'server_default={default}), schema="s")\n'
+        )
+
+    rule = '    op.create_check_constraint("c", "t", "NOT on OR x IS NOT NULL", schema="s")\n'
+    safe = _migration(flagged("sa.false()") + rule)
+    assert Verdict.BREAKING not in _verdicts(safe)
+    assert "restriction on a column the previous release never writes" in _rules(changes_in(safe))
+    text_default = _migration(flagged('sa.text("false")') + rule)
+    assert Verdict.BREAKING not in _verdicts(text_default)
+    # A flag that defaults to true holds true in every row the previous release writes.
+    assert _verdicts(_migration(flagged("sa.true()") + rule))[-1] is Verdict.BREAKING
+    # A flag nobody added in this migration is one the previous release may set.
+    assert _verdicts(_migration(rule))[-1] is Verdict.BREAKING
+    # Another column's name, and another table's flag.
+    assert _verdicts(_migration(flagged("sa.false()", column="off") + rule))[-1] is Verdict.BREAKING
+    other_table = flagged("sa.false()").replace('"t"', '"u"')
+    assert _verdicts(_migration(other_table + rule))[-1] is Verdict.BREAKING
