@@ -123,6 +123,7 @@ from brain.tables.manifest_draft import (
     ManifestDraftRow,
     ManifestRevisionRow,
 )
+from brain.tables.member_preference import MemberPreferenceRow
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
 from brain.tables.model_health import (
     ChainDepthAlertRow,
@@ -540,6 +541,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0223_templates_and_audience. A draft and an offer each name an agent and a person as values.
     "agent.template_draft",
     "agent.audience_extra",
+    # 0228_member_preference. Points at nothing: the person is a value, so a row outlives a
+    # directory row and an erasure removes it by the column.
+    "auth.member_preference",
 )
 
 __all__ = [
@@ -628,6 +632,7 @@ __all__ = [
     "ManifestDraftRow",
     "ManifestRevisionRow",
     "MarkRow",
+    "MemberPreferenceRow",
     "MessageRole",
     "MessageRow",
     "ModelAttemptRow",
