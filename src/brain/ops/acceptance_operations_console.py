@@ -343,7 +343,7 @@ async def a_request_s_traffic_class_is_declared_at_ingress_with_no_default(h: Ha
 
 # ------------------------------------------------------ 2. what is running (M27.6.1)
 @check(
-    leaves=("M27.6.1",),
+    leaves=("M27.6.1", "M27.7.25"),
     sentence=(
         "A reserved reader of This install is told, by the route the page calls, the install "
         "size it was deployed at, the release or why it cannot be named, the database version "
@@ -380,7 +380,7 @@ async def this_install_says_what_is_running_and_at_what_level(h: Harness) -> Non
 
 # ------------------------------------ 3. the release check switched from the console (M27.15.51)
 @check(
-    leaves=("M27.15.51",),
+    leaves=("M27.15.51", "M27.7.25"),
     sentence=(
         "An administrator switches the release check on from the Features screen's route with the "
         "environment's switch off: the switch is audited under their name, Version and updates "

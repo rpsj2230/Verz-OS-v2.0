@@ -56,7 +56,7 @@ undecided submission; the landing is `tests/unit/test_skill_export.py`'s.
 Every name the checks write is the run's: skills are `acceptance_<run>_...`, written by reserved
 principals of acceptance_a, and all of it rolls back with the check.
 
-Task ids: M12.3.4, M12.3.1, M12.4.11
+Task ids: M12.3.4, M12.3.1, M12.4.11, M12.4.9
 """
 
 from __future__ import annotations
@@ -233,7 +233,7 @@ async def _statement_refusal(h: Harness, actor: str, statement: Any) -> tuple[st
 
 # ------------------------------------------------ 1. examples rehearsed first (M12.3.4)
 @check(
-    leaves=("M12.3.4",),
+    leaves=("M12.3.4", "M12.4.9"),
     sentence=(
         "A skill carrying two example tasks is refused approval before it is rehearsed and after "
         "a rehearsal through an agent that cannot reach what an example expects, and is approved "
@@ -337,7 +337,7 @@ async def a_version_with_examples_is_approved_only_once_rehearsed(h: Harness) ->
 
 # ------------------------------------------------------------- 2. exported (M12.3.1)
 @check(
-    leaves=("M12.3.1",),
+    leaves=("M12.3.1", "M12.4.9"),
     sentence=(
         "An approved version is exported as a zip whose manifest names its version and digest, "
         "which reads back as that version waiting undecided, and the export is a row and a ledger "

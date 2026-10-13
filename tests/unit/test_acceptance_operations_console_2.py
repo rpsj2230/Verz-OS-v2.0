@@ -10,7 +10,7 @@ that anybody may ask for.
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M27.2.2, M27.8.13, M27.15.47, M27.15.7, M27.15.36, M27.15.39
+Task ids: M27.2.2, M27.8.13, M27.15.47, M27.15.7, M27.15.36, M27.15.39, M27.11.9
 Task ids: M27.2.4, M27.12.2, M27.15.8
 """
 
@@ -48,7 +48,7 @@ def test_the_module_declares_one_check_per_group_of_leaves() -> None:
         (RUNS, ("M27.2.2",)),
         (JOBS, ("M27.8.13", "M27.15.47")),
         (TOOLS, ("M27.15.7", "M27.15.36")),
-        (SOURCE, ("M27.15.39",)),
+        (SOURCE, ("M27.15.39", "M27.11.9")),
         (PROBE, ("M27.15.8", "M27.12.2", "M27.2.4")),
     ]
 
