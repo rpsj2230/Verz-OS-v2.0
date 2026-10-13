@@ -10,19 +10,19 @@ Classes: 1 built and wired, only an install check is missing; 2 partly built; 3 
 | --- | --- | --- | --- | --- | --- | --- |
 | M17 (Wave 4) | 41 | 16 | 11 | 2 | 7 | 5 |
 | M18 (Wave 4) | 21 | 3 | 0 | 12 | 6 | 0 |
-| M21 (Wave 4) | 0 | 0 | 0 | 0 | 0 | 0 |
-| M25 (Wave 4) | 0 | 0 | 0 | 0 | 0 | 0 |
-| M26 (Wave 4) | 0 | 0 | 0 | 0 | 0 | 0 |
-| M29 (Wave 4) | 0 | 0 | 0 | 0 | 0 | 0 |
-| M34 (Wave 4) | 0 | 0 | 0 | 0 | 0 | 0 |
-| M35 (Wave 4) | 0 | 0 | 0 | 0 | 0 | 0 |
+| M21 (Wave 4) | 22 | 5 | 9 | 6 | 1 | 1 |
+| M25 (Wave 4) | 17 | 7 | 6 | 3 | 0 | 1 |
+| M26 (Wave 4) | 15 | 9 | 2 | 3 | 0 | 1 |
+| M29 (Wave 4) | 14 | 1 | 0 | 12 | 0 | 1 |
+| M34 (Wave 4) | 17 | 1 | 6 | 8 | 0 | 2 |
+| M35 (Wave 4) | 21 | 11 | 7 | 0 | 0 | 3 |
 | M40 (Wave 4) | 53 | 20 | 15 | 14 | 3 | 1 |
 | M19 (Wave 5) | 0 | 0 | 0 | 0 | 0 | 0 |
 | M30 (Wave 5) | 30 | 5 | 12 | 6 | 2 | 5 |
 | M36 (Wave 5) | 22 | 8 | 5 | 6 | 0 | 3 |
 | M37 (Wave 5) | 40 | 7 | 5 | 26 | 0 | 2 |
 | M42 (Wave 5) | 0 | 0 | 0 | 0 | 0 | 0 |
-| Total | 207 | 59 | 48 | 66 | 18 | 16 |
+| Total | 313 | 93 | 78 | 98 | 19 | 25 |
 
 # Wave 4
 
@@ -239,6 +239,405 @@ Classes: 1 built and wired, only an install check is missing; 2 partly built; 3 
 - **M18.7.1** The cost check may run a coordinator's specialist agents one after another, but never replaces a specialist's work with the coordinator's...  
   Evidence: Not built: fanout.Verdict has only SINGLE_LOOP and PARALLEL, and nothing says SINGLE_LOOP for a coordinator means running specialists in sequence rather than the coordinator doing their work. No orchestrator exists to hold the rule (register OWN2-5).  
   Build: when the orchestrator exists, define SINGLE_LOOP as sequential specialist calls and add a test that the coordinator never answers a subtask itself
+
+## M21 Cost, budgets and metering
+
+### M21, Class 1: built and wired, only an install check is missing (5)
+
+- **M21.1.5** All levels as versioned, audited rows  
+  Evidence: tables.budget versioned rows + ops.budget_store.append/history_of, ledgered by a trigger on append (agent_workspace_routes docstring cites 0098); written by company_routes and agent_workspace_routes, tested test_budget_store. Only the company and agent levels have a writer.  
+  Next step: Write check naming M21.1.5 that sets the company budget twice via PUT and reads both versions and the ledger row (reuse acceptance_checks_company_budget._history).
+- **M21.2.3** Post-hoc accounting against principal, department, agent, model and lane  
+  Evidence: ops.usage_store.UsageRecorder (installed in app.py) writes tables.spend.SpendActualRow per finished request; Actual carries principal, department, agent, model, lane; read by spend_report_view and /report/spend. Tests test_usage_store, test_spend.  
+  Next step: Write check naming M21.2.3 that asks one question then reads the spend_actual row and /report/spend by each dimension (see acceptance_checks_console_money for the harness).
+- **M21.3.1** Spend by department, user, agent, model and lane  
+  Evidence: GET /report/spend (report_routes.spend) groups by Dimension department, principal, agent, model, lane from ops.spend_daily via spend_report_view; page console/src/pages/reports/SpendPage.tsx. Tests test_report_routes, test_spend_report_view.  
+  Next step: Write check naming M21.3.1 reading GET /report/spend for each dimension after seeding spend rows.
+- **M21.3.2** Machine traffic excluded and labelled  
+  Evidence: report_routes.spend takes include_machine default false and the view says which it was (MACHINE_TRAFFIC_IS_EXCLUDED_BY_DEFAULT_AND_THE_REPORT_SAYS_SO); Actual.machine is derived. Tests test_spend_report_view, test_spend.  
+  Next step: Write check naming M21.3.2 seeding a machine and a human row and reading /report/spend with and without include_machine.
+- **M21.3.5** Budget consumption against pace  
+  Evidence: GET /console/department/pace (department_view_routes.PACE_PATH) uses scoped_authority.department_pace and spend_view.pace; page console/src/pages/department (departmentFigures.ts). Agent projection in console_stats_routes. Test test_department_view_routes.  
+  Next step: Write check naming M21.3.5 that sets a department ceiling row then reads /console/department/pace (needs a department budget writer, see M21.1.2, or a direct seed row).
+
+### M21, Class 3: built but not wired (6)
+
+- **M21.1.2** Department budget as a share, with explicit transfer only  
+  Evidence: ops.budgets.allocate, Transfer and apply_transfers are built and unit-tested (test_budgets) but have no caller outside budgets.py; no route writes a department budget row (only company_routes and agent_workspace_routes call budget_store.append).  
+  Next step: Add a department budget set/transfer route (beside company_routes.set_company_budget) that calls allocate/apply_transfers and budget_store.append, then a check.
+- **M21.1.3** User daily and monthly allowance with a fair-share cap  
+  Evidence: ops.budgets.user_allowances (daily and monthly, fair share) has no caller; mine_routes and member_activity only read user rows via budget_store.in_force. No route or job writes a user-level row, so no person ever has an allowance.  
+  Next step: Call user_allowances from a route or sync that appends user rows via budget_store.append, with the fair-share cap; then write a check.
+- **M21.2.1** Pre-flight cost estimate from lane, tier, tool count and retrieval size  
+  Evidence: ops.spend.estimate and preflight (lane, tier, tool count, retrieval size) are built and tested; callers are builder.rehearse and orchestration.plan only. budget_stop_store docstring rejects preflight on the request path; no live question is estimated.  
+  Next step: Decide with owner whether to call spend.estimate in api_routes.answered_for before the lane (budget_stop_store.judged is the slot); raise as a needs item since the code deliberately chose stop-on-used-up.
+- **M21.2.4** Estimator correction from actuals  
+  Evidence: ops.spend.correct (estimator correction from Observation actuals) is built; only ops.retune.post_launch_correction uses it, called from console.spend_view.cost_review which no route or page calls. No live estimator applies a Correction.  
+  Next step: Run correct() from a worker job over spend_actual versus estimates and persist the Correction; wire it into estimate() on the request path (depends on M21.2.1).
+- **M21.3.3** Cost per answer with the distribution, not only the mean  
+  Evidence: console.spend_view.distribution and cost_per_answer (quantiles, not only mean) are built and tested (test_spend_view) but no route, page or other module calls them; SpendReportView has no distribution field.  
+  Next step: Add the distribution to /report/spend (report_routes.spend_view_of) or a new route, then show it on SpendPage.tsx.
+- **M21.3.6** Every budget refusal with the budget that caused it  
+  Evidence: BudgetStopRow rows are written (budget_stop_store.record) with level, subject, period; spend_view.budget_stops/StopRow list them but nothing calls those. console.needs_you still says no stop is recorded (stale text).  
+  Next step: Add a route and Spend section listing recorded stops (reader-scoped via spend_view.told_about); fix the stale needs_you UNRECORDED_HEALTH entry.
+
+### M21, Class 2: partly built (9)
+
+- **M21.1.1** Company budget with hard ceiling and alert thresholds  
+  Evidence: Ceiling stored and versioned: PUT company budget (company_routes.set_company_budget, ops.budgets.BudgetRow, test_company_routes). Hard stop is ops.budget_stop_store.budget_refusal_for in api_routes, flag budget_enforcement off (needs 169 A). alert_fractions stored, nothing fires them.  
+  Next step: Wire alert_fractions to a notice when spend crosses one (spend.alerts_for exists but is only called by unwired preflight); then write a check naming M21.1.1 that sets a ceiling with alerts and reads the stop record.
+- **M21.1.4** Per-agent per-run and per-day ceilings  
+  Evidence: Agent monthly ceiling is settable: agent_workspace_routes (BudgetLevel.AGENT, MONTH; test_agent_workspace_routes). ops.budgets.agent_ceilings (per-run and per-day) has no caller, so per-run and per-day agent ceilings are never written.  
+  Next step: Call agent_ceilings from the agent workspace route (or a second field) so run and day rows are appended; then check naming M21.1.4.
+- **M21.2.2** Refusal before tokens are spent  
+  Evidence: A used-up budget refuses before any lane runs (api_routes.answered_for calls budget_refusal_for after the halt, before lanes), so no tokens are spent on that question; flag off (needs 169 A). Estimate-based refusal (spend.preflight) is not on the path.  
+  Next step: Same as M21.2.1 for estimate-based refusal; for the used-up stop only the flag decision (169) and a check remain.
+- **M21.2.5** At a budget limit the request is refused with no silent degradation to a cheaper tier, and at a department ceiling the department admin i...  
+  Evidence: Used-up budget stop is wired (budget_stop_store.judged, records BudgetStopRow, refuses with no degradation) but flag budget_enforcement ships off (needs 169 A). Admin warning is recorded (addressed_to) and not delivered: the module says delivery is the next change.  
+  Next step: Deliver the recorded warning through the notice channel to the admin; owner switches the flag after a week of would-have-stopped rows; then check naming M21.2.5.
+- **M21.2.6** Message naming which budget was hit and who can raise it  
+  Evidence: The refused person gets SPENDING_LIMIT_REACHED (budget_stop_store), which deliberately names no budget and no person who can raise it; console.spend_view.told_about names level and period but has no caller. Leaf wording is narrowed by design with no needs item.  
+  Next step: Raise a needs-rupash question on the narrowing, or call spend_view.told_about from the refusal path for readers entitled to it; then check.
+- **M21.3.4** Most expensive agents and question shapes  
+  Evidence: Most expensive agents: /report/spend dimension=agent ordered by cost. Question shapes: ops.spend_store.question_shape_report and spend_view.shape_report/dearest built (test_question_shapes) but have no route or page caller.  
+  Next step: Add a route over question_shape_report (reader's grant filter already inside) and a SpendPage section; then check.
+- **M21.4.2** Every spend row carries the trace id of the request it paid for, the trace records the request's tool count and fan-out, and the most exp...  
+  Evidence: SpendActualRow.trace_id is recorded and telemetry records tool_count; shape join is spend_store.question_shape_report (no route). Fan-out is deliberately not recorded (telemetry docstring, item 59): nothing that finishes a request fans out.  
+  Next step: Wire shape ranking (see M21.3.4); fan-out waits until an orchestrated run finishes through a point that records width; then check.
+- **M21.4.3** Budgets are proved on an install: company, department, person and agent limits are set in the console, a request whose estimate exceeds a...  
+  Evidence: Roll-up proof (a check can be written once clauses exist) across M21.1 and M21.2; several parts are unbuilt or unwired (department and user budgets M21.1.2/3, estimate refusal M21.2.1, enforcement flag off per needs 169 A, skill-body load check).  
+  Next step: Waits on M21.1.2, M21.1.3, M21.2.1 and the owner switching budget_enforcement on (needs 169); then record the demonstration.
+- **M21.4.4** The agent usage chart offers an all-time range beside seven, thirty and ninety days and month to date, and marks the incomplete current d...  
+  Evidence: console.workspace.Range has 7d, 30d, 90d and mtd only; no all-time range and no marking of the incomplete current day in console/src/pages/agents/AgentDashboard.tsx or agentStats.ts.  
+  Next step: Add Range.ALL_TIME to console/workspace.py and the period selector, and a partial-day marker on the last chart bar; then check.
+
+### M21, Class 5: not code, owner or blocked (1)
+
+- **M21.4.5** Every cost requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the req...  
+  Evidence: Person-run demonstration of every cost requirement recorded against its row (register proof column M21.4.3 and M21.4.5); not code.  
+  Waits on: Waits on M21.4.3 and the owner or a person running the checks.
+
+### M21, Class 4: unbuilt (1)
+
+- **M21.4.1** Metered spend for a billing period is reported per provider key in the provider's own units and reconciles with that provider's invoice w...  
+  Evidence: No code reconciles spend to a provider invoice. models/pricing.py holds the install's own prices; no invoice figure input, tolerance or difference display found (grep invoice/reconcil in src).  
+  Build: Build: per provider key billing-period total from spend_actual in provider units, an owner-entered invoice figure, tolerance setting, and a difference line on the Spend screen. Reuse models.pricing and spend_daily.
+
+## M25 Retention, deletion, export, DSAR
+
+### M25, Class 1: built and wired, only an install check is missing (7)
+
+- **M25.1.1** Retention policy per data class  
+  Evidence: ops.retention.HORIZONS/DataClass/Horizon, one per class, shown by GET retention controls (erasure_routes.retention_controls, kept_view); retention_policy_gaps self-checks. Tests test_retention, test_erasure_routes. No install check names it.  
+  Next step: Write check naming M25.1.1 that reads the retention controls route and asserts every DataClass has a horizon and reason.
+- **M25.1.2** Metadata ledger long retention  
+  Evidence: HORIZONS has METADATA_LEDGER at 5 years (retention.METADATA_LEDGER_RETENTION_DAYS); obs.request_telemetry is partitioned monthly by ops.ledger_partitions run on the daily schedule; detach keeps rows, drop is not built. Policy is long, as the leaf says.  
+  Next step: Write check naming M25.1.2 reading the retention controls route for the ledger horizon and the ledger report line.
+- **M25.1.5** Automated enforcement with a report  
+  Evidence: Daily sweep: schedule_runner.run_retention_sweep -> retention_store, report stored (ops.retention_report), served by GET /govern/retention, page Retention.tsx. Report proved on install for M32.1.1.3. Tests test_retention_store, test_retention_routes.  
+  Next step: Write check naming M25.1.5 reading GET /govern/retention for a stored report that reaches every store with a not-reached reason where applicable.
+- **M25.2.3** Backup deletion policy and its honest limits  
+  Evidence: ops.erasure.Disposition, backup_horizon and BACKUP_RETENTION_DAYS; the screen text says a backup holds the data until it rotates out (erasure_routes.ERASING, install_routes copies_kept_days); needs 60 decided option A. Tests test_erasure, test_erasure_routes.  
+  Next step: Write check naming M25.2.3 reading the retention controls and erasure screen text for the backup window and the stated limit.
+- **M25.3.1** Conversation export per user  
+  Evidence: POST /threads/{id}/export (thread_routes, member_activity.export_my_history) records an ExportAudit-style row and hands the person their own conversation; Ask.tsx button. Merged on main (migration 0207, test_thread_export_routes).  
+  Next step: Write check naming M25.3.1 that asks, exports own thread, and reads the export record; note the other owner's thread is refused.
+- **M25.4.1** The retention sweep first runs as a dry run that reports what it would delete, and deletes nothing until a person releases it from the co...  
+  Evidence: Sweep is report-only until released: retention_store.run_retention_sweep(report_only), POST /govern/retention/release (needs the report named, ledgered by trigger), withdrawal route, RetentionActs.tsx. Tests test_retention_routes, test_retention_store.  
+  Next step: Write check naming M25.4.1: read the report, assert nothing removed, release via the route, assert the ledger row.
+- **M25.4.5** A configured trace destination receives redacted traces from an install, proved end to end.  
+  Evidence: ops.ledger_export.LedgerShipper (app.py, destination_here) sends each finished request's masked trace to the install's Langfuse; install check a_run_sent_to_the_ledger_is_found_there_with_its_model_call (acceptance_checks_services.py:303) already proves it under M32.1.2.6.  
+  Next step: Add M25.4.5 to that check's leaves=(...) if it asserts the payload is masked; otherwise add that assertion first.
+
+### M25, Class 3: built but not wired (3)
+
+- **M25.2.1** Subject access request assembling every store: rows, projections, memory, traces, recordings, backups  
+  Evidence: ops.erasure.assemble and member_activity.stored_about_me (store by store, disposition per store) are built and tested but no route or page calls them; the data-transfer catalogue lists subject_access with runs=False (not available yet).  
+  Next step: Add a subject access route over member_activity.stored_about_me wired to PostgresEraser.count_for per store (EstateEraser) and flip DataSet subject_access runs=True; then check.
+- **M25.2.4** Deletion certificate with what was removed and when  
+  Evidence: ops.erasure.Certificate and certify (with backup horizon) are built and tested but have no caller; drain_erasure_queue stores outcome and per-store counts on ops.erasure_request only, and erasure_routes.request_view carries no certificate or horizon.  
+  Next step: Call certify in drain_erasure_queue, persist it on the request row (migration) and return it in request_view; then check.
+- **M25.3.3** Knowledge export preserving scope metadata  
+  Evidence: ops.export.knowledge_export keeps each item's scope and is tested (test_export) but has no caller; data_transfer catalogue knowledge runs=False (needs 108 decided: build it).  
+  Next step: Wire knowledge_export into a data_transfer route (needs 108) reading know.item through the reader's scope; set runs=True; then check.
+
+### M25, Class 2: partly built (6)
+
+- **M25.1.3** Payload store thirty-day expiry  
+  Evidence: Payload store = obs.trace_step, horizon 30 days (PAYLOAD_RETENTION_DAYS, test_retention) and reported daily by the sweep. But migration 0150 grants brain_app INSERT only, so PostgresSweeper.removal_rule queues those rows and never deletes them.  
+  Next step: Build the removal: a job or role that deletes (or partitions and drops) obs.trace_step past 30 days with the release gate and hold check; then write the check.
+- **M25.1.4** Trace and recording lifecycle  
+  Evidence: Trace window declared (tracing.RETENTION, 30d) and daily retention report reaches the trace store (proved for M32.1.1.3, #328). Recording lifecycle is only the recordings bucket rule (storage.BUCKETS 30d); trace_step has no DELETE grant so nothing is removed.  
+  Next step: Same removal as M25.1.3 for traces; call browsing.recording.remove_expired from a worker (see M25.4.3); then check naming M25.1.4.
+- **M25.2.2** Deletion propagating to cache, index, memory and projection  
+  Evidence: The queue (erasure_store.drain_erasure_queue via schedule_runner, EstateEraser) erases rows, projection, knowledge and memory (plus session memory and own vault tokens). Cache, index, recordings and attachments are NOT reached (NO_CACHE_ERASER, NO_INDEX_ERASER, NO_OBJECT_STORE_ERASER; erasure_routes ERASING text).  
+  Next step: Build erasers for the answer cache and retrieval index, and an object-store eraser over ops.object_store; pass them as objects= in schedule_runner; then check.
+- **M25.3.2** Bulk export for eDiscovery with an audit row and a required reason  
+  Evidence: Audit-trail export demands a reason and writes an audit row (data_transfer_routes.take_export, ExportReason, ops.data_export_store; listed by GET /govern/retention/exports). The bulk store collection for eDiscovery (ops.export.bulk_export, BulkExportRequest) has no caller; catalogue bulk_collection runs=False.  
+  Next step: Add a route that runs ops.export.bulk_export over named stores and people with reason and reference, write the ExportAudit row, set bulk_collection runs=True; then check.
+- **M25.4.2** Retention and erasure are proved on an install: the retention sweep reports a dry run and removes nothing until released, a subject acces...  
+  Evidence: Roll-up proof (a check can be written once clauses exist) across M25.1 to M25.3; parts are unbuilt (subject access M25.2.1, certificate M25.2.4, cache/index/object erasure M25.2.2, bulk and knowledge export M25.3.2/3, trace row removal M25.1.3).  
+  Next step: Waits on those leaves, then a person runs the demonstration and the checks are recorded.
+- **M25.4.3** A per-object sweep removes every stored artifact past its retention class's window, records each removal, and leaves an object under a le...  
+  Evidence: browsing.recording.remove_expired(backend, today, held_runs) removes recordings past 30 days and skips held runs (tested) but nothing calls it; other buckets rely on lifecycle rules which retention_store says nothing verifies; no per-object sweeper over ops.object_store.  
+  Next step: Add an object sweeper over ops.object_store.list_objects with ages, call it from schedule_runner behind the release gate with the hold check and a removal record per object.
+
+### M25, Class 5: not code, owner or blocked (1)
+
+- **M25.4.4** Every data and retention requirement in the requirements register is demonstrated on an install by a person, and each check is recorded a...  
+  Evidence: Person-run demonstration of every data and retention requirement recorded against its row; not code.  
+  Waits on: Waits on M25.4.2 and a person running the checks.
+
+## M26 Joiner, mover, leaver
+
+### M26, Class 1: built and wired, only an install check is missing (9)
+
+- **M26.1.1** Provisioning from the identity provider  
+  Evidence: Provisioning is done by the scheduled staff sync (ops.staff_sync_run via schedule_runner, staff_accounts_run makes accounts, staff_people_run writes members), not by identity.lifecycle.provision (no caller). Staff sources screen and routes; tests test_staff_sync_routes. Checks name M1.6.x only.  
+  Next step: Write check naming M26.1.1 that runs a sync over a seeded roster and reads the new principal and its account row (reuse acceptance_checks_accounts.py harness).
+- **M26.1.2** Role and starter capability pack assignment  
+  Evidence: ops.starter_pack_store.grant_starter_packs is called by staff_sync_run and gives each joiner the Starter pack for their department (decided needs 105); role from directory groups via identity.group_sync. Tests test_starter_pack_sync. Check M1.6.20/21 touches the step.  
+  Next step: Add M26.1.2 to the leaves of the accounts check that covers the Starter pack step (acceptance_checks_accounts.py:420) or write one reading the grant.
+- **M26.1.3** Department assignment with scope  
+  Evidence: starter_pack_sync.starter_plan scopes the pack to the person's registered department (department_scope), applied by starter_pack_store from staff_sync_run; a mover has it moved, a leaver has it ended. Test test_starter_pack_sync.  
+  Next step: Check naming M26.1.3 that syncs a person into a department and reads the grant's scope; reuse the accounts check harness.
+- **M26.2.1** Entitlement re-resolution on the next request  
+  Evidence: Grants are read per request (gate.held_grants, disabled principal counts none) and the cache key carries the entitlement hash, so a move shows on the next request; existing check M6.5.2 (acceptance_checks_cache.py:116) shows a moved person is not served the old answer. lifecycle.Move is unwired.  
+  Next step: Add M26.2.1 to the leaves of that M6.5.2 check, or write a check that moves a person and asks at once.
+- **M26.2.4** Cached answers unreachable by construction  
+  Evidence: Answer cache key includes the entitlement hash (gate.answer_cache, cache_key); check M6.5.2 shows a person who moved department was refused the cached answer (acceptance_checks_cache.py:196). Test test_answer_cache.  
+  Next step: Add M26.2.4 to that check's leaves=(...).
+- **M26.2.6** Knowledge access changing with no reindex  
+  Evidence: Knowledge reach is applied at query time from the reader's grants (knowledge.search scope, starter_pack_sync moves the pack with the person); nothing reindexes on a move. Test test_starter_pack_sync and knowledge scope tests.  
+  Next step: Check naming M26.2.6: move a person between departments with no reindex job and assert search results change; reuse the people and knowledge check helpers.
+- **M26.3.1** Immediate disable with session termination  
+  Evidence: POST /govern/people/disable (principal_state_routes) sets disabled_at; migration 0003's trigger ends every session and grants go inert; the staff sync disables leavers via ops.standing_run (check M1.6.14). identity.lifecycle.disable is the unwired in-memory twin.  
+  Next step: Write check naming M26.3.1: disable a signed-in person, assert the next request is refused and the session row ended (acceptance_checks_accounts.py has the harness).
+- **M26.3.2** Owned agents flagged for adoption  
+  Evidence: ops.staff_sync_run calls stop_leavers_agents in the leaver's run (M1.8.9); staff_source_routes lists agents_for_adoption and adopt; Transfers.tsx page; tests test_staff_connect, test_staff_sync_routes. Adoption is by the department admin.  
+  Next step: Write check naming M26.3.2: mark a leaver with an agent, assert the agent is disabled and appears in transfers, adopt it.
+- **M26.3.3** Automations suspended  
+  Evidence: ops.automation_owner.standing_of returns AWAITING_OWNER when the owner is not active; automation_run_store.owner_live refuses an owner_gone run; automations_routes may_adopt lets a new owner take it. Check M32.6 covers other clauses.  
+  Next step: Write check naming M26.3.3: disable the owner of a seeded automation, assert it does not run and is listed as awaiting an owner.
+
+### M26, Class 3: built but not wired (3)
+
+- **M26.1.4** Welcome path with three department-scoped starter questions  
+  Evidence: identity.lifecycle.welcome_questions and adoption.starter_questions (three department-scoped questions) are built; only ops.guide_docs imports the latter and nothing imports guide_docs. Ask.tsx says it suggests no question before the first ask.  
+  Next step: Serve welcome_questions from a route for the signed-in person's department, from entities that indexed, and show them on the first Ask screen (Ask.tsx empty state).
+- **M26.2.3** Delegations re-evaluated and suspended rather than narrowed  
+  Evidence: identity.lifecycle.reevaluate_delegations (suspend, never narrow) and Reconfirmation are built and tested but no caller; no delegation table or route exists on main (grep delegation in tables and routes). Nearest live object is an automation owner (M26.3.3).  
+  Next step: Decide what a delegation is on this install (elevation, automation owner or a new object), then call reevaluate_delegations from the sync run when a move changes reach.
+- **M26.3.4** Personal knowledge and memory disposition policy  
+  Evidence: identity.lifecycle.departure_disposition (per Store) and member_activity.DeletionRoute are built but have no route or job caller; nothing applies a leaver's memory or personal knowledge disposition when the sync marks them.  
+  Next step: Call departure_disposition from the leaver step of staff_sync_run and record each disposition; surface it on the Transfers page.
+
+### M26, Class 2: partly built (2)
+
+- **M26.2.2** Personal agents following the person  
+  Evidence: Personal agents follow the person by construction: E_run is the caller's reach intersected with the agent ceiling (gate.leash.decide), so a moved owner's agent reaches the new department. lifecycle.agents_following has no caller. Not verified that a personal agent's audience record updates on a move.  
+  Next step: Check naming M26.2.2: move an owner, call their personal agent, assert old-department knowledge is not reached; fix the agent audience if it fails.
+- **M26.4.1** Joiner, mover and leaver handling is proved on an install: a person moved between departments loses the old department's knowledge, agent...  
+  Evidence: Roll-up proof (a check can be written once clauses exist) across joiner, mover and leaver; clauses depend on unwired parts (delegations M26.2.3, personal knowledge disposition M26.3.4, ended grant mid-run, external person end date).  
+  Next step: Waits on M26.2.3 and M26.3.4, then a person runs it and the checks are recorded.
+
+### M26, Class 5: not code, owner or blocked (1)
+
+- **M26.2.7** Test covering every one of the above  
+  Evidence: Roll-up test leaf: tests/unit/test_lifecycle.py covers the pure module, but several clauses it covers (provision, delegations, welcome) are not wired, so a test of every item above has nothing end to end to run.  
+  Waits on: Waits on M26.1.4, M26.2.3 and M26.4.1 wiring; then write the end-to-end test.
+
+## M29 Extension points
+
+### M29, Class 1: built and wired, only an install check is missing (1)
+
+- **M29.3.1** Modularity is proved on an install: a connector for a new API and a new channel record are added and switched off from the console with n...  
+  Evidence: Clauses have checks: new-API connector live with no release (acceptance_checks_custom_connector.py, M11.7.8); channel off refuses inbound (acceptance_operations_console_4.py:239); a console setting says when it applies (acceptance_operations_console.py:472). Not verified: vendor adapter replaced with no deploy.  
+  Next step: Write a roll-up check naming M29.3.1 over those checks (pattern acceptance_roll_up.clauses_demonstrated); add a clause check for a replaced provider key taking effect with no deploy.
+
+### M29, Class 3: built but not wired (12)
+
+- **M29.1.2** Connector and tool provider interface  
+  Evidence: plugins.points entry connector names contract brain.connectors.contract:ConnectorFetch (exists), tier sidecar; test_plugins_points. Nothing outside the registry imports brain.plugins and the Features page says plugins have no loader. Console connectors (M11.7.8) are separate.  
+  Next step: Wire a plugin host: a loader that reads ops.plugin_registry records and calls plugins.contract before handing the point its input; show points on the Features and plugins page.
+- **M29.1.3** Skill interface  
+  Evidence: plugins.points entry skill names contract brain.tools.skills:Skill (exists), tier sandbox; test_plugins_points. Nothing outside the registry imports brain.plugins and the Features page says plugins have no loader.  
+  Next step: Wire a plugin host: a loader that reads ops.plugin_registry records and calls plugins.contract before handing the point its input; show points on the Features and plugins page.
+- **M29.1.4** Template interface  
+  Evidence: plugins.points entry template names contract brain.agents.template:TemplateManifest (exists), tier in_process; test_plugins_points. Nothing outside the registry imports brain.plugins and the Features page says plugins have no loader.  
+  Next step: Wire a plugin host: a loader that reads ops.plugin_registry records and calls plugins.contract before handing the point its input; show points on the Features and plugins page.
+- **M29.1.5** Model provider interface  
+  Evidence: plugins.points entry model_provider names contract brain.models.driver:ModelDriver (exists), tier sidecar; test_plugins_points. Nothing outside the registry imports brain.plugins and the Features page says plugins have no loader.  
+  Next step: Wire a plugin host: a loader that reads ops.plugin_registry records and calls plugins.contract before handing the point its input; show points on the Features and plugins page.
+- **M29.1.7** Field classifier interface  
+  Evidence: plugins.points entry field_classifier names contract brain.ops.pii:Recogniser (exists), tier sandbox; test_plugins_points. Nothing outside the registry imports brain.plugins and the Features page says plugins have no loader.  
+  Next step: Wire a plugin host: a loader that reads ops.plugin_registry records and calls plugins.contract before handing the point its input; show points on the Features and plugins page.
+- **M29.1.12** Notification sink interface  
+  Evidence: plugins.points entry notification_sink names contract brain.ops.digest_delivery:DigestSender (exists), tier sidecar; test_plugins_points. Nothing outside the registry imports brain.plugins and the Features page says plugins have no loader.  
+  Next step: Wire a plugin host: a loader that reads ops.plugin_registry records and calls plugins.contract before handing the point its input; show points on the Features and plugins page.
+- **M29.2.1** Manifest schema: identity, version, required capabilities, config schema, core compatibility range  
+  Evidence: plugins.manifest (PluginManifest, manifest_from, PLUGIN_ID_RE, refuses reach keys; core compatibility range) is built and tested (test_plugins_manifest); only ops.plugin_registry and tables.plugin import it, and no route accepts a manifest.  
+  Next step: Add an install route that parses an uploaded manifest with manifest_from and records it via plugin_registry; then check.
+- **M29.2.2** Registry tables  
+  Evidence: Migration 0032, tables.plugin (PluginInstallRow, PluginVersionRow) and ops.plugin_registry (remember, save, records, one document per version) are built and tested (test_plugin_registry); nothing calls plugin_registry.  
+  Next step: Call plugin_registry from a plugin install route and the Features and plugins page; then write a check naming M29.2.2.
+- **M29.2.3** Install, enable, disable, upgrade, rollback  
+  Evidence: plugins.lifecycle (install, enable, disable, upgrade, rollback, assert_transition; nothing arrives enabled) is built and tested (test_plugins_lifecycle); only ops.plugin_registry calls assert_transition, and no route or page drives a transition.  
+  Next step: Expose transitions as routes over plugin_registry (admin authority, ledgered) and buttons on the Features and plugins page.
+- **M29.2.4** Drain on upgrade so in-flight work finishes on the old version  
+  Evidence: plugins.lifecycle models the drain (in-flight work finishes on the old version) and is tested, but there are no plugin runs to drain: no loader, and no route upgrades a plugin.  
+  Next step: Build with M29.2.3 plus the host: count in-flight calls per plugin version and block the switch until they finish.
+- **M29.2.5** Isolation tier per point: in-process, sidecar, sandbox  
+  Evidence: plugins.points gives each plugin point a tier (in_process, sidecar, sandbox) and structural rules (code never runs in process); tested in test_plugins_points. No host enforces a tier because no plugin is loaded.  
+  Next step: Enforce the tier in the plugin host when it exists (sidecar or sandbox runner reuse brain.tools sandbox); until then nothing to check on an install.
+- **M29.2.6** Core contract test: a plugin cannot see an unredacted result it did not produce, and cannot widen entitlements  
+  Evidence: plugins.contract checks a plugin cannot see an unredacted result it did not produce and cannot widen entitlements (uses EntitlementSet.intersect); tested in test_plugins_contract. Nothing calls it: brain.plugins has no importer outside the registry.  
+  Next step: Call plugins.contract from the host before every plugin call; then write a check with a stand-in plugin asserting both properties.
+
+### M29, Class 5: not code, owner or blocked (1)
+
+- **M29.3.2** Every modularity requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against t...  
+  Evidence: Person-run demonstration of every modularity requirement recorded against its row; not code.  
+  Waits on: Waits on M29.3.1 and a person running the checks.
+
+## M34 Onboarding and adoption
+
+### M34, Class 1: built and wired, only an install check is missing (1)
+
+- **M34.2.2.3** Unanswered question log as the connector roadmap  
+  Evidence: adoption.connector_demand is called by console.questions_view over question_gap_store rows and served at GET /report/questions, QuestionsPage.tsx, scoped to the reader's departments. Check acceptance_people_console_3 touches the screen under other leaves.  
+  Next step: Write check naming M34.2.2.3: ask a question no source answers, read /report/questions and assert a connector demand line.
+
+### M34, Class 3: built but not wired (8)
+
+- **M34.1.1.1** First connector chosen so a real question is answerable before any document is uploaded  
+  Evidence: adoption.first_connector (picks the connector that answers a real question before any upload) is built and tested (test_adoption) but nothing outside adoption.py calls it; no setup or Connectors page recommends a first connector.  
+  Next step: Call first_connector from the setup wizard's connector step or the Connectors screen's empty state, over ConnectorOffer rows from the manifests.
+- **M34.1.1.2** Three department-scoped starter questions generated from what actually indexed  
+  Evidence: adoption.starter_questions (three department-scoped questions from entities that actually indexed) is built; its only importer is ops.guide_docs, which nothing imports. Ask.tsx suggests no question before the first ask.  
+  Next step: Serve starter_questions from a route for the signed-in person's department (reader-scoped) and render them in the Ask empty state.
+- **M34.1.2.1** Per-scope statement: record counts and last sync  
+  Evidence: adoption.coverage_report/ScopeCoverage (records and last sync per department and source) is built; no route or page calls it. Connectors screens show per-source status, not a per-scope statement; department_view_routes coverage is knowledge freshness.  
+  Next step: Add a per-department coverage route over connector sync state feeding adoption.coverage_report and show it on Adoption or Departments.
+- **M34.1.2.3** Shopping list for the champion rather than a progress bar  
+  Evidence: adoption.shopping_list (actions for the champion, not a progress bar) is built and tested; nothing outside adoption.py calls it (locale.py only names its two work kinds).  
+  Next step: Add it to the Adoption page for a champion, fed by coverage_report; reader-scoped.
+- **M34.2.1.1** Each department lead verifies five documents in week one  
+  Evidence: adoption.verification_targets (five documents per department lead in week one) is built; no route, task or page uses it. knowledge.verification tasks exist separately for re-verification.  
+  Next step: Create the week-one verification tasks from verification_targets through the knowledge tasks route when a department lead is placed.
+- **M34.2.2.2** Wrong-sources feedback distinct from wrong-answer, so retrieval and reasoning bugs separate  
+  Evidence: ops.feedback.FlagReason.WRONG_SOURCES vs WRONG_FACT, plane_of and by_plane are built and tested (test_flag_planes); flag_answer is called only by the unwired channels.correction, and no route or console control files a flag.  
+  Next step: Add a flag route (POST on an answer's trace with a FlagReason) and a console control, or wire channels.correction; then check.
+- **M34.3.1.1** What it can and cannot see, in plain language  
+  Evidence: adoption.visibility_summary (what it can and cannot see, plain language, from the reader's reach) is built and tested; no route or page calls it.  
+  Next step: Serve it from a route for the signed-in person (reach-scoped) and link it from Ask or My workspace.
+- **M34.3.1.2** The privacy posture stated openly  
+  Evidence: adoption.privacy_posture reads the install's configuration into plain sentences and is tested (test_adoption); no route or page calls it (locale.py names its keys only).  
+  Next step: Serve privacy_posture on a staff-facing page or Ask help panel; reader needs no grant.
+
+### M34, Class 2: partly built (6)
+
+- **M34.1.1.3** Answers verifiable against a system the client already trusts  
+  Evidence: Answers carry citations to the source record (provenance, cited_document_routes, CitedDocument.tsx). adoption.verification_targets, which picks what a person can check in a system they already trust, has no caller.  
+  Next step: Call verification_targets from the answer view so each answer names where to verify it, or confirm citations already satisfy the leaf and write the check over them.
+- **M34.1.2.2** Explicit not-connected state per department  
+  Evidence: adoption.Coverage.NOT_CONNECTED per department is unwired; the Connectors dashboard already shows a source as Not connected (ConnectorDashboard.tsx NOT_CONNECTED_TITLE) but per source, not per department.  
+  Next step: Show the per-department state through coverage_report (see M34.1.2.1).
+- **M34.2.2.1** Correction path in every channel  
+  Evidence: Chat marks (helpful or unhelpful) are wired in channels: marks.mark_line in chat_answer and read_mark in channels.inbound. The reason-bearing path channels.correction (send_with_correction, read_correction, file_correction) has no caller.  
+  Next step: Call send_with_correction where adapters send an answer and read_correction in channels.inbound; then check naming M34.2.2.1 per channel.
+- **M34.3.1.3** How to ask well, with examples from their own department  
+  Evidence: docs/guides/asking-well.md exists with per-department examples marker; ops.guide_docs.asking_examples and asking_gaps check it (test_guide_docs). Nothing imports guide_docs and no route serves the guide to staff.  
+  Next step: Serve the guide from a help route that fills the examples marker with asking_examples for the reader's department.
+- **M34.3.2.1** Runbook per console screen  
+  Evidence: 36 runbooks exist in docs/console/runbooks and launch.screen_runbook_gaps and guide_docs.runbook_gaps sweep them against the screen registry (test_guide_docs). No route or page serves them; docs_routes serves only the build pages.  
+  Next step: Add a help route serving docs/console/runbooks per screen and a link on each console page (see M34.4.1).
+- **M34.4.1** The runbooks for every console screen and every alert, and the incident playbook, are served from the install's own help pages, and a swe...  
+  Evidence: Runbooks per screen exist (36 files) with a gap sweep (launch.screen_runbook_gaps); alert runbooks via ops.controls.runbook_gaps. The incident playbook is a Python table (ops.reliability.MATRIX) nothing renders, and no help route serves any of it.  
+  Next step: Build GET help pages serving runbooks, alert runbooks and a rendered playbook; extend the sweep to fail when a screen or alert has none.
+
+### M34, Class 5: not code, owner or blocked (2)
+
+- **M34.3.3.3** Upgrade and rollback procedure  
+  Evidence: Document leaf: docs/install/update-and-rollback.md (275 lines) exists, held to the code by ops.install_docs and tests; release.py references it. Closing needs an operator to run an upgrade and a rollback on a server, or Proved-in-ci naming the guard test.  
+  Waits on: Waits on a person rehearsing upgrade and rollback on the install, or a Proved-in-ci line.
+- **M34.3.3.4** Restore drill procedure  
+  Evidence: Document leaf: docs/install/restore-drill.md (360 lines) exists, guarded by tests/unit/test_install_drill_page.py; the recovery screen says no control runs a drill (install_routes.NO_CONTROL_HERE_RUNS_A_REHEARSAL). The drill itself is run by hand on the server.  
+  Waits on: Waits on a person running the drill on the install (needs-rupash style server step); record via the drill record the screen reads.
+
+## M35 Localisation and accessibility
+
+### M35, Class 1: built and wired, only an install check is missing (11)
+
+- **M35.1.2.1** CJK tokenisation for lexical search so Chinese queries do not silently retrieve worse  
+  Evidence: knowledge.search lexical_legs and knowledge.chunk_store write know.chunk.cjk via chunk_text_fields (migration 0024); query side runs in the document search tool; ingest runs in the worker (ingest_queue.register_ingest_tasks). Test test_search.  
+  Next step: Write check naming M35.1.2.1: ingest a Han-text document through the queue, query it in Chinese as a person who may read it, assert it is found.
+- **M35.1.2.2** Mixed-language document handling  
+  Evidence: search.chunk_text_fields tokenises every script in a chunk into cjk and detects the dominant language, and lexical_legs chooses legs per script in the question, so a mixed document is found by queries in either language. Tests test_search, test_locale.  
+  Next step: Write check naming M35.1.2.2 ingesting a mixed English and Chinese document and asking in each language.
+- **M35.1.2.3** Language detection on ingest recorded as metadata  
+  Evidence: chunk_store.ingest_document writes know.chunk.language from locale.detect via chunk_text_fields (None when too little text); column from migration 0024. Test test_search.  
+  Next step: Write check naming M35.1.2.3 that ingests one English and one Chinese document and reads know.chunk.language.
+- **M35.2.1.1** Screen-reader-safe streaming: no naive aria-live on a token stream  
+  Evidence: console/src/pages/Ask.tsx keeps the answer out of any live region and only progress steps use role=status; locale documents why. Tests console/tests/ask-page.test.tsx and skip-to-answer.test.tsx. Not shown under a real screen reader on an install.  
+  Next step: Browser run on the install under a screen reader (or a console test over the served bundle) naming M35.2.1.1; no Python check can prove it.
+- **M35.2.1.2** Announce on completion, not on every token  
+  Evidence: Ask.tsx returns focus to the skip control when the answer finishes (FOCUS_IS_RETURNED_AND_NEVER_TAKEN), the one announcement; test skip-to-answer.test.tsx. locale.announcements is unused by the console. Not observed in a browser on the install.  
+  Next step: Same browser run as M35.2.1.1; add M35.2.1.2 to the console test's Task ids and record the install run.
+- **M35.2.1.3** Skip-to-answer control  
+  Evidence: Ask.tsx SKIP_TO_ANSWER button after the form focuses the answer region; console test skip-to-answer.test.tsx exists and names the leaf. Label is English only (answer.skip_to is in the catalogue).  
+  Next step: Browser run on the install asking a question and pressing the control; record it against M35.2.1.3.
+- **M35.2.2.1** Keyboard navigation across the console  
+  Evidence: Native controls, a skip link and console/scripts/check-boundaries rules run in CI; console/tests/keyboard-access.test.tsx renders pages and asserts tab order (names M35.2.2.1). jsdom only; not observed on the served console.  
+  Next step: Browser run on the install tabbing through the shell, a list and a form; record against M35.2.2.1 (see M35.4.1).
+- **M35.2.2.2** Visible focus states  
+  Evidence: A focus-visible ring is defined in the theme tokens and CI refuses outline none; keyboard-access.test.tsx asserts it in both themes (names M35.2.2.2). Not seen on the served console.  
+  Next step: Browser run in both themes on the install; record against M35.2.2.2.
+- **M35.2.2.4** Form labels and error association  
+  Evidence: 58 console files set aria-describedby and 39 aria-invalid; forms use SchemaForm with locale.form_gaps behind the setup wizard; unit tests assert labels. No test or run names M35.2.2.4 and none shows an error on the served console.  
+  Next step: Browser run submitting an invalid value in a console form; add the leaf id to the form test's Task ids.
+- **M35.3.1.1** Console usable on a phone for approvals at minimum  
+  Evidence: Approvals.tsx and approvals/ApprovalCard.tsx with phone layout (console/tests/approvals-phone.test.tsx, approvals-page.test.tsx); POST decide route (approval_routes). Suspensions are now raised by held agent runs and knowledge promotions. Not run on a phone against the install.  
+  Next step: Install run: raise an approval, open the console at phone width, decide it; record against M35.3.1.1.
+- **M35.3.2.1** Installable shell  
+  Evidence: console/public/manifest.webmanifest and index.html link it; console_static serves unhashed files at the root; console/tests/installable-shell.test.ts asserts it (names the leaf). No service worker is claimed.  
+  Next step: Write a check naming M35.3.2.1 that GETs /manifest.webmanifest from the install and asserts start_url, scope, icons and name; an install prompt in Chrome is the person's half.
+
+### M35, Class 2: partly built (7)
+
+- **M35.1.1.1** English and Simplified Chinese interface strings  
+  Evidence: locale.MESSAGES holds en and zh-Hans (67 keys, catalogue_gaps tested) but only the setup wizard and data_steward_routes call text(); the served console draws English strings from TSX (CONSOLE_LANGUAGE en-GB) with no locale switch; enabled_locales and default_locale have no caller.  
+  Next step: Add a locale choice (INSTALL_LOCALES) to the console shell and move console strings to the catalogue; start with Ask and Approvals; then a browser check in zh-Hans.
+- **M35.1.1.2** Locale-aware dates, numbers and currency  
+  Evidence: currency (locale.currency_or_unset) and time_zone are used by routes and workers; format_date, format_timestamp, format_number and format_money have no caller, and console dates use the browser default (Intl en-GB in spendQuery.ts).  
+  Next step: Serve install-formatted dates, numbers and money from the API or a shared console formatter reading INSTALL_LOCALES; then a check on a Spend figure in zh-Hans.
+- **M35.1.1.3** Right-to-left readiness deferred with a stated trigger  
+  Evidence: locale.RIGHT_TO_LEFT deferral with trigger is defined, and rules_for refuses an RTL tag with its reason; but console.configuration._locales_problem swallows the LocaleError into a generic sentence, and locale_facts and triggered have no caller.  
+  Next step: Pass the deferral's sentence through the settings refusal and report triggered() on the Install screen; then write the check (also M35.4.3).
+- **M35.3.2.2** Push for approvals, deferred with a stated trigger  
+  Evidence: locale.PUSH_FOR_APPROVALS with Trigger.APPROVALS_WAIT_LONGER_THAN_THE_STATED_HOURS and PUSH_IS_DUE_ABOVE_HOURS=4 is defined and tested; triggered() has no caller and nothing measures approval waits, so the trigger can never fire.  
+  Next step: Build the wait measurement (see M35.4.5) and call locale.triggered from the report; that completes this leaf.
+- **M35.4.3** Choosing a right-to-left locale in the console or at setup is refused with a sentence naming the deferral, proved in the browser  
+  Evidence: rules_for raises LocaleError carrying locale.RIGHT_TO_LEFT.reason for an RTL tag, but console.configuration._locales_problem replaces it with a generic sentence, so the console refusal does not name the deferral; setup path not verified.  
+  Next step: Return the deferral sentence from _locales_problem and the wizard; then a browser run or a settings route check naming M35.4.3.
+- **M35.4.5** The install measures how long each approval waited before a decision, and when the typical wait passes the stated hours the console repor...  
+  Evidence: Only the constants exist: locale.PUSH_IS_DUE_ABOVE_HOURS and the deferral. Suspension rows carry raise and decide times but nothing computes a typical wait or reports that push is due.  
+  Next step: Add a read over gate.suspension (raised to decided) giving the median wait, show it on Approvals or Install, and call locale.triggered; then a check.
+- **M35.4.6** At phone width every touch target is at least 44px and no element is wider than 320px, across every console page  
+  Evidence: console/tests/phone-width.test.tsx asserts the cascade for every registered route at 360px (wrapping, link height) but the file says it cannot measure widths; no 44px target or 320px width measurement exists.  
+  Next step: Add a headless browser measurement (iframe at 320px as the test's author did) over every route and assert 44px targets and no overflow; or relax to the measured figures and ask.
+
+### M35, Class 5: not code, owner or blocked (3)
+
+- **M35.4.1** Each console module is proved in the browser operable by keyboard alone, with visible focus and every form error associated with its fiel...  
+  Evidence: Needs a browser run of every console module by keyboard, with focus and errors seen. The repo has jsdom tests (keyboard-access.test.tsx, phone-width.test.tsx) and docs/console-audit but no browser job; person or agent browser run on the install.  
+  Waits on: Waits on a browser run over the install after M35.2.2.x are exercised; a person or the owner's browser tools record it.
+- **M35.4.2** Language and assistive use are proved on an install: a Chinese query and a mixed-language document retrieve correctly, local names and id...  
+  Evidence: Roll-up proof; clauses unmet: console is English only (M35.1.1.1, M35.1.1.2 unwired) and a screen-reader run is a person's. Retrieval clauses (M35.1.2.x) and names for redaction (acceptance_checks_names.py) are provable by checks.  
+  Waits on: Waits on M35.1.1.1 and M35.1.1.2, then a person runs it under a screen reader.
+- **M35.4.4** Every localisation and accessibility requirement in the requirements register is demonstrated on an install by a person, and each check i...  
+  Evidence: Person-run demonstration of every localisation and accessibility requirement recorded against its row; not code.  
+  Waits on: Waits on M35.4.1 to M35.4.3 and a person running them.
 
 ## M40 Member self-service application
 

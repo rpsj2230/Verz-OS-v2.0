@@ -3875,94 +3875,114 @@
    "act_groups": {},
    "leaf_progress": {
     "M21.1.1": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.budget_stop, ops.budgets, ops.spend); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): Ceiling stored and versioned: PUT company budget (company_routes.set_company_budget, ops.budgets.BudgetRow, test_company_routes). Hard stop is ops.budget_stop_store.budget_refusal_for in api_routes, flag budget_enforcement off (needs 169 A). alert_fractions stored, nothing fires them. NEXT: Wire alert_fractions to a notice when spend crosses one (spend.alerts_for exists but is only called by unwired preflight); then write a check naming M21.1.1 that sets a ceiling with alerts and reads the stop record.",
+     "updated": "2026-10-13"
     },
     "M21.1.2": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.budgets); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): ops.budgets.allocate, Transfer and apply_transfers are built and unit-tested (test_budgets) but have no caller outside budgets.py; no route writes a department budget row (only company_routes and agent_workspace_routes call budget_store.append). NEXT: Add a department budget set/transfer route (beside company_routes.set_company_budget) that calls allocate/apply_transfers and budget_store.append, then a check.",
+     "updated": "2026-10-13"
     },
     "M21.1.3": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.budgets); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): ops.budgets.user_allowances (daily and monthly, fair share) has no caller; mine_routes and member_activity only read user rows via budget_store.in_force. No route or job writes a user-level row, so no person ever has an allowance. NEXT: Call user_allowances from a route or sync that appends user rows via budget_store.append, with the fair-share cap; then write a check.",
+     "updated": "2026-10-13"
     },
     "M21.1.4": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.budgets); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): Agent monthly ceiling is settable: agent_workspace_routes (BudgetLevel.AGENT, MONTH; test_agent_workspace_routes). ops.budgets.agent_ceilings (per-run and per-day) has no caller, so per-run and per-day agent ceilings are never written. NEXT: Call agent_ceilings from the agent workspace route (or a second field) so run and day rows are appended; then check naming M21.1.4.",
+     "updated": "2026-10-13"
     },
     "M21.1.5": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.budget_store, ops.budgets, tables.budget); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-w1-8",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): tables.budget versioned rows + ops.budget_store.append/history_of, ledgered by a trigger on append (agent_workspace_routes docstring cites 0098); written by company_routes and agent_workspace_routes, tested test_budget_store. Only the company and agent levels have a writer. NEXT: Write check naming M21.1.5 that sets the company budget twice via PUT and reads both versions and the ledger row (reuse acceptance_checks_company_budget._history).",
+     "updated": "2026-10-13"
     },
     "M21.2.1": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.spend); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): ops.spend.estimate and preflight (lane, tier, tool count, retrieval size) are built and tested; callers are builder.rehearse and orchestration.plan only. budget_stop_store docstring rejects preflight on the request path; no live question is estimated. NEXT: Decide with owner whether to call spend.estimate in api_routes.answered_for before the lane (budget_stop_store.judged is the slot); raise as a needs item since the code deliberately chose stop-on-used-up.",
+     "updated": "2026-10-13"
     },
     "M21.2.2": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.spend); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): A used-up budget refuses before any lane runs (api_routes.answered_for calls budget_refusal_for after the halt, before lanes), so no tokens are spent on that question; flag off (needs 169 A). Estimate-based refusal (spend.preflight) is not on the path. NEXT: Same as M21.2.1 for estimate-based refusal; for the used-up stop only the flag decision (169) and a check remain.",
+     "updated": "2026-10-13"
     },
     "M21.2.3": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.spend, tables.spend); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): ops.usage_store.UsageRecorder (installed in app.py) writes tables.spend.SpendActualRow per finished request; Actual carries principal, department, agent, model, lane; read by spend_report_view and /report/spend. Tests test_usage_store, test_spend. NEXT: Write check naming M21.2.3 that asks one question then reads the spend_actual row and /report/spend by each dimension (see acceptance_checks_console_money for the harness).",
+     "updated": "2026-10-13"
     },
     "M21.2.4": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.spend); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): ops.spend.correct (estimator correction from Observation actuals) is built; only ops.retune.post_launch_correction uses it, called from console.spend_view.cost_review which no route or page calls. No live estimator applies a Correction. NEXT: Run correct() from a worker job over spend_actual versus estimates and persist the Correction; wire it into estimate() on the request path (depends on M21.2.1).",
+     "updated": "2026-10-13"
     },
     "M21.2.5": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.spend); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): Used-up budget stop is wired (budget_stop_store.judged, records BudgetStopRow, refuses with no degradation) but flag budget_enforcement ships off (needs 169 A). Admin warning is recorded (addressed_to) and not delivered: the module says delivery is the next change. NEXT: Deliver the recorded warning through the notice channel to the admin; owner switches the flag after a week of would-have-stopped rows; then check naming M21.2.5.",
+     "updated": "2026-10-13"
     },
     "M21.2.6": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.spend_view, ops.spend); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): The refused person gets SPENDING_LIMIT_REACHED (budget_stop_store), which deliberately names no budget and no person who can raise it; console.spend_view.told_about names level and period but has no caller. Leaf wording is narrowed by design with no needs item. NEXT: Raise a needs-rupash question on the narrowing, or call spend_view.told_about from the refusal path for readers entitled to it; then check.",
+     "updated": "2026-10-13"
     },
     "M21.3.1": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.spend_view); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): GET /report/spend (report_routes.spend) groups by Dimension department, principal, agent, model, lane from ops.spend_daily via spend_report_view; page console/src/pages/reports/SpendPage.tsx. Tests test_report_routes, test_spend_report_view. NEXT: Write check naming M21.3.1 reading GET /report/spend for each dimension after seeding spend rows.",
+     "updated": "2026-10-13"
     },
     "M21.3.2": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.spend_view, ops.spend); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): report_routes.spend takes include_machine default false and the view says which it was (MACHINE_TRAFFIC_IS_EXCLUDED_BY_DEFAULT_AND_THE_REPORT_SAYS_SO); Actual.machine is derived. Tests test_spend_report_view, test_spend. NEXT: Write check naming M21.3.2 seeding a machine and a human row and reading /report/spend with and without include_machine.",
+     "updated": "2026-10-13"
     },
     "M21.3.3": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.spend_view); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): console.spend_view.distribution and cost_per_answer (quantiles, not only mean) are built and tested (test_spend_view) but no route, page or other module calls them; SpendReportView has no distribution field. NEXT: Add the distribution to /report/spend (report_routes.spend_view_of) or a new route, then show it on SpendPage.tsx.",
+     "updated": "2026-10-13"
     },
     "M21.3.4": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.spend_view, gate.answer, gate.finish +5 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #117's branch M8/citations-freshness-abstention (may be replayed already); closed PR #131's branch M8/citations-freshness-abstention-r2 (may be replayed already); closed PR #142's branch M11/live-read-speed-budget (may be replayed already); +7 more",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): Most expensive agents: /report/spend dimension=agent ordered by cost. Question shapes: ops.spend_store.question_shape_report and spend_view.shape_report/dearest built (test_question_shapes) but have no route or page caller. NEXT: Add a route over question_shape_report (reader's grant filter already inside) and a SpendPage section; then check.",
+     "updated": "2026-10-13"
     },
     "M21.3.5": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.spend_view); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): GET /console/department/pace (department_view_routes.PACE_PATH) uses scoped_authority.department_pace and spend_view.pace; page console/src/pages/department (departmentFigures.ts). Agent projection in console_stats_routes. Test test_department_view_routes. NEXT: Write check naming M21.3.5 that sets a department ceiling row then reads /console/department/pace (needs a department budget writer, see M21.1.2, or a direct seed row).",
+     "updated": "2026-10-13"
     },
     "M21.3.6": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.spend_view); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): BudgetStopRow rows are written (budget_stop_store.record) with level, subject, period; spend_view.budget_stops/StopRow list them but nothing calls those. console.needs_you still says no stop is recorded (stale text). NEXT: Add a route and Spend section listing recorded stops (reader-scoped via spend_view.told_about); fix the stale needs_you UNRECORDED_HEALTH entry.",
+     "updated": "2026-10-13"
     },
     "M21.4.1": {
      "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (models.pricing); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #154's branch M21/record-usage-for-stats (may be replayed already); closed PR #167's branch M38/migration-train-0118-0138-0139 (may be replayed already)",
-     "updated": "2026-10-06"
+     "why": "TRIAGE 2026-10-13 class 4 (unbuilt): No code reconciles spend to a provider invoice. models/pricing.py holds the install's own prices; no invoice figure input, tolerance or difference display found (grep invoice/reconcil in src).",
+     "updated": "2026-10-13"
+    },
+    "M21.4.2": {
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): SpendActualRow.trace_id is recorded and telemetry records tool_count; shape join is spend_store.question_shape_report (no route). Fan-out is deliberately not recorded (telemetry docstring, item 59): nothing that finishes a request fans out. NEXT: Wire shape ranking (see M21.3.4); fan-out waits until an orchestrated run finishes through a point that records width; then check.",
+     "updated": "2026-10-13"
+    },
+    "M21.4.3": {
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): Roll-up proof (a check can be written once clauses exist) across M21.1 and M21.2; several parts are unbuilt or unwired (department and user budgets M21.1.2/3, estimate refusal M21.2.1, enforcement flag off per needs 169 A, skill-body load check). NEXT: Waits on M21.1.2, M21.1.3, M21.2.1 and the owner switching budget_enforcement on (needs 169); then record the demonstration.",
+     "updated": "2026-10-13"
+    },
+    "M21.4.4": {
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): console.workspace.Range has 7d, 30d, 90d and mtd only; no all-time range and no marking of the incomplete current day in console/src/pages/agents/AgentDashboard.tsx or agentStats.ts. NEXT: Add Range.ALL_TIME to console/workspace.py and the period selector, and a partial-day marker on the last chart bar; then check.",
+     "updated": "2026-10-13"
+    },
+    "M21.4.5": {
+     "status": "BLOCKED",
+     "why": "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Person-run demonstration of every cost requirement recorded against its row (register proof column M21.4.3 and M21.4.5); not code.",
+     "updated": "2026-10-13"
     }
    }
   },
@@ -4210,64 +4230,89 @@
    "act_groups": {},
    "leaf_progress": {
     "M25.1.1": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.retention); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): ops.retention.HORIZONS/DataClass/Horizon, one per class, shown by GET retention controls (erasure_routes.retention_controls, kept_view); retention_policy_gaps self-checks. Tests test_retention, test_erasure_routes. No install check names it. NEXT: Write check naming M25.1.1 that reads the retention controls route and asserts every DataClass has a horizon and reason.",
+     "updated": "2026-10-13"
     },
     "M25.1.2": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.retention); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): HORIZONS has METADATA_LEDGER at 5 years (retention.METADATA_LEDGER_RETENTION_DAYS); obs.request_telemetry is partitioned monthly by ops.ledger_partitions run on the daily schedule; detach keeps rows, drop is not built. Policy is long, as the leaf says. NEXT: Write check naming M25.1.2 reading the retention controls route for the ledger horizon and the ledger report line.",
+     "updated": "2026-10-13"
     },
     "M25.1.3": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.retention); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): Payload store = obs.trace_step, horizon 30 days (PAYLOAD_RETENTION_DAYS, test_retention) and reported daily by the sweep. But migration 0150 grants brain_app INSERT only, so PostgresSweeper.removal_rule queues those rows and never deletes them. NEXT: Build the removal: a job or role that deletes (or partitions and drops) obs.trace_step past 30 days with the release gate and hold check; then write the check.",
+     "updated": "2026-10-13"
     },
     "M25.1.4": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.retention, ops.trace_store); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): Trace window declared (tracing.RETENTION, 30d) and daily retention report reaches the trace store (proved for M32.1.1.3, #328). Recording lifecycle is only the recordings bucket rule (storage.BUCKETS 30d); trace_step has no DELETE grant so nothing is removed. NEXT: Same removal as M25.1.3 for traces; call browsing.recording.remove_expired from a worker (see M25.4.3); then check naming M25.1.4.",
+     "updated": "2026-10-13"
     },
     "M25.1.5": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.retention, ops.retention_store, retention_routes +1 more); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): Daily sweep: schedule_runner.run_retention_sweep -> retention_store, report stored (ops.retention_report), served by GET /govern/retention, page Retention.tsx. Report proved on install for M32.1.1.3. Tests test_retention_store, test_retention_routes. NEXT: Write check naming M25.1.5 reading GET /govern/retention for a stored report that reaches every store with a not-reached reason where applicable.",
+     "updated": "2026-10-13"
     },
     "M25.2.1": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.erasure); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): ops.erasure.assemble and member_activity.stored_about_me (store by store, disposition per store) are built and tested but no route or page calls them; the data-transfer catalogue lists subject_access with runs=False (not available yet). NEXT: Add a subject access route over member_activity.stored_about_me wired to PostgresEraser.count_for per store (EstateEraser) and flip DataSet subject_access runs=True; then check.",
+     "updated": "2026-10-13"
     },
     "M25.2.2": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.erasure); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): The queue (erasure_store.drain_erasure_queue via schedule_runner, EstateEraser) erases rows, projection, knowledge and memory (plus session memory and own vault tokens). Cache, index, recordings and attachments are NOT reached (NO_CACHE_ERASER, NO_INDEX_ERASER, NO_OBJECT_STORE_ERASER; erasure_routes ERASING text). NEXT: Build erasers for the answer cache and retrieval index, and an object-store eraser over ops.object_store; pass them as objects= in schedule_runner; then check.",
+     "updated": "2026-10-13"
     },
     "M25.2.3": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.erasure); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): ops.erasure.Disposition, backup_horizon and BACKUP_RETENTION_DAYS; the screen text says a backup holds the data until it rotates out (erasure_routes.ERASING, install_routes copies_kept_days); needs 60 decided option A. Tests test_erasure, test_erasure_routes. NEXT: Write check naming M25.2.3 reading the retention controls and erasure screen text for the backup window and the stated limit.",
+     "updated": "2026-10-13"
     },
     "M25.2.4": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.erasure); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): ops.erasure.Certificate and certify (with backup horizon) are built and tested but have no caller; drain_erasure_queue stores outcome and per-store counts on ops.erasure_request only, and erasure_routes.request_view carries no certificate or horizon. NEXT: Call certify in drain_erasure_queue, persist it on the request row (migration) and return it in request_view; then check.",
+     "updated": "2026-10-13"
     },
     "M25.3.1": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.export); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): POST /threads/{id}/export (thread_routes, member_activity.export_my_history) records an ExportAudit-style row and hands the person their own conversation; Ask.tsx button. Merged on main (migration 0207, test_thread_export_routes). NEXT: Write check naming M25.3.1 that asks, exports own thread, and reads the export record; note the other owner's thread is refused.",
+     "updated": "2026-10-13"
     },
     "M25.3.2": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.export); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): Audit-trail export demands a reason and writes an audit row (data_transfer_routes.take_export, ExportReason, ops.data_export_store; listed by GET /govern/retention/exports). The bulk store collection for eDiscovery (ops.export.bulk_export, BulkExportRequest) has no caller; catalogue bulk_collection runs=False. NEXT: Add a route that runs ops.export.bulk_export over named stores and people with reason and reference, write the ExportAudit row, set bulk_collection runs=True; then check.",
+     "updated": "2026-10-13"
     },
     "M25.3.3": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.export); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): ops.export.knowledge_export keeps each item's scope and is tested (test_export) but has no caller; data_transfer catalogue knowledge runs=False (needs 108 decided: build it). NEXT: Wire knowledge_export into a data_transfer route (needs 108) reading know.item through the reader's scope; set runs=True; then check.",
+     "updated": "2026-10-13"
+    },
+    "M25.4.1": {
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): Sweep is report-only until released: retention_store.run_retention_sweep(report_only), POST /govern/retention/release (needs the report named, ledgered by trigger), withdrawal route, RetentionActs.tsx. Tests test_retention_routes, test_retention_store. NEXT: Write check naming M25.4.1: read the report, assert nothing removed, release via the route, assert the ledger row.",
+     "updated": "2026-10-13"
+    },
+    "M25.4.2": {
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): Roll-up proof (a check can be written once clauses exist) across M25.1 to M25.3; parts are unbuilt (subject access M25.2.1, certificate M25.2.4, cache/index/object erasure M25.2.2, bulk and knowledge export M25.3.2/3, trace row removal M25.1.3). NEXT: Waits on those leaves, then a person runs the demonstration and the checks are recorded.",
+     "updated": "2026-10-13"
+    },
+    "M25.4.3": {
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): browsing.recording.remove_expired(backend, today, held_runs) removes recordings past 30 days and skips held runs (tested) but nothing calls it; other buckets rely on lifecycle rules which retention_store says nothing verifies; no per-object sweeper over ops.object_store. NEXT: Add an object sweeper over ops.object_store.list_objects with ages, call it from schedule_runner behind the release gate with the hold check and a removal record per object.",
+     "updated": "2026-10-13"
+    },
+    "M25.4.4": {
+     "status": "BLOCKED",
+     "why": "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Person-run demonstration of every data and retention requirement recorded against its row; not code.",
+     "updated": "2026-10-13"
+    },
+    "M25.4.5": {
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): ops.ledger_export.LedgerShipper (app.py, destination_here) sends each finished request's masked trace to the install's Langfuse; install check a_run_sent_to_the_ledger_is_found_there_with_its_model_call (acceptance_checks_services.py:303) already proves it under M32.1.2.6. NEXT: Add M25.4.5 to that check's leaves=(...) if it asserts the payload is masked; otherwise add that assertion first.",
+     "updated": "2026-10-13"
     }
    }
   },
@@ -4324,69 +4369,79 @@
    "act_groups": {},
    "leaf_progress": {
     "M26.1.1": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (identity.lifecycle); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): Provisioning is done by the scheduled staff sync (ops.staff_sync_run via schedule_runner, staff_accounts_run makes accounts, staff_people_run writes members), not by identity.lifecycle.provision (no caller). Staff sources screen and routes; tests test_staff_sync_routes. Checks name M1.6.x only. NEXT: Write check naming M26.1.1 that runs a sync over a seeded roster and reads the new principal and its account row (reuse acceptance_checks_accounts.py harness).",
+     "updated": "2026-10-13"
     },
     "M26.1.2": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (identity.lifecycle, identity.starter_pack_sync, ops.staff_sync_run +1 more); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): ops.starter_pack_store.grant_starter_packs is called by staff_sync_run and gives each joiner the Starter pack for their department (decided needs 105); role from directory groups via identity.group_sync. Tests test_starter_pack_sync. Check M1.6.20/21 touches the step. NEXT: Add M26.1.2 to the leaves of the accounts check that covers the Starter pack step (acceptance_checks_accounts.py:420) or write one reading the grant.",
+     "updated": "2026-10-13"
     },
     "M26.1.3": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (identity.lifecycle, identity.starter_pack_sync, ops.staff_sync_run +1 more); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): starter_pack_sync.starter_plan scopes the pack to the person's registered department (department_scope), applied by starter_pack_store from staff_sync_run; a mover has it moved, a leaver has it ended. Test test_starter_pack_sync. NEXT: Check naming M26.1.3 that syncs a person into a department and reads the grant's scope; reuse the accounts check harness.",
+     "updated": "2026-10-13"
     },
     "M26.1.4": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (identity.lifecycle); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): identity.lifecycle.welcome_questions and adoption.starter_questions (three department-scoped questions) are built; only ops.guide_docs imports the latter and nothing imports guide_docs. Ask.tsx says it suggests no question before the first ask. NEXT: Serve welcome_questions from a route for the signed-in person's department, from entities that indexed, and show them on the first Ask screen (Ask.tsx empty state).",
+     "updated": "2026-10-13"
     },
     "M26.2.1": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (identity.lifecycle); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): Grants are read per request (gate.held_grants, disabled principal counts none) and the cache key carries the entitlement hash, so a move shows on the next request; existing check M6.5.2 (acceptance_checks_cache.py:116) shows a moved person is not served the old answer. lifecycle.Move is unwired. NEXT: Add M26.2.1 to the leaves of that M6.5.2 check, or write a check that moves a person and asks at once.",
+     "updated": "2026-10-13"
     },
     "M26.2.2": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (identity.lifecycle); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): Personal agents follow the person by construction: E_run is the caller's reach intersected with the agent ceiling (gate.leash.decide), so a moved owner's agent reaches the new department. lifecycle.agents_following has no caller. Not verified that a personal agent's audience record updates on a move. NEXT: Check naming M26.2.2: move an owner, call their personal agent, assert old-department knowledge is not reached; fix the agent audience if it fails.",
+     "updated": "2026-10-13"
     },
     "M26.2.3": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (identity.lifecycle); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): identity.lifecycle.reevaluate_delegations (suspend, never narrow) and Reconfirmation are built and tested but no caller; no delegation table or route exists on main (grep delegation in tables and routes). Nearest live object is an automation owner (M26.3.3). NEXT: Decide what a delegation is on this install (elevation, automation owner or a new object), then call reevaluate_delegations from the sync run when a move changes reach.",
+     "updated": "2026-10-13"
     },
     "M26.2.4": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (identity.lifecycle); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): Answer cache key includes the entitlement hash (gate.answer_cache, cache_key); check M6.5.2 shows a person who moved department was refused the cached answer (acceptance_checks_cache.py:196). Test test_answer_cache. NEXT: Add M26.2.4 to that check's leaves=(...).",
+     "updated": "2026-10-13"
     },
     "M26.2.6": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (identity.lifecycle, identity.starter_pack_sync, ops.starter_pack_store); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): Knowledge reach is applied at query time from the reader's grants (knowledge.search scope, starter_pack_sync moves the pack with the person); nothing reindexes on a move. Test test_starter_pack_sync and knowledge scope tests. NEXT: Check naming M26.2.6: move a person between departments with no reindex job and assert search results change; reuse the people and knowledge check helpers.",
+     "updated": "2026-10-13"
+    },
+    "M26.2.7": {
+     "status": "BLOCKED",
+     "why": "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Roll-up test leaf: tests/unit/test_lifecycle.py covers the pure module, but several clauses it covers (provision, delegations, welcome) are not wired, so a test of every item above has nothing end to end to run.",
+     "updated": "2026-10-13"
     },
     "M26.3.1": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (identity.lifecycle); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): POST /govern/people/disable (principal_state_routes) sets disabled_at; migration 0003's trigger ends every session and grants go inert; the staff sync disables leavers via ops.standing_run (check M1.6.14). identity.lifecycle.disable is the unwired in-memory twin. NEXT: Write check naming M26.3.1: disable a signed-in person, assert the next request is refused and the session row ended (acceptance_checks_accounts.py has the harness).",
+     "updated": "2026-10-13"
     },
     "M26.3.2": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit.record, identity.lifecycle, ops.staff_sync_run +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #180's branch M27/console-platform (may be replayed already); closed PR #241's branch M1/staff-sync-diagnostics (may be replayed already); closed PR #75's branch M1/staff-source-connect-leaver-stop (may be replayed already); +1 more",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): ops.staff_sync_run calls stop_leavers_agents in the leaver's run (M1.8.9); staff_source_routes lists agents_for_adoption and adopt; Transfers.tsx page; tests test_staff_connect, test_staff_sync_routes. Adoption is by the department admin. NEXT: Write check naming M26.3.2: mark a leaver with an agent, assert the agent is disabled and appears in transfers, adopt it.",
+     "updated": "2026-10-13"
     },
     "M26.3.3": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (identity.lifecycle); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): ops.automation_owner.standing_of returns AWAITING_OWNER when the owner is not active; automation_run_store.owner_live refuses an owner_gone run; automations_routes may_adopt lets a new owner take it. Check M32.6 covers other clauses. NEXT: Write check naming M26.3.3: disable the owner of a seeded automation, assert it does not run and is listed as awaiting an owner.",
+     "updated": "2026-10-13"
     },
     "M26.3.4": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (identity.lifecycle); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): identity.lifecycle.departure_disposition (per Store) and member_activity.DeletionRoute are built but have no route or job caller; nothing applies a leaver's memory or personal knowledge disposition when the sync marks them. NEXT: Call departure_disposition from the leaver step of staff_sync_run and record each disposition; surface it on the Transfers page.",
+     "updated": "2026-10-13"
+    },
+    "M26.4.1": {
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): Roll-up proof (a check can be written once clauses exist) across joiner, mover and leaver; clauses depend on unwired parts (delegations M26.2.3, personal knowledge disposition M26.3.4, ended grant mid-run, external person end date). NEXT: Waits on M26.2.3 and M26.3.4, then a person runs it and the checks are recorded.",
+     "updated": "2026-10-13"
     }
    }
   },
@@ -5753,64 +5808,74 @@
    "act_groups": {},
    "leaf_progress": {
     "M29.1.2": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (plugins.points); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): plugins.points entry connector names contract brain.connectors.contract:ConnectorFetch (exists), tier sidecar; test_plugins_points. Nothing outside the registry imports brain.plugins and the Features page says plugins have no loader. Console connectors (M11.7.8) are separate. NEXT: Wire a plugin host: a loader that reads ops.plugin_registry records and calls plugins.contract before handing the point its input; show points on the Features and plugins page.",
+     "updated": "2026-10-13"
     },
     "M29.1.3": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (plugins.points); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): plugins.points entry skill names contract brain.tools.skills:Skill (exists), tier sandbox; test_plugins_points. Nothing outside the registry imports brain.plugins and the Features page says plugins have no loader. NEXT: Wire a plugin host: a loader that reads ops.plugin_registry records and calls plugins.contract before handing the point its input; show points on the Features and plugins page.",
+     "updated": "2026-10-13"
     },
     "M29.1.4": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (plugins.points); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): plugins.points entry template names contract brain.agents.template:TemplateManifest (exists), tier in_process; test_plugins_points. Nothing outside the registry imports brain.plugins and the Features page says plugins have no loader. NEXT: Wire a plugin host: a loader that reads ops.plugin_registry records and calls plugins.contract before handing the point its input; show points on the Features and plugins page.",
+     "updated": "2026-10-13"
     },
     "M29.1.5": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (plugins.points); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): plugins.points entry model_provider names contract brain.models.driver:ModelDriver (exists), tier sidecar; test_plugins_points. Nothing outside the registry imports brain.plugins and the Features page says plugins have no loader. NEXT: Wire a plugin host: a loader that reads ops.plugin_registry records and calls plugins.contract before handing the point its input; show points on the Features and plugins page.",
+     "updated": "2026-10-13"
     },
     "M29.1.7": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (plugins.points); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): plugins.points entry field_classifier names contract brain.ops.pii:Recogniser (exists), tier sandbox; test_plugins_points. Nothing outside the registry imports brain.plugins and the Features page says plugins have no loader. NEXT: Wire a plugin host: a loader that reads ops.plugin_registry records and calls plugins.contract before handing the point its input; show points on the Features and plugins page.",
+     "updated": "2026-10-13"
     },
     "M29.1.12": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (plugins.points); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): plugins.points entry notification_sink names contract brain.ops.digest_delivery:DigestSender (exists), tier sidecar; test_plugins_points. Nothing outside the registry imports brain.plugins and the Features page says plugins have no loader. NEXT: Wire a plugin host: a loader that reads ops.plugin_registry records and calls plugins.contract before handing the point its input; show points on the Features and plugins page.",
+     "updated": "2026-10-13"
     },
     "M29.2.1": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (plugins.manifest); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): plugins.manifest (PluginManifest, manifest_from, PLUGIN_ID_RE, refuses reach keys; core compatibility range) is built and tested (test_plugins_manifest); only ops.plugin_registry and tables.plugin import it, and no route accepts a manifest. NEXT: Add an install route that parses an uploaded manifest with manifest_from and records it via plugin_registry; then check.",
+     "updated": "2026-10-13"
     },
     "M29.2.2": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in tables.plugin; NOT wired: ops.plugin_registry",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): Migration 0032, tables.plugin (PluginInstallRow, PluginVersionRow) and ops.plugin_registry (remember, save, records, one document per version) are built and tested (test_plugin_registry); nothing calls plugin_registry. NEXT: Call plugin_registry from a plugin install route and the Features and plugins page; then write a check naming M29.2.2.",
+     "updated": "2026-10-13"
     },
     "M29.2.3": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (plugins.lifecycle); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): plugins.lifecycle (install, enable, disable, upgrade, rollback, assert_transition; nothing arrives enabled) is built and tested (test_plugins_lifecycle); only ops.plugin_registry calls assert_transition, and no route or page drives a transition. NEXT: Expose transitions as routes over plugin_registry (admin authority, ledgered) and buttons on the Features and plugins page.",
+     "updated": "2026-10-13"
     },
     "M29.2.4": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (plugins.lifecycle); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): plugins.lifecycle models the drain (in-flight work finishes on the old version) and is tested, but there are no plugin runs to drain: no loader, and no route upgrades a plugin. NEXT: Build with M29.2.3 plus the host: count in-flight calls per plugin version and block the switch until they finish.",
+     "updated": "2026-10-13"
     },
     "M29.2.5": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (plugins.points); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): plugins.points gives each plugin point a tier (in_process, sidecar, sandbox) and structural rules (code never runs in process); tested in test_plugins_points. No host enforces a tier because no plugin is loaded. NEXT: Enforce the tier in the plugin host when it exists (sidecar or sandbox runner reuse brain.tools sandbox); until then nothing to check on an install.",
+     "updated": "2026-10-13"
     },
     "M29.2.6": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in plugins.contract; NOT wired: plugins",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): plugins.contract checks a plugin cannot see an unredacted result it did not produce and cannot widen entitlements (uses EntitlementSet.intersect); tested in test_plugins_contract. Nothing calls it: brain.plugins has no importer outside the registry. NEXT: Call plugins.contract from the host before every plugin call; then write a check with a stand-in plugin asserting both properties.",
+     "updated": "2026-10-13"
+    },
+    "M29.3.1": {
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): Clauses have checks: new-API connector live with no release (acceptance_checks_custom_connector.py, M11.7.8); channel off refuses inbound (acceptance_operations_console_4.py:239); a console setting says when it applies (acceptance_operations_console.py:472). Not verified: vendor adapter replaced with no deploy. NEXT: Write a roll-up check naming M29.3.1 over those checks (pattern acceptance_roll_up.clauses_demonstrated); add a clause check for a replaced provider key taking effect with no deploy.",
+     "updated": "2026-10-13"
+    },
+    "M29.3.2": {
+     "status": "BLOCKED",
+     "why": "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Person-run demonstration of every modularity requirement recorded against its row; not code.",
+     "updated": "2026-10-13"
     }
    }
   },
@@ -6830,84 +6895,89 @@
    "act_groups": {},
    "leaf_progress": {
     "M34.1.1.1": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (adoption); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): adoption.first_connector (picks the connector that answers a real question before any upload) is built and tested (test_adoption) but nothing outside adoption.py calls it; no setup or Connectors page recommends a first connector. NEXT: Call first_connector from the setup wizard's connector step or the Connectors screen's empty state, over ConnectorOffer rows from the manifests.",
+     "updated": "2026-10-13"
     },
     "M34.1.1.2": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (adoption); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): adoption.starter_questions (three department-scoped questions from entities that actually indexed) is built; its only importer is ops.guide_docs, which nothing imports. Ask.tsx suggests no question before the first ask. NEXT: Serve starter_questions from a route for the signed-in person's department (reader-scoped) and render them in the Ask empty state.",
+     "updated": "2026-10-13"
     },
     "M34.1.1.3": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (adoption); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): Answers carry citations to the source record (provenance, cited_document_routes, CitedDocument.tsx). adoption.verification_targets, which picks what a person can check in a system they already trust, has no caller. NEXT: Call verification_targets from the answer view so each answer names where to verify it, or confirm citations already satisfy the leaf and write the check over them.",
+     "updated": "2026-10-13"
     },
     "M34.1.2.1": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (adoption); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): adoption.coverage_report/ScopeCoverage (records and last sync per department and source) is built; no route or page calls it. Connectors screens show per-source status, not a per-scope statement; department_view_routes coverage is knowledge freshness. NEXT: Add a per-department coverage route over connector sync state feeding adoption.coverage_report and show it on Adoption or Departments.",
+     "updated": "2026-10-13"
     },
     "M34.1.2.2": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (adoption); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): adoption.Coverage.NOT_CONNECTED per department is unwired; the Connectors dashboard already shows a source as Not connected (ConnectorDashboard.tsx NOT_CONNECTED_TITLE) but per source, not per department. NEXT: Show the per-department state through coverage_report (see M34.1.2.1).",
+     "updated": "2026-10-13"
     },
     "M34.1.2.3": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (adoption); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): adoption.shopping_list (actions for the champion, not a progress bar) is built and tested; nothing outside adoption.py calls it (locale.py only names its two work kinds). NEXT: Add it to the Adoption page for a champion, fed by coverage_report; reader-scoped.",
+     "updated": "2026-10-13"
     },
     "M34.2.1.1": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (adoption); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): adoption.verification_targets (five documents per department lead in week one) is built; no route, task or page uses it. knowledge.verification tasks exist separately for re-verification. NEXT: Create the week-one verification tasks from verification_targets through the knowledge tasks route when a department lead is placed.",
+     "updated": "2026-10-13"
     },
     "M34.2.2.1": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (channels.adapter, channels.correction, channels.lark); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): Chat marks (helpful or unhelpful) are wired in channels: marks.mark_line in chat_answer and read_mark in channels.inbound. The reason-bearing path channels.correction (send_with_correction, read_correction, file_correction) has no caller. NEXT: Call send_with_correction where adapters send an answer and read_correction in channels.inbound; then check naming M34.2.2.1 per channel.",
+     "updated": "2026-10-13"
     },
     "M34.2.2.2": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.feedback); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): ops.feedback.FlagReason.WRONG_SOURCES vs WRONG_FACT, plane_of and by_plane are built and tested (test_flag_planes); flag_answer is called only by the unwired channels.correction, and no route or console control files a flag. NEXT: Add a flag route (POST on an answer's trace with a FlagReason) and a console control, or wire channels.correction; then check.",
+     "updated": "2026-10-13"
     },
     "M34.2.2.3": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (adoption); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): adoption.connector_demand is called by console.questions_view over question_gap_store rows and served at GET /report/questions, QuestionsPage.tsx, scoped to the reader's departments. Check acceptance_people_console_3 touches the screen under other leaves. NEXT: Write check naming M34.2.2.3: ask a question no source answers, read /report/questions and assert a connector demand line.",
+     "updated": "2026-10-13"
     },
     "M34.3.1.1": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (adoption); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): adoption.visibility_summary (what it can and cannot see, plain language, from the reader's reach) is built and tested; no route or page calls it. NEXT: Serve it from a route for the signed-in person (reach-scoped) and link it from Ask or My workspace.",
+     "updated": "2026-10-13"
     },
     "M34.3.1.2": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (adoption); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 3 (built, not wired): adoption.privacy_posture reads the install's configuration into plain sentences and is tested (test_adoption); no route or page calls it (locale.py names its keys only). NEXT: Serve privacy_posture on a staff-facing page or Ask help panel; reader needs no grant.",
+     "updated": "2026-10-13"
     },
     "M34.3.1.3": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: ops.guide_docs name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): docs/guides/asking-well.md exists with per-department examples marker; ops.guide_docs.asking_examples and asking_gaps check it (test_guide_docs). Nothing imports guide_docs and no route serves the guide to staff. NEXT: Serve the guide from a help route that fills the examples marker with asking_examples for the reader's department.",
+     "updated": "2026-10-13"
     },
     "M34.3.2.1": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: ops.guide_docs name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): 36 runbooks exist in docs/console/runbooks and launch.screen_runbook_gaps and guide_docs.runbook_gaps sweep them against the screen registry (test_guide_docs). No route or page serves them; docs_routes serves only the build pages. NEXT: Add a help route serving docs/console/runbooks per screen and a link on each console page (see M34.4.1).",
+     "updated": "2026-10-13"
     },
     "M34.3.3.3": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.install_docs); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "BLOCKED",
+     "why": "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Document leaf: docs/install/update-and-rollback.md (275 lines) exists, held to the code by ops.install_docs and tests; release.py references it. Closing needs an operator to run an upgrade and a rollback on a server, or Proved-in-ci naming the guard test.",
+     "updated": "2026-10-13"
     },
     "M34.3.3.4": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.install_docs); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "BLOCKED",
+     "why": "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Document leaf: docs/install/restore-drill.md (360 lines) exists, guarded by tests/unit/test_install_drill_page.py; the recovery screen says no control runs a drill (install_routes.NO_CONTROL_HERE_RUNS_A_REHEARSAL). The drill itself is run by hand on the server.",
+     "updated": "2026-10-13"
+    },
+    "M34.4.1": {
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): Runbooks per screen exist (36 files) with a gap sweep (launch.screen_runbook_gaps); alert runbooks via ops.controls.runbook_gaps. The incident playbook is a Python table (ops.reliability.MATRIX) nothing renders, and no help route serves any of it. NEXT: Build GET help pages serving runbooks, alert runbooks and a rendered playbook; extend the sweep to fail when a screen or alert has none.",
+     "updated": "2026-10-13"
     }
    }
   },
@@ -6976,64 +7046,109 @@
    "act_groups": {},
    "leaf_progress": {
     "M35.1.1.1": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (locale); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): locale.MESSAGES holds en and zh-Hans (67 keys, catalogue_gaps tested) but only the setup wizard and data_steward_routes call text(); the served console draws English strings from TSX (CONSOLE_LANGUAGE en-GB) with no locale switch; enabled_locales and default_locale have no caller. NEXT: Add a locale choice (INSTALL_LOCALES) to the console shell and move console strings to the catalogue; start with Ask and Approvals; then a browser check in zh-Hans.",
+     "updated": "2026-10-13"
     },
     "M35.1.1.2": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (locale); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): currency (locale.currency_or_unset) and time_zone are used by routes and workers; format_date, format_timestamp, format_number and format_money have no caller, and console dates use the browser default (Intl en-GB in spendQuery.ts). NEXT: Serve install-formatted dates, numbers and money from the API or a shared console formatter reading INSTALL_LOCALES; then a check on a Spend figure in zh-Hans.",
+     "updated": "2026-10-13"
     },
     "M35.1.1.3": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (locale); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): locale.RIGHT_TO_LEFT deferral with trigger is defined, and rules_for refuses an RTL tag with its reason; but console.configuration._locales_problem swallows the LocaleError into a generic sentence, and locale_facts and triggered have no caller. NEXT: Pass the deferral's sentence through the settings refusal and report triggered() on the Install screen; then write the check (also M35.4.3).",
+     "updated": "2026-10-13"
     },
     "M35.1.2.1": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (knowledge.search); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): knowledge.search lexical_legs and knowledge.chunk_store write know.chunk.cjk via chunk_text_fields (migration 0024); query side runs in the document search tool; ingest runs in the worker (ingest_queue.register_ingest_tasks). Test test_search. NEXT: Write check naming M35.1.2.1: ingest a Han-text document through the queue, query it in Chinese as a person who may read it, assert it is found.",
+     "updated": "2026-10-13"
     },
     "M35.1.2.2": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (locale); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): search.chunk_text_fields tokenises every script in a chunk into cjk and detects the dominant language, and lexical_legs chooses legs per script in the question, so a mixed document is found by queries in either language. Tests test_search, test_locale. NEXT: Write check naming M35.1.2.2 ingesting a mixed English and Chinese document and asking in each language.",
+     "updated": "2026-10-13"
     },
     "M35.1.2.3": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (knowledge.search, locale); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): chunk_store.ingest_document writes know.chunk.language from locale.detect via chunk_text_fields (None when too little text); column from migration 0024. Test test_search. NEXT: Write check naming M35.1.2.3 that ingests one English and one Chinese document and reads know.chunk.language.",
+     "updated": "2026-10-13"
     },
     "M35.2.1.1": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (locale); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): console/src/pages/Ask.tsx keeps the answer out of any live region and only progress steps use role=status; locale documents why. Tests console/tests/ask-page.test.tsx and skip-to-answer.test.tsx. Not shown under a real screen reader on an install. NEXT: Browser run on the install under a screen reader (or a console test over the served bundle) naming M35.2.1.1; no Python check can prove it.",
+     "updated": "2026-10-13"
     },
     "M35.2.1.2": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (locale); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): Ask.tsx returns focus to the skip control when the answer finishes (FOCUS_IS_RETURNED_AND_NEVER_TAKEN), the one announcement; test skip-to-answer.test.tsx. locale.announcements is unused by the console. Not observed in a browser on the install. NEXT: Same browser run as M35.2.1.1; add M35.2.1.2 to the console test's Task ids and record the install run.",
+     "updated": "2026-10-13"
     },
     "M35.2.1.3": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (pages/Ask.tsx); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #117's branch M8/citations-freshness-abstention (may be replayed already); closed PR #131's branch M8/citations-freshness-abstention-r2 (may be replayed already); closed PR #143's branch M8/citations-freshness-abstention-r3 (may be replayed already); +7 more",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): Ask.tsx SKIP_TO_ANSWER button after the form focuses the answer region; console test skip-to-answer.test.tsx exists and names the leaf. Label is English only (answer.skip_to is in the catalogue). NEXT: Browser run on the install asking a question and pressing the control; record it against M35.2.1.3.",
+     "updated": "2026-10-13"
+    },
+    "M35.2.2.1": {
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): Native controls, a skip link and console/scripts/check-boundaries rules run in CI; console/tests/keyboard-access.test.tsx renders pages and asserts tab order (names M35.2.2.1). jsdom only; not observed on the served console. NEXT: Browser run on the install tabbing through the shell, a list and a form; record against M35.2.2.1 (see M35.4.1).",
+     "updated": "2026-10-13"
+    },
+    "M35.2.2.2": {
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): A focus-visible ring is defined in the theme tokens and CI refuses outline none; keyboard-access.test.tsx asserts it in both themes (names M35.2.2.2). Not seen on the served console. NEXT: Browser run in both themes on the install; record against M35.2.2.2.",
+     "updated": "2026-10-13"
     },
     "M35.2.2.4": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (locale); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-ui-foundation",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): 58 console files set aria-describedby and 39 aria-invalid; forms use SchemaForm with locale.form_gaps behind the setup wizard; unit tests assert labels. No test or run names M35.2.2.4 and none shows an error on the served console. NEXT: Browser run submitting an invalid value in a console form; add the leaf id to the form test's Task ids.",
+     "updated": "2026-10-13"
     },
     "M35.3.1.1": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in approval_routes, gate.suspension_store, tables.suspension +3 more; NOT wired: pages/Approvals.tsx. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-integrate2; old backup branch recovery/from-windows-20260928-wt-w03",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): Approvals.tsx and approvals/ApprovalCard.tsx with phone layout (console/tests/approvals-phone.test.tsx, approvals-page.test.tsx); POST decide route (approval_routes). Suspensions are now raised by held agent runs and knowledge promotions. Not run on a phone against the install. NEXT: Install run: raise an approval, open the console at phone width, decide it; record against M35.3.1.1.",
+     "updated": "2026-10-13"
+    },
+    "M35.3.2.1": {
+     "status": "READY FOR TESTING",
+     "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): console/public/manifest.webmanifest and index.html link it; console_static serves unhashed files at the root; console/tests/installable-shell.test.ts asserts it (names the leaf). No service worker is claimed. NEXT: Write a check naming M35.3.2.1 that GETs /manifest.webmanifest from the install and asserts start_url, scope, icons and name; an install prompt in Chrome is the person's half.",
+     "updated": "2026-10-13"
     },
     "M35.3.2.2": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (locale); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-ui-foundation",
-     "updated": "2026-10-06"
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): locale.PUSH_FOR_APPROVALS with Trigger.APPROVALS_WAIT_LONGER_THAN_THE_STATED_HOURS and PUSH_IS_DUE_ABOVE_HOURS=4 is defined and tested; triggered() has no caller and nothing measures approval waits, so the trigger can never fire. NEXT: Build the wait measurement (see M35.4.5) and call locale.triggered from the report; that completes this leaf.",
+     "updated": "2026-10-13"
+    },
+    "M35.4.1": {
+     "status": "BLOCKED",
+     "why": "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Needs a browser run of every console module by keyboard, with focus and errors seen. The repo has jsdom tests (keyboard-access.test.tsx, phone-width.test.tsx) and docs/console-audit but no browser job; person or agent browser run on the install.",
+     "updated": "2026-10-13"
+    },
+    "M35.4.2": {
+     "status": "BLOCKED",
+     "why": "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Roll-up proof; clauses unmet: console is English only (M35.1.1.1, M35.1.1.2 unwired) and a screen-reader run is a person's. Retrieval clauses (M35.1.2.x) and names for redaction (acceptance_checks_names.py) are provable by checks.",
+     "updated": "2026-10-13"
+    },
+    "M35.4.3": {
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): rules_for raises LocaleError carrying locale.RIGHT_TO_LEFT.reason for an RTL tag, but console.configuration._locales_problem replaces it with a generic sentence, so the console refusal does not name the deferral; setup path not verified. NEXT: Return the deferral sentence from _locales_problem and the wizard; then a browser run or a settings route check naming M35.4.3.",
+     "updated": "2026-10-13"
+    },
+    "M35.4.4": {
+     "status": "BLOCKED",
+     "why": "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Person-run demonstration of every localisation and accessibility requirement recorded against its row; not code.",
+     "updated": "2026-10-13"
+    },
+    "M35.4.5": {
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): Only the constants exist: locale.PUSH_IS_DUE_ABOVE_HOURS and the deferral. Suspension rows carry raise and decide times but nothing computes a typical wait or reports that push is due. NEXT: Add a read over gate.suspension (raised to decided) giving the median wait, show it on Approvals or Install, and call locale.triggered; then a check.",
+     "updated": "2026-10-13"
+    },
+    "M35.4.6": {
+     "status": "IN PROGRESS",
+     "why": "TRIAGE 2026-10-13 class 2 (partly built): console/tests/phone-width.test.tsx asserts the cascade for every registered route at 360px (wrapping, link height) but the file says it cannot measure widths; no 44px target or 320px width measurement exists. NEXT: Add a headless browser measurement (iframe at 320px as the test's author did) over every route and assert 44px targets and no overflow; or relax to the measured figures and ask.",
+     "updated": "2026-10-13"
     }
    }
   },
