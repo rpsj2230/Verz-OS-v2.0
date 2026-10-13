@@ -342,6 +342,25 @@ WIDGET_MODEL_ANSWERS: Final = Feature(
     read_by=("brain.widget_answers:model_answers_on",),
 )
 
+#: A person making their own agent. Off until the owner has watched it on his install: it widens who
+#: may start the builder from the holders of the install authority to anybody signed in, though only
+#: for an agent that nobody but its maker can find (needs-rupash 173 and 189, requirement ANY-060).
+PERSONAL_AGENTS: Final = Feature(
+    name="personal_agents",
+    title="Let each person make their own agent",
+    what=(
+        "Any signed-in person may make an agent that only they can find and use, from the "
+        "builder, without asking anybody. It can reach nothing its maker cannot reach. "
+        "Administrators who may make agents already make both kinds, and a team agent is "
+        "still made only by them."
+    ),
+    while_off=(
+        "Only people who hold the authority to make agents may start the builder, as before. "
+        "A personal agent somebody already has stays theirs and keeps working."
+    ),
+    read_by=("brain.agents.kinds:personal_agents_on",),
+)
+
 #: Counting which documents an agent's answers cite, for the Knowledge section's figures. Off
 #: because it is a new record kept on every answer: `brain.ops.agent_item_use` keeps an agent, a
 #: document, a day and a count, and no question, person or passage. While off, the section shows no
@@ -450,6 +469,7 @@ FEATURES: Final[tuple[Feature, ...]] = (
     SUPERVISION_REVIEW,
     SHARED_TOOL_START,
     WIDGET_MODEL_ANSWERS,
+    PERSONAL_AGENTS,
     AGENT_ITEM_COUNTS,
     SKILL_NEEDS,
     SKILL_DRAFTING,

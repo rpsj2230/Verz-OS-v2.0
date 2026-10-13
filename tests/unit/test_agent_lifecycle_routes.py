@@ -985,6 +985,7 @@ def test_the_lifecycle_view_says_what_the_reader_may_do(console: Console) -> Non
         "may_duplicate": True,
         "duplicate_unavailable": None,
         "level": "company",
+        "agent_kind": "team",
         "may_publish": False,
         "channels": list(console.memory.agents[COMPANY].record.channels),
         # Every channel but the website widget, which declares nothing it can carry yet.
