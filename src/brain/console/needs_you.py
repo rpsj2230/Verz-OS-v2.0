@@ -132,8 +132,8 @@ UNRECORDED_HEALTH: Final[tuple[Unrecorded, ...]] = (
     Unrecorded(
         figure="budget_stops",
         why=(
-            "nothing records a budget stop in force yet: ceilings are stored and nothing writes "
-            "the stop reached on the way to one, so there is no stop to count"
+            "this strip does not count budget stops yet. Each used-up budget is recorded, and "
+            "the Spend report's stop list names every one in force that you may be told about"
         ),
     ),
 )

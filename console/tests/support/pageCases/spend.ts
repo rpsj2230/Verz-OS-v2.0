@@ -27,6 +27,22 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         time_zone: "UTC",
         not_recorded: [],
       },
+      "/api/v1/report/spend/cost-per-answer": {
+        days: 30,
+        machine_included: false,
+        answers: 3,
+        mean_minor: 233.5,
+        quantiles: [{ quantile: 0.5, cost_minor: 200 }],
+        currency: "XXX",
+      },
+      "/api/v1/report/spend/shapes": {
+        days: 30,
+        machine_included: false,
+        dearest: [{ shape: "answer lane, 0 tool call(s)", cost_minor: 700 }],
+        total_minor: 700,
+        currency: "XXX",
+      },
+      "/api/v1/report/spend/stops": { stops: [] },
     },
   },
 };

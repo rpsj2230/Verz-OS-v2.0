@@ -3,7 +3,7 @@
 - **Screens:** `/usage`, `/adoption`, `/spend`, `/questions`, `/quality`, `/service-levels`, `/me`, `/company/estate`, `/company/activity`, `/company/consumption`
 - **Tables:** `agent.artifact_share`, `agent.agent_request`, `auth.member_preference`, `ops.question_asked`, `ops.question_gap`, `ops.report_refresh`, `ops.spend_actual`, `obs.request_telemetry`, `ops.answer_flag`, `ops.regression_case`, `ops.quality_reading`, `ops.quality_annotation`, `ops.golden_score`, `ops.evaluation_candidate`, `ops.positive_example`, `ops.tier_decision`
 - **Installation values:** none
-- **Measured here:** 35 routes, 10 called by no screen; 8 write routes, 8 with all three proofs; 1 gaps.
+- **Measured here:** 38 routes, 10 called by no screen; 8 write routes, 8 with all three proofs; 1 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -29,6 +29,9 @@
 | `GET /api/v1/report/questions` | `/department`, `/questions` |
 | `GET /api/v1/report/service-levels` | `/service-levels` |
 | `GET /api/v1/report/spend` | `/spend` |
+| `GET /api/v1/report/spend/cost-per-answer` | `/spend` |
+| `GET /api/v1/report/spend/shapes` | `/spend` |
+| `GET /api/v1/report/spend/stops` | `/spend` |
 | `GET /api/v1/report/usage` | `/adoption`, `/department`, `/usage` |
 | `POST /api/v1/me/agents/{agent_id}/request` | `/me` |
 | `POST /api/v1/me/artifacts/{artifact_id}/share` | `/me` |

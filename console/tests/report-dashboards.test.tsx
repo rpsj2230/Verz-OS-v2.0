@@ -29,7 +29,7 @@ import { NOT_MEASURED, NO_LANES } from "../src/pages/reports/ServiceLevelsPage";
 import { CUT_OFF, FINDINGS_GO_TO_THE_ALERT, NO_RUN_IN_PERIOD } from "../src/pages/reports/QualityPage";
 import { SOURCE_NOT_NAMED } from "../src/pages/reports/QuestionsPage";
 import { REPORT_PERIODS, PERIOD_LABEL } from "../src/pages/reports/reportParts";
-import { daysBefore, spendReportPath } from "../src/pages/spendQuery";
+import { daysBefore, spendDetailPath, spendReportPath } from "../src/pages/spendQuery";
 import { serviceLevelsPathFor } from "../src/pages/serviceLevelsQuery";
 import { qualityApiPathFor } from "../src/pages/qualityQuery";
 import { questionsApiPathFor } from "../src/pages/questionsQuery";
@@ -333,6 +333,122 @@ describe("Spend", () => {
 
     expect(page.text()).toContain(NOT_BUILT);
     expect(page.text()).not.toContain("0.00");
+  });
+});
+
+describe("Spend, under the breakdown", () => {
+  const DETAIL = `${SPEND}`;
+  const answered = {
+    [`${DETAIL}/cost-per-answer`]: {
+      days: 30,
+      machine_included: false,
+      answers: 120,
+      mean_minor: 150.4,
+      quantiles: [
+        { quantile: 0.5, cost_minor: 100 },
+        { quantile: 0.9, cost_minor: 400 },
+      ],
+      currency: "SGD",
+    },
+    [`${DETAIL}/shapes`]: {
+      days: 30,
+      machine_included: false,
+      dearest: [
+        { shape: "task lane, 3 tool call(s)", cost_minor: 900 },
+        { shape: "answer lane, 0 tool call(s)", cost_minor: 400 },
+      ],
+      total_minor: 1300,
+      currency: "SGD",
+    },
+    [`${DETAIL}/stops`]: {
+      stops: [
+        { level: "department", subject: "finance", period: "month", since: "2019-03-01T00:00:00Z", until: "2019-04-01T00:00:00Z", enforced: true },
+        { level: "user", subject: "u_ana", period: "day", since: "2019-03-04T00:00:00Z", until: "2019-03-05T00:00:00Z", enforced: false },
+      ],
+    },
+  };
+
+  test("what an answer costs is the API's count, mean and quantiles, and a quantile the sample could not hold is not drawn", async () => {
+    // What breaks if this is deleted: the mean is drawn alone, or a quantile the API withheld is
+    // drawn as nought, which is a figure for a sample too small to have one.
+    const page = await reportAt("/spend", { [SPEND]: spendBody(), ...answered });
+    await waitFor(() => {
+      expect(page.text()).toContain("Median");
+    });
+
+    expect(page.text()).toContain("What one answer costs");
+    expect(page.text()).toContain("120");
+    expect(page.text()).toContain("SGD 1.50");
+    expect(page.text()).toContain("Median");
+    expect(page.text()).toContain("SGD 1.00");
+    expect(page.text()).toContain("90th percentile");
+    expect(page.text()).not.toContain("99th percentile");
+  });
+
+  test("an empty window says there is no figure and draws none", async () => {
+    // What breaks if this is deleted: a window with no answer in it reads as an answer that cost nothing.
+    const none = { ...answered[`${DETAIL}/cost-per-answer`], answers: 0, mean_minor: null, quantiles: [] };
+    const page = await reportAt("/spend", { [SPEND]: spendBody(), ...answered, [`${DETAIL}/cost-per-answer`]: none });
+    await waitFor(() => {
+      expect(page.text()).toContain("No answer in this period, so there is no figure.");
+    });
+
+    expect(page.text()).not.toContain("Median");
+  });
+
+  test("the shapes are listed dearest first as the API sent them", async () => {
+    // What breaks if this is deleted: the dearest shape is drawn below a cheaper one.
+    const page = await reportAt("/spend", { [SPEND]: spendBody(), ...answered });
+    await waitFor(() => {
+      expect(page.text()).toContain("task lane, 3 tool call(s)");
+    });
+    const text = page.text();
+
+    expect(text.indexOf("task lane, 3 tool call(s)")).toBeGreaterThan(-1);
+    expect(text.indexOf("task lane, 3 tool call(s)")).toBeLessThan(text.indexOf("answer lane, 0 tool call(s)"));
+    expect(text).toContain("SGD 9.00");
+  });
+
+  test("a stop says whether it stopped anything, and no stop says so", async () => {
+    // What breaks if this is deleted: a budget the install only said it would have stopped reads as
+    // a refusal, or an empty list reads as a missing one.
+    const page = await reportAt("/spend", { [SPEND]: spendBody(), ...answered });
+    await waitFor(() => {
+      expect(page.text()).toContain("department finance");
+    });
+    const text = page.text();
+
+    expect(text).toContain("department finance, month budget, questions refused until it ends");
+    expect(text).toContain("user u_ana, day budget, said only: the install did not stop anything");
+    const none = await reportAt("/spend", { [SPEND]: spendBody(), ...answered, [`${DETAIL}/stops`]: { stops: [] } });
+    await waitFor(() => {
+      expect(none.text()).toContain("No budget is stopped.");
+    });
+  });
+
+  test("the stops are asked for in an install that records no cost, and the cost readings are not", async () => {
+    // What breaks if this is deleted: an install with nothing priced shows a cost per answer of
+    // nought, or hides a budget stop because cost is not recorded.
+    const why = "no model has a price in this install's currency yet";
+    const page = await reportAt("/spend", { [SPEND]: spendBody({ not_recorded: [{ figure: "cost", why }] }), ...answered });
+    await waitFor(() => {
+      expect(page.text()).toContain("finance");
+    });
+
+    expect(page.text()).toContain("Budgets that are stopped");
+    expect(page.text()).not.toContain("What one answer costs");
+    expect(page.text()).not.toContain("Question shapes that cost most");
+  });
+
+  test("every request names only what the route declares", () => {
+    // What breaks if this is deleted: a parameter is renamed on the route, the console keeps
+    // sending the old one, FastAPI discards it and the page shows the default window under another's name.
+    for (const reading of ["cost-per-answer", "shapes"] as const) {
+      const declared = new Set(declaredQueryParameters(`${SPEND}/${reading}`, "get"));
+      const sent = [...new URL(spendDetailPath(reading, 90), "https://console.test").searchParams.keys()];
+      expect(sent.filter((one) => !declared.has(one)), reading).toEqual([]);
+    }
+    expect(spendDetailPath("stops", null)).toBe("/report/spend/stops");
   });
 });
 
