@@ -26,7 +26,6 @@ from brain.db import Base
 from brain.ops.ledger_partitions import declared_as
 from brain.ops.retention import STORES, TRACE_RETENTION_DAYS, Lifetime, Store, horizon_of
 from brain.ops.retention_store import (
-    A_TABLE_WITH_NO_DELETE_GRANT_ARGUED_FOR_HOW_ITS_ROWS_GO,
     ATTRIBUTED,
     CLOCKS,
     PostgresSweeper,
@@ -126,7 +125,8 @@ def test_the_stores_in_obs_are_reached_at_head_and_a_step_past_its_window_is_due
 ) -> None:
     """At head, every store sharing `obs` lists its tables without refusing, the trace store holds
     `obs.trace_step`, and its census counts a step recorded past thirty days as due and one from
-    today as not, queued behind the migration that grants the application no DELETE.
+    today as not, and removable now that `0232` grants the application a bounded DELETE: it is
+    counted due and not queued, where it was queued behind a table the role could not delete from.
 
     Delete this and the attribution could be right in the mapping and wrong against the schema a
     migration actually builds, which is the only place the sweep reads."""
@@ -142,5 +142,5 @@ def test_the_stores_in_obs_are_reached_at_head_and_a_step_past_its_window_is_due
         conn.rollback()
 
     assert census.beyond_horizon == 1
-    assert census.queued == 1
-    assert A_TABLE_WITH_NO_DELETE_GRANT_ARGUED_FOR_HOW_ITS_ROWS_GO in census.queued_because
+    assert census.queued == 0
+    assert census.queued_because == ""
