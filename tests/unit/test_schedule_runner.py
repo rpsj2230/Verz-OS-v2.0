@@ -288,10 +288,15 @@ def test_every_control_the_schedule_cannot_start_yet_says_what_it_is_waiting_for
     **Three on 2026-10-06**, when `resolution_calibration` was given the registry's candidate
     pairs to fit and a setting to keep each fit in until a reviewer promotes it.
 
+    **Two on 2026-10-13**, when `backup_exposure` was given `brain.ops.backup_report_run`: the
+    manifests the nightly dump writes read through the object store, the report recorded and each
+    day's alerts said once to the evening digest's conversation.
+
     Delete this and the gap report can go empty because the list went empty."""
     found = runner_gaps()
 
-    assert len(found) == 3
+    assert len(found) == 2
+    assert not any("backup_exposure" in one for one in found)
     assert not any("resolution_calibration" in one for one in found)
     assert not any("queue_redrive" in one for one in found)
     assert not any("side_effect_resume" in one for one in found)
@@ -502,7 +507,8 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     describes as unwired."""
     from brain.ops.controls import orphans
 
-    assert len(orphans()) == 1
+    assert len(orphans()) == 0
+    assert "backup_exposure" not in {one.name for one in orphans()}
     assert "resolution_calibration" not in {one.name for one in orphans()}
     assert "queue_redrive" not in {one.name for one in orphans()}
     assert "side_effect_resume" not in {one.name for one in orphans()}
@@ -568,6 +574,7 @@ def test_the_dispatch_names_exactly_the_runners_that_can_run() -> None:
         "resolution_calibration",
         "approved_actions",
         "supervision_review",
+        "backup_exposure",
     }
 
 
@@ -630,7 +637,7 @@ def test_a_control_with_nothing_to_run_is_refused_by_name_with_what_it_needs() -
     Delete this and a control the schedule cannot start could be answered with an empty string,
     which the worker would record as a run that succeeded."""
     with pytest.raises(RunnerError, match="cannot be started by this process: it needs"):
-        start_control("backup_exposure", now=NOW, report_only=False, database_url="postgresql://x")
+        start_control("restore_drill", now=NOW, report_only=False, database_url="postgresql://x")
     with pytest.raises(RunnerError, match="no runner named"):
         start_control("no_such_control", now=NOW, report_only=False, database_url="postgresql://x")
 

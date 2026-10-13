@@ -62,7 +62,8 @@ KNOWN_ORPHANS = frozenset(
         # `SCHEDULED_BY_THE_WORKER`.
         # `canary_run` left on 2026-09-17: the worker's schedule starts it. See
         # `SCHEDULED_BY_THE_WORKER`.
-        "backup_exposure",
+        # `backup_exposure` left on 2026-10-13: the worker's schedule starts it. See
+        # `SCHEDULED_BY_THE_WORKER`.
         # `denial_digest` left on 2026-09-28 for `WIRED_BUT_NOT_SCHEDULED`: see there.
         # `knowledge_reverification` left on 2026-09-15: the worker's schedule starts it. See
         # `SCHEDULED_BY_THE_WORKER`.
@@ -158,6 +159,8 @@ WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "restore_drill"})
 #: `supervision_review` joined on 2026-10-07 the day it was registered (`0212`, M13.5.18), asking
 #: each due supervision pin its thirty-day question through
 #: `brain.ops.supervision_review.run_supervision_review_now`, behind a feature that ships off.
+#: `backup_exposure` joined on 2026-10-13 from `KNOWN_ORPHANS`: `brain.ops.backup_report_run` reads
+#: the backup bucket's manifests, records the report and says each day's alerts once.
 SCHEDULED_BY_THE_WORKER = frozenset(
     {
         "retention_sweep",
@@ -182,6 +185,7 @@ SCHEDULED_BY_THE_WORKER = frozenset(
         "resolution_calibration",
         "approved_actions",
         "supervision_review",
+        "backup_exposure",
     }
 )
 
