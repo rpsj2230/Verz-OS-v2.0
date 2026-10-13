@@ -11,7 +11,7 @@
 | `GET /api/v1/agents/{agent_id}/automation-templates` | `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/automation-templates/{template_id}/preview` | `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/automations` | `/agents/:agentId` |
-| `GET /api/v1/console/automations` | `/automations` |
+| `GET /api/v1/console/automations` | `/automations`, `/people/:personId` |
 | `GET /api/v1/console/automations/{automation_id}` | `/automations/:automationId`, `/automations/:automationId/:view` |
 | `GET /api/v1/console/automations/{automation_id}/stats` | `/automations/:automationId` |
 | `POST /api/v1/agents/{agent_id}/automation-authoring/preview` | `/agents/:agentId`, `/agents/:agentId/:tab` |

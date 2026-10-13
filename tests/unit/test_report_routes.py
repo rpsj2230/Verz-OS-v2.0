@@ -708,10 +708,12 @@ def test_a_full_page_of_adoption_says_there_is_more_and_never_how_much(
     assert body["total"] is None
 
 
-def test_an_adoption_line_carries_three_figures_and_nowhere_for_a_fourth(
+def test_an_adoption_line_carries_four_figures_and_nowhere_for_a_fifth(
     client: TestClient, stored: Stored
 ) -> None:
-    """The key set, held to `brain.adoption.DepartmentAdoption`'s own three fields.
+    """The key set: `brain.adoption.DepartmentAdoption`'s own three fields and the one figure the
+    owner asked for beside them, who has stopped (M27.7.17), which is a count of people over the
+    reader's own departments and sits beside no total.
 
     What breaks if this is deleted: a figure the adoption module refuses to hold is added one
     layer out, where the argument against it is not written down.
@@ -721,7 +723,7 @@ def test_an_adoption_line_carries_three_figures_and_nowhere_for_a_fourth(
 
     body = get(client, ADOPTION_PATH, "u_wide").json()
 
-    assert set(body["items"][0]) == {"department", "questions", "people"}
+    assert set(body["items"][0]) == {"department", "questions", "people", "stopped"}
 
 
 def test_an_adoption_window_longer_than_the_bound_is_refused_identically_for_every_reader(

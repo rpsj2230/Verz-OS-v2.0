@@ -554,6 +554,30 @@ export function readOwnedAgents(payload: unknown, principalId: string): readonly
     });
 }
 
+/** One automation a person owns, as the automations list names it. */
+export interface OwnedAutomation {
+  readonly automationId: string;
+  readonly name: string;
+  readonly agentName: string;
+  readonly state: string;
+}
+
+/** The automations a person owns that this reader may be told of. Empty is "none", never a count. */
+export function readOwnedAutomations(payload: unknown): readonly OwnedAutomation[] {
+  return listOf(fieldsOf(payload)?.["items"])
+    .map(fieldsOf)
+    .flatMap((one) => {
+      const automationId = said(one?.["automation_id"]);
+      const name = said(one?.["name"]);
+      const agentName = said(one?.["agent_name"]);
+      const state = said(one?.["state"]);
+      if (automationId === undefined || name === undefined || agentName === undefined || state === undefined) {
+        return [];
+      }
+      return [{ automationId, name, agentName, state }];
+    });
+}
+
 /** A leaver's agent this reader may take on, from the staff source's transfers route. */
 export interface Waiting {
   readonly agentId: string;

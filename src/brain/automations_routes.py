@@ -35,7 +35,7 @@ run writes `ops.spend_actual`: the one task this install performs reads a table 
 `RUN_COST_IS_NOT_RECORDED` is the reason the figures carry, for the shared stats routes' rule that a
 figure nothing records is absent and never nought.
 
-Task ids: M27.12.3, M27.15.37, M39.6.1.4, M39.6.1.5, M27.16.1
+Task ids: M27.12.3, M27.15.37, M39.6.1.4, M39.6.1.5, M27.16.1, M27.15.18
 """
 
 from __future__ import annotations
@@ -187,6 +187,11 @@ class AutomationRowView(BaseModel):
     agent_id: str
     agent_name: str
     owner_name: str
+    #: Who the automation runs as, which is who owns it. **Never sent**: a row carries names and not
+    #: principal ids (`test_the_rows_carry_names`), so this is excluded from the body and exists to
+    #: be filtered by, which is how a person's page lists the automations they own (M27.15.18)
+    #: without the list naming anybody's id.
+    owner_id: str = Field(exclude=True)
     #: The cadence in words, or empty when nothing says when it runs.
     schedule: str
     state: State
@@ -451,6 +456,7 @@ def row_view(listed: Listed, agent: AgentRecord, asked: Asking) -> AutomationRow
         agent_id=one.agent_id,
         agent_name=agent.display_name,
         owner_name=_owner_name(listed),
+        owner_id=one.runs_as.id,
         schedule=(
             listed.cadence.words()
             if listed.cadence is not None
@@ -628,6 +634,7 @@ AUTOMATIONS: Final[Listing[AutomationRowView]] = Listing(
         Column("name", lambda row: row.name, search=True, sort=True),
         Column("agent", lambda row: row.agent_name, search=True, filter=True, sort=True),
         Column("owner", lambda row: row.owner_name, search=True, filter=True, sort=True),
+        Column("owner_id", lambda row: row.owner_id, filter=True),
         Column("state", lambda row: row.state.value, filter=True, sort=True),
         Column("schedule", lambda row: row.schedule, search=True),
         Column("next_run_at", lambda row: row.next_run_at, sort=True),

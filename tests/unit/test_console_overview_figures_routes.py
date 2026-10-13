@@ -202,6 +202,35 @@ def test_a_reader_without_the_usage_screen_is_counted_their_own_requests_in_the_
     assert "u_narrow" in statement.compile().params.values()
 
 
+def test_the_figures_are_asked_over_another_window_and_for_one_department(
+    served: tuple[TestClient, Stub],
+) -> None:
+    """**M27.15.17.** The window is the front page's four, and a department narrows the counts and
+    the cost to it, in the statement; a reader who may not read that department's usage is refused
+    as for one that is not there and no statement is sent for them. Delete this and the figures stay
+    a fixed week for everybody, or a department's figure is readable by anybody who may open the
+    overview.
+    """
+    client, stub = served
+    month = get(client, "u_wide", f"{FIGURES}?range=30d")
+    assert month.status_code == 200, month.text
+    body = OverviewFiguresView.model_validate(month.json())
+    assert body.range == "30d" and body.until - body.since == timedelta(days=30)
+    assert body.department is None
+
+    narrowed = get(client, "u_wide", f"{FIGURES}?department=web")
+    assert OverviewFiguresView.model_validate(narrowed.json()).department == "web"
+    assert "web" in outcome_statements(stub)[-1].compile().params.values()
+    assert "web" in cost_statements(stub)[-1].compile().params.values()
+
+    before = len(stub.statements)
+    refused = get(client, "u_narrow", f"{FIGURES}?department=web")
+    missing = get(client, "u_narrow", f"{FIGURES}?department=nobody")
+    assert refused.status_code == missing.status_code == 404
+    assert refused.json()["message"] == missing.json()["message"]
+    assert len(stub.statements) == before
+
+
 def test_a_reader_who_may_not_open_the_overview_is_refused_before_anything_is_read(
     served: tuple[TestClient, Stub],
 ) -> None:
