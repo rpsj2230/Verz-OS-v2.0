@@ -9,7 +9,7 @@ Classes: 1 built and wired, only an install check is missing; 2 partly built; 3 
 | Module | Leaves | Class 1 | Class 2 | Class 3 | Class 4 | Class 5 |
 | --- | --- | --- | --- | --- | --- | --- |
 | M17 (Wave 4) | 41 | 16 | 11 | 2 | 7 | 5 |
-| M18 (Wave 4) | 0 | 0 | 0 | 0 | 0 | 0 |
+| M18 (Wave 4) | 21 | 3 | 0 | 12 | 6 | 0 |
 | M21 (Wave 4) | 0 | 0 | 0 | 0 | 0 | 0 |
 | M25 (Wave 4) | 0 | 0 | 0 | 0 | 0 | 0 |
 | M26 (Wave 4) | 0 | 0 | 0 | 0 | 0 | 0 |
@@ -18,11 +18,11 @@ Classes: 1 built and wired, only an install check is missing; 2 partly built; 3 
 | M35 (Wave 4) | 0 | 0 | 0 | 0 | 0 | 0 |
 | M40 (Wave 4) | 53 | 20 | 15 | 14 | 3 | 1 |
 | M19 (Wave 5) | 0 | 0 | 0 | 0 | 0 | 0 |
-| M30 (Wave 5) | 0 | 0 | 0 | 0 | 0 | 0 |
-| M36 (Wave 5) | 0 | 0 | 0 | 0 | 0 | 0 |
-| M37 (Wave 5) | 0 | 0 | 0 | 0 | 0 | 0 |
+| M30 (Wave 5) | 30 | 5 | 12 | 6 | 2 | 5 |
+| M36 (Wave 5) | 22 | 8 | 5 | 6 | 0 | 3 |
+| M37 (Wave 5) | 40 | 7 | 5 | 26 | 0 | 2 |
 | M42 (Wave 5) | 0 | 0 | 0 | 0 | 0 | 0 |
-| Total | 94 | 36 | 26 | 16 | 10 | 6 |
+| Total | 207 | 59 | 48 | 66 | 18 | 16 |
 
 # Wave 4
 
@@ -165,6 +165,80 @@ Classes: 1 built and wired, only an install check is missing; 2 partly built; 3 
 - **M17.7.7** An agent runs only the workflows assigned to it, and a request that would start any other workflow through it is refused before the first...  
   Evidence: No workflow assignment exists, so no refusal of an unassigned workflow through an agent; depends on M17.6.1's workflow data and an agent-workflow link in the agent manifest or install.  
   Build: design with M17.6.1: agent holds a list of workflow ids; the runner refuses others before step one
+
+## M18 Multi-agent execution
+
+### M18, Class 1: built and wired, only an install check is missing (3)
+
+- **M18.3.1** Child grant computed in SQL as parent intersect agent intersect subtask  
+  Evidence: core/scope_sql.py gate.delegated_reach computes parent intersect agent intersect subtask in SQL; installed by migrations 0028, 0029, 0033 with gate.delegation. test_delegation_sql.py compares it to EntitlementSet.intersect on a real server. Nothing in the app inserts rows yet.  
+  Next step: write check naming M18.3.1: insert a root and child delegation row in the harness and assert the stored child reach equals the Python intersect
+- **M18.3.2** Database trigger rejecting any non-subset delegation row  
+  Evidence: Trigger gate.delegation_narrows (core/scope_sql.py, migrations 0028 and 0033) refuses any insert or update whose reach is not a subset of its parent; 30-odd real-server tests in test_delegation_sql.py. No application code writes the table yet.  
+  Next step: write check naming M18.3.2: via h.execute insert a widening child row and assert the database refuses it, then a narrowing row and assert accepted
+- **M18.3.3** Orchestrator has no grant verb, asserted  
+  Evidence: delegation.grant_verbs_in() scans the orchestrator for grant operations and tests assert none exist (test_orchestration_delegation.py); there is no orchestrator runtime to grant anything. CI-asserted by design.  
+  Next step: repo-only leaf: close as Proved-in-ci naming the unit job running test_orchestration_delegation.py
+
+### M18, Class 3: built but not wired (12)
+
+- **M18.1.2** Subtask contract: objective, output schema, tool hints, scope predicate  
+  Evidence: orchestration/contract.py SubtaskContract (objective, output schema as FieldSpec, tool hints, scope predicate) and subtask_ceiling() are tested in test_orchestration_contract.py. No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package.  
+  Next step: build the orchestrator runtime that calls it: a coordinating-agent step in the run path (gate/runtime or a new orchestration runner) fed by the M18.5.3 planner and the M18.5.1 callee links
+- **M18.1.3** Schema validation on every subtask result, failure rather than merge input  
+  Evidence: contract.validated()/validated_or_none() refuse a result that does not match its schema (tested); merge.merge only takes ValidatedResult. No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package.  
+  Next step: call contract.validated on each child's reply in the orchestrator before it is handed to merge; a failure becomes a gap, not an input
+- **M18.1.4** Prose explicitly disallowed as a subtask contract  
+  Evidence: contract.py has no prose field kind and contract_gaps() refuses a contract that would let free prose be the output (tested). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package.  
+  Next step: build the orchestrator runtime that calls it: a coordinating-agent step in the run path (gate/runtime or a new orchestration runner) fed by the M18.5.3 planner and the M18.5.1 callee links
+- **M18.2.1** Dependency graph with cost and coupling weights  
+  Evidence: orchestration/plan.py DependencyGraph with Node cost and Edge coupling weights, read_proposal(), plan_refusals() (tested in test_orchestration_plan.py). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package.  
+  Next step: feed it the planner proposal (M18.5.3) and pass the graph to fanout.decide
+- **M18.2.2** Six arithmetic conditions evaluated before any child starts  
+  Evidence: orchestration/fanout.py six Conditions evaluated by gate_inputs(), holds(), failures(), decide() before any child starts (tested in test_orchestration_fanout.py). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package.  
+  Next step: call fanout.decide(graph, depth) in the orchestrator before dispatching children
+- **M18.2.3** Collapse to a single loop as the default when any condition fails  
+  Evidence: fanout.decide returns Verdict.SINGLE_LOOP when any condition fails, the default (tested). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package.  
+  Next step: honour the verdict in the orchestrator: run the plan as one loop when SINGLE_LOOP
+- **M18.2.4** Gate inputs and verdict recorded for audit  
+  Evidence: fanout.GateRecord holds inputs, failures and verdict with AUDIT_SURFACE and gate_record_gaps (tested). Nothing persists a record: no table, no trace field, no caller.  
+  Next step: persist the GateRecord on the run's trace (tables or ledger) when decide() runs, then show it on the run's page
+- **M18.3.4** Depth cap of two and per-run concurrency cap of eight  
+  Evidence: delegation.depth_of(), chain_refusals(), concurrency_refusals() hold depth two and eight children (tested). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package.  
+  Next step: call chain_refusals and concurrency_refusals when the orchestrator creates each child
+- **M18.3.5** Global parallelism budget across all runs  
+  Evidence: delegation.fan_out_request() builds an ops.admission request per run and global_ceiling() reads the central budget (tested). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package.  
+  Next step: submit fan_out_request to ops.admission before children start; refuse or queue when the global budget is spent
+- **M18.4.1** Merge step writing the final answer from validated inputs  
+  Evidence: orchestration/merge.py merge() builds a MergedAnswer only from ValidatedResult inputs (tested in test_orchestration_merge.py). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package.  
+  Next step: call merge from the orchestrator and return MergedAnswer to the asker as the run's answer
+- **M18.4.2** Per-subtask cost and duration surfaced to the user  
+  Evidence: merge.SubtaskReport carries cost and duration per subtask into MergedAnswer (tested). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package. No route or page shows it.  
+  Next step: expose per-subtask cost and duration on the run's answer payload and in the console run view
+- **M18.4.3** Partial-failure handling with a stated gap  
+  Evidence: merge.Gap, GapCause, GapTrace state the gap when a subtask failed, and merge_refusals refuses a silent hole (tested). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package.  
+  Next step: carry the stated gap into the user-visible answer from the orchestrator
+
+### M18, Class 4: unbuilt (6)
+
+- **M18.5.1** A coordinating agent can hand a subtask only to agents an administrator allowed it to call, and a call to any other agent is refused befo...  
+  Evidence: No coordinator concept exists: no table or route holds which agents an administrator allowed an agent to call (agent_link_routes.py is deep links only), and no call-another-agent step is in the run path. Reuse: delegation.Hop and chain_refusals.  
+  Build: build an agent-to-agent callee allow-list (table, admin route, console tab) and a call-agent tool in the gate refusing any agent not on it before the child starts
+- **M18.5.2** A specialist agent handed a subtask reads through its own knowledge, skills and connectors within the asker's reach, and the coordinator ...  
+  Evidence: No specialist runs on a subtask: nothing hands a subtask to an agent. Pieces exist: EntitlementSet.intersect via ops.automation.flow_reach (commit 4f1f1d6 fold test), delegation.child_hops, contract.validated.  
+  Build: build the specialist run: child run at flow_reach(asker, specialist ceiling) using the specialist's own knowledge, skills and connectors, returning only a validated result
+- **M18.5.3** A planner step asks a model for subtasks and their dependencies, and its proposal passes the existing proposal checks before any child runs  
+  Evidence: No planner step: nothing asks a model for subtasks and dependencies. plan.read_proposal() and plan_refusals() are built to check a proposal but nothing produces or calls one; needs-rupash lists M18.1.1 merged into M18.5.3.  
+  Build: build a planner prompt step in the orchestrator that calls the model, parses with plan.read_proposal, and runs plan_refusals before any child
+- **M18.6.1** A request to analyse a client's website and prepare an improvement proposal runs on the install as a coordinating agent handing website, ...  
+  Evidence: End-to-end website proposal by a coordinating agent with four specialists is unbuilt: depends on M18.5.1 to M18.5.3 and on specialist agents for website, search data, competitor and pricing, plus a single trace showing each child's reach and the fan-out verdict. Person-run proof leaf.  
+  Build: blocked on M18.5.x and the orchestrator runtime; then rehearse on an install and record the checks
+- **M18.6.2** An agent spawns parallel subtasks or workers only when fan-out is enabled on it by its department admin, and a run of an agent without it...  
+  Evidence: No fan-out grant on an agent: nothing in tables/agent*, agents/model.py or the department admin console holds a fan-out switch, and no run records a reason for running single loop. fanout.Verdict.SINGLE_LOOP exists unwired.  
+  Build: add a fan-out flag per agent set by its department admin (agents/model.py, route, console), have the orchestrator read it and record the single-loop reason on the run
+- **M18.7.1** The cost check may run a coordinator's specialist agents one after another, but never replaces a specialist's work with the coordinator's...  
+  Evidence: Not built: fanout.Verdict has only SINGLE_LOOP and PARALLEL, and nothing says SINGLE_LOOP for a coordinator means running specialists in sequence rather than the coordinator doing their work. No orchestrator exists to hold the rule (register OWN2-5).  
+  Build: when the orchestrator exists, define SINGLE_LOOP as sequential specialist calls and add a test that the coordinator never answers a subtask itself
 
 ## M40 Member self-service application
 
@@ -343,4 +417,325 @@ Classes: 1 built and wired, only an install check is missing; 2 partly built; 3 
   Build: build a route GET /agents/{id}/starters over the agent's pinned skills and answerable knowledge at the person's reach (reuse Ask roster and knowledge search); refuse any the run could not answer
 
 # Wave 5
+
+## M30 Hosting, delivery and recovery
+
+### M30, Class 1: built and wired, only an install check is missing (5)
+
+- **M30.3.5** Retention: thirty daily, twelve weekly, twelve monthly  
+  Evidence: Decided narrower by needs-rupash item 60 option A (register DEC-5): thirty daily copies and weekly to day 35. recovery.RETENTION_LADDER and backup_ladder.select decide it; the backups bucket's 35-day lifecycle (ops/seaweedfs/provision.sh) holds a superset. Tests: test_backup_ladder, test_recovery.  
+  Next step: write check naming M30.3.5: read the backups bucket lifecycle rule equals retention.BACKUP_RETENTION_DAYS and backup_policy_gaps() is empty; a pruner is optional and was rejected for now
+- **M30.4.6** Policy change during an active task  
+  Evidence: gate/runtime.py re-resolves the reach before every tool call (A_RUN_IS_JUDGED_AGAIN_AT_EVERY_TOOL_CALL) and leash.resume re-judges; tests: test_agent_runtime.py test_a_grant_revoked_mid_run_refuses_the_next_call, test_crash.py M30.4.6 cases.  
+  Next step: write check naming M30.4.6: start a run, change policy (revoke a grant or lower the rung) mid-run, assert the next tool call is refused in the one sentence
+- **M30.4.7** User disabled during an active task  
+  Evidence: Same per-call re-resolution; test_crash.py test_a_caller_disabled_between_two_attempts_is_refused_at_the_second and test_a_reader_disabled_between_two_attempts_is_judged_at_the_instant_it_is_asked cover the rule; the request path applies EntitlementSet expiry via intersect.  
+  Next step: write check naming M30.4.7: disable a person (directory change or session end) mid-run and assert the run's next step is refused
+- **M30.5.2** Measurement wired to the ledger  
+  Evidence: gate/finish.py records every request into telemetry (ops/telemetry_store.py, tables/telemetry.py RequestTelemetryRow) with lane, tokens, duration and status; GET /report/service-levels reads it (ops/service_levels.py). Tests: test_telemetry_store, test_service_levels, test_request_finish.  
+  Next step: write check naming M30.5.2: ask a question through the answer route and assert the telemetry row carries lane, duration and status
+- **M30.6.9** After a person asks a question on the install, the Service levels screen counts that request in its lane within the window, and a lane wi...  
+  Evidence: Telemetry is written for every request by gate/finish.py and GET /report/service-levels returns each lane's requests, p95 and success rate (ops/service_levels.py, report_routes.py); test_a_lane_nothing_was_asked_through_is_present_and_unmeasured. A lane with traffic carries requests above zero.  
+  Next step: write check naming M30.6.9: ask one question, GET /report/service-levels and assert the answer lane shows requests of at least one
+
+### M30, Class 3: built but not wired (6)
+
+- **M30.3.10** Alert on backup age exceeding the profile RPO  
+  Evidence: recovery.alerts() raises BACKUP_AGED against the profile RPO from real manifests (tested); schedule_runner Runner backup_exposure has needs= and no run, controls.backup_exposure is invoked_by NOTHING, and ops/notices BACKUP_EXPOSURE says no channel is chosen. Nothing calls alerts().  
+  Next step: give Runner backup_exposure a run that lists manifests with backup_manifest.read_manifests, calls recovery.alerts and sends the notice to the operations alert holder; channel may need an owner decision
+- **M30.3.11** Louder alert on a failed verification  
+  Evidence: recovery.alerts() ranks VERIFICATION_FAILED above BACKUP_AGED and last_attempt covers a drill that ran and did not verify (tested). Same gap: backup_exposure runner has no run, no drill records are written, no channel sends it.  
+  Next step: same wiring as M30.3.10 plus the drill record writer (M30.3.8) so a failed verification exists to alert on
+- **M30.4.2** Operation classification: safe to retry, unsafe, retry after verification, needs a human  
+  Evidence: ops/reliability.py RetryClass (safe, after verification, unsafe, needs a human), OperationClass, retry_class_for(), classification_gaps() are tested; nothing outside reliability.py calls retry_class_for (effects.py PORTS is a separate classification).  
+  Next step: consult retry_class_for in ops.recovery_run.sweep_queue and queue verdict_for for the task name, so the class decides redrive versus person
+- **M30.5.4** RPO and RTO per profile written into the client agreement  
+  Evidence: launch.service_level() builds the profile's RPO and RTO statement and refuses it without a verified drill (tested in test_launch.py, register DEC-31); reliability.RECOVERY_OBJECTIVES says nothing writes it into an agreement. Nothing calls service_level; no route or document serves it.  
+  Next step: expose launch.service_level through a route on the handover or recovery page that renders the statement or its refusal reason
+- **M30.6.6** The service level statement is produced only after a restore drill verified a copy and the newest copy is inside the promised recovery po...  
+  Evidence: launch.service_level() is produced only with a verified Drill and a newest copy inside the RPO, otherwise raises with the reason (four refusals, tested in test_launch.py, DEC-31). Nothing calls it and no route serves the statement or its refusal.  
+  Next step: same route as M30.5.4; the check asks for the statement on an install with no verified drill and expects the stated reason
+- **M30.6.10** On the install the backup exposure control runs on its cadence and alerts a named person when the newest verified copy is older than the ...  
+  Evidence: controls.backup_exposure (daily, WOKEN) and recovery.alerts() exist; Runner backup_exposure in schedule_runner.py has needs= and no run, so the control never runs on its cadence and alerts nobody. Includes the not-verified-last-rehearsal case via last_attempt (tested).  
+  Next step: same wiring as M30.3.10; then the check reads the control's last run from the Jobs route and an alert addressed to the named person
+
+### M30, Class 2: partly built (12)
+
+- **M30.3.1** pgBackRest with continuous WAL archiving, daily incremental, weekly full  
+  Evidence: ops/backup/brain-backup (systemd timer 02:00) takes a nightly pg_dump -Fc with a manifest; backup_manifest.py reads it. No pgBackRest, no continuous WAL, no daily incremental or weekly full: recovery.SCHEDULE says nothing in the repository runs them.  
+  Next step: decide pgBackRest versus the nightly dump (needs-rupash item 44 option C chose the dump for now), then add a pgBackRest stanza, WAL archive_command and timers to the installer
+- **M30.3.3** Off-host destination, mandatory  
+  Evidence: recovery.destination_gaps() refuses an on-host destination (tested) but nothing calls it; brain-install-backup defaults the endpoint to the install's own SeaweedFS container, so copies stay on the host unless an operator sets another endpoint. Manifest has no off_host field.  
+  Next step: require an off-host endpoint in brain-install-backup and the setup wizard, record it in the manifest, and call destination_gaps from the recovery panel route
+- **M30.3.4** Encryption at rest with a client-held key  
+  Evidence: recovery.KeyHolder and destination_gaps() refuse platform-held or no key (tested) but brain-backup and brain-install-backup contain no encryption step at all and the manifest records no key holder; nothing calls destination_gaps.  
+  Next step: add client-held-key encryption (age or gpg public key from setup) to brain-backup before upload, record key holder in the manifest, surface in recovery panel
+- **M30.3.6** Weekly automated restore into a scratch container  
+  Evidence: ops/backup/brain-restore-drill loads one copy into a named scratch database and compares counts and migration head; docs/install/restore-drill.md. Run by hand: schedule_runner Runner restore_drill has needs= and no run; no timer; it does not create the scratch container or write the drill record.  
+  Next step: give Runner restore_drill a run that fetches the newest copy, drives the script, writes the drill record to the backups bucket, started weekly by the worker
+- **M30.3.7** Smoke query and permission canary against the restored copy  
+  Evidence: recovery.Check has SCHEMA_COMPLETE, SMOKE_QUERY, PERMISSION_CANARY as required checks (tested); brain-restore-drill does row counts and migration head only and says the schema check, RLS sweep and canary are manual steps in the drill document.  
+  Next step: extend the drill runner to run schema, smoke and permission canary checks on the scratch copy and record each CheckRun in the drill record
+- **M30.3.8** Measured RTO recorded from the drill  
+  Evidence: recovery.verification_of() refuses an RTO on an unverified drill and backup_manifest.read_drills() reads drill records (tested); nothing writes a drill record, the script leaves it to the person, so the install records no measured RTO.  
+  Next step: have the drill runner time the restore and write the drill record; then GET /install/recovery shows the measured RTO against the profile target
+- **M30.3.9** Console recovery panel with last backup, last verified restore and a one-click drill  
+  Evidence: GET /install/recovery (install_routes.py) and console RecoveryPage show last backup, last verified restore, last attempt and drill due via console/recovery_view.py; tested. No one-click drill: install_routes.py says it is a write nothing performs. backup_ladder unwired.  
+  Next step: add a POST drill route starting the drill runner (M30.3.6) under admin capability, and a Start rehearsal button on RecoveryPage
+- **M30.4.4** Malformed responses and 429 injection  
+  Evidence: 429 and malformed handling exists: models/routing.py maps 429 to FallbackTrigger.RATE_LIMITED, models/calls.py walks the ladder, gate/runtime.py counts a malformed reply as a turn; unit tests in test_model_calls, test_routing, test_agent_runtime. ops/crash.py is about worker crashes. No injection suite on an install.  
+  Next step: write install check with a stub provider returning 429 then a malformed reply, asserting fallback and the stated stop reason through the real answer route
+- **M30.4.5** Disk-full behaviour  
+  Evidence: Disk full is handled by name only in deployment/database.py (create, migrate, seed raise DiskFullError via reliability.is_disk_full); the request path, ledger writes and uploads do not catch it, and no test fills a disk.  
+  Next step: call is_disk_full on answer-path writes and object store puts and return the stated refusal; add an install check with a tiny tmpfs volume
+- **M30.6.2** Operations are proved on an install: the service levels screen shows each lane's measured p50 and p95, permission and redaction latency a...  
+  Evidence: GET /report/service-levels shows per lane objective_p95_ms, p95_ms, success_rate, requests (report_routes.py, ops/service_levels.py). Missing: p50, permission and redaction latency, connector timeout in force; missed-window and aged-backup alerts unwired (M37.5.1.3, M30.3.10); worker-stop and canary delivery unbuilt.  
+  Next step: add p50, permission and redaction latency and connector timeout to the service levels reading, wire the alert runners, then write the check
+- **M30.6.4** Enabling an edge proxy or tunnel on an install that declares a residency constraint states that encryption then ends at the provider's ed...  
+  Evidence: docs/install/network.md states Cloudflare reads every request and decrypts at its edge. No install-level residency constraint exists (residency is a model-routing setting) and nothing requires or records an administrator's acceptance before a tunnel or edge proxy is enabled.  
+  Next step: add an acceptance record (table, route, console prompt) shown when the tunnel overlay is enabled on an install declaring a residency constraint; needs a decision on what declares one
+- **M30.6.5** An install on a profile with a recovery point under four hours replicates its object store off the host and has a standby database it fai...  
+  Evidence: docker-compose.replica.yml runs a hot standby Postgres; profile full has a one-hour RPO (reliability.RECOVERY_OBJECTIVES). Missing: object store replication off the host, a promote or failover procedure and recorded failover drill, and any gate stopping the profile being offered without them.  
+  Next step: build object-store replication, a failover runbook and drill record, and make launch.service_level refuse an under-four-hour profile without them; needs a second server to rehearse
+
+### M30, Class 5: not code, owner or blocked (5)
+
+- **M30.1.3** Cloudflare Tunnel option for zero inbound ports  
+  Evidence: docker-compose.tunnel.yml and .tunnel.identity.yml, ops/tunnel.py (overlay_gaps, page_gaps) and deployment/release.py carry the option; docs/install/network.md explains it; test_tunnel_option.py. tunnel.py says no tunnel has ever been started from these files.  
+  Waits on: waits on the owner: a Cloudflare account and tunnel token on a real server, then a person starts it and records zero inbound ports
+- **M30.4.9** Two-box split rehearsed without application change  
+  Evidence: Overlays docker-compose.split*.yml, ops/split.py (host_services, address_refusals) and docs/install/scaling.md exist and are tested; scaling.md says the rehearsal steps have not been run. Needs-rupash lists M36.1.4.2 merged into M30.4.9.  
+  Waits on: waits on a second server for a person to run the split rehearsal and record it against ARC-B-153
+- **M30.6.1** Backups are proved on an install: a copy lands off-host with its manifest every night for seven consecutive nights, a missed night raises...  
+  Evidence: Proof leaf for backups on an install: seven consecutive nights, a missed night alerting a person, never verified until a drill, drill checking schema, RLS and permissions, erasure horizon. Needs elapsed time on a real install and the unbuilt pieces M30.3.2, 3.3, 3.4, 3.6, 3.7, 3.10.  
+  Waits on: waits on M30.3.x work above and then seven nights on the owner's install with an off-host destination and key; a person records the checks
+- **M30.6.7** Recovery and resilience are proved on an install: backups land off the host encrypted with the client's key, a restore drill is timed aga...  
+  Evidence: Multi-part proof: backups off-host with client key, timed restore drill, worker killed mid-task, chaos suite, capacity and scaling readbacks. Chaos suite is unbuilt (M30.4.3) and backup encryption and off-host enforcement are unbuilt (M30.3.3, 3.4); the worker-kill piece has recovery_run.  
+  Waits on: waits on M30.3.x and M30.4.3 and a person running it on an install
+- **M30.6.8** Every hosting and delivery requirement in the requirements register is demonstrated on an install by a person, and each check is recorded...  
+  Evidence: Person-run demonstration of every hosting and delivery requirement in the register, each check recorded against its requirement; register rows cite M30.6.8 as proof for dozens of requirements.  
+  Waits on: waits on the owner or a tester running the demonstrations on an install
+
+### M30, Class 4: unbuilt (2)
+
+- **M30.3.2** restic for object store and configuration  
+  Evidence: Nothing backs up the object store or configuration: ops/backup/brain-backup copies the database only; no restic anywhere in src, ops or compose files. recovery.SCHEDULE declares hourly snapshots of both and says nothing runs them.  
+  Build: build ops/backup/brain-backup-files using restic into the same manifest format (Coverage.OBJECT_STORE and CONFIGURATION), reusing backup_manifest.read_manifests and brain-install-backup
+- **M30.4.3** Chaos suite: kill Postgres, provider, connector, browser, worker  
+  Evidence: No chaos suite exists: nothing in src, tests, ops or CI matches chaos, and no script kills Postgres, provider, connector, browser or worker. Related: ops/crash.py durable_machines, ops/recovery_run.py, ops.reliability.MATRIX.  
+  Build: build a rehearsal script under ops/ for a throwaway install that kills each component and reads recovery from the install and jobs routes, plus in-process provider and connector fault injection in acceptance checks
+
+## M36 Scaling triggers and performance
+
+### M36, Class 1: built and wired, only an install check is missing (8)
+
+- **M36.1.1.1** Monthly partitions of the metadata ledger, created and detached by the worker in plain SQL  
+  Evidence: Migration 0039 creates obs request telemetry partitioned by range on received_at; ops/ledger_partitions.maintain creates and detaches months in plain SQL and runs from the worker's retention_sweep runner (schedule_runner.py). Tests: test_ledger_partitions (real server in CI).  
+  Next step: write check naming M36.1.1.1: run the retention sweep runner and read pg_inherits for the next month's partition under obs.request_telemetry
+- **M36.1.2.2** Console reads routed to the replica  
+  Evidence: app.py builds app.state.console_reads from settings.read_replica_url (ops/replica_store.console_reads_for, falling back to the primary); estate, directory, govern and people routes read through ConsoleReads and console/read_replica.route_read. Tests: test_read_replica, test_replica_store.  
+  Next step: write check naming M36.1.2.2: build ConsoleReads with a second session factory in the harness and assert a console read is served from it and an answer-path read is not
+- **M36.1.3.2** Refresh schedule and staleness display  
+  Evidence: Runner spend_report_refresh in schedule_runner.py refreshes the spend view daily; spend_report_view carries as_of and freshness (LIVE, ageing, STALE tied to controls.MISSED_RUN_GRACE) and spendQuery.ts renders them. Tests: test_spend_report_view, test_worker_schedule.  
+  Next step: write check naming M36.1.3.2: run the refresh runner, GET /report/spend and assert as_of and freshness LIVE; age the view and assert it reads ageing
+- **M36.2.1.1** Dependency graph over independent source calls  
+  Evidence: connectors/federation.py FanOutPlan (SourceCall, depends_on, cycle check, waves) is used by connectors/live_read.py, which runs in the answer path via ops/live_read_run and gate/live_records (app.py). Tests: test_connectors_federation and the connector acceptance checks.  
+  Next step: write check naming M36.2.1.1: ask a question needing two independent source calls and assert the plan puts them in one wave (extend acceptance_checks_connector_framework.py)
+- **M36.2.1.2** Fan-out with one critical path rather than a sum  
+  Evidence: live_read.py runs each wave with asyncio.gather and checks FanOutPlan.assert_within against the wall clock, so the cost is the critical path and not the sum. Tests: test_connectors_federation, test_live_read.  
+  Next step: write check naming M36.2.1.2: two stub sources each taking a known time, assert the question's elapsed time is near the longer one, not the sum
+- **M36.2.2.3** Verify no detection coverage is lost  
+  Evidence: tests/unit/test_screening.py asserts the single pass reports exactly what the serial screens report across every fragment pair, corpora and generated text, plus overlapping detections; the equivalence is the proof that no coverage is lost.  
+  Next step: repo-only leaf: close as Proved-in-ci naming the unit job running test_screening.py; no install check applies
+- **M36.2.4.1** Peak concurrency test rather than daily volume  
+  Evidence: tests/load/test_admission_at_peak.py drives the admission controller at LOAD_TEST_TARGET (two arrivals a second for ten minutes) and ops/load_peak.py is the owner's command for a live install. Concurrency, not daily volume, is the unit.  
+  Next step: repo-only leaf: close as Proved-in-ci naming the load test job; the live run is M36.3.1
+- **M36.2.4.2** Documented first bottleneck at ten and one hundred times  
+  Evidence: ops/admission.py bottleneck_ladder and FIRST_BOTTLENECK_AT_SCALE name the first limit at 10x and 100x; install_routes.capacity_plan feeds GET /install/capacity; acceptance_checks_capacity.py check capacity_is_sized_for_the_busiest_minute_and_its_first_limit asserts both 10x and 100x are named.  
+  Next step: add M36.2.4.2 to leaves= of that existing check in acceptance_checks_capacity.py
+
+### M36, Class 3: built but not wired (6)
+
+- **M36.1.1.4** Trigger: ledger row count or query latency threshold  
+  Evidence: ops/scaling.py partitioning_is_due is tested (test_scaling.py) but nothing imports brain.ops.scaling; controls.NOT_A_SCHEDULE calls it a person's decision. It takes a retention window and interval, not a measured row count or query latency, and GET /install/capacity does not evaluate it.  
+  Next step: wire partitioning_is_due with the measured ledger row count and p95 into a section on GET /install/capacity; also note the trigger needs a row-count or latency input, not just the window
+- **M36.1.2.4** Trigger: console queries affecting answer latency  
+  Evidence: ops/scaling.py trigger predicates are tested (test_scaling.py) but nothing imports brain.ops.scaling; controls.NOT_A_SCHEDULE says each is a decision for a person asked when someone looks. GET /install/capacity (install_routes.py) does not evaluate them.  
+  Next step: wire replica_is_due with measured console read load against answer headroom into GET /install/capacity so a person sees when a replica is warranted
+- **M36.1.3.3** Trigger: a report exceeding two seconds  
+  Evidence: ops/scaling.py trigger predicates are tested (test_scaling.py) but nothing imports brain.ops.scaling; controls.NOT_A_SCHEDULE says each is a decision for a person asked when someone looks. GET /install/capacity (install_routes.py) does not evaluate them.  
+  Next step: wire report_is_due(observed_p95_ms) into the report routes' timing and into GET /install/capacity; needs a per-report latency measurement
+- **M36.1.4.3** Trigger: RAM pressure or a resilience requirement  
+  Evidence: ops/scaling.py trigger predicates are tested (test_scaling.py) but nothing imports brain.ops.scaling; controls.NOT_A_SCHEDULE says each is a decision for a person asked when someone looks. GET /install/capacity (install_routes.py) does not evaluate them.  
+  Next step: wire host_split_is_due(profile) with measured memory headroom into GET /install/capacity; resilience requirement input has no source yet
+- **M36.2.3.1** Identical in-flight requests share one execution  
+  Evidence: ops/scaling.py share_role, may_share, share_refusals decide whether an in-flight answer may be shared (tested); the answer path has no in-flight sharing (gate cache has none). Only connector fetches share, via federation.SingleFlight in live_read.  
+  Next step: call scaling.share_role from the answer lane's cache lookup in gate (cache_key) so a second identical question waits for the first
+- **M36.2.3.2** Entitlement equality required before sharing, never similarity  
+  Evidence: scaling.may_share compares gate.cache_key parts and requires equal entitlement hash, never similarity (tested). The answer cache key itself already carries ent_hash, but nothing calls may_share, so no sharing happens. federation.flight_key omits reach on purpose.  
+  Next step: wire may_share with M36.2.3.1; an existing cache check (ARC-A-051) already proves the key carries the hash
+
+### M36, Class 2: partly built (5)
+
+- **M36.1.2.3** Replication lag monitoring with a staleness banner  
+  Evidence: replica_store.measure_lag and console/read_replica.banner_for put a staleness field on estate, directory and govern route bodies (tested). The console UI renders it only on LearningPage and MemoryDetailPage; the other pages ignore the field. Not verified further.  
+  Next step: render StalenessBanner on the pages whose routes carry it (estate, directory, people, govern); then check with a stubbed lag
+- **M36.1.3.1** Views for the heaviest report screens  
+  Evidence: A materialised daily spend report exists: tables/spend.py, ops/spend_store.py, console/spend_report_view.py, migration 0034 and GET /report/spend. Usage, adoption, questions and quality reports still read live tables, so only one of the heaviest screens has a view.  
+  Next step: decide which other report screens exceed two seconds (report_is_due) and materialise those; spend is done
+- **M36.2.1.3** Per-source and global budgets still enforced under parallelism  
+  Evidence: live_read.py enforces CallBudget.assert_affordable and per-connector concurrency under gather (tested). Missing: a global ceiling; scaling.scaling_gaps and fanout_refusals say per-connector rows have no global row, up to the sum may be in flight, and are not called.  
+  Next step: wire scaling.fanout_refusals and a declared global SOURCE_CALLS budget into live_read admission; then check parallel calls respect both
+- **M36.2.2.2** Collapse into a single pass where semantics allow  
+  Evidence: gate/screening.py screen_in_one_pass reports the same as the serial screens (tested), but nothing in the request path calls it and its docstring records the collapse does not pay (re has no multi-pattern automaton). No needs-rupash item records this narrowing.  
+  Next step: raise a needs-rupash question to close M36.2.2.2 as measured not worth switching to, or switch the gate to screen_in_one_pass; the register row ARC-B-099 should name the decision
+- **M36.2.4.3** Results recorded against the SLO table  
+  Evidence: ops/load_peak.judge compares each lane's p95 and success rate with reliability.LANE_OBJECTIVES (tested) and prints them; no store keeps a run's result and no screen shows it. A run needs the owner's sign-off (needs-rupash item 194).  
+  Next step: add a table and route that record a load_peak result per run and show it beside the service level table; the first real result waits on item 194
+
+### M36, Class 5: not code, owner or blocked (3)
+
+- **M36.1.2.1** Streaming replica configuration  
+  Evidence: docker-compose.replica.yml and ops/streaming_replica.py (replica_overlay_gaps) are built and tested; docs/install/scaling.md says nobody has run the replica rehearsal. Built only when its trigger is met (ARC-B-104).  
+  Waits on: waits on the owner's server: starting the replica overlay once the trigger is met, a person records the rehearsal
+- **M36.1.4.1** Application and browser on one host, database and object store on the other  
+  Evidence: ops/split.py with docker-compose.split*.yml (host_services, address_refusals) is built and tested in CI; docs/install/scaling.md says a split install serving a question has not been run. Needs-rupash notes M36.1.4.2 merged into M30.4.9.  
+  Waits on: waits on a second server for a person to run the two-host split (same step as M30.4.9)
+- **M36.3.1** A load test at the company's declared peak concurrency runs against the owner's install on its own host, records latency per lane against...  
+  Evidence: ops/load_peak.py (python -m brain.ops.load_peak) runs the peak at a live install and judges per lane; it spends real model calls so it is the owner's command, needs-rupash item 194 asks whether to run it. It does not measure memory headroom under load.  
+  Waits on: waits on the owner's answer to item 194 and tokens for test people; also add memory headroom sampling and a finding output before go-live
+
+## M37 Migration, launch and handover
+
+### M37, Class 1: built and wired, only an install check is missing (7)
+
+- **M37.2.2.3** Re-review every imported skill through the normal queue rather than trusting it because it worked before  
+  Evidence: Normal path exists: POST /skills/imports and /skills in skill_routes.py add via console/skill_library.added(), which builds an ImportedSkill unapproved; POST /skills/{digest}/review is the queue. migration.skills.arriving is a duplicate nobody calls. Tests: test_skill_library, test_skill_routes.  
+  Next step: write check naming M37.2.2.3: import a skill by POST /skills/imports, assert it is unreviewed and not executable, then approve by POST /skills/{digest}/review as a second person (reuse acceptance_agent_console.py helpers)
+- **M37.2.3.1** Rebuild each agent from a template rather than importing its configuration, because their model has no ceiling and no leash to carry across  
+  Evidence: Agents are only ever made from a template here: agents/install.py, agents/template.py, agent_lifecycle_routes.py install route, builder drafts; no importer of a foreign agent configuration exists on main. migration.rebuild.Rebuild is an unwired record. Tests exist for install.  
+  Next step: write check naming M37.2.3.1: install an agent from a catalogue template via the lifecycle install route and assert it came from that template with no foreign prompt field (reuse existing install checks)
+- **M37.2.3.2** Set an explicit ceiling per agent, which AnyGen never had  
+  Evidence: agents/model.py AgentAuthority is the explicit per-agent ceiling; agent_lifecycle_routes.py install writes one; E_run intersect applies it. migration.rebuild.authority_for (refuses empty capabilities) is unwired but the product path sets a ceiling.  
+  Next step: write check naming M37.2.3.2: install an agent, read its authority from the agent route, assert capabilities are non-empty and a run is narrowed to them
+- **M37.2.3.3** Start every rebuilt agent at Shadow on writes regardless of how it behaved there  
+  Evidence: agents/install_store.py INSTALLED_RUNG = AutonomyTier.SHADOW, builder STARTING_RUNG = SHADOW; agent_lifecycle_routes.py install writes every target at that rung (test refuses otherwise). migration.rebuild.Rebuild.write_tier unwired.  
+  Next step: write check naming M37.2.3.3: install an agent and read its leash rungs from the leash route, assert every write target is Shadow
+- **M37.3.2.4** Adoption measured as real questions from real people, machine traffic excluded  
+  Evidence: Every question reaching the answer lane is recorded once by gate/finish.py via ops/question_store.record(Asked); adoption.Asked.machine calls limits.is_automated; GET /report/adoption (report_routes.py) reads it. Tests: test_adoption, test_question_store, test_request_finish. Existing check records human asks only.  
+  Next step: write check naming M37.3.2.4: record one human and one automated-channel Asked (see asked_questions in acceptance_operations_console_3.py), read GET /report/adoption and assert only the human is counted
+- **M37.5.1.2** CI assertion that each control appears in the scheduler  
+  Evidence: ops/controls.py registry plus ops/schedule.py (imports CONTROLS) give the worker its schedule; tests/invariants/test_no_safety_mechanism_lacks_a_caller.py and tests/unit/test_schedule.py assert every control is scheduled or named orphan. Jobs and Live runs routes list controls (jobs_routes.py, operate_routes.py).  
+  Next step: install check names M37.5.1.2: GET the Jobs route and assert each scheduled control from CONTROLS appears; or close it as Proved-in-ci naming the invariant job
+- **M37.5.1.4** Explicit test that no safety mechanism lacks a caller  
+  Evidence: tests/invariants/test_no_safety_mechanism_lacks_a_caller.py asserts no control lacks a caller unless the registry says so; backed by controls.orphans(), call_sites(), registry_gaps(). Runs in CI on every push.  
+  Next step: repo-only leaf: close with Proved-in-ci naming the invariants job; optional install check calling controls.registry_gaps() and asserting empty
+
+### M37, Class 3: built but not wired (26)
+
+- **M37.1.1.1** Catalogue what the current Company Brain holds: knowledge, prompts, tool definitions, conversation history  
+  Evidence: inventory.py: Catalogue/Holding cover knowledge, prompts, tool definitions and conversation history, tested in test_migration_inventory.py; but nothing imports brain.migration.inventory outside the package; no table, route or page.  
+  Next step: add a migration store (table) plus a console route and page that record the catalogue and decisions through inventory.agree(), then write a check naming the leaf that reads that route
+- **M37.1.1.2** Decide per item: migrate, rebuild or retire  
+  Evidence: inventory.py: Disposition (migrate, rebuild, retire), Decision, undecided(), contradicted(), cannot_be_carried(), tested; no caller outside the package, no store or screen.  
+  Next step: add a migration store (table) plus a console route and page that record the catalogue and decisions through inventory.agree(), then write a check naming the leaf that reads that route
+- **M37.1.1.3** Map old permissions onto the new capability model, explicitly rather than by assumption  
+  Evidence: inventory.py: PermissionMapping, unmapped(), mapped_twice() make a mapping explicit and refuse an unmapped permission; tested; no caller outside the package, no store or screen.  
+  Next step: add a migration store (table) plus a console route and page that record the catalogue and decisions through inventory.agree(), then write a check naming the leaf that reads that route
+- **M37.1.2.2** Re-parse and re-embed rather than copying vectors, since embeddings are model-specific  
+  Evidence: carry.py: reparse_plan() and carried_vectors() refuse to reuse vectors and name each re-parse from original-bytes digest (tested). No caller feeds the ingest pipeline from reparse_plan; nothing imports carry.  
+  Next step: call carry.reparse_plan from a migration route that queues knowledge ingest for each Reparse; then check names the leaf
+- **M37.1.2.3** Entity registry seeded from existing client records  
+  Evidence: carry.py: EntitySeed (no access field) and seed_gaps() report name collisions via resolution.normalise_name (tested). Nothing writes a seed into the entity registry and nothing imports carry.  
+  Next step: wire seed_gaps then a registry-seeding route using the brain.resolution entity write path; then check
+- **M37.1.2.4** Historical conversations archived, not imported, unless there is a stated reason  
+  Evidence: carry.py: archive(agreed, imports) returns an Archive with searchable empty by construction (tested). No store holds an archive and nothing calls it.  
+  Next step: persist Archive in a migration table behind a route, never into knowledge search; then check that an archived conversation is not retrievable
+- **M37.1.3.2** Answer comparison log with disagreements surfaced  
+  Evidence: parallel.py: disagreements(), unanswered(), unreviewed() build the comparison log views (tested). No table, route or page holds or shows the log; nothing imports parallel.  
+  Next step: add a comparison-log table and a console page reading parallel.disagreements; then check
+- **M37.1.3.3** Cutover criteria agreed in writing before the period starts  
+  Evidence: parallel.py: Criterion and Period require cutover criteria before the window opens; cutover_gaps(), may_cut_over() refuse otherwise (tested; DEC-35 row names it). No store or route; nothing imports parallel.  
+  Next step: persist Period and Criterion with a created-at before the first Comparison, route may_cut_over to the cutover screen; then check
+- **M37.1.4.1** Old system read-only, then archived  
+  Evidence: decommission.py: Decommission refuses read-only before cutover and archived before read-only (tested). Nothing reaches the old system and nothing outside the package imports decommission; no table, route or page.  
+  Next step: add decommission record store and route that records timestamps through Decommission; then check
+- **M37.1.4.2** Credential revocation on every connector the old system held  
+  Evidence: decommission.py: Revocation and credentials_outstanding() keep requested and confirmed apart (tested). Nothing revokes or probes a grant and nothing imports it; register row GAP2-25 names the leaf.  
+  Next step: wire Revocation records to a console route fed by a person or a connector probe; then check
+- **M37.1.4.3** Scheduled jobs disabled and verified stopped  
+  Evidence: decommission.py: ScheduledJob and jobs_outstanding() require an observed silence window after disabling (tested). No store, route, caller outside the package.  
+  Next step: record ScheduledJob observations through a route and show jobs_outstanding on the cutover page; then check
+- **M37.1.4.4** Final backup retained per the retention policy  
+  Evidence: decommission.py: FinalBackup.may_delete_after derives retention from ops.retention.BACKUP_RETENTION_DAYS (tested). No store or route records a final backup; nothing imports the module.  
+  Next step: wire FinalBackup record into the cutover route reading the real backup manifest (ops.backup_manifest); then check
+- **M37.2.2.2** Convert the description convention, since theirs are written as router prompts beginning "Use the X skill to"  
+  Evidence: migration/skills.py: proposed_description() strips the 'Use the X skill to' preamble and router_descriptions() lists the rest (tested). Skill import route POST /skills/imports (skill_routes.py) does not call it; nothing imports migration.skills.  
+  Next step: call proposed_description/router_descriptions from the skills import path in skill_routes.py (or console/skill_library.read_package) as a draft shown to the reviewer; then check
+- **M37.2.2.5** Retire any skill that has not been invoked in ninety days rather than carrying it over  
+  Evidence: migration/skills.py: to_retire(skills, now, after_days=90) lists skills not invoked in ninety days (tested). Retirement exists as POST /skills/{digest}/retirement and per-skill last_used in console_stats_routes, but nothing calls to_retire.  
+  Next step: call to_retire over the imported foreign skill list from the migration page (needs last_invoked_at from the export) and route each to /skills/{digest}/retirement
+- **M37.2.4.2** Read the memory files as evidence and re-derive tier one preferences rather than importing beliefs wholesale  
+  Evidence: migration/learning.py: ForeignMemory and re_derive() build a proposal through memory.tiers.propose and refuse session, promoted and gated changes (tested). Nothing imports migration.learning; the proposal queue exists (agent_memory_routes.py).  
+  Next step: wire re_derive into a migration route that files each Derivation into the existing memory proposal queue; then check
+- **M37.2.4.3** Discard anything that would widen a scope, since it was never approved by anyone under our rules  
+  Evidence: migration/learning.py: re_derive() refuses any change in CHANGES_WHAT_ANYBODY_MAY_SEE (tested). No caller outside the package, so nothing is discarded in practice.  
+  Next step: same wiring as M37.2.4.2; check asserts a scope-widening derivation is refused by the route
+- **M37.2.4.4** State plainly in the handover that the new system starts without their accumulated learning, and why that is the right trade  
+  Evidence: migration/learning.py: learning_note() renders THE_SYSTEM_STARTS_WITHOUT_THEIR_ACCUMULATED_LEARNING from derivations (tested). launch.assemble handover pack does not include it and nothing imports learning.  
+  Next step: add the learning note as a section of the handover pack (launch.assemble) and serve it; then check reads it
+- **M37.4.2.4** Subprocessor list covering every model provider used  
+  Evidence: launch.py subprocessors() derives the list from provider slots that hold a key (ops.provider_keys.PROVIDER_SLOTS) and refuses an undeclared slot; tested in test_launch.py. Nothing outside launch.py calls it; no route or screen serves the subprocessor list.  
+  Next step: expose launch.subprocessors() through a route on the data or handover page and render it; then check that a provider with a key appears and one without does not
+- **M37.4.3.3** Named client owner for knowledge, grants and connectors  
+  Evidence: launch.py Owner/owner_gaps() refuses a handover pack where knowledge, grants or connectors lack a named client owner (tested). No caller outside launch.py; no table, route or page records owners (data steward appointment is a separate leaf).  
+  Next step: add a handover owners table and route feeding launch.owner_gaps, or reuse the data steward record; then check
+- **M37.4.3.5** Thirty-day post-launch review booked at handover  
+  Evidence: launch.py review_gaps(launched_on, review_booked_for) refuses a review not within thirty days (tested). No caller outside launch.py; nothing books the review (no calendar, task or table).  
+  Next step: record the review date in the handover route and surface review_gaps on the handover page; then check
+- **M37.5.1.3** Alert when a scheduled job has not run within its window  
+  Evidence: ops/controls.py overdue() builds the alert (tested), and ops/notices.py lists CONTROL_NOT_RUN with 'No channel is chosen for it yet, so nothing sends it'. Nothing calls controls.overdue; worker and schedule_runner do not.  
+  Next step: call controls.overdue from a scheduled runner using schedule_store last-run times and deliver via the notice sender to the operations alert holder; the channel choice may need a needs-rupash item
+- **M37.5.2.2** Runbook per alert  
+  Evidence: ops/controls.py runbook_for(), runbook_gaps() and Control.runbook text give each alert a runbook, checked by alerting.runbook_gaps (tested). Only registry_gaps and handover_lines call them; no route or console page serves a runbook, and no alert carries it.  
+  Next step: serve the per-control runbook on the Jobs screen or in the alert body (jobs_routes.py) via controls.runbook_for; then check
+- **M37.5.2.3** Escalation path to us where the client cannot resolve it  
+  Evidence: ops/alerting.py escalation_path(), supplier_step(), escalation_gaps() build the ladder ending at the supplier contact setting (tested). No caller outside alerting.py and no code reads SUPPLIER_CONTACT_SETTING into a sent escalation.  
+  Next step: wire escalation_path into the overdue alert flow after Runbook.escalate_after, with the supplier contact read from configuration
+- **M37.5.3.1** Measured spend against the projection after thirty days  
+  Evidence: console/spend_view.py cost_review() renders variance(projected, measured) beside post_launch_correction (tested in test_spend_view.py) but only tests call cost_review; no route in report_routes.py or spend routes serves it.  
+  Next step: add cost review to GET /report/spend (report_routes.py), reading the projection from the install record and thirty days of measured spend; then check
+- **M37.5.3.3** Budget thresholds retuned with real distribution rather than assumptions  
+  Evidence: ops/retune.py post_launch_correction() recomputes the estimator from observed distribution, returning the prior while the window is short (tested). Called only by spend_view.cost_review, which no route serves; the spend_correction control has no runner (schedule_runner.py Runner has needs=).  
+  Next step: give spend_correction a runner assembling estimate vs actual per period and call retune.post_launch_correction; surface via cost review route
+- **M37.7.5** A migration cutover cannot be recorded complete while revoking the old system's authorisations, recording the date its access ended or th...  
+  Evidence: migration/decommission.py CompletedCutover cannot be built while CUTOVER_GATED_ACTS are unrecorded and decommission_gaps names which (tested; DEC-35). Nothing records a cutover: no table, route or page, and nothing imports it.  
+  Next step: build the cutover record store and route that constructs CompletedCutover and returns the refusal text naming the unrecorded act; then check reads the refusal
+
+### M37, Class 2: partly built (5)
+
+- **M37.1.2.1** Knowledge and asset export from the old system  
+  Evidence: carry.py: Export record and export_gaps(agreed, exports) check what arrived against the agreed catalogue (tested). The exporter itself is a plugin that does not exist (src/brain/plugins has contract/points only); nothing calls carry.  
+  Next step: define the exporter plugin point in brain.plugins, then route carry.export_gaps from a migration page; check names the leaf once an export can be handed over
+- **M37.1.3.1** Both systems answering the same questions for an agreed period  
+  Evidence: parallel.py: Period and Comparison hold an agreed window and per-question answers of both systems (tested). Nothing sends a question to both systems or records comparisons; no caller outside the package.  
+  Next step: needs a runner that asks the old system via a plugin and records Comparison rows, plus a route; first build the store and recorder
+- **M37.2.2.4** Diff behaviour on a real task before and after import, not just that the file parses  
+  Evidence: migration/skills.py: BehaviourCheck and unproven() name skills with no real task run and answers that changed (tested). No store, route or caller; needs both systems to run the same task, which is person-run.  
+  Next step: build a store and route for BehaviourCheck records and show unproven() on the skill review page; the comparison itself needs a person with the old system
+- **M37.2.3.4** Map their Availability onto our availability, and their absent authority onto our entitlement, separately - conflating the two is the mis...  
+  Evidence: agents/model.py has AgentAudience and AgentAuthority as separate fields, so the native model keeps availability and entitlement apart. The foreign mapping migration.rebuild.audience_for (refuses an unmapped availability) is unwired and takes a per-company mapping.  
+  Next step: wire audience_for into a migration rebuild route that takes the person's mapping; native separation can be checked now by installing an agent and reading audience and authority separately
+- **M37.5.2.1** Alert routing and severity definitions  
+  Evidence: ops/alerting.py Severity, Route, route_for(), routing_gaps() and controls.py use route_for for each control's runbook (tested in test_alerting.py). No delivery path: notices CONTROL_NOT_RUN and BACKUP_EXPOSURE say no channel is chosen, so no alert is routed to anyone.  
+  Next step: wire alert delivery: resolve route_for's role to people and send via a channel (ops.notices sender); likely needs an owner decision on the channel
+
+### M37, Class 5: not code, owner or blocked (2)
+
+- **M37.7.6** A migration is rehearsed on a throwaway install: skills are imported and re-reviewed, agents are rebuilt from templates at Shadow with no...  
+  Evidence: A throwaway-install rehearsal of the whole migration (skills re-reviewed, agents at Shadow, cutover refused) is a person-run demonstration that needs the migration package wired first (M37.1.x, M37.2.x are unwired). Register DEC-35 and DEC-59 name it as proof.  
+  Waits on: waits on wiring of the migration package (classes 3 above) and on a person running the rehearsal on a spare install
+- **M37.7.8** Every migration requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against th...  
+  Evidence: Person-run demonstration of every migration requirement on an install, recorded against the requirement it proves; register rows GAP2-25 and others name it as proof. Depends on the migration package being wired and on the owner or a tester running it.  
+  Waits on: waits on M37.1.x and M37.2.x wiring, then on a person running it
 
