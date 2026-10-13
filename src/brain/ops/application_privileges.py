@@ -123,6 +123,12 @@ USES_EXPLAINED: Final[Mapping[tuple[str, str, str], str]] = MappingProxyType(
     {
         ("brain.ops.schedule_store", "ops.control_run", "INSERT"): _RECORDED_BY_THE_WORKER,
         ("brain.ops.schedule_store", "ops.control_run", "UPDATE"): _RECORDED_BY_THE_WORKER,
+        ("brain.ops.queue", "ops.dead_letter", "INSERT"): (
+            "keep_aside and keep_failed are DriverQueue's, called by run_queue_redrive_now on the "
+            "connection brain.ops.recovery_run opens on the queue's own URL, the owner's login and "
+            "never the application's (A_QUEUE_IS_OPENED_ON_THE_QUEUE_S_URL_AND_NEVER_THE_"
+            "APPLICATION_S), so 0231 grants brain_app SELECT alone"
+        ),
         ("brain.ops.erasure_store", "ops.erasure_request", "UPDATE"): (
             "drain_erasure_queue runs on the psycopg connection brain.ops.schedule_runner opens as "
             "the database owner, and refuses a connection row-level security narrows, because a "

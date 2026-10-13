@@ -13,7 +13,7 @@
  * each now), the "Paused by u_admin" principal ids (a name, or "somebody"), and the per-row
  * explanation of what each job keeps true (on the job's About view).
  *
- * Task ids: M27.8.13, M27.15.47, M27.16.1
+ * Task ids: M27.8.13, M27.15.47, M27.16.1, M17.1.5
  */
 
 import { MoreHorizontal } from "lucide-react";
@@ -33,6 +33,15 @@ import {
   ACTION_LABELS,
   actionsFor,
   CONTROLS_SWITCHED_OFF,
+  DEAD_LETTERS_API_PATH,
+  DEAD_LETTERS_CAPTION,
+  DEAD_LETTERS_LABEL,
+  deadLetterReasonWords,
+  NO_DEAD_LETTERS,
+  NO_DEAD_LETTERS_MORE,
+  readDeadLetters,
+  REFERENCES_OUTLIVED,
+  type DeadLetterRow,
   everyWords,
   jobAddress,
   JOBS_API_PATH,
@@ -98,6 +107,65 @@ function RowMenu({
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+export const DEAD_TASK_COLUMN = "Task";
+export const DEAD_WHY_COLUMN = "What happened";
+export const DEAD_ATTEMPTS_COLUMN = "Tries";
+export const DEAD_WHEN_COLUMN = "Set aside";
+
+/**
+ * The jobs the recovery sweep set aside for a person (M17.1.5). Answered whole and narrowed by the
+ * API per reader, so it has no search, no pager and no count of what was left out; an empty list is
+ * what a reader with nothing to see and an install with nothing set aside are both told.
+ */
+function DeadLetters() {
+  const answer = useResource<unknown>(DEAD_LETTERS_API_PATH, 0);
+  const body = answer.data === null ? null : readDeadLetters(answer.data);
+  if (body === null) {
+    return null;
+  }
+  const columns: readonly EntityColumn<DeadLetterRow>[] = [
+    {
+      id: "task",
+      header: DEAD_TASK_COLUMN,
+      hideable: false,
+      cell: (row) => <span className="font-medium text-ink">{row.task}</span>,
+      text: (row) => row.task,
+    },
+    {
+      id: "why",
+      header: DEAD_WHY_COLUMN,
+      cell: (row) => deadLetterReasonWords(row.reason),
+      text: (row) => deadLetterReasonWords(row.reason),
+    },
+    {
+      id: "attempts",
+      header: DEAD_ATTEMPTS_COLUMN,
+      cell: (row) => String(row.attempts),
+      text: (row) => String(row.attempts),
+    },
+    {
+      id: "when",
+      header: DEAD_WHEN_COLUMN,
+      cell: (row) => at(row.set_aside_at),
+      text: (row) => at(row.set_aside_at),
+    },
+  ];
+  return (
+    <WholeList
+      title={DEAD_LETTERS_LABEL}
+      caption={DEAD_LETTERS_CAPTION}
+      columns={columns}
+      rows={body.items}
+      rowId={(row) => row.job_id}
+      rowLabel={(row) => row.task}
+      exportName="jobs-set-aside"
+      empty={NO_DEAD_LETTERS}
+      emptyDescription={NO_DEAD_LETTERS_MORE}
+      footer={body.items.some((row) => !row.actionable) ? <Line>{REFERENCES_OUTLIVED}</Line> : null}
+    />
   );
 }
 
@@ -204,6 +272,7 @@ export function JobsPage() {
                 </>
               }
             />
+            <DeadLetters />
           </>
         );
       }}

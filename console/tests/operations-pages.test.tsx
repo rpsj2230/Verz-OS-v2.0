@@ -192,6 +192,26 @@ function run(id: number, outcome: string, overrides: Record<string, unknown> = {
 
 const JOB_API = "/api/v1/jobs/spend_report_refresh";
 
+function deadLetter(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    job_id: "41",
+    task: "brain.controls.run",
+    reason: "quarantined_after_a_stop",
+    attempts: 1,
+    set_aside_at: "2019-03-06T08:30:00Z",
+    actionable: true,
+    ...overrides,
+  };
+}
+
+function deadLettersPage(items: Record<string, unknown>[]): Record<string, unknown> {
+  return {
+    as_of: "2019-03-06T09:00:00Z",
+    items,
+    reasons: ["attempts_exhausted", "quarantined_after_a_stop"],
+  };
+}
+
 // --------------------------------------------------------------------------- the shapes agree
 
 describe("what the Operations pages agree with the API about", () => {
@@ -203,6 +223,8 @@ describe("what the Operations pages agree with the API about", () => {
     expect(Object.keys(jobDetail()).sort()).toEqual(backendModelFields(JOBS_ROUTES, "JobDetail").sort());
     expect(Object.keys(period("7d", 1)).sort()).toEqual(backendModelFields(JOBS_ROUTES, "JobPeriodView").sort());
     expect(Object.keys(run(1, "ok")).sort()).toEqual(backendModelFields(JOBS_ROUTES, "JobRunView").sort());
+    expect(Object.keys(deadLettersPage([])).sort()).toEqual(backendModelFields(JOBS_ROUTES, "DeadLettersPage").sort());
+    expect(Object.keys(deadLetter()).sort()).toEqual(backendModelFields(JOBS_ROUTES, "DeadLetterView").sort());
   });
 
   test("every act drawn as unavailable names no route the API document declares", () => {
@@ -294,6 +316,34 @@ describe("Background jobs", () => {
     expect(text).not.toContain("spend_report_refresh");
     expect(text).not.toContain("u_admin");
     expect(container.querySelector('a[href="/jobs/spend_report_refresh"]')).not.toBeNull();
+  });
+
+  test("a job set aside for a person is listed under the jobs with why, in words, and no job id", async () => {
+    // What breaks if this is deleted: the sweep records a job nobody will run again and the screen
+    // goes on showing only the scheduled controls, which is the gap M17.1.5 names, or the reason is
+    // shown as the constant it is stored as.
+    const { container } = await open("/jobs", {
+      "GET /api/v1/jobs": () => ({ body: jobsPage() }),
+      "GET /api/v1/jobs/dead": () => ({ body: deadLettersPage([deadLetter()]) }),
+    });
+    const text = mainText(container);
+    expect(text).toContain("Jobs set aside for a person");
+    expect(text).toContain("brain.controls.run");
+    expect(text).toContain("not safe to run twice");
+    expect(text).not.toContain("quarantined_after_a_stop");
+  });
+
+  test("with nothing set aside the section says so, and a failed read draws no section", async () => {
+    // What breaks if this is deleted: an empty queue of dead letters reads as a broken page, or a
+    // failure of the second read replaces the list of jobs above it.
+    const empty = await open("/jobs", {
+      "GET /api/v1/jobs": () => ({ body: jobsPage() }),
+      "GET /api/v1/jobs/dead": () => ({ body: deadLettersPage([]) }),
+    });
+    expect(mainText(empty.container)).toContain("No job has been set aside for you");
+    const failed = await open("/jobs", { "GET /api/v1/jobs": () => ({ body: jobsPage() }) });
+    expect(mainText(failed.container)).toContain("Spend report refresh");
+    expect(mainText(failed.container)).not.toContain("Jobs set aside for a person");
   });
 
   test("pausing is confirmed with what stops being kept true, sent once from the dialog, and the list is asked again", async () => {

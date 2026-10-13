@@ -895,6 +895,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
             NOT_RUN,
             acceptance_checks_recovery.NO_SCHEDULED_RUN_YET,
         )
+    # No job has been set aside on a new install, so the dead-letter check says so;
+    # `tests/unit/test_acceptance_checks_dead_letter.py` records one and it passes.
+    assert outcomes.pop("a_job_set_aside_is_listed_to_those_who_may_see_it")[0] == NOT_RUN
     # Nothing started the application against this database, so nothing furnished it;
     # `tests/unit/test_acceptance_operations_console.py` furnishes one and the check passes.
     assert outcomes.pop("the_install_was_furnished_once_by_the_product") == (

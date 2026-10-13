@@ -119,6 +119,20 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         no_run_can_be_stopped: true,
         every_change_is_in_the_audit_trail: true,
       },
+      "/api/v1/jobs/dead": {
+        as_of: "2019-03-06T09:00:00Z",
+        items: [
+          {
+            job_id: "41",
+            task: UNBROKEN,
+            reason: "quarantined_after_a_stop",
+            attempts: 1,
+            set_aside_at: "2019-03-06T08:30:00Z",
+            actionable: false,
+          },
+        ],
+        reasons: ["attempts_exhausted", "quarantined_after_a_stop"],
+      },
     },
   },
   // One job's Dashboard: the header's figures, the week's, and the run history on the list contract.

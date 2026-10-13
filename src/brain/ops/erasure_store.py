@@ -541,6 +541,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # request that found it used up and of the people told: actors, and a stop is the budget's
         # period rather than anybody's record (`0211`).
         "ops.budget_stop",
+        # A job set aside names its task, its class and why, and the system as its principal
+        # unless the driver row named one: an operational fact, not anybody's record (`0231`).
+        "ops.dead_letter",
         # How many answers of an agent cited a document on a day (`0213`): no question, no
         # principal and no text, so a count is about the agent's use of a document and nobody's.
         "ops.agent_item_use",

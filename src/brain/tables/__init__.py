@@ -78,6 +78,7 @@ from brain.tables.connector_sync import ConnectorSyncRow
 from brain.tables.credential import CredentialWriteRow
 from brain.tables.custom_connector import CustomConnectorRow
 from brain.tables.data_export import DataExportRow
+from brain.tables.dead_letter import DeadLetterRow
 from brain.tables.deployment_record import DeploymentRecordRow
 from brain.tables.elevation import ElevationRequestRow
 from brain.tables.entity_merge import EntityMergeRow, EntityUnmergeRow
@@ -522,6 +523,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0211_budget_stop. Points at nothing: the ceiling, the principal and the recipients are
     # values, so a stop's row outlives a ceiling's next version and a person leaving.
     "ops.budget_stop",
+    # 0231_dead_letter. Points at nothing: the driver's job is a value, so a row outlives the
+    # driver's own cleaning of finished jobs.
+    "ops.dead_letter",
     # 0213_agent_item_use. Points at nothing: the agent and the document are values.
     "ops.agent_item_use",
     # 0217_alert_acknowledgement. Points at nothing: the subject is a source's name and the person
@@ -594,6 +598,7 @@ __all__ = [
     "CredentialWriteRow",
     "CustomConnectorRow",
     "DataExportRow",
+    "DeadLetterRow",
     "DepartmentLeadRow",
     "DepartmentRow",
     "DeploymentRecordRow",
