@@ -55,6 +55,48 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         ],
         told: UNBROKEN,
       },
+      "/api/v1/me/devices": {
+        devices: [
+          {
+            session_id: UNBROKEN,
+            channel: UNBROKEN,
+            second_factor: true,
+            started_at: "2019-03-01T09:00:00Z",
+            expires_at: "2019-03-01T17:00:00Z",
+            is_this_one: false,
+          },
+        ],
+        more: false,
+      },
+      "/api/v1/me/reads": {
+        reads: [
+          { at: "2019-03-01T09:00:00Z", actor_id: UNBROKEN, agent_id: UNBROKEN, record_kind: UNBROKEN },
+        ],
+        more: false,
+      },
+      "/api/v1/me/artifacts": {
+        artifacts: [
+          {
+            artifact_id: UNBROKEN,
+            kind: UNBROKEN,
+            agent_id: UNBROKEN,
+            produced_for: UNBROKEN,
+            produced_at: "2019-03-01T09:00:00Z",
+            state: "current",
+            superseded_by: "",
+            run_id: UNBROKEN,
+            agent_version: "1",
+            kept_as: UNBROKEN,
+            kept_until: "",
+            kept_because: UNBROKEN,
+          },
+        ],
+        more: false,
+      },
+      "/api/v1/me/stored": {
+        stores: [{ store: UNBROKEN, holds: UNBROKEN, deletion: UNBROKEN }],
+        told: UNBROKEN,
+      },
       "/api/v1/me/accounts": {
         accounts: [{ connector: "xero", label: UNBROKEN, connected: false, told: "" }],
         told: UNBROKEN,
