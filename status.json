@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-13T16:31:30.891015+00:00",
-  "commit": "e9f54594",
-  "commit_subject": "Plugins can be recorded, switched on and off, upgraded and returned from the Features page, behind a switch that ships off (M29.1.2, M29.1.3, M29.1.4, M29.1.5, M29.1.7, M29.1.12, M29.2.1, M29.2.2, M29.2.3, M29.2.6) (#573)",
+  "generated_at": "2026-10-13T16:40:51.497802+00:00",
+  "commit": "2078f398",
+  "commit_subject": "Install checks for the delegation table, a rebuilt agent, an added skill, adoption, the scheduler and modularity (M18.3.1, M18.3.2, M18.3.3, M29.3.1, M37.2.2.3, M37.2.3.1, M37.2.3.2, M37.2.3.3, M37.3.2.4, M37.5.1.2, M37.5.1.4) (#569)",
   "total": 1625,
   "done": 864,
   "percent": 53.2,
