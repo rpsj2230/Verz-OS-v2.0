@@ -100,7 +100,7 @@ async def corrections_of(h: Harness, memory_ids: list[str]) -> list[tuple[str, s
 
 # --------------------------------------------- M16.4.2, M33.3.1.4 edited, forgotten, kept
 @check(
-    leaves=("M16.4.2", "M33.3.1.4"),
+    leaves=("M16.4.2", "M33.3.1.4", "M40.2.1.4"),
     sentence=(
         "A person edits a memory they formed on Ask and then forgets it, through their own Edit "
         "and Forget: each change is marked and nothing is deleted, the old words stay in the "

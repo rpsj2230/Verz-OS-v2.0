@@ -58,7 +58,7 @@ AN_UNAPPROVED_ACTION_RAN: Final = (
 
 
 @check(
-    leaves=("M13.7.6",),
+    leaves=("M13.7.6", "M40.6.1.3"),
     sentence=(
         "Four of an installed agent's actions held for a person, one approved, one pending, one "
         "rejected and one approved and lapsed: the worker's run carries out the approved one "

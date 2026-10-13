@@ -101,6 +101,7 @@ Scope: domain logic. Nothing here opens a connection or reads a clock; rows, the
 instant arrive as arguments.
 
 Task ids: M42.6.4, M12.2.2, M12.2.3, M12.2.4, M12.2.6, M12.3.2, M12.4.6, M12.4.13, M27.15.55
+Task ids: M12.3.3, M12.4.10, M12.4.14
 Task ids: M12.3.1
 Task ids: M12.2.10
 """
@@ -131,11 +132,13 @@ from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.console.workspace import Attachment, Composition, Part
 from brain.console.workspace_capabilities import run_reach
+from brain.core.department import DEPARTMENT_FIELD
 from brain.core.entitlement import Capability, EntitlementSet
-from brain.gate.catalogue import EmptyCatalogueError
+from brain.gate.catalogue import EmptyCatalogueError, within_ceiling
 from brain.tools.extract import MAX_MEMBERS, _is_regular
 from brain.tools.registry import ToolRegistry
 from brain.tools.review import QueueEntry, pending
+from brain.tools.skill_draft import SkillDraft
 from brain.tools.skill_examples import examples_of
 from brain.tools.skills import (
     MAX_SCRIPT_BYTES,
@@ -362,6 +365,10 @@ MAX_ADDRESS_CHARS: Final = 400
 
 #: The version a procedure's first import is given, and how a later one moves it.
 FIRST_PROCEDURE_VERSION: Final = "1.0.0"
+
+#: The name a drafted skill's upload is kept under, in the archive-member grammar: where it came
+#: from, and nothing about what it says.
+DRAFTED_SOURCE: Final = "described-in-conversation.md"
 
 #: What a procedure's description says. A Word document has no line saying when to use it, and
 #: every skill's description has to open by saying so (M12.4.12).
@@ -1032,6 +1039,32 @@ def procedure_package(procedure: Procedure, library: Iterable[LibrarySkill]) -> 
     return Package(skill=_skill_of(text), source=procedure.source)
 
 
+def drafted_package(draft: SkillDraft, library: Iterable[LibrarySkill]) -> Package:
+    """A skill drafted from a person's description, as a package every way in treats alike.
+
+    The draft's `SKILL.md` is read back through `_skill_of`, the parser a pasted package goes
+    through, and kept as an upload of that text under a name saying where it came from, with the
+    digest of the bytes written: the same source an import is, so the library, the queue and the
+    review cannot tell a drafted skill from a pasted one, which is the point. A name the library
+    already holds is refused, not versioned: a described skill is a new skill, and a second one
+    under a held name would be an edit nobody asked for. See
+    `brain.tools.skill_draft.A_DRAFTED_SKILL_IS_AN_IMPORT_AND_NOTHING_MORE_TRUSTED`.
+    """
+    for one in library:
+        if one.name == draft.skill.name:
+            raise _refused(
+                f"the library already holds a skill named {one.name}; describe this one under "
+                "another name, or edit that one"
+            )
+    text = draft.markdown
+    source = SkillSource(
+        kind=SourceKind.UPLOAD,
+        location=DRAFTED_SOURCE,
+        content_digest=hashlib.sha256(text.encode("utf-8")).hexdigest(),
+    )
+    return Package(skill=_skill_of(text), source=source)
+
+
 def procedure_findings(one: LibrarySkill) -> tuple[Finding, ...]:
     """What a reviewer should see about a procedure's draft, read from its body now.
 
@@ -1403,6 +1436,61 @@ def reach_through(
         return ()
 
 
+# ------------------------------------------------------------ what a skill needs of an agent
+#: Why an assignment is refused for a need, and what the refusal says.
+AN_ASSIGNMENT_NAMES_WHAT_THE_AGENT_LACKS_AND_WIDENS_NOTHING: Final = (
+    "A skill that cannot do what it says is worse than none, so a skill whose tools or knowledge "
+    "the agent's own ceiling does not cover is refused, and the refusal says which. It never "
+    "widens the agent: only the publish gate does that (needs-rupash 178 and 179)."
+)
+
+
+@dataclass(frozen=True)
+class Missing:
+    """What a skill needs that an agent's own ceiling does not give it. Names, never a count."""
+
+    #: Tools the skill names that the agent may not reach: not in its allowed tools, above its side
+    #: effect ceiling, or registered nowhere on this install. Sorted.
+    tools: tuple[str, ...] = ()
+    #: Departments whose knowledge the skill needs and the agent's scope does not cover. Sorted.
+    departments: tuple[str, ...] = ()
+
+    def __bool__(self) -> bool:
+        return bool(self.tools or self.departments)
+
+    def sentence(self, agent: str) -> str:
+        """The refusal in words: what the agent cannot reach, and that nothing was widened."""
+        parts: list[str] = []
+        if self.tools:
+            parts.append(f"cannot reach the tool {', '.join(self.tools)}")
+        if self.departments:
+            parts.append(f"has no knowledge of {', '.join(self.departments)}")
+        return f"{agent} {' and '.join(parts)}"
+
+
+def missing_for(skill: Skill, record: AgentRecord, registry: ToolRegistry) -> Missing:
+    """What this skill needs that this agent's own ceiling leaves out (M12.3.3, M12.4.10).
+
+    The agent alone, and not the person assigning or any later caller: the question is whether the
+    skill could work through this agent for anybody, which is `brain.gate.catalogue.within_ceiling`
+    for each tool and, for each department, whether the agent's scope admits a row of it. An
+    unrestricted scope narrows nothing, so it covers every department, as it does at run time. A
+    tool no registry holds is missing too, said as a tool the agent cannot reach. See
+    `AN_ASSIGNMENT_NAMES_WHAT_THE_AGENT_LACKS_AND_WIDENS_NOTHING`.
+    """
+    ceiling = tool_ceiling(record)
+    tools = tuple(
+        name
+        for name in skill.tools
+        if not registry.has(name) or not within_ceiling(registry.get(name).definition, ceiling)
+    )
+    scope = record.authority.scope
+    departments = tuple(
+        name for name in skill.knowledge if not scope.matches({DEPARTMENT_FIELD: name})
+    )
+    return Missing(tools=tools, departments=departments)
+
+
 # ------------------------------------------------------------------------ assigning a skill
 @dataclass(frozen=True)
 class Assignment:
@@ -1467,8 +1555,14 @@ def assignment(
     by: EntitlementSet,
     recorder: AuditRecorder,
     now: datetime,
+    needs_registry: ToolRegistry | None = None,
 ) -> Assignment:
     """Assign one approved skill to one agent through `register_skill`, or refuse.
+
+    `needs_registry` is the install's tool registry when the skill's needs are to be checked, and
+    None when they are not (the switch is off, `brain.ops.features.SKILL_NEEDS`): a skill whose
+    tools or knowledge the agent lacks is then refused with `missing_for`'s sentence, before
+    anything is attached. The route reads the switch, so this stays a decision and not a read.
 
     The composition is the agent's current pins. The same bytes already there is refused, because
     an assignment that changes nothing would record a change. Another version of the same skill is
@@ -1480,6 +1574,13 @@ def assignment(
     The install is `set_field` on `skills` and nothing else, materialised again, and the authority
     before and after is compared. See `A_SKILL_NEVER_WIDENS_AN_AGENT_PAST_ITS_CALLER`.
     """
+    if needs_registry is not None:
+        lacks = missing_for(one.imported.skill, record, needs_registry)
+        if lacks:
+            raise SkillLibraryError(
+                f"nothing was assigned: {lacks.sentence(record.display_name)}. "
+                f"{AN_ASSIGNMENT_NAMES_WHAT_THE_AGENT_LACKS_AND_WIDENS_NOTHING}"
+            )
     before = materialise(signed, instance, audience=record.audience)
     composition = pins_on(signed, instance, record)
     same = [pin for pin in composition.attached_to(Part.SKILLS) if pin.ref == one.name]

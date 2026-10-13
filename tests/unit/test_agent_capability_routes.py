@@ -32,7 +32,7 @@ from brain.core.scope import Scope
 from brain.knowledge.visibility import Visibility
 from brain.tables.agent import AgentRow
 from brain.tables.attachment import ToolAttachmentRow
-from tests.fixtures.console_http import Stub, console_client, get, headers
+from tests.fixtures.console_http import Stub, console_client, get, headers, no_audience_extras
 from tests.fixtures.setting_rows import Result, Row
 from tests.unit.test_agent_routes import agent_row, install_rows
 from tests.unit.test_connector_routes import Records
@@ -100,6 +100,7 @@ class NoAttempts:
 @pytest.fixture
 def served() -> Iterator[tuple[TestClient, Stub]]:
     with console_client(GRANTS, routers=(router,)) as (client, stub):
+        stub.answerers.append(no_audience_extras)
         stub.answerers.append(answer)
         state = client.app.state  # type: ignore[attr-defined]
         state.connector_records = Records(())

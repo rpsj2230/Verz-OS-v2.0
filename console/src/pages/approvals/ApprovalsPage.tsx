@@ -24,7 +24,7 @@ import { Button } from "../../components/ui/button";
 import { WaitingPublishes } from "../agents/WaitingPublishes";
 import { APPROVALS_API_PATH, readApprovalQueue } from "../approvalsQuery";
 import { nameOf, peopleIn } from "../review/parts";
-import { ApprovalCard, DecisionControls, said, type Verdict } from "./ApprovalCard";
+import { ApprovalCard, DecisionControls, said, type Confirmation } from "./ApprovalCard";
 
 /** Why the page moves focus to the sentence confirming a decision. */
 export const A_CONFIRMATION_IS_DRAWN_WHERE_THE_THUMB_IS =
@@ -35,7 +35,8 @@ export const A_CONFIRMATION_IS_DRAWN_WHERE_THE_THUMB_IS =
   "screen and has a screen reader read it, and only after the API has confirmed the decision.";
 
 export const APPROVALS_HEADING = "Approvals";
-export const APPROVALS_LEDE = "Actions waiting for you to decide, soonest to lapse first.";
+export const APPROVALS_LEDE =
+  "Actions waiting for you to decide, soonest to lapse first. One nobody decides lapses, and nothing is done.";
 export const NO_APPROVALS = "Nothing is waiting for you.";
 export const NO_APPROVALS_MORE = "An approval appears here when an agent asks before acting on something you may decide.";
 export const MORE_APPROVALS = "There are more approvals than this page shows.";
@@ -66,7 +67,7 @@ export function useConfirmationInView(sentence: RefObject<HTMLParagraphElement |
 }
 
 /** The sentence saying what the last confirmed decision was, which takes focus. */
-export function Confirmed({ verdict, sentence }: { readonly verdict: Verdict | null; readonly sentence: RefObject<HTMLParagraphElement | null> }) {
+export function Confirmed({ verdict, sentence }: { readonly verdict: Confirmation | null; readonly sentence: RefObject<HTMLParagraphElement | null> }) {
   if (verdict === null) {
     return null;
   }
@@ -79,8 +80,8 @@ export function Confirmed({ verdict, sentence }: { readonly verdict: Verdict | n
 
 export function ApprovalsPage() {
   const [round, setRound] = useState(0);
-  const [last, setLast] = useState<Verdict | null>(null);
-  const decided = useCallback((verdict: Verdict) => {
+  const [last, setLast] = useState<Confirmation | null>(null);
+  const decided = useCallback((verdict: Confirmation) => {
     setLast(verdict);
     setRound((one) => one + 1);
   }, []);

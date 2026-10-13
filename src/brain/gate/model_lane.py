@@ -1255,6 +1255,7 @@ async def draft(
         task=offered_cards(offered),
         asker=lane.hints,
         knowledge=payload,
+        kinds=None if agent is None else agent.record.memory_kinds,
     )
     cards = parts.task
     # The model writes the prose, so its call is the composing step and follows the redactor.

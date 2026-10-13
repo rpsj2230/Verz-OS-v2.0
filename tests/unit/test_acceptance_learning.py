@@ -28,7 +28,7 @@ MODULE = "brain.ops.acceptance_checks_learning"
 
 #: Each learning check and the leaves it proves.
 LEAVES = {
-    "a_person_edits_and_forgets_their_own_memory": ("M16.4.2", "M33.3.1.4"),
+    "a_person_edits_and_forgets_their_own_memory": ("M16.4.2", "M33.3.1.4", "M40.2.1.4"),
     "a_person_forgets_everything_learned_about_them_in_one_press": ("M40.4.1.2",),
     "every_learned_change_is_held_at_the_tier_its_reach_needs": ("M16.3.5", "M16.3.6"),
     "a_conversation_learning_is_reviewed_and_undone": ("M27.7.21",),

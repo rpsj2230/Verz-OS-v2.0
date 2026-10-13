@@ -8,6 +8,7 @@
  */
 
 import { EXPORTS_API_PATH } from "../../../src/pages/dataTransferQuery";
+import { ACKNOWLEDGE_API_PATH } from "../../../src/pages/incidentsQuery";
 import { actionPath } from "../../../src/pages/jobsQuery";
 import { LEARNING_SETTINGS_API_PATH } from "../../../src/pages/learningQuery";
 import { HALTS_API_PATH, RESUME_API_PATH } from "../../../src/pages/stopQuery";
@@ -35,6 +36,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/jobs/{name}/resume", "actionPath", actionPath("resume", "spend_report_refresh")),
     at("POST /api/v1/jobs/{name}/run", "actionPath", actionPath("run", "spend_report_refresh")),
   ],
+  "src/pages/operations/IncidentsPage.tsx ACKNOWLEDGE_API_PATH": [
+    at("POST /api/v1/console/incidents/acknowledgement", "ACKNOWLEDGE_API_PATH", ACKNOWLEDGE_API_PATH),
+  ],
   // One card, two screens: the Rate limits screen's knobs and the Learning screen's (M16.6.8).
   "src/pages/operations/LimitSettings.tsx knobPath(screen.path, knob.name)": [
     at("PUT /api/v1/install/tuning/{name}", "knobPath", knobPath(TUNING_API_PATH, "person_per_minute")),
@@ -43,6 +47,18 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
 };
 
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/console/incidents/acknowledgement": {
+    row: t("test_acceptance_checks_alert_ack", "test_the_check_passes_on_an_install_and_leaves_nothing", true),
+    audit: {
+      notApplicable:
+        "An acknowledgement changes nobody's access and no configuration, so it has no ledger entry of its own: the ops.alert_acknowledgement row, written once in the presser's own name and refused any rewrite, is the record of who and when.",
+    },
+    behaviour: t(
+      "test_acceptance_checks_alert_ack",
+      "test_a_press_open_to_a_reader_of_one_department_fails_the_check",
+      true,
+    ),
+  },
   "POST /api/v1/halts": {
     row: A_STOP_AND_ITS_RESUME_ARE_ROWS_AND_ENTRIES,
     audit: A_STOP_AND_ITS_RESUME_ARE_ROWS_AND_ENTRIES,

@@ -24,7 +24,7 @@ import {
 } from "../../components/kit";
 import { approvalApiPath, readApprovalCard } from "../approvalsQuery";
 import { nameOf, peopleIn, Pill, whenWords } from "../review/parts";
-import { APPROVALS_ADDRESS, ApprovalCard, DecisionControls, type Verdict } from "./ApprovalCard";
+import { APPROVALS_ADDRESS, ApprovalCard, DecisionControls, type Confirmation } from "./ApprovalCard";
 import { APPROVALS_HEADING, Confirmed, useConfirmationInView } from "./ApprovalsPage";
 
 export const READING_APPROVAL = "Reading the approval.";
@@ -37,7 +37,7 @@ function titleOf(request: string): string {
 
 export function ApprovalPage({ suspensionId }: { readonly suspensionId: string }) {
   const answer = useResource<unknown>(approvalApiPath(suspensionId));
-  const [decided, setDecided] = useState<Verdict | null>(null);
+  const [decided, setDecided] = useState<Confirmation | null>(null);
   const sentence = useRef<HTMLParagraphElement | null>(null);
   useConfirmationInView(sentence, decided === null ? 0 : 1);
   const people = useMemo(() => peopleIn(answer.data), [answer.data]);
@@ -69,6 +69,8 @@ export function ApprovalPage({ suspensionId }: { readonly suspensionId: string }
           pills={
             decided === null ? (
               <Pill tone="warn">Waiting for you</Pill>
+            ) : decided === "approved_first" ? (
+              <Pill tone="warn">Waiting for a second person</Pill>
             ) : decided === "approved" ? (
               <Pill tone="ok">Approved</Pill>
             ) : decided === "taken_over" ? (

@@ -164,6 +164,7 @@ export interface Offered {
   readonly newVersion: boolean;
   readonly propose: boolean;
   readonly handOver: boolean;
+  readonly archive: boolean;
 }
 
 export interface DocumentPage {
@@ -205,6 +206,7 @@ export function readDocumentPage(payload: unknown): DocumentPage | null {
       newVersion: offered?.["new_version"] === true,
       propose: offered?.["propose"] === true,
       handOver: offered?.["hand_over"] === true,
+      archive: offered?.["archive"] === true,
     },
     ...optional("promotionWaits", said(fields["promotion_waits"])),
   };
