@@ -40,6 +40,12 @@ if TYPE_CHECKING:
 #: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
 CHECK_ORDER: Final = 1510
 
+#: Why the check is not run where no cost can be counted against a cap.
+CURRENCY_DOES_NOT_RESOLVE: Final = (
+    "this install's currency does not resolve, so no cost can be counted against a cap"
+)
+NO_CURRENCY_SET: Final = "this install has no currency set, so no cost can be counted against a cap"
+
 # What the check says, one sentence for each way the property can fail.
 ASKED_WITH_THE_SWITCH_OFF: Final = "the model was asked for a visitor with the switch off"
 NO_MODEL_ANSWER: Final = "a visitor was not given the model's answer with the switch on"
@@ -85,13 +91,9 @@ async def _priced(h: Harness) -> str:
     try:
         code = install_currency()
     except (LocaleError, Failed):
-        raise CheckNotRunError(
-            "this install's currency does not resolve, so no cost can be counted against a cap"
-        ) from None
+        raise CheckNotRunError(CURRENCY_DOES_NOT_RESOLVE) from None
     if code == NO_CURRENCY_CODE:
-        raise CheckNotRunError(
-            "this install has no currency set, so no cost can be counted against a cap"
-        )
+        raise CheckNotRunError(NO_CURRENCY_SET)
     price = Price(input_minor=Decimal(1_000_000), output_minor=Decimal(1_000_000), currency=code)
     from brain.ops.acceptance_run import SET_UP_REACH
     from brain.tables.audit import attributed_to
