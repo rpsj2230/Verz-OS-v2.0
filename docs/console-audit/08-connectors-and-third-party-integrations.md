@@ -1,9 +1,9 @@
 ### Connectors and third-party integrations
 
 - **Screens:** `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`, `/channels`, `/channels/:name`, `/channels/:name/:view`, `/connector-consent`, `/connectors/new-api`, `/incidents`
-- **Tables:** `auth.binding_code`, `ops.channel`, `ops.channel_delivery`, `ops.connector_connection`, `ops.connector_sync`, `ops.oauth_consent`, `ops.custom_connector`, `proj.record`, `proj.record_retired`, `proj.source_epoch`, `er.alias`, `er.canonical`, `er.identifier`, `er.link`
+- **Tables:** `auth.binding_code`, `ops.channel`, `ops.channel_delivery`, `ops.connector_connection`, `ops.connector_sync`, `ops.alert_acknowledgement`, `ops.oauth_consent`, `ops.custom_connector`, `proj.record`, `proj.record_retired`, `proj.source_epoch`, `er.alias`, `er.canonical`, `er.identifier`, `er.link`
 - **Installation values:** `INSTALL_LARK_USES`, `INSTALL_LARK_PLATFORM`, `INSTALL_LARK_BASE`, `INSTALL_LARK_CARD_APPROVALS`
-- **Measured here:** 45 routes, 5 called by no screen; 21 write routes, 16 with all three proofs; 4 gaps.
+- **Measured here:** 46 routes, 6 called by no screen; 21 write routes, 16 with all three proofs; 4 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -45,6 +45,7 @@
 | `POST /api/v1/connectors/{connector}/key` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`, `/staff_sources` |
 | `POST /api/v1/connectors/{connector}/probe` | `/connectors/:connector`, `/connectors/:connector/:view` |
 | `POST /api/v1/connectors/{connector}/steward` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`, `/staff_sources` |
+| `POST /api/v1/console/incidents/acknowledgement` | **no screen** |
 | `POST /api/v1/custom-connectors` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view` |
 | `POST /api/v1/custom-connectors/{name}` | **no screen** |
 | `POST /api/v1/custom-connectors/{name}/review` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view` |

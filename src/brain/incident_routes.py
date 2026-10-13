@@ -27,7 +27,16 @@ an empty blocked list beside a down source reads as a harmless incident. See
 `brain.install_routes.AN_UNREAD_SOURCE_IS_NOT_AN_EMPTY_ONE`: "nothing is degraded" is the
 reassuring answer, and it would be given by a process that looked at nothing.
 
-Task ids: M27.2.7
+**An incident can be acknowledged, and that stops its repeat notice and hides nothing.** A person
+who holds the screen across the whole install presses once and the row names who and when
+(`brain.ops.alert_acknowledgement`, `0224`); the incident stays listed in the state the worker
+found. The control is offered to that reader alone (`may_acknowledge`), and the press is refused
+to anybody else in the one answer every refusal here gives, so a department-scoped reader is not
+told there is a button. Only an incident this reader is shown can be acknowledged: naming a
+source that is not degraded, or not theirs to be told of, is the same refusal. See
+`AN_ACKNOWLEDGEMENT_STOPS_THE_REPEAT_AND_NEVER_HIDES_THE_INCIDENT`.
+
+Task ids: M27.2.7, M27.15.45
 """
 
 from __future__ import annotations
@@ -37,19 +46,28 @@ from typing import Final
 
 import structlog
 from fastapi import APIRouter, Request
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from brain.agent_routes import steward_names
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked
 from brain.connector_routes import records_of, sync_records_of
 from brain.connectors.contract import ConnectorContractError, HealthState
 from brain.connectors.manifest import ConnectorManifest
 from brain.console.connector_trust import admitted_connections
+from brain.console.department_console import held_across_the_install
 from brain.console.operate import incidents
 from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.core.errors import Absent
+from brain.ops.alert_acknowledgement import (
+    AN_ACKNOWLEDGEMENT_STOPS_THE_REPEAT_AND_NEVER_HIDES_THE_INCIDENT,
+    acknowledge,
+    acknowledgements,
+)
 from brain.ops.connectable import NotConnectableError, manifest_for
+from brain.routing_routes import sessions_of
+from brain.tables.alert_acknowledgement import AlertKind
 
 log = structlog.get_logger()
 
@@ -114,11 +132,17 @@ class IncidentView(BaseModel):
     #: The tools that stop working, in the order the source declares them.
     blocks: list[str]
     blocks_unknown: str = ""
+    #: Who acknowledged it and when, or empty and none. Together or not at all.
+    acknowledged_by: str = ""
+    acknowledged_at: datetime | None = None
 
     @model_validator(mode="after")
     def _blocks_or_why_not(self) -> IncidentView:
         if bool(self.blocks) == bool(self.blocks_unknown):
             msg = "an incident names what it blocks or says why it cannot, never both or neither"
+            raise ValueError(msg)
+        if bool(self.acknowledged_by) != (self.acknowledged_at is not None):
+            msg = "an acknowledgement names who and when together, or neither"
             raise ValueError(msg)
         return self
 
@@ -132,25 +156,47 @@ class IncidentsView(BaseModel):
     #: Why there is no list, on a process that cannot read the attempts. Empty otherwise.
     unread: str = ""
     told: str = WHERE_THIS_COMES_FROM
+    #: Whether this reader is offered the acknowledge control: the screen held across the whole
+    #: install, and a database to write the acknowledgement to.
+    may_acknowledge: bool = False
+    #: The words of what acknowledging does, shown beside the control.
+    acknowledging_means: str = AN_ACKNOWLEDGEMENT_STOPS_THE_REPEAT_AND_NEVER_HIDES_THE_INCIDENT
+
+
+class AcknowledgementAsked(BaseModel):
+    """Which incident, as the listing drew it: the source's name and when it began."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    subject: str = Field(min_length=1, max_length=128)
+    since: datetime
 
 
 # ------------------------------------------------------------------------- the route
 router = APIRouter(prefix=API_PREFIX, tags=["operate"])
 
 
-@router.get(INCIDENTS_PATH, response_model=IncidentsView, responses=COMMON_RESPONSES)
-async def incidents_screen(request: Request, asked: Asked) -> IncidentsView:
-    """Every source this reader may be told of that is degraded now, with what it blocks.
+#: Where an incident is acknowledged.
+ACKNOWLEDGE_PATH: Final = "/console/incidents/acknowledgement"
+
+
+def _not_answerable() -> Absent:
+    """The one refusal this screen makes, for a read and for an acknowledgement alike."""
+    return Absent(f"the {INCIDENTS_SCREEN} screen is not answerable for this caller")
+
+
+async def _current(request: Request, asked: Asked) -> list[IncidentView] | None:
+    """Every incident this reader may be told of, or None when this process reads no records.
 
     The screen's read first, then the connections, then the worker's attempts for the connections
     this reader may be told of and no others.
     """
     if not permitted(screen(INCIDENTS_SCREEN).read, asked.reach, asked.now):
         log.info("incidents not answerable", principal=asked.caller.principal.id)
-        raise Absent(f"the {INCIDENTS_SCREEN} screen is not answerable for this caller")
+        raise _not_answerable()
     records = records_of(request)
     if records is None:
-        return IncidentsView(items=[], unread=NOTHING_HERE_READS_THE_ATTEMPTS)
+        return None
     shown = admitted_connections(await records.connected(), asked.reach, asked.now)
     sync = sync_records_of(request)
     synced = {} if sync is None or not shown else await sync.states()
@@ -175,18 +221,94 @@ async def incidents_screen(request: Request, asked: Asked) -> IncidentsView:
             continue
         named.append((manifest, state.health.value, state.finished_at))
     found = incidents(named, [one.connector for one in shown])
+    return [
+        *(
+            IncidentView(
+                subject=one.subject,
+                state=one.state,
+                since=one.since,
+                blocks=list(one.blocks),
+                blocks_unknown="" if one.blocks else WHAT_IT_BLOCKS_IS_NOT_KNOWN,
+            )
+            for one in found
+        ),
+        *unnamed,
+    ]
+
+
+async def _with_acknowledgements(
+    request: Request, listed: list[IncidentView]
+) -> list[IncidentView]:
+    """These incidents with who acknowledged each and when, where somebody has."""
+    factory = sessions_of(request)
+    if factory is None or not listed:
+        return listed
+    async with factory() as session:
+        kept = await acknowledgements(session, AlertKind.INCIDENT, {one.subject for one in listed})
+        names = await steward_names(session, sorted({one.by for one in kept.values()}))
+    return [
+        one.model_copy(
+            update={
+                "acknowledged_by": names.get(kept[(one.subject, one.since)].by, "someone"),
+                "acknowledged_at": kept[(one.subject, one.since)].at,
+            }
+        )
+        if (one.subject, one.since) in kept
+        else one
+        for one in listed
+    ]
+
+
+@router.get(INCIDENTS_PATH, response_model=IncidentsView, responses=COMMON_RESPONSES)
+async def incidents_screen(request: Request, asked: Asked) -> IncidentsView:
+    """Every source this reader may be told of that is degraded now, with what it blocks, and who
+    acknowledged it."""
+    listed = await _current(request, asked)
+    if listed is None:
+        return IncidentsView(items=[], unread=NOTHING_HERE_READS_THE_ATTEMPTS)
     return IncidentsView(
-        items=[
-            *(
-                IncidentView(
-                    subject=one.subject,
-                    state=one.state,
-                    since=one.since,
-                    blocks=list(one.blocks),
-                    blocks_unknown="" if one.blocks else WHAT_IT_BLOCKS_IS_NOT_KNOWN,
-                )
-                for one in found
-            ),
-            *unnamed,
-        ]
+        items=await _with_acknowledgements(request, listed),
+        may_acknowledge=_may_acknowledge(request, asked),
+    )
+
+
+def _may_acknowledge(request: Request, asked: Asked) -> bool:
+    """Whether the control is offered: the screen held across the whole install, with a database."""
+    return sessions_of(request) is not None and held_across_the_install(
+        screen(INCIDENTS_SCREEN), asked.reach, asked.now
+    )
+
+
+@router.post(ACKNOWLEDGE_PATH, response_model=IncidentView, responses=COMMON_RESPONSES)
+async def acknowledge_incident(
+    request: Request, asked: Asked, which: AcknowledgementAsked
+) -> IncidentView:
+    """Acknowledge one incident the reader is shown: who and when are kept, the repeat stops.
+
+    Refused in one answer to a reader who does not hold the screen across the whole install, to one
+    who is not shown this incident, and to a process with no database, so the refusal says nothing
+    about which of the three it was. The first person to press is the one recorded.
+    """
+    if not _may_acknowledge(request, asked):
+        raise _not_answerable()
+    listed = await _current(request, asked) or []
+    one = next(
+        (item for item in listed if item.subject == which.subject and item.since == which.since),
+        None,
+    )
+    factory = sessions_of(request)
+    if one is None or factory is None:
+        raise _not_answerable()
+    async with factory() as session:
+        done = await acknowledge(
+            session,
+            kind=AlertKind.INCIDENT,
+            subject=one.subject,
+            since=one.since,
+            by=asked.caller.principal.id,
+        )
+        names = await steward_names(session, [done.by])
+        await session.commit()
+    return one.model_copy(
+        update={"acknowledged_by": names.get(done.by, "someone"), "acknowledged_at": done.at}
     )
