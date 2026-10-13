@@ -440,6 +440,29 @@ ORCHESTRATION_REHEARSAL: Final = Feature(
     read_by=("brain.orchestration_routes:rehearse", "brain.orchestration_routes:decisions"),
 )
 
+#: Recording plugins on the install and moving them between states. Off because it is a new way to
+#: put something from outside on an install, and what it records is not run: no runner exists for
+#: the points that take code, so an enabled plugin changes a row and nothing else (M29.2.3).
+PLUGIN_REGISTRY: Final = Feature(
+    name="plugin_registry",
+    title="Record plugins on this install",
+    what=(
+        "An administrator of plugins may add a plugin by its manifest, switch it on, move it to a "
+        "later version of itself and return it to one that has run here. The manifest is refused "
+        "if it asks for reach, names a point no plugin may take, or is outside this release's "
+        "range. Nothing is loaded or run: this keeps the record a runner will read."
+    ),
+    while_off=(
+        "No plugin can be added, switched on, upgraded or rolled back, and the list says so. A "
+        "plugin recorded while this was on stays recorded, and can still be switched off and "
+        "removed."
+    ),
+    read_by=(
+        "brain.plugin_routes:plugins",
+        "brain.plugin_routes:_switched_on",
+    ),
+)
+
 #: Every feature this product can switch on, in the order the screen lists them.
 FEATURES: Final[tuple[Feature, ...]] = (
     PROMPT_EDITING,
@@ -455,6 +478,7 @@ FEATURES: Final[tuple[Feature, ...]] = (
     SKILL_DRAFTING,
     AUTOMATION_AUTHORING,
     STARTER_SKILLS_SWITCH,
+    PLUGIN_REGISTRY,
     ORCHESTRATION_REHEARSAL,
 )
 
