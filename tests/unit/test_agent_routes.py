@@ -515,6 +515,7 @@ def test_the_roster_lists_the_agents_the_callers_audience_covers(
             "display_name": "Company Desk",
             "owner_id": "u_steward",
             "department": None,
+            "agent_kind": "team",
             "ceiling": None,
             "owner_name": "Steward One",
             "state": None,
@@ -525,6 +526,7 @@ def test_the_roster_lists_the_agents_the_callers_audience_covers(
             "display_name": "My Notes",
             "owner_id": "u_narrow",
             "department": None,
+            "agent_kind": "personal",
             "ceiling": None,
             "owner_name": "Person u_narrow",
             "state": None,
@@ -535,6 +537,7 @@ def test_the_roster_lists_the_agents_the_callers_audience_covers(
             "display_name": "Web Helper",
             "owner_id": "u_steward",
             "department": "web",
+            "agent_kind": "team",
             "ceiling": None,
             "owner_name": "Steward One",
             "state": None,
@@ -685,6 +688,7 @@ def test_no_roster_answer_carries_a_count_of_anything(client: TestClient, stored
         "display_name",
         "owner_id",
         "department",
+        "agent_kind",
         "ceiling",
         "owner_name",
         "state",
@@ -891,6 +895,7 @@ def test_the_header_is_the_agent_its_steward_and_its_lineage_whoever_may_open_it
         "state": None,
         "leash_up_to": None,
         "department": None,
+        "agent_kind": "team",
         "template_name": "Pricing desk",
     }
 
@@ -1141,6 +1146,7 @@ def test_an_install_that_does_not_construct_is_an_agent_with_no_lineage_and_no_c
         "state": "enabled",
         "leash_up_to": None,
         "department": None,
+        "agent_kind": "team",
         "template_name": None,
     }
     assert spoiled.json()["composition"] == []
