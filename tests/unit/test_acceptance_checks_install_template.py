@@ -6,7 +6,7 @@ read; the Updates screen's check signs a reserved person in and runs against Pos
 and skips where `DATABASE_URL` is unset.
 
 Task ids: M42.1.2, M42.1.3, M42.1.4, M42.2.3, M42.2.8, M42.3.1, M42.3.6
-Task ids: M42.3.9, M42.5.1, M42.5.2, M42.5.15
+Task ids: M42.3.9, M42.5.1, M42.5.2, M42.5.15, M42.3.3
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ import pytest
 
 from brain.deployment.installer import PLAN
 from brain.ops.acceptance import (
+    FAILED,
     PASSED,
     CheckFailedError,
     CheckNotRunError,
@@ -37,6 +38,7 @@ GUIDES = "the_install_guides_are_held_to_the_installer_and_the_checklist"
 PIN = "the_install_runs_one_published_image_at_a_named_release"
 UPDATE = "the_update_refuses_latest_and_the_rollback_reads_the_previous"
 SCREEN = "the_updates_screen_names_the_version_and_whether_newer_exists"
+HEAD = "the_database_is_at_the_head_the_migrate_command_brings_it_to"
 
 IMAGE = "ghcr.io/rpsj2230/verz-brain-v2.0"
 
@@ -59,8 +61,9 @@ def test_the_module_declares_the_leaves_each_check_proves() -> None:
         PIN: ("M42.1.3", "M42.1.4"),
         UPDATE: ("M42.3.6",),
         SCREEN: ("M42.3.9",),
+        HEAD: ("M42.3.3",),
     }
-    assert checks_in(MODULE) == [STEPS, SECRETS, GUIDES, PIN, UPDATE, SCREEN]
+    assert checks_in(MODULE) == [STEPS, SECRETS, GUIDES, PIN, UPDATE, SCREEN, HEAD]
 
 
 def test_the_installer_and_the_update_checks_pass_on_the_plan_this_release_carries() -> None:
@@ -168,8 +171,24 @@ def test_the_updates_screen_check_passes_on_an_install_and_leaves_nothing(
     from tests.fixtures.console_proof import counts
 
     before = counts(install)
-    assert run_module(install, MODULE)[SCREEN] == (PASSED, "")
+    results = run_module(install, MODULE)
+    assert results[SCREEN] == (PASSED, "")
+    assert results[HEAD] == (PASSED, "")
     assert counts(install) == before
+
+
+@pytest.mark.needs_db
+def test_a_database_behind_the_head_fails_the_head_check(
+    install: str, issuer: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A database one revision behind would apply a migration if the command ran. Delete this and
+    M42.3.3 closes on a check that never compares the two."""
+    from alembic.script import ScriptDirectory
+
+    monkeypatch.setattr(ScriptDirectory, "get_current_head", lambda self: "0000")
+    outcome, reason = run_module(install, MODULE)[HEAD]
+    assert outcome == FAILED, reason
+    assert "head" in reason
 
 
 def test_the_guides_are_found_where_the_application_serves_them() -> None:

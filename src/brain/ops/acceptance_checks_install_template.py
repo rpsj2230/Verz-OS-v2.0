@@ -20,7 +20,7 @@ Rejected: reading `.env` on the host. The worker does not mount it, and an insta
 a second mount is an install that cannot be checked until somebody changes its compose file.
 
 Task ids: M42.1.2, M42.1.3, M42.1.4, M42.2.3, M42.2.8, M42.3.1, M42.3.6
-Task ids: M42.3.9, M42.5.1, M42.5.2, M42.5.15
+Task ids: M42.3.9, M42.5.1, M42.5.2, M42.5.15, M42.3.3
 """
 
 from __future__ import annotations
@@ -320,3 +320,31 @@ async def the_updates_screen_names_the_version_and_whether_newer_exists(
         raise CheckFailedError("the screen shows a tick with nothing behind it")
     if set(ANSWERS) != set(Standing):
         raise CheckFailedError("a standing of the Updates screen has no sentence to say")
+
+
+@check(
+    leaves=("M42.3.3",),
+    sentence=(
+        "The database is at the one head the migrate command brings a database to, so running it "
+        "now would apply nothing, and the operations chapter names the create, migrate and seed "
+        "commands that exist and no others."
+    ),
+)
+async def the_database_is_at_the_head_the_migrate_command_brings_it_to(h: Harness) -> None:
+    from alembic.script import ScriptDirectory
+
+    from brain.deployment import database
+    from brain.migrate import _alembic_config
+    from brain.ops.acceptance_operations_console import applied_revisions
+    from brain.ops.install_docs import database_command_gaps
+
+    head = ScriptDirectory.from_config(_alembic_config("postgresql://acceptance.invalid/x"))
+    if await applied_revisions(h) != [head.get_current_head()]:
+        raise CheckFailedError("the database is not at the head the migrate command brings it to")
+    chapter = _guides() / "operations.md"
+    if not chapter.is_file():
+        raise CheckNotRunError(NO_GUIDES_HERE)
+    if database_command_gaps(
+        chapter.read_text(encoding="utf-8"), commands=database.COMMANDS, module=database.__name__
+    ):
+        raise CheckFailedError("the operations chapter and the database commands disagree")
