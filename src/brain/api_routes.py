@@ -196,6 +196,7 @@ from brain.gate.model_lane import (
     DocumentSearchTool,
     FollowUp,
     ModelLane,
+    skills_offered,
 )
 from brain.gate.resolve import EntitlementCache, EntitlementStore, VersionSource, resolve
 from brain.gate.roster import (
@@ -236,6 +237,7 @@ from brain.ops.connector_store import StoredConnections
 from brain.ops.connector_sync_store import SourceEpochs, StoredSourceEpochs
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
 from brain.ops.drive_passages import WithDrive, drive_passages_for
+from brain.ops.google_workspace_live import workspace_passages_for
 from brain.ops.halt_store import Work, read_state, refusal_for, refusal_in
 from brain.ops.lark_base_index import LarkBaseUse, switched_on
 from brain.ops.lark_base_live import BaseSchema
@@ -260,11 +262,14 @@ from brain.ops.model_service import ModelService
 from brain.ops.retrieval_store import StoredRetrievals
 from brain.ops.sensitive_referral_store import SensitiveReferrals, StoredSensitiveReferrals
 from brain.ops.session_memory_store import SessionRecollection, StoredSessions
+from brain.ops.shared_start import universal_when_on
 from brain.ops.signal_store import StoredSignals
 from brain.ops.slack_messages_live import Alongside
 from brain.ops.trace_sink import CountingTraceSink
 from brain.reviewed_connectors import current as reviewed_now
+from brain.tools.own_results import OWN_RESULT_POLICIES
 from brain.tools.registry import ToolRegistry
+from brain.tools.skills import ImportedSkill, SkillPin, offered_cards
 from brain.tools.startup import classification_for
 
 log = structlog.get_logger()
@@ -1191,6 +1196,13 @@ def model_lane_of(state: Any) -> ModelLane | None:
     slack = slack_passages_for(getattr(state, "db_sessions", None), getattr(state, "vault", None))
     if slack is not None:
         search = Alongside(search, slack)
+    # And a connected Google Workspace, the asker's own mail, calendar and documents read live
+    # with their own consent (M11.7.6).
+    workspace = workspace_passages_for(
+        getattr(state, "db_sessions", None), getattr(state, "vault", None)
+    )
+    if workspace is not None:
+        search = Alongside(search, workspace)
     return ModelLane(search=search, model=models.calls, items=item_lookup_of(state))
 
 
@@ -1895,10 +1907,18 @@ class RunToolCaller:
     Imported where it is called, because `brain.automation_routes` imports this module.
     """
 
-    def __init__(self, registry: ToolRegistry) -> None:
+    def __init__(
+        self,
+        registry: ToolRegistry,
+        *,
+        agent_id: str | None = None,
+        skills: Mapping[str, Any] | None = None,
+    ) -> None:
         from brain.automation_routes import RegistryToolCaller
 
-        self.inner = RegistryToolCaller(registry)
+        # The run's agent and the skills it was offered, for the two skill tools only; a handler
+        # that declares neither parameter is never handed them. See `brain.tools.skill_tools`.
+        self.inner = RegistryToolCaller(registry, bound={"agent_id": agent_id, "skills": skills})
 
     def call(
         self,
@@ -1911,8 +1931,31 @@ class RunToolCaller:
         from brain.ops.automation_piece import PieceRefusedError
 
         try:
-            return self.inner.call(tool=tool, arguments=arguments, entitlement=entitlement, now=now)
+            returned = self.inner.call(
+                tool=tool, arguments=arguments, entitlement=entitlement, now=now
+            )
         except PieceRefusedError as refused_call:
+            raise ToolRefusedError(str(refused_call)) from refused_call
+        if inspect.isawaitable(returned):
+            return self._refusing(returned)
+        return returned
+
+    @staticmethod
+    async def _refusing(pending: Awaitable[object]) -> object:
+        """An awaited handler's refusal as the runtime's one refusal, and the reason logged.
+
+        A skill that is not offered, a script changed since its approval and a sandbox that did
+        not answer are each a `SkillError`, and a website outside the run's reach is `Denied`.
+        Either would otherwise end the whole run; the run goes on and the model is told what every
+        unavailable tool says, which is also what a record that does not exist says.
+        """
+        from brain.core.errors import Denied
+        from brain.tools.skills import SkillError
+
+        try:
+            return await pending
+        except (SkillError, Denied) as refused_call:
+            log.info("run.tool_refused", error=type(refused_call).__name__)
             raise ToolRefusedError(str(refused_call)) from refused_call
 
 
@@ -1929,7 +1972,14 @@ def policy_of(registry: ToolRegistry) -> Callable[[ToolDefinition], FieldPolicy]
         if definition.entity == KNOWLEDGE_ENTITY:
             return PASSAGE_POLICY
         found = by_source.get((definition.source, definition.entity))
-        return found or by_entity.get(definition.entity) or FieldPolicy()
+        # A tool whose records no classification describes reads under its own capability, so a
+        # run is not handed an empty record; see `brain.tools.own_results`.
+        return (
+            found
+            or by_entity.get(definition.entity)
+            or OWN_RESULT_POLICIES.get(definition.entity)
+            or FieldPolicy()
+        )
 
     return policy
 
@@ -2010,6 +2060,26 @@ async def side_effects_for(
     )
 
 
+def offered_skills_of(
+    model: ModelLane | None, *, caller: EntitlementSet, now: datetime
+) -> dict[str, tuple[SkillPin, ImportedSkill]]:
+    """The skills a run was offered, each with the pin that offered it, by name.
+
+    `skills_offered` is the one filter (pinned to this agent, approved, unmoved, every tool in
+    the run reach), and the cards a model is shown are drawn from the same call, so a body or a
+    script is asked for under exactly the names a model was told. See
+    `brain.tools.skill_tools` for why a skill outside this set is a refusal and never a lookup.
+    """
+    if model is None or model.agent is None:
+        return {}
+    pins = {(one.skill_name, one.digest): one for one in model.agent.pins}
+    return {
+        one.skill.name: (pins[(one.skill.name, one.skill.digest())], one)
+        for one in skills_offered(model.agent, caller=caller, now=now)
+        if (one.skill.name, one.skill.digest()) in pins
+    }
+
+
 def agent_runtime_for(
     request: Request,
     *,
@@ -2019,6 +2089,8 @@ def agent_runtime_for(
     assessment: RiskAssessment,
     leash: Leash | None = None,
     side_effects: SideEffects | None = None,
+    skills: Mapping[str, Any] | None = None,
+    universal: frozenset[str] = frozenset(),
 ) -> AgentRuntime | None:
     """The tool loop for this agent and this asker, or None when the passage step serves it.
 
@@ -2050,13 +2122,15 @@ def agent_runtime_for(
         asker=asking.reach,
         registry=registry,
         leash=held,
-        tools=RunToolCaller(registry),
+        tools=RunToolCaller(registry, agent_id=agent.agent_id, skills=skills),
         policy_for=policy_of(registry),
         reach_now=reach_again(request, asking),
         halted=halted,
         assessment=assessment,
         runs=None if sessions is None else StoredAgentRuns(sessions),
         side_effects=side_effects,
+        skill_cards=offered_cards([held for _, held in (skills or {}).values()]),
+        universal=universal,
     )
     try:
         invocation = invoke(
@@ -2293,6 +2367,11 @@ async def answered_for(
         # not already read (M13.7.1). See `agent_runtime_for`.
         if model is not None and agent is not None:
             held_leash, effects = await side_effects_for(request, agent=agent, registry=registry)
+            # The tools the shared start of the request may name, none while the install keeps the
+            # switch off (M3.7.2).
+            universal = await universal_when_on(
+                getattr(request.app.state, "db_sessions", None), registry
+            )
             runtime = agent_runtime_for(
                 request,
                 agent=agent,
@@ -2301,6 +2380,8 @@ async def answered_for(
                 assessment=front.screened,
                 leash=held_leash,
                 side_effects=effects,
+                skills=offered_skills_of(model, caller=asking.reach, now=asking.now),
+                universal=universal,
             )
             if runtime is not None:
                 model = replace(model, runtime=runtime)

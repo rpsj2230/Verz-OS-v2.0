@@ -8,12 +8,12 @@
  * it drops a card that does not say which approval it is or what will happen, and a second
  * card for an approval already read, and carries every other card in the order it arrived.
  *
- * **Seven fields a card, and the card has no eighth.** They are `Card`'s own: which suspension,
+ * **Eight fields a card, and the card has no ninth.** They are `Card`'s own: which suspension,
  * the request as this reader may see it, whose reach it runs under, when it was raised, when it
  * lapses, whether taking the work over is offered, which is true for an agent's prepared action
  * and false for a person's own request, and why approving it would send nothing, which is empty
  * for nearly every card and says "this install has not allowed DNS changes" for a Cloudflare
- * change whose write key was never given (M11.7.3). A body carrying a tool call, a count or a
+ * change whose write key was never given (M11.7.3), and which agent raised it (M27.15.30). A body carrying a tool call, a count or a
  * state beside a card reaches nothing here, because the reader never takes it. See
  * `AN_APPROVAL_CARD_DRAWS_WHAT_WILL_HAPPEN_AND_COUNTS_NOTHING`.
  *
@@ -28,7 +28,7 @@
  * this console does not offer for that verdict, so a click with nothing chosen sends nothing. See
  * `A_DECISION_IS_SENT_AS_THE_ROUTE_TAKES_IT_OR_NOT_AT_ALL`.
  *
- * Task ids: M35.3.1.2, M35.3.1.1, M33.6.1.3, M11.7.3, M33.8.1
+ * Task ids: M35.3.1.2, M35.3.1.1, M33.6.1.3, M11.7.3, M33.8.1, M27.15.30
  */
 
 /** Written down because an approvals screen is tempted by a count above it and a call below it. */
@@ -42,12 +42,21 @@ export const AN_APPROVAL_CARD_DRAWS_WHAT_WILL_HAPPEN_AND_COUNTS_NOTHING =
 /** Where the queue is asked for, under the API base. */
 export const APPROVALS_API_PATH = "/approvals";
 
+/**
+ * The queue narrowed to one agent's cards, which is what the agent's own page asks for. It is the
+ * same route and the same reach: a reader who may decide none of the agent's cards is sent an
+ * empty page, so the page draws nothing for them, which is absent and never nought.
+ */
+export function approvalsForAgentApiPath(agentId: string): string {
+  return `${APPROVALS_API_PATH}?filter=${encodeURIComponent(`agent_id:${agentId}`)}`;
+}
+
 /** Where one approval's card is asked for, under the API base. */
 export function approvalApiPath(suspensionId: string): string {
   return `${APPROVALS_API_PATH}/${encodeURIComponent(suspensionId)}`;
 }
 
-/** One approval as this console holds it. `Card`'s seven fields, under this console's names. */
+/** One approval as this console holds it. `Card`'s eight fields, under this console's names. */
 export interface ApprovalCardView {
   readonly suspensionId: string;
   /** What will happen, rendered by the API at this reader's reach, locked where they may not read. */
@@ -59,6 +68,8 @@ export interface ApprovalCardView {
   readonly mayTakeOver: boolean;
   /** Why approving this sends nothing, in the API's words, or empty when approving sends it. */
   readonly unsentBecause: string;
+  /** The agent that raised it, which an agent's own page narrows the queue by (M27.15.30). */
+  readonly agentId: string;
 }
 
 /** The queue as this console holds it. Two fields, and neither is a count. */
@@ -114,6 +125,7 @@ export function readApprovalCard(payload: unknown): ApprovalCardView | null {
     expiresAt,
     mayTakeOver: fields?.["may_take_over"] === true,
     unsentBecause: said(fields?.["unsent_because"]) ?? "",
+    agentId: said(fields?.["agent_id"]) ?? "",
   };
 }
 

@@ -32,10 +32,17 @@ from brain.ops import (
     acceptance_checks_accounts,
     acceptance_checks_channels,
     acceptance_checks_class_pools,
+    acceptance_checks_connectors_area,
+    acceptance_checks_evaluation,
+    acceptance_checks_knowledge_models,
     acceptance_checks_people,
+    acceptance_checks_proof_gaps,
     acceptance_checks_recovery,
+    acceptance_checks_requirement_areas,
     acceptance_checks_services,
     acceptance_checks_starter,
+    acceptance_checks_storage,
+    acceptance_checks_vault_worker,
     acceptance_operations_console,
     acceptance_operations_console_5,
     acceptance_operations_console_6,
@@ -778,6 +785,10 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     # runs them with the hosted profile and a vault the test answers for.
     for escalation_check in registered(("brain.ops.acceptance_escalation",)):
         assert outcomes.pop(escalation_check.name)[0] == NOT_RUN, escalation_check.name
+    # The skill tools are read by an agent's run through the stand-in too, and a website by a run
+    # whose model is one; `tests/unit/test_acceptance_skill_tools.py` runs them.
+    for tool_check in registered(("brain.ops.acceptance_checks_skill_tools",)):
+        assert outcomes.pop(tool_check.name)[0] == NOT_RUN, tool_check.name
     # An agent's skill reaches a model too; `tests/unit/test_acceptance_skill_runs.py` runs it.
     assert outcomes.pop("an_agents_run_reads_its_assigned_skills_and_its_level")[0] == NOT_RUN
     # The co-author asks a model too, with no tools;
@@ -802,6 +813,11 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert outcomes.pop("the_detector_finds_every_entity_the_scrub_relies_on_it_for") == (
         NOT_RUN,
         acceptance_checks_services.NO_DETECTOR_HERE,
+    )
+    # A default install declares no embedding revision, so there is no model server to ask.
+    assert outcomes.pop("the_install_s_inference_server_embeds_a_sentence_as_declared") == (
+        NOT_RUN,
+        acceptance_checks_knowledge_models.NO_EMBEDDING_REVISION_IS_DECLARED,
     )
     assert outcomes.pop("the_sandbox_finds_no_network_and_stops_scripts_at_their_limits") == (
         NOT_RUN,
@@ -832,6 +848,10 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         acceptance_checks_accounts.NO_RELAY_FOR_THE_RESET_EMAIL,
     )
     assert outcomes.pop("a_queued_file_is_kept_in_the_store_and_read_by_the_worker")[0] == NOT_RUN
+    assert outcomes.pop("the_install_s_own_store_keeps_and_returns_an_object") == (
+        NOT_RUN,
+        acceptance_checks_storage.NO_STORE_IS_CONNECTED,
+    )
     # Every act, the chain, the trace and the export were seen, and no deploy is recorded here to
     # be kept out of the export: `tests/unit/test_acceptance_audit.py` records one and passes.
     assert outcomes.pop("each_audited_act_is_in_the_ledger_and_a_missing_entry_is_caught") == (
@@ -846,6 +866,12 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         "the_scrub_meets_its_budget_on_this_install_s_processor",
     ):
         assert outcomes.pop(worker_check) == (NOT_RUN, acceptance_deployment.NOT_IN_A_WORKER)
+    # No vault is named here, so no key can be held in one; the install's own check is read-only and
+    # `tests/unit/test_acceptance_checks_vault_worker.py` shows each refusal over a reading.
+    assert outcomes.pop("the_worker_reads_a_connected_source_with_the_key_the_vault_holds") == (
+        NOT_RUN,
+        acceptance_checks_vault_worker.NO_VAULT_HERE,
+    )
     # No worker has ticked here, so neither recovery sweep has a scheduled run to judge;
     # `tests/unit/test_acceptance_recovery.py` records one and both pass.
     for recovery_check in registered(("brain.ops.acceptance_checks_recovery",)):
@@ -862,6 +888,22 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert outcomes.pop("a_new_install_is_furnished_as_decided_and_not_blank") == (
         NOT_RUN,
         acceptance_checks_starter.NOTHING_HAS_FURNISHED_THIS_INSTALL,
+    )
+    # Pressing Forgot password for a reserved person needs a mailbox somebody reads, so the check
+    # that names it says so on every install, and nothing here supplies one.
+    assert outcomes.pop("a_reserved_person_resets_their_password_and_sets_a_second_factor") == (
+        NOT_RUN,
+        acceptance_checks_proof_gaps.A_REAL_ACCOUNT_AND_A_REAL_MAILBOX_ARE_NEEDED,
+    )
+    assert outcomes.pop("a_reserved_person_signs_in_with_lark_and_a_leaver_cannot") == (
+        NOT_RUN,
+        acceptance_checks_proof_gaps.A_REAL_LARK_ACCOUNT_AND_A_REAL_SIGN_IN_ARE_NEEDED,
+    )
+    # No person has recorded a check against the Connectors requirements on a new install, so
+    # the area's check says so; `tests/unit/test_acceptance_connectors_area.py` records them.
+    assert outcomes.pop("every_connectors_requirement_is_shown_working_by_a_person") == (
+        NOT_RUN,
+        acceptance_checks_connectors_area.SOME_REQUIREMENT_HAS_NO_RECORDED_CHECK,
     )
     # Nobody here has opened a console session with a second factor, so the realm's half is not
     # run; `tests/unit/test_acceptance_people_console_2.py` records one and it passes.
@@ -880,13 +922,28 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         "departments_managed_on_people_are_not_the_staff_sync_s",
     ):
         assert outcomes.pop(list_check) == (NOT_RUN, acceptance_checks_people.NO_STAFF_LIST_IS_READ)
+    # Nobody has recorded a check on the Requirement checks screen here, so each area's leaf says
+    # so; `tests/unit/test_acceptance_checks_requirement_areas.py` records them and it passes.
+    for area_check in registered(("brain.ops.acceptance_checks_requirement_areas",)):
+        assert outcomes.pop(area_check.name) == (
+            NOT_RUN,
+            acceptance_checks_requirement_areas.SOME_REQUIREMENT_HAS_NO_RECORDED_CHECK,
+        )
+    # No worker has run the canaries here, so the scheduled run's own record is not there to judge;
+    # `tests/unit/test_acceptance_evaluation.py` records one and the check passes.
+    assert outcomes.pop("the_scheduled_canary_run_is_owed_runs_and_alerts") == (
+        NOT_RUN,
+        acceptance_checks_evaluation.THE_WORKER_HAS_NOT_STARTED_THEM,
+    )
     # A roll-up reads what the checks before it came to, so on an install where some of those are
     # not run it is not run too, and it is never failed while they pass; each one's own test file
     # runs the checks it reads (`tests/unit/test_acceptance_roll_up.py`).
     from brain.ops.acceptance_roll_up import is_roll_up
 
+    # The memory roll-up module also holds smaller sentences (M16.3.2, M16.7.3, M16.7.14) that are
+    # not roll-up leaves but ask the same of the run, so the module is what marks them.
     for one in suite_checks:
-        if is_roll_up(one):
+        if is_roll_up(one) or one.run.__module__.endswith("_roll_up"):
             assert outcomes.pop(one.name)[0] in (PASSED, NOT_RUN), one.name
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
     assert after == before

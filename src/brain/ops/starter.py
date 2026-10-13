@@ -384,9 +384,12 @@ def checked_elsewhere() -> tuple[tuple[Capability, str], ...]:
     from brain.knowledge.visibility import PROMOTION_CAPABILITY
     from brain.ops.drive_passages import READ_FILE
     from brain.ops.feedback import FLAG_CAPABILITY
+    from brain.ops.google_workspace_live import READ_WORKSPACE
     from brain.ops.jobs import DEAD_LETTER_CAPABILITY
     from brain.ops.slack_messages_live import READ_MESSAGE
+    from brain.tools.own_results import SCRIPT_OUTPUT_CAPABILITY
     from brain.tools.run_skill import SCRIPT_CAPABILITY
+    from brain.tools.skill_tools import INSTRUCTIONS_CAPABILITY
     from brain.tools.website_check import WEBSITE_CHECK_CAPABILITY
 
     # Described by grammar, as the starter pack's own copies of the same reads already are.
@@ -399,6 +402,8 @@ def checked_elsewhere() -> tuple[tuple[Capability, str], ...]:
         (AGENT_PUBLICATION_CAPABILITY, "Approves publishing an agent to a wider audience."),
         (PROMOTION_CAPABILITY, "Approves promoting a knowledge item to a wider audience."),
         (SCRIPT_CAPABILITY, "Runs an approved skill's script in its sandbox."),
+        (SCRIPT_OUTPUT_CAPABILITY, "Reads what an approved skill's script printed in its sandbox."),
+        (INSTRUCTIONS_CAPABILITY, "Reads the full instructions of a skill offered to an agent."),
         (READ_LOG_CAPABILITY, "Reads other people's entries in the audit read log."),
         (BROWSE_SURFACE, "Reads a declared browser surface."),
         (ACT_ON_SURFACE_CAPABILITY, "Acts on a declared browser surface."),
@@ -417,6 +422,11 @@ def checked_elsewhere() -> tuple[tuple[Capability, str], ...]:
             READ_MESSAGE,
             "Reads a connected Slack workspace's messages, live, in the channels Slack says the "
             "reader is in, in the connection's department.",
+        ),
+        (
+            READ_WORKSPACE,
+            "Connects the reader's own Google Workspace account and reads their own mail, "
+            "calendar and documents for their questions, live, in the connection's department.",
         ),
     )
 

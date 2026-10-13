@@ -19,7 +19,7 @@ approving it would be the check overruling the install's own people.
 **The approval is the check's, made by a reserved administrator, and is held.** Nobody on the
 install has read these words in the check's transaction, so what is shown is that the path works
 and not that the library holds eight approved skills. `docs/proof-sweep-holds.json` holds M12.4.7
-until a person has approved them on the install (needs-rupash 181).
+until a person has approved them on the install (needs-rupash 185).
 
 **Every example is rehearsed through an agent holding what the examples expect**, with the website
 check registered over the install's own transport as the application registers it. The rehearsal is

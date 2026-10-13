@@ -794,7 +794,7 @@ async def an_agents_knowledge_is_a_predicate_over_the_readers_documents(
 
 # ------------------------------------------- 6. who can use it, its ceiling, and a preview
 @check(
-    leaves=("M39.3.1.1", "M39.3.1.2", "M39.3.1.3", "M39.3.1.4"),
+    leaves=("M39.3.1.1", "M39.3.1.2", "M39.3.1.3", "M39.3.1.4", "M27.15.61"),
     sentence=(
         "An agent of acceptance_a is found by its department and not by acceptance_b, saying that "
         "finding it gives no access; its ceiling is shown whole to a reader of capabilities and "
@@ -1329,13 +1329,14 @@ def report_cells(found: bytes) -> list[list[str]]:
         "M39.5.2.5",
         "M39.8.4",
         "M39.8.5",
+        "M27.7.23",
+        "M27.15.42",
     ),
     sentence=(
-        "A report over an uploaded price list, produced through an agent for two people, holds "
-        "the cost only for the one who may read it, keeps its run, version, reach and its most "
-        "sensitive input's window, and is fetched only while its requester holds what it drew on; "
-        "it is listed, filtered and counted, superseded rather than edited, and found as the "
-        "latest for a merged client by its person alone."
+        "A report over a price list, made through an agent for two people, holds the cost only for "
+        "the one who may read it, keeps its run, version and reach, and is fetched only while its "
+        "requester holds what it drew on, each download leaving one entry naming the file and the "
+        "person; it is listed, counted and superseded, and found as a merged client's latest."
     ),
 )
 async def an_agents_report_holds_what_its_reader_may_see_and_is_rechecked(
@@ -1548,6 +1549,45 @@ async def an_agents_report_holds_what_its_reader_may_see_and_is_rechecked(
     pricing_reach = await h.reach(pricing)
     if not may_download(full, costing_reach, h.now) or not may_download(part, pricing_reach, h.now):
         raise CheckFailedError("the person a report was produced for could not fetch it")
+    # 4a. The route itself, as the person it was produced for: the bytes come back, the file's
+    # download is in the ledger under their name naming the file, and a refusal leaves no entry
+    # (M27.15.42).
+    from fastapi import FastAPI
+    from starlette.requests import Request
+
+    from brain.agent_artifact_routes import download_agent_artifact
+    from brain.ops.acceptance_operations_console import asking_as, refused, traced
+
+    serving = FastAPI()
+    serving.state.settings = h.settings
+    serving.state.db_sessions = h.sessions
+    serving.state.artifacts = store
+    console_request = Request({"type": "http", "app": serving, "headers": [], "method": "GET"})
+    async with traced(h, 9):
+        fetched = await download_agent_artifact(
+            console_request, agent_id, full.artifact_id, await asking_as(h, costing)
+        )
+    if fetched.status_code != 200 or not fetched.body:
+        raise CheckFailedError("the person a report was produced for could not download it")
+    if (
+        await refused(
+            download_agent_artifact(
+                console_request, agent_id, full.artifact_id, await asking_as(h, steward)
+            )
+        )
+        is not True
+    ):
+        raise CheckFailedError("the steward was handed a report whose cost they may not read")
+    taken = (
+        await h.execute(
+            text(
+                "SELECT actor_id, details FROM obs.audit_entry"
+                " WHERE action = 'record_read' AND subject = :subject ORDER BY seq"
+            ).bindparams(subject=f"entity:{full.artifact_id}")
+        )
+    ).all()
+    if [(who, said.get("record_kind")) for who, said in taken] != [(costing, "artifact")]:
+        raise CheckFailedError("a download did not leave exactly one entry naming file and reader")
     await h.execute(*h.attributed(admin.principal_id), retire_grant(costing, cost.value))
     if may_download(full, await h.reach(costing), h.now):
         raise CheckFailedError("a report was fetched after its person lost the grant it drew on")

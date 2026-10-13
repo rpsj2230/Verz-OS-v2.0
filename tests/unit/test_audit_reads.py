@@ -64,7 +64,7 @@ def reader_holding(*values: str, principal_id: str = "u_subject") -> Entitlement
 
 
 # ------------------------------------------------------------------ the declared set
-def test_the_written_down_set_is_personnel_and_a_salary_and_nothing_else() -> None:
+def test_the_written_down_set_is_personnel_a_salary_and_an_artifact_download_only() -> None:
     """The whole of Option A, pinned. Item 45 says personnel records and anything carrying a
     salary, and nothing else; the difference between that and Option B is this tuple.
 
@@ -72,8 +72,8 @@ def test_the_written_down_set_is_personnel_and_a_salary_and_nothing_else() -> No
     which is precisely how a narrow read log becomes a log of every read of every row. The
     argument per entry is asserted too, because an entry nobody can weigh is one that gets
     added without being weighed."""
-    assert {one.name for one in WRITTEN_DOWN} == {"personnel", "salary"}
-    assert len(WRITTEN_DOWN) == 2
+    assert {one.name for one in WRITTEN_DOWN} == {"personnel", "salary", "artifact_download"}
+    assert len(WRITTEN_DOWN) == 3
     for one in WRITTEN_DOWN:
         assert one.because.strip(), one.name
         assert len(one.because) > 100, one.name

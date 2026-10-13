@@ -25,7 +25,7 @@ what to do when there is no answer from it.
 **None arrives approved.** A skill is the one part of an agent that comes from outside the
 company, and an approval is a named person's statement about exact words. So these arrive as
 undecided submissions of the product's first-run identity, and the person who reads one, rehearses
-its examples and approves it is the person whose name the library records (needs-rupash 181, the
+its examples and approves it is the person whose name the library records (needs-rupash 185, the
 owner's to answer; this is its recommended option). Rejected: furnishing them approved by the
 product, which would be a skill with no named approver on every install.
 

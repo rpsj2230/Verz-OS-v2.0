@@ -278,8 +278,19 @@ def test_the_sequence_is_assembled_here_and_run_from_the_store_the_worker_and_th
     assert call_sites("brain.knowledge.embed_policy:dimension_gaps") == ("brain.knowledge.embed",)
     assert call_sites("brain.knowledge.embed_policy:question_vector") == ("brain.knowledge.embed",)
     assert call_sites("brain.knowledge.embed:embed_units") == ("brain.knowledge.chunk_store",)
-    assert call_sites("brain.knowledge.chunk_store:run_embed_job") == ("brain.ops.worker",)
-    assert call_sites("brain.knowledge.embed:embed_question") == ("brain.knowledge.document_tools",)
+
+    # An install check calls these two entry points too, over a transport it made, and says so in
+    # its own module; what is held here is which production code runs a stored window and embeds a
+    # question, and that is the worker and the search tool alone.
+    def product_callers(symbol: str) -> tuple[str, ...]:
+        return tuple(
+            one for one in call_sites(symbol) if not one.startswith("brain.ops.acceptance")
+        )
+
+    assert product_callers("brain.knowledge.chunk_store:run_embed_job") == ("brain.ops.worker",)
+    assert product_callers("brain.knowledge.embed:embed_question") == (
+        "brain.knowledge.document_tools",
+    )
 
 
 def test_the_report_names_a_step_and_what_it_needs_rather_than_counting_them() -> None:

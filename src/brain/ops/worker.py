@@ -184,15 +184,19 @@ from brain.knowledge.embed_policy import embedding_revision, policy_gaps
 from brain.knowledge.embed_queue import (
     EMBED_TASK,
     EMBED_TRAFFIC_CLASS,
+    REEMBED_TASK,
     EmbeddingService,
     embed_batch_gaps,
 )
+from brain.knowledge.embedding import EmbeddingError
 from brain.knowledge.ingest_queue import register_ingest_tasks
 from brain.knowledge.parse_budget import (
     PARSE_WORKER_COMPONENT,
     parse_budget_note,
     parse_worker_gaps,
 )
+from brain.knowledge.parse_layout import layout_request_gaps
+from brain.knowledge.reembed import run_reembed_page, start_rebuild
 from brain.ops.admission import WorkloadClass
 from brain.ops.checkpoints import channel_policy_gaps, connection_refusals
 from brain.ops.class_pools import Follower, Routing, queued_class, routed_url
@@ -927,7 +931,45 @@ def advisories(env: Mapping[str, str], *, worker_component: str) -> tuple[str, .
     no longer splits the way the budget describes is wrong in the budget's documentation rather
     than in the database, which is this list's exact subject.
     """
-    return (*policy_gaps(), *queue_split_advisory(env, worker_component=worker_component))
+    return (
+        *policy_gaps(),
+        *queue_split_advisory(env, worker_component=worker_component),
+        *model_server_advisory(_declared_revision(env)),
+    )
+
+
+def _declared_revision(env: Mapping[str, str]) -> str | None:
+    """The embedding revision this install declares, or None when it has not said or said a
+    value this system cannot record.
+
+    A value that is set and unusable reads as undeclared here, because this is an advisory and
+    an advisory must not stop a worker from starting. The same value is refused by name where it
+    is acted on: `brain.knowledge.embed_policy.embedding_revision` raises for it on the ingest
+    leg, which is where the person who wrote it needs to be told.
+    """
+    try:
+        return embedding_revision(env)
+    except EmbeddingError:
+        return None
+
+
+def model_server_advisory(revision: str | None) -> tuple[str, ...]:
+    """What the door admits that the model server cannot be sent, said once an install has one.
+
+    **Declared by the embedding revision, and nothing else.** An install that has not said which
+    weights its model server holds has no model server to send a file to, and printing that a
+    50 MiB PDF is larger than a request ceiling on a server that does not exist would be a finding
+    every operator learns to read past. An install that has declared one gets
+    `brain.knowledge.parse_layout.layout_request_gaps`: the door's largest file, base64 encoded,
+    against the request the server accepts. It is an advisory rather than a refusal for the reason
+    `advisories` gives: the worker has other work, and what is wrong is a file accepted at the
+    door that the parse service would refuse after it had been fetched, scanned and stored.
+    Closing it is the owner's choice (a smaller door, a larger container or another request
+    format), and printing it at every start is what makes it a decision rather than a surprise.
+    """
+    if revision is None:
+        return ()
+    return layout_request_gaps()
 
 
 # ----------------------------------------------------------------------------- the process
@@ -1379,8 +1421,31 @@ def register_tasks(
         finally:
             await engine.dispose()
 
+    async def run_reembed(after_chunk_id: str, size: int, model: str) -> str:
+        # The page reads across every owner, so it connects as this worker's own login and never
+        # as the application role: see `brain.knowledge.reembed.A_REBUILD_PAGE_READS_NO_BODY`.
+        engine = make_app_engine(
+            routed_url(database_url, queued_class(EMBED_TRAFFIC_CLASS), running=moved())
+        )
+
+        async def enqueue(job: Job) -> object:
+            return await enqueue_job(app, job)
+
+        try:
+            return await run_reembed_page(
+                make_session_factory(engine),
+                enqueue,
+                after_chunk_id=after_chunk_id,
+                size=size,
+                model=model,
+                revision=embedding_revision(env),
+            )
+        finally:
+            await engine.dispose()
+
     register_task(app, CONTROL_TASK, run_control, traffic_class=TrafficClass.SYSTEM)
     register_task(app, EMBED_TASK, run_embed, traffic_class=EMBED_TRAFFIC_CLASS)
+    register_task(app, REEMBED_TASK, run_reembed, traffic_class=EMBED_TRAFFIC_CLASS)
     # Queued uploads (M7.1.5): a standard-slot task and a parse-worker task, each read here.
     register_ingest_tasks(app, database_url=database_url, env=env, routing=routing)
 
@@ -1623,15 +1688,63 @@ def run_control_text(
     return 0, f"control {name} enqueued as job {job_id}"
 
 
+async def enqueue_rebuild(app: Any, database_url: str, env: Mapping[str, str]) -> tuple[int, str]:
+    """Queue the first page of a rebuild onto the model this install serves, and say so."""
+    engine = make_app_engine(database_url)
+    try:
+        async with app.open_async():
+
+            async def enqueue(job: Job) -> object:
+                return await enqueue_job(app, job)
+
+            return await start_rebuild(
+                make_session_factory(engine), enqueue, revision=embedding_revision(env)
+            )
+    finally:
+        await engine.dispose()
+
+
+def run_reembed_text(env: Mapping[str, str], *, worker_component: str) -> tuple[int, str]:
+    """Start moving the corpus onto the embedding model this install serves, and say so.
+
+    The same refusals as `run_control_text`, for the same reason: only the general worker with the
+    application's database registers the rebuild's task, so enqueueing from anywhere else would
+    put a job on a queue whose task this process could not describe. See
+    `brain.knowledge.reembed`.
+    """
+    database_url = schedule_url(env) if schedules_here(worker_component) else None
+    if database_url is None:
+        return EXIT_MISCONFIGURED, (
+            "a rebuild is started from the general worker with the application's database: "
+            f"{A_WORKER_THAT_SCHEDULES_NEEDS_THE_APPLICATIONS_DATABASE_URL}"
+        )
+    refused = schedule_url_refusal(database_url)
+    if refused is not None:
+        return EXIT_MISCONFIGURED, f"the rebuild was not started: {refused}"
+    share, split = queue_pool_max(env, worker_component=worker_component)
+    if share is None:
+        reason = "; ".join(split) if split else f"{POOL_MAX_ENV} is not set"
+        return EXIT_MISCONFIGURED, f"the rebuild was not started: {reason}"
+    try:
+        app = queue_app(
+            (env.get(QUEUE_URL_ENV) or "").strip(), pool_max=share, schema=DRIVER_SCHEMA
+        )
+        register_tasks(app, database_url=database_url, env=env)
+        return asyncio.run(enqueue_rebuild(app, database_url, env), loop_factory=_loop_factory())
+    except (QueueError, RunnerError) as exc:
+        return EXIT_MISCONFIGURED, f"the rebuild was not started: {exc}"
+
+
 def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
     """`python -m brain.ops.worker [--check | --ready | --deploy-plan | --install-queue |
-    --install-checkpointer | --run-control NAME]`.
+    --install-checkpointer | --run-control NAME | --reembed]`.
 
-    Seven modes, and each one is used by something. `--check` is an operator asking whether a
+    Eight modes, and each one is used by something. `--check` is an operator asking whether a
     deployment would start; `--ready` is the container healthcheck; `--deploy-plan` is the
     steps that install the queue and `--install-queue` is those steps run;
     `--install-checkpointer` installs the saver's tables; `--run-control` enqueues one control
-    run; no argument is the container's command. The environment is a parameter defaulting to
+    run; `--reembed` queues the first page of a move onto the embedding model this install
+    serves; no argument is the container's command. The environment is a parameter defaulting to
     the real one so the modes can be tested without one, which is the same reason
     `brain.ops.admission` takes `now` rather than reading a clock.
     """
@@ -1710,6 +1823,11 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None
         # After the preflight for the same reason as the queue: `connection_refusals` has already
         # been asked about the checkpointer URL, so the tables cannot be installed on the pooler.
         code, text = install_checkpointer_text(environment)
+        print(text, file=sys.stdout if code == 0 else sys.stderr)
+        return code
+
+    if "--reembed" in arguments:
+        code, text = run_reembed_text(environment, worker_component=worker_component)
         print(text, file=sys.stdout if code == 0 else sys.stderr)
         return code
 

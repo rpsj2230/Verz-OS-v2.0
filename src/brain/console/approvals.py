@@ -154,6 +154,10 @@ class Card:
     #: Why approving this sends nothing, in the grant's own words, or empty when it would run
     #: (M11.7.3): a connector write this install has not allowed. Never a tool call's detail.
     unsent_because: str = ""
+    #: The agent whose action this is, so a card can be found from the agent it came from and an
+    #: agent's page can list the cards its reader could decide (M27.15.30). A person's own
+    #: request, a promotion, carries the id the gate raised it under. Never a tool or a call.
+    agent_id: str = ""
 
 
 def card_gaps(shape: type = Card) -> tuple[str, ...]:
@@ -256,6 +260,7 @@ def card(
         expires_at=suspension.expires_at,
         may_take_over=not is_promotion(suspension),
         unsent_because=unsent_because,
+        agent_id=suspension.action.agent_id,
     )
 
 

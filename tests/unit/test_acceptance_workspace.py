@@ -11,11 +11,13 @@ Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `
 Task ids: M39.1.1.2, M39.1.1.4, M39.1.1.5, M39.1.3.1, M39.1.3.2, M39.1.3.3, M39.1.3.4
 Task ids: M39.2.1.4, M39.2.2.1, M39.2.2.2, M39.2.2.3, M39.2.2.4, M39.2.2.5
 Task ids: M39.2.3.1, M39.2.3.2, M39.2.3.3, M39.2.3.4, M39.3.1.1, M39.3.1.2, M39.3.1.3, M39.3.1.4
+Task ids: M27.15.61
 Task ids: M39.4.1.1, M39.4.1.2, M39.4.1.3, M39.4.1.4, M39.4.1.5, M39.4.2.1, M39.4.2.2, M39.4.2.4
 Task ids: M16.5.2
 Task ids: M39.6.1.1, M39.6.1.2, M39.6.1.3, M39.6.1.4, M39.6.1.5, M39.6.2.1, M39.6.2.2, M39.6.2.4
 Task ids: M39.5.1.1, M39.5.1.2, M39.5.1.4, M39.5.1.5, M39.5.2.1, M39.5.2.2, M39.5.2.3, M39.5.2.4
 Task ids: M39.5.2.5, M39.8.4, M39.8.5
+Task ids: M27.7.23
 Task ids: M39.3.2.1, M39.3.2.2, M39.3.2.3, M39.3.2.4, M39.3.2.5, M39.8.2, M39.8.3
 Task ids: M39.8.6, M39.2.1.2, M39.1.1.3
 """
@@ -86,6 +88,7 @@ LEAVES = {
         "M39.3.1.2",
         "M39.3.1.3",
         "M39.3.1.4",
+        "M27.15.61",
     ),
     "an_agents_memory_is_text_its_owner_corrects_and_its_tiers_route": (
         "M39.4.1.1",
@@ -120,6 +123,8 @@ LEAVES = {
         "M39.5.2.5",
         "M39.8.4",
         "M39.8.5",
+        "M27.7.23",
+        "M27.15.42",
     ),
     "an_agents_leash_moves_on_evidence_and_its_pin_extends": (
         "M39.3.2.1",
@@ -521,6 +526,25 @@ def test_a_download_that_trusts_its_own_person_fails_the_artifact_check(
     assert run_checks(head, (by_name(name),))[name] == (
         FAILED,
         "the steward could fetch a report whose cost they may not read",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_download_that_leaves_no_entry_fails_the_artifact_check(
+    head: str, bucket: FakeS3, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the download's record gone, the file is handed over and nothing says who took it, and
+    the check says so. Delete this and M27.15.42 closes on a route that serves files unrecorded."""
+
+    async def unrecorded(*args: object, **kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr("brain.agent_artifact_routes.record_artifact_download", unrecorded)
+    name = "an_agents_report_holds_what_its_reader_may_see_and_is_rechecked"
+
+    assert run_checks(head, (by_name(name),))[name] == (
+        FAILED,
+        "a download did not leave exactly one entry naming file and reader",
     )
 
 

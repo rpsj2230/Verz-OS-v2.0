@@ -225,7 +225,7 @@ async def filters_offer_only_what_is_reached_and_refusals_say_no_why(h: Harness)
 
 # ---------------------------------------------------- 4. approvals (M27.3.7, M27.9.3)
 @check(
-    leaves=("M27.3.7", "M27.9.3"),
+    leaves=("M27.3.7", "M27.9.3", "M27.12.6"),
     sentence=(
         "An agent's action held for a person is on Approvals for an approver in acceptance_a and "
         "not for one in acceptance_b; approved from the console it is recorded once in the ledger, "
@@ -596,7 +596,7 @@ def _human() -> Any:
 
 # ------------------------------------------------------------- 8. the data steward (M27.9.9)
 @check(
-    leaves=("M27.9.9",),
+    leaves=("M27.9.9", "M27.15.3"),
     sentence=(
         "The data steward is named, through the console where nobody is, and holds the content "
         "plane, the grant authority and every capability each connected source declares, over "
