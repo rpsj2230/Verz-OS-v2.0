@@ -35,8 +35,8 @@ one, as the partial rows it wrote, and the next run of that commit starts afresh
 
 Task ids: M38.5.1
 
-Revision ID: 0250
-Revises: 0225
+Revision ID: 0231
+Revises: 0230
 """
 
 from __future__ import annotations
@@ -44,10 +44,9 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0250"
-# A branch migration: the newest on origin/main when it was written is 0225. The coordinator
-# re-points it when the migrations land as one train.
-down_revision = "0225"
+revision = "0231"
+# The newest on origin/main when this was rebased is 0230, where train 4 landed.
+down_revision = "0230"
 branch_labels = None
 depends_on = None
 

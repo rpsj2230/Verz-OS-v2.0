@@ -170,11 +170,14 @@ MIGRATION_LEARNED_RULES = VERSIONS / "0206_learned_rule_promotion.py"
 MIGRATION_ROLE_NOMINATIONS = VERSIONS / "0208_role_nominations.py"
 MIGRATION_ELEVATION_CHAIN = VERSIONS / "0209_elevation_chain.py"
 MIGRATION_BUDGET_STOP = VERSIONS / "0211_budget_stop.py"
+MIGRATION_DEAD_LETTER = VERSIONS / "0228_dead_letter.py"
 MIGRATION_AGENT_ITEM_USE = VERSIONS / "0213_agent_item_use.py"
 MIGRATION_ALERT_ACKNOWLEDGEMENT = VERSIONS / "0217_alert_acknowledgement.py"
 MIGRATION_QUALITY = VERSIONS / "0222_quality_and_learning.py"
 MIGRATION_TEMPLATES_AUDIENCE = VERSIONS / "0223_templates_and_audience.py"
-MIGRATION_ACCEPTANCE_RUN = VERSIONS / "0250_acceptance_run_record.py"
+MIGRATION_MEMBER_PREFERENCE = VERSIONS / "0229_member_preference.py"
+MIGRATION_MEMBER_SHARE = VERSIONS / "0230_member_share_and_agent_request.py"
+MIGRATION_ACCEPTANCE_RUN = VERSIONS / "0231_acceptance_run_record.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -497,6 +500,7 @@ ROLE_NOMINATION_TABLES: tuple[str, ...] = ("gate.role_nomination",)
 ELEVATION_CHAIN_TABLES: tuple[str, ...] = ("obs.elevation_entry",)
 #: And the one 0211 adds: every used-up budget, stopped or only said.
 BUDGET_STOP_TABLES: tuple[str, ...] = ("ops.budget_stop",)
+DEAD_LETTER_TABLES: tuple[str, ...] = ("ops.dead_letter",)
 #: And the one 0213 adds: how often an agent's answers cited a document, by day (M39.2.3.5).
 AGENT_ITEM_USE_TABLES: tuple[str, ...] = ("ops.agent_item_use",)
 #: And the one 0217 adds: who acknowledged an incident, and when (M27.15.45).
@@ -516,7 +520,9 @@ QUALITY_TABLES: tuple[str, ...] = (
 #: And the two 0223 adds: a template draft that survives a restart, and an agent offered beyond its
 #: level (M13.8.15, M13.8.19).
 TEMPLATES_AUDIENCE_TABLES: tuple[str, ...] = ("agent.template_draft", "agent.audience_extra")
-#: And the one 0250 adds: a run of the acceptance checks, so it can be finished after a restart.
+MEMBER_PREFERENCE_TABLES: tuple[str, ...] = ("auth.member_preference",)
+MEMBER_SHARE_TABLES: tuple[str, ...] = ("agent.artifact_share", "agent.agent_request")
+#: And the one 0231 adds: a run of the acceptance checks, so it can be finished after a restart.
 ACCEPTANCE_RUN_TABLES: tuple[str, ...] = ("ops.acceptance_run",)
 
 ALL_TABLES = (
@@ -611,10 +617,13 @@ ALL_TABLES = (
     + ROLE_NOMINATION_TABLES
     + ELEVATION_CHAIN_TABLES
     + BUDGET_STOP_TABLES
+    + DEAD_LETTER_TABLES
     + AGENT_ITEM_USE_TABLES
     + ALERT_ACKNOWLEDGEMENT_TABLES
     + QUALITY_TABLES
     + TEMPLATES_AUDIENCE_TABLES
+    + MEMBER_PREFERENCE_TABLES
+    + MEMBER_SHARE_TABLES
     + ACCEPTANCE_RUN_TABLES
 )
 
@@ -1486,6 +1495,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert elevation_chain.TABLES == ELEVATION_CHAIN_TABLES
     budget_stop = migration_module(MIGRATION_BUDGET_STOP)
     assert budget_stop.TABLES == BUDGET_STOP_TABLES
+    dead_letter = migration_module(MIGRATION_DEAD_LETTER)
+    assert dead_letter.TABLES == DEAD_LETTER_TABLES
     agent_item_use = migration_module(MIGRATION_AGENT_ITEM_USE)
     assert agent_item_use.TABLES == AGENT_ITEM_USE_TABLES
     alert_acknowledgement = migration_module(MIGRATION_ALERT_ACKNOWLEDGEMENT)
@@ -1494,6 +1505,10 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert quality.TABLES == QUALITY_TABLES
     templates_audience = migration_module(MIGRATION_TEMPLATES_AUDIENCE)
     assert templates_audience.TABLES == TEMPLATES_AUDIENCE_TABLES
+    member_preference = migration_module(MIGRATION_MEMBER_PREFERENCE)
+    assert member_preference.TABLES == MEMBER_PREFERENCE_TABLES
+    member_share = migration_module(MIGRATION_MEMBER_SHARE)
+    assert member_share.TABLES == MEMBER_SHARE_TABLES
     acceptance_run = migration_module(MIGRATION_ACCEPTANCE_RUN)
     assert acceptance_run.TABLES == ACCEPTANCE_RUN_TABLES
     assert core.TABLES == CORE_TABLES
@@ -1611,10 +1626,13 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(role_nominations.TABLES)
         + tuple(elevation_chain.TABLES)
         + tuple(budget_stop.TABLES)
+        + tuple(dead_letter.TABLES)
         + tuple(agent_item_use.TABLES)
         + tuple(alert_acknowledgement.TABLES)
         + tuple(quality.TABLES)
         + tuple(templates_audience.TABLES)
+        + tuple(member_preference.TABLES)
+        + tuple(member_share.TABLES)
         + tuple(acceptance_run.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
@@ -1712,10 +1730,13 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(role_nominations.TABLES),
         set(elevation_chain.TABLES),
         set(budget_stop.TABLES),
+        set(dead_letter.TABLES),
         set(agent_item_use.TABLES),
         set(alert_acknowledgement.TABLES),
         set(quality.TABLES),
         set(templates_audience.TABLES),
+        set(member_preference.TABLES),
+        set(member_share.TABLES),
         set(acceptance_run.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)

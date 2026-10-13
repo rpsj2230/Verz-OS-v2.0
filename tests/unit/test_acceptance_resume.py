@@ -476,7 +476,7 @@ def test_an_unbroken_run_is_recorded_whole_and_marked_complete() -> None:
 # ----------------------------------------------------------------------- the migration at head
 @pytest.mark.needs_db
 def test_the_application_role_may_move_a_running_run_on_and_nothing_else() -> None:
-    """The grants and policies of `0250` as the application role meets them: a running run can be
+    """The grants and policies of `0231` as the application role meets them: a running run can be
     moved on and finished; a finished one cannot be edited or deleted; no other column can be
     written. Delete this and the table can be relaxed to editable history without a test noticing,
     which is the one thing `ops.acceptance_result`'s rule forbids."""
@@ -489,7 +489,7 @@ def test_the_application_role_may_move_a_running_run_on_and_nothing_else() -> No
     own = (database_url() or "").rsplit("/", 1)[-1].removeprefix("brain_test_")
     with retirable(f"brain_resume_policy_{own}"[:63]) as url:
         if not has_pgvector(url):
-            pytest.skip("the chain to 0250 needs pgvector, which CI has")
+            pytest.skip("the chain to 0231 needs pgvector, which CI has")
         for status, ended in ((RUNNING, "NULL"), (COMPLETE, "statement_timestamp()")):
             sql(
                 url,

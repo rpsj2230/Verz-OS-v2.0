@@ -78,6 +78,7 @@ from brain.tables.connector_sync import ConnectorSyncRow
 from brain.tables.credential import CredentialWriteRow
 from brain.tables.custom_connector import CustomConnectorRow
 from brain.tables.data_export import DataExportRow
+from brain.tables.dead_letter import DeadLetterRow
 from brain.tables.deployment_record import DeploymentRecordRow
 from brain.tables.elevation import ElevationRequestRow
 from brain.tables.entity_merge import EntityMergeRow, EntityUnmergeRow
@@ -123,6 +124,8 @@ from brain.tables.manifest_draft import (
     ManifestDraftRow,
     ManifestRevisionRow,
 )
+from brain.tables.member_preference import MemberPreferenceRow
+from brain.tables.member_share import AgentRequestRow, ArtifactShareRow
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
 from brain.tables.model_health import (
     ChainDepthAlertRow,
@@ -522,6 +525,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0211_budget_stop. Points at nothing: the ceiling, the principal and the recipients are
     # values, so a stop's row outlives a ceiling's next version and a person leaving.
     "ops.budget_stop",
+    # 0228_dead_letter. Points at nothing: the driver's job is a value, so a row outlives the
+    # driver's own cleaning of finished jobs.
+    "ops.dead_letter",
     # 0213_agent_item_use. Points at nothing: the agent and the document are values.
     "ops.agent_item_use",
     # 0217_alert_acknowledgement. Points at nothing: the subject is a source's name and the person
@@ -540,7 +546,14 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0223_templates_and_audience. A draft and an offer each name an agent and a person as values.
     "agent.template_draft",
     "agent.audience_extra",
-    # 0250_acceptance_run_record. Points at nothing: its id is carried by value on the result rows.
+    # 0229_member_preference. Points at nothing: the person is a value, so a row outlives a
+    # directory row and an erasure removes it by the column.
+    "auth.member_preference",
+    # 0230_member_share_and_agent_request. Neither points at anything: an artifact, an agent and a
+    # person are values.
+    "agent.artifact_share",
+    "agent.agent_request",
+    # 0231_acceptance_run_record. Points at nothing: its id is carried by value on the result rows.
     "ops.acceptance_run",
 )
 
@@ -554,6 +567,7 @@ __all__ = [
     "AdaptiveMemoryRow",
     "AgentAutomationRow",
     "AgentItemUseRow",
+    "AgentRequestRow",
     "AgentRow",
     "AgentRunRow",
     "AlertAcknowledgementRow",
@@ -562,6 +576,7 @@ __all__ = [
     "ApplicationLogRow",
     "ArtifactChangeRow",
     "ArtifactRow",
+    "ArtifactShareRow",
     "AudienceExtraRow",
     "AuditEntryRow",
     "AutomationChangeRow",
@@ -597,6 +612,7 @@ __all__ = [
     "CredentialWriteRow",
     "CustomConnectorRow",
     "DataExportRow",
+    "DeadLetterRow",
     "DepartmentLeadRow",
     "DepartmentRow",
     "DeploymentRecordRow",
@@ -631,6 +647,7 @@ __all__ = [
     "ManifestDraftRow",
     "ManifestRevisionRow",
     "MarkRow",
+    "MemberPreferenceRow",
     "MessageRole",
     "MessageRow",
     "ModelAttemptRow",
