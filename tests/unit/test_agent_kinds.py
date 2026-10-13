@@ -16,6 +16,7 @@ import pytest
 
 from brain.agent_builder_routes import (
     DRAFTS_PATH,
+    EDIT_PATH,
     FORM_PATH,
     PUBLISH_PATH,
     PUBLISHED_NEW,
@@ -284,3 +285,31 @@ def test_naming_the_workspace_on_a_team_agent_opens_nothing_so_it_cannot_be_atta
     )
     with pytest.raises(AttachmentError):
         connectors_after_attach("google_workspace", record=team, by=reach, now=now)
+
+
+def test_a_person_edits_their_own_personal_agent_and_nobody_else_edits_it(
+    console: Console, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the switch on, the owner of a personal agent starts a draft that changes it, and an
+    administrator who cannot see it is answered as for an agent never made; with the switch off the
+    owner is refused too, as they are everywhere else the builder is closed to them.
+
+    Delete this and a person can make an agent they can then never change, or edit one that is not
+    theirs."""
+    _on(monkeypatch, value=True)
+    draft_id, revision = _ready(console, MEMBER)
+    made = console.post(MEMBER, at(PUBLISH_PATH, draft_id=draft_id), {"revision": revision})
+    agent_id = made.json()["agent_id"]
+    edit = at(EDIT_PATH, agent_id=agent_id)
+
+    mine = console.post(MEMBER, edit)
+    theirs = console.post("u_admin", edit)
+    never = console.post("u_admin", at(EDIT_PATH, agent_id="never_made_here"))
+
+    assert mine.status_code == 201, mine.text
+    assert mine.json()["kind"] == "edit"
+    assert theirs.status_code == never.status_code == 404
+    assert theirs.json()["message"] == never.json()["message"]
+
+    _on(monkeypatch, value=False)
+    assert console.post(MEMBER, edit).status_code == 404

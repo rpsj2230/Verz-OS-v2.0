@@ -117,7 +117,7 @@ from brain.agents.kinds import (
     refusal_for,
 )
 from brain.agents.lifecycle import ARCHIVE_IS_TERMINAL
-from brain.agents.model import AgentAudience, AgentState, EnabledChannels
+from brain.agents.model import AgentAudience, AgentRecord, AgentState, EnabledChannels
 from brain.agents.template import SignedManifest, TemplateManifest, materialise, publish
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked, Asking
@@ -653,6 +653,20 @@ async def _personal_on(request: Request) -> bool:
     return await personal_agents_on(sessions_of(request))
 
 
+async def _may_edit(request: Request, record: AgentRecord, asked: Asking) -> bool:
+    """Whether this caller may start a draft that changes this agent: the install authority over its
+    row, or, while a person may make their own agent, the owner of a personal one.
+
+    The same two answers `_reaches` gives to a publish, asked of an agent that exists, and the
+    switch is read only when the owner's half is the one in question. Anybody else's personal agent
+    is not visible to them at all, so it never reaches here."""
+    if holds(AGENT_INSTALL_CAPABILITY, record, asked):
+        return True
+    if record.audience.level is not Visibility.PERSONAL:
+        return False
+    return record.audience.owner_id == asked.caller.principal.id and await _personal_on(request)
+
+
 async def _may_build(request: Request, asked: Asking) -> None:
     """Admit the builder to the install authority and, while a person may make their own agent,
     to anybody signed in. Everyone else gets the one 404 `_builds` raises.
@@ -1137,12 +1151,12 @@ async def edit_agent_as_draft(request: Request, agent_id: str, asked: Asked) -> 
     `brain.agent_lifecycle_routes`' order, with one 404 for all three. An archived agent is refused
     in the domain's own words, and an agent with no install has nothing to start from.
     """
-    _builds(asked)
+    await _may_build(request, asked)
     store = drafts_of(request)
     found = await store.agent(agent_id)
     if found is None or not visible(found.record, asked):
         raise _no_draft_here(asked, "agent")
-    if not holds(AGENT_INSTALL_CAPABILITY, found.record, asked):
+    if not await _may_edit(request, found.record, asked):
         raise _no_draft_here(asked, "scope")
     if found.record.state is AgentState.ARCHIVED:
         return _not_changed(REFUSED, ARCHIVE_IS_TERMINAL)
@@ -1192,11 +1206,11 @@ async def export_agent_manifest(request: Request, agent_id: str, asked: Asked) -
     amount, a number, a code) redacted. Prose is kept: the persona is the agent. What was redacted
     is named by kind and place and never by value.
     """
-    _builds(asked)
+    await _may_build(request, asked)
     found = await drafts_of(request).agent(agent_id)
     if found is None or not visible(found.record, asked):
         raise _no_draft_here(asked, "agent")
-    if not holds(AGENT_INSTALL_CAPABILITY, found.record, asked):
+    if not await _may_edit(request, found.record, asked):
         raise _no_draft_here(asked, "scope")
     if found.install is None:
         return _not_changed(REFUSED, NO_INSTALL_TO_START_FROM)
@@ -1317,11 +1331,11 @@ async def agent_publications(request: Request, agent_id: str, asked: Asked) -> P
     """
     from brain.builder.publication_store import StoredPublications
 
-    _builds(asked)
+    await _may_build(request, asked)
     found = await drafts_of(request).agent(agent_id)
     if found is None or not visible(found.record, asked):
         raise _no_draft_here(asked, "agent")
-    if not holds(AGENT_INSTALL_CAPABILITY, found.record, asked):
+    if not await _may_edit(request, found.record, asked):
         raise _no_draft_here(asked, "scope")
     sessions = sessions_of(request)
     if sessions is None:
