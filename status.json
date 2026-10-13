@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-13T14:07:24.017062+00:00",
-  "commit": "5687daa4",
-  "commit_subject": "Item 203 asks what 'only towards stricter' means for how a source's own permissions are followed (#577)",
+  "generated_at": "2026-10-13T14:31:49.274084+00:00",
+  "commit": "a270fc97",
+  "commit_subject": "Install checks for the client deployment template (M42, eleven leaves) (#558)",
   "total": 1625,
   "done": 864,
   "percent": 53.2,
