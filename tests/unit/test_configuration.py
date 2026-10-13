@@ -304,3 +304,20 @@ def test_a_saved_currency_is_capitals_and_is_what_the_money_figures_are_rendered
 
     assert currency() == "SGD"
     assert time_zone().key == "Asia/Singapore"
+
+
+def test_a_right_to_left_locale_is_refused_with_the_deferral_s_own_sentence() -> None:
+    """The refusal names the deferral and its reason rather than saying the tag is unknown. Delete
+    this and the settings screen answers Arabic with the sentence for a typing mistake, so nobody
+    learns that right-to-left was deferred on purpose and what would make it due.
+
+    The positive sibling is `test_a_sensible_value_may_be_saved`, and the refusal of a language the
+    product merely does not ship is the one above, which must stay a different sentence."""
+    from brain.locale import RIGHT_TO_LEFT
+
+    said = setting_problem("INSTALL_LOCALES", "zh-Hans, ar")
+    assert RIGHT_TO_LEFT.reason in said
+    assert "'ar'" in said
+    assert RIGHT_TO_LEFT.reason not in setting_problem("INSTALL_LOCALES", "fr")
+    assert setting_problem("INSTALL_LOCALES", "fr") != ""
+    assert setting_problem("INSTALL_LOCALES", "zh-Hans, en") == ""
