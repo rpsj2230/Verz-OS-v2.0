@@ -133,6 +133,16 @@ from brain.tables.organisation import DepartmentLeadRow, TeamMembershipRow
 from brain.tables.outbox import OutboxDeliveryRow, OutboxEventRow, WebhookSubscriberRow
 from brain.tables.plugin import PluginInstallRow, PluginVersionRow
 from brain.tables.projection import ProjectedRecordRow, RetiredRecordRow, SourceEpochRow
+from brain.tables.quality import (
+    AnswerFlagRow,
+    EvaluationCandidateRow,
+    GoldenScoreRow,
+    PositiveExampleRow,
+    QualityAnnotationRow,
+    QualityReadingRow,
+    RegressionCaseRow,
+    TierDecisionRow,
+)
 from brain.tables.question_gap import QuestionGapRow
 from brain.tables.requirement_check import RequirementCheckRow
 from brain.tables.resolution import (
@@ -508,6 +518,16 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0211_budget_stop. Points at nothing: the ceiling, the principal and the recipients are
     # values, so a stop's row outlives a ceiling's next version and a person leaving.
     "ops.budget_stop",
+    # 0219_quality_and_learning. A case points at the flag it came from and nothing else points at
+    # anything: every reference is a value, so a trace aging out or a person leaving deletes none.
+    "ops.answer_flag",
+    "ops.regression_case",
+    "ops.quality_reading",
+    "ops.quality_annotation",
+    "ops.golden_score",
+    "ops.evaluation_candidate",
+    "ops.positive_example",
+    "ops.tier_decision",
 )
 
 __all__ = [
@@ -520,6 +540,7 @@ __all__ = [
     "AgentAutomationRow",
     "AgentRow",
     "AgentRunRow",
+    "AnswerFlagRow",
     "ApiKeyRow",
     "ApplicationLogRow",
     "ArtifactChangeRow",
@@ -572,9 +593,11 @@ __all__ = [
     "ErasureOutcome",
     "ErasureRequestRow",
     "EscalationRow",
+    "EvaluationCandidateRow",
     "FastPathRuleRow",
     "FieldPolicyRow",
     "GoldenQuestionRow",
+    "GoldenScoreRow",
     "GrantsVersionRow",
     "GroupInstallRow",
     "GroupRoleRuleRow",
@@ -603,12 +626,16 @@ __all__ = [
     "PluginInstallRow",
     "PluginVersionRow",
     "PolicyEpochRow",
+    "PositiveExampleRow",
     "PrincipalIdentityRow",
     "PrincipalRow",
     "ProjectedRecordRow",
     "ProviderHealthRow",
+    "QualityAnnotationRow",
+    "QualityReadingRow",
     "QuestionAskedRow",
     "QuestionGapRow",
+    "RegressionCaseRow",
     "ReportRefreshRow",
     "RequestTelemetryRow",
     "RequirementCheckRow",
@@ -656,6 +683,7 @@ __all__ = [
     "TeamRow",
     "TemplateInstanceRow",
     "TemplateVersionRow",
+    "TierDecisionRow",
     "ToolAttachmentRow",
     "ToolDefinitionRow",
     "ToolSwitchRow",

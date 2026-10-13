@@ -541,6 +541,17 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # request that found it used up and of the people told: actors, and a stop is the budget's
         # period rather than anybody's record (`0211`).
         "ops.budget_stop",
+        # What a lead flagged, what was read of answers, how golden questions scored and who agreed
+        # to a change: each names an actor and a reference and is a fact about a moment, not
+        # anybody's record, and `0219` grants no way for a row to leave.
+        "ops.answer_flag",
+        "ops.regression_case",
+        "ops.quality_reading",
+        "ops.quality_annotation",
+        "ops.golden_score",
+        "ops.evaluation_candidate",
+        "ops.positive_example",
+        "ops.tier_decision",
         "ops.retention_release",
         "ops.retention_report",
         "ops.routing_change",

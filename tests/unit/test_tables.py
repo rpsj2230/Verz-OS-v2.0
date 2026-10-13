@@ -168,6 +168,7 @@ MIGRATION_LEARNED_RULES = VERSIONS / "0206_learned_rule_promotion.py"
 MIGRATION_ROLE_NOMINATIONS = VERSIONS / "0208_role_nominations.py"
 MIGRATION_ELEVATION_CHAIN = VERSIONS / "0209_elevation_chain.py"
 MIGRATION_BUDGET_STOP = VERSIONS / "0211_budget_stop.py"
+MIGRATION_QUALITY = VERSIONS / "0219_quality_and_learning.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -490,6 +491,18 @@ ROLE_NOMINATION_TABLES: tuple[str, ...] = ("gate.role_nomination",)
 ELEVATION_CHAIN_TABLES: tuple[str, ...] = ("obs.elevation_entry",)
 #: And the one 0211 adds: every used-up budget, stopped or only said.
 BUDGET_STOP_TABLES: tuple[str, ...] = ("ops.budget_stop",)
+#: And the eight 0219 adds: flags and their cases, the two tiers of reading, golden scores, a failed
+#: case's candidate, the positive examples and who agreed to a change that needed a person.
+QUALITY_TABLES: tuple[str, ...] = (
+    "ops.answer_flag",
+    "ops.regression_case",
+    "ops.quality_reading",
+    "ops.quality_annotation",
+    "ops.golden_score",
+    "ops.evaluation_candidate",
+    "ops.positive_example",
+    "ops.tier_decision",
+)
 
 ALL_TABLES = (
     CORE_TABLES
@@ -583,6 +596,7 @@ ALL_TABLES = (
     + ROLE_NOMINATION_TABLES
     + ELEVATION_CHAIN_TABLES
     + BUDGET_STOP_TABLES
+    + QUALITY_TABLES
 )
 
 
@@ -1453,6 +1467,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert elevation_chain.TABLES == ELEVATION_CHAIN_TABLES
     budget_stop = migration_module(MIGRATION_BUDGET_STOP)
     assert budget_stop.TABLES == BUDGET_STOP_TABLES
+    quality = migration_module(MIGRATION_QUALITY)
+    assert quality.TABLES == QUALITY_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1568,6 +1584,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(role_nominations.TABLES)
         + tuple(elevation_chain.TABLES)
         + tuple(budget_stop.TABLES)
+        + tuple(quality.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1664,6 +1681,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(role_nominations.TABLES),
         set(elevation_chain.TABLES),
         set(budget_stop.TABLES),
+        set(quality.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

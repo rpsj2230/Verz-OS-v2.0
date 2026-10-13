@@ -774,16 +774,33 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/company/activity",
       "/company/consumption",
     ],
-    routes: ["/api/v1/report/*", "/api/v1/me/workspace", "/api/v1/company/*"],
+    routes: ["/api/v1/report/*", "/api/v1/me/workspace", "/api/v1/company/*", "/api/v1/quality/*"],
     tables: [
       "ops.question_asked",
       "ops.question_gap",
       "ops.report_refresh",
       "ops.spend_actual",
       "obs.request_telemetry",
+      // What a lead flagged and the case it became, what the machines and the people read of
+      // answers, how the golden questions scored by release, and what a failed case proposed.
+      "ops.answer_flag",
+      "ops.regression_case",
+      "ops.quality_reading",
+      "ops.quality_annotation",
+      "ops.golden_score",
+      "ops.evaluation_candidate",
+      // An example approved unchanged, and who agreed to a change that needed a person.
+      "ops.positive_example",
+      "ops.tier_decision",
     ],
     installation: [],
-    gaps: [],
+    gaps: [
+      {
+        what: "Flagging an answer, annotating a day's sample and deciding a candidate have no screen: the Quality screen draws the canary run and not the findings.",
+        because:
+          "brain.quality_routes serves each as a door and no page presses them yet (M28.3.1, M28.3.3, M28.4.1); a captured case, a golden score and an example are stored and read by the install checks only.",
+      },
+    ],
   },
   "Logs and errors": {
     screens: ["/errors", "/logs"],
