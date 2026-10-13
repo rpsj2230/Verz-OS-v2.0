@@ -225,6 +225,17 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "sentence drawn beside the field. " +
     "tests/unit/test_settings_routes.py holds a refused value writing no row; the page case draws " +
     "no editable row, so no form is opened here.",
+  "src/components/AutomationAuthoring.tsx":
+    "The New automation form opens behind a press on an agent's Automations tab, which the page cases do " +
+    "not make. Its Review button stays disabled until the cadence and the instruction are chosen, the API " +
+    "judges the whole request and answers a refusal that names what is missing before anything is " +
+    "written, and the write itself waits for a confirmation of the previewed card, " +
+    "which tests/automation-authoring.test.tsx holds.",
+  "src/pages/agents/AgentKnowledgeActs.tsx":
+    "The refetch form opens behind a press on a link item in an agent's Knowledge section, which the " +
+    "page cases do not make. It has no field to leave blank: it sends the item's own address, and the " +
+    "API refuses a link whose address resolves to a private one before anything is fetched or written, " +
+    "which tests/agent-knowledge.test.tsx holds.",
   "src/pages/skills/SkillForms.tsx":
     "Every form here opens behind a press the page cases do not make: Add a skill's drawer, Edit as a " +
     "new version, or the Profile's assign and categories cards. Each says what it accepts above its " +

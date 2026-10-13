@@ -38,7 +38,7 @@ from brain.knowledge.lifecycle import Authority, StoredItem
 from brain.knowledge.search import Reach
 from brain.knowledge.visibility import KnowledgeVisibility, Visibility
 from brain.tables.agent import AgentRow
-from tests.fixtures.console_http import Stub, console_client, get
+from tests.fixtures.console_http import Stub, console_client, get, no_audience_extras
 from tests.fixtures.setting_rows import Result
 from tests.unit.test_agent_routes import agent_row
 
@@ -142,6 +142,7 @@ def served(monkeypatch: pytest.MonkeyPatch) -> Iterator[tuple[TestClient, Stub]]
     monkeypatch.setattr(routes, "names_of", no_names)
     monkeypatch.setattr(routes, "counting_is_on", counting_off)
     with console_client(GRANTS, routers=(router,)) as (client, stub):
+        stub.answerers.append(no_audience_extras)
         stub.answerers.append(answer)
         yield client, stub
 
