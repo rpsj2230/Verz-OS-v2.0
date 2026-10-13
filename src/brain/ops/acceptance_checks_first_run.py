@@ -19,7 +19,7 @@ product is here.
 Rejected: posting to the running application. The check runs in the worker, which serves nothing,
 and an HTTP client from a worker to its own application is a second thing to be down.
 
-Task ids: M42.5.3, M42.5.4, M42.5.10, M42.5.11, M42.5.13, M42.5.8, M42.6.2
+Task ids: M42.5.3, M42.5.4, M42.5.10, M42.5.11, M42.5.13, M42.5.8, M42.6.2, M42.5.12
 """
 
 from __future__ import annotations
@@ -338,3 +338,74 @@ async def a_provider_key_the_wizard_was_given_is_held_in_the_vault(h: Harness) -
         raise CheckNotRunError(THE_VAULT_IS_NOT_OPEN_HERE)
     if not any(one.state is SlotState.HELD for one in vault.providers):
         raise CheckNotRunError(NO_PROVIDER_KEY_HELD)
+
+
+@check(
+    leaves=("M42.5.12",),
+    sentence=(
+        "Behind the setup code, the answers given so far are kept and read back with the next "
+        "screen named, a provider key is not in what is kept, and a wrong code is refused as an "
+        "install with an administrator is: with the one refusal, and nothing written."
+    ),
+)
+async def a_half_finished_setup_is_kept_behind_the_code_and_read_back(h: Harness) -> None:
+    import tempfile
+    from pathlib import Path
+
+    from brain.core.errors import Absent, to_public
+    from brain.identity.first_administrator import FirstAdministrators
+    from brain.ops.acceptance_people_signed_in import administrator, everywhere
+    from brain.setup_routes import AppointmentAsked, keep_draft, read_kept_draft
+    from brain.setup_wizard import StepId
+
+    enrolment, code = _enrolment(h.now)
+    secret = f"{SECRET_ANSWER}{secrets.token_hex(8)}"
+    answers = {
+        StepId.COMPANY: {
+            "company_name": "A company",
+            "web_address": "https://company.example.invalid",
+        },
+        StepId.MODEL_PROVIDER: {
+            "model_profile": "hosted",
+            "model_provider": "anthropic",
+            "provider_key": secret,
+        },
+    }
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "draft.json"
+        open_store = _NobodyYet()
+        asked = AppointmentAsked(setup_code=code, answers=answers)
+        kept = await keep_draft(open_store, asked, enrolment=enrolment, path=path, now=h.now)
+        if set(kept) != {StepId.COMPANY, StepId.MODEL_PROVIDER}:
+            raise CheckFailedError("the screens answered so far were not all kept")
+        if secret in path.read_text(encoding="utf-8"):
+            raise CheckFailedError("a provider key was written into the draft")
+        told = await read_kept_draft(open_store, code, enrolment=enrolment, path=path, now=h.now)
+        if told.answers.get(StepId.COMPANY, {}).get("company_name") != "A company":
+            raise CheckFailedError("what was kept was not read back")
+        if "provider_key" in told.answers.get(StepId.MODEL_PROVIDER, {}):
+            raise CheckFailedError("a provider key was read back")
+        if told.next_step is None:
+            raise CheckFailedError("the draft did not say which screen comes next")
+        try:
+            await read_kept_draft(
+                open_store, secrets.token_urlsafe(32), enrolment=enrolment, path=path, now=h.now
+            )
+        except Absent as refused:
+            wrong = to_public(refused)
+        else:
+            raise CheckFailedError("a wrong setup code was answered with a draft")
+
+        await h.found_departments()
+        keeper = h.principal(A, "draftkeeper")
+        await h.person(keeper, department=A, grants=everywhere(*administrator()))
+        shut = FirstAdministrators(h.sessions)
+        later = Path(directory) / "closed.json"
+        try:
+            await keep_draft(shut, asked, enrolment=enrolment, path=later, now=h.now)
+        except Absent as refused:
+            closed = to_public(refused)
+        else:
+            raise CheckFailedError("a draft was kept on an install that has an administrator")
+        if later.exists() or closed != wrong:
+            raise CheckFailedError("a closed wizard wrote a draft or answered unlike a wrong code")

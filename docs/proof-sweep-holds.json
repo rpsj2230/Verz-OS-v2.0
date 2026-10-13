@@ -82,6 +82,7 @@
     "M42.5.3": "passes on a setup code and an enrolment the check made, through the wizard's own functions; held until the fresh-install walk is recorded on an install",
     "M42.5.4": "passes on a setup code and an enrolment the check made, through the wizard's own functions; held until the fresh-install walk is recorded on an install",
     "M42.5.10": "passes on a setup code and an enrolment the check made, through the wizard's own functions; held until the fresh-install walk is recorded on an install",
-    "M42.5.13": "passes on a setup code and an enrolment the check made, through the wizard's own functions; held until the fresh-install walk is recorded on an install"
+    "M42.5.13": "passes on a setup code and an enrolment the check made, through the wizard's own functions; held until the fresh-install walk is recorded on an install",
+    "M42.5.12": "passes on a setup code and an enrolment the check made, through the wizard's own functions; held until a half-finished setup is resumed on an install"
   }
 }
