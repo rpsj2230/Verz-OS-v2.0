@@ -411,8 +411,13 @@ def opened(monkeypatch: pytest.MonkeyPatch) -> Opened:
 
     kept = Opened()
 
-    def keeping(trace_id: str, received_at: datetime, channel: Channel) -> Recorder:
-        recorder = open_trace(trace_id, received_at, channel)
+    def keeping(
+        trace_id: str,
+        received_at: datetime,
+        channel: Channel,
+        clock: Callable[[], datetime] | None = None,
+    ) -> Recorder:
+        recorder = open_trace(trace_id, received_at, channel, clock=clock)
         kept.append(recorder)
         return recorder
 
@@ -433,6 +438,23 @@ def test_the_recorder_is_built_at_ingress_before_identification(
     finally:
         del STEP_OF[open_trace.__code__]
     assert observed.index("record") < observed.index("identify")
+
+
+def test_the_recorder_the_route_opens_times_its_own_steps(
+    client: TestClient, opened: Opened
+) -> None:
+    """M27.15.6 on the real route: the recorder carries a clock, so each step it entered has an
+    instant and the request's record can say where its time went; a request refused at
+    identification has timed the one step it reached, and the map is never invented.
+
+    Delete this and the route can open its recorder without a clock, after which every request's
+    stage map is null and nothing says the timing was ever switched off."""
+    assert _ask(client, UNANSWERED_BY_RULES, token_for=None) == 401
+    (recorder,) = opened
+    assert recorder.clock is not None
+    assert len(recorder.entered_at) == len(recorder.steps) == 1
+    stages = recorder.stage_ms(recorder.entered_at[0])
+    assert stages == {"record": 0.0}
 
 
 def test_a_request_refused_at_identification_still_opened_a_recorder(

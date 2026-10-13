@@ -48,7 +48,7 @@ LEAVES = {
     DEPARTMENT_APPROVES: ("M33.2.2.1",),
     SUPER_APPROVES: ("M33.1.2.2",),
     AUDIT: ("M33.4.1.1",),
-    OWN_AGENTS: ("M33.3.1.1",),
+    OWN_AGENTS: ("M33.3.1.1", "M40.2.1.2", "M40.2.2.4"),
     OWN_KNOWLEDGE: ("M33.3.1.2",),
 }
 

@@ -88,6 +88,7 @@ async def a_third_takeover_in_a_week_lowers_the_agent_a_step(h: Harness) -> None
         queue,
         take_decision,
     )
+    from brain.console.approvals import Decided
     from brain.core.entitlement import Capability, EntitlementSet, Grant
     from brain.core.envelope import SideEffect, ToolDefinition
     from brain.core.field_policy import FieldPolicy
@@ -185,7 +186,10 @@ async def a_third_takeover_in_a_week_lowers_the_agent_a_step(h: Harness) -> None
             trace_id=h.trace_id,
             now=h.now,
         )
-        if decided.entry.details.get("verdict") != DecidableVerdict.TAKEN_OVER.value:
+        if (
+            not isinstance(decided, Decided)
+            or decided.entry.details.get("verdict") != DecidableVerdict.TAKEN_OVER.value
+        ):
             raise CheckFailedError(A_TAKEOVER_WAS_KEPT_AS_ANOTHER_VERDICT)
 
     if await next_route() is not Route.SIMULATE:

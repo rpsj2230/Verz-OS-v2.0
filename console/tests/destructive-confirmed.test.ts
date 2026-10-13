@@ -39,6 +39,10 @@ import { CONTROL_DIRECTORIES, everyConfirmation, everyWrite } from "./support/wr
  * why each one is not destructive.
  */
 const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
+  "src/pages/agents/AutomationAuthoring.tsx authoringPreviewApiPath(agentId)":
+    "Reviewing a new automation writes nothing: brain.automation_authoring_routes.authoring_preview " +
+    "returns what saving would store and what it would have done, keeps no row, and the save is a " +
+    "second press that is confirmed, which tests/unit/test_automation_authoring_routes.py holds.",
   // The owner's rule (needs-rupash 38 (2)): stopping is one press, with no confirmation and no
   // second signature, because a stop that can be held up by a dialog fails at the moment it is
   // needed. It ends no work and loses none; resuming is the guarded act, and it is confirmed.
@@ -213,10 +217,18 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/roles/PacksPage.tsx PACK_COPY_API_PATH":
     "Copies a pack under a new short name at version 1. The pack copied is unchanged and nobody holds " +
     "the copy until it is assigned.",
+  "src/pages/operations/IncidentsPage.tsx ACKNOWLEDGE_API_PATH":
+    "Records who has seen an incident and when, and stops the repeat of its notice: the first press " +
+    "wins, the row can never be changed or removed, and nothing about the incident itself is " +
+    "touched, so there is nothing to undo and no consequence for anybody but the repeated notice.",
   "src/pages/skills/SkillForms.tsx SKILLS_API_PATH":
     "Adds a skill to the library undecided. A second import of the same bytes is refused by the " +
     "table's key rather than written over, so nothing existing is replaced, and the skill reaches no " +
     "agent until somebody approves it and an administrator assigns it, both of which are confirmed.",
+  "src/pages/skills/SkillForms.tsx DRAFT_PATH":
+    "Asks the model to draft a skill from a description and stores it in the library undecided, " +
+    "unreadable by any agent, exactly as an import is: nothing existing is replaced, it reaches no agent " +
+    "until a second person approves it and an administrator assigns it, both of which are confirmed.",
   "src/pages/skills/SkillForms.tsx IMPORT_PATH":
     "Imports a skill from a repository commit or an address into the library undecided, exactly as " +
     "an added package is: the same bytes twice are refused by the key, nothing existing is replaced, " +

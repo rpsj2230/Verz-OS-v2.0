@@ -102,6 +102,16 @@ MODEL_PIN_BOTH_OR_NEITHER = "(model_pin_provider IS NULL) = (model_pin_model IS 
 CHANNEL_CHARS = 32
 
 
+#: The widest kind of memory is seven characters; this leaves room. See `brain.agents.memory_kinds`.
+MEMORY_KIND_CHARS = 16
+
+#: `0225`. An agent's memory kinds are among the five and no others. `<@` is array containment, as
+#: in `REQUIRED_WITHIN_ALLOWED`, and the right side is cast so both sides are the same type.
+MEMORY_KINDS_KNOWN = (
+    "memory_kinds <@ ARRAY['conversation', 'own', 'person', 'project', 'task']::character varying[]"
+)
+
+
 def _null_or_between(column: str, cap: int) -> str:
     return f"{column} IS NULL OR ({column} >= 1 AND {column} <= {cap})"
 
@@ -251,6 +261,15 @@ class AgentRow(TimestampMixin, Base):
         ARRAY(String(CHANNEL_CHARS)), nullable=False, server_default=text("'{}'")
     )
 
+    #: The kinds of memory this agent may read and write (M39.7.1), since `0225`: the conversation,
+    #: the task, the project, the person and its own. All five by default, so no agent loses what it
+    #: remembered the day this lands. Constrained to those five and no other.
+    memory_kinds: Mapped[list[str]] = mapped_column(
+        ARRAY(String(MEMORY_KIND_CHARS)),
+        nullable=False,
+        server_default=text("'{conversation,own,person,project,task}'"),
+    )
+
     #: The most turns one run may take, or NULL for the product's default (M13.7.2), since `0189`.
     max_turns: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
@@ -270,6 +289,7 @@ class AgentRow(TimestampMixin, Base):
         CheckConstraint(SIDE_EFFECT_IN, name="max_side_effect"),
         CheckConstraint(_present("created_by"), name="created_by_present"),
         CheckConstraint(MODEL_PIN_BOTH_OR_NEITHER, name="model_pin_both_or_neither"),
+        CheckConstraint(MEMORY_KINDS_KNOWN, name="memory_kinds_known"),
         CheckConstraint(MAX_TURNS_IN_RANGE, name="max_turns_in_range"),
         CheckConstraint(MAX_TOOL_CALLS_IN_RANGE, name="max_tool_calls_in_range"),
         # The selection path's index: everything an audience test needs, over the rows that

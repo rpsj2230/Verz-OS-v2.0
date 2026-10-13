@@ -801,6 +801,15 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         assert outcomes.pop(tool_check.name)[0] == NOT_RUN, tool_check.name
     # An agent's skill reaches a model too; `tests/unit/test_acceptance_skill_runs.py` runs it.
     assert outcomes.pop("an_agents_run_reads_its_assigned_skills_and_its_level")[0] == NOT_RUN
+    # So does the reuse of one skill by two agents; `tests/unit/test_acceptance_skill_reuse.py`.
+    assert (
+        outcomes.pop("a_skill_is_reused_by_two_agents_and_refused_where_unservable")[0] == NOT_RUN
+    )
+    # A skill described in conversation is drafted by a model too;
+    # `tests/unit/test_acceptance_skill_draft.py` runs it.
+    assert (
+        outcomes.pop("a_skill_described_in_conversation_lands_as_an_unreviewed_draft")[0] == NOT_RUN
+    )
     # The co-author asks a model too, with no tools;
     # `tests/unit/test_acceptance_coauthor.py` runs it.
     assert outcomes.pop("the_coauthor_proposes_and_nothing_changes_until_taken")[0] == NOT_RUN
@@ -858,6 +867,13 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         acceptance_checks_accounts.NO_RELAY_FOR_THE_RESET_EMAIL,
     )
     assert outcomes.pop("a_queued_file_is_kept_in_the_store_and_read_by_the_worker")[0] == NOT_RUN
+    # The agent Knowledge answer check asks a provider through the install's own plan, so on a
+    # database whose plan keeps text on its own hardware it says so and is not run; its own test
+    # file (`tests/unit/test_acceptance_agent_knowledge.py`) gives it a plan that may be asked.
+    assert outcomes.pop("an_agent_answers_from_a_file_added_on_its_page_and_cites_it")[0] in (
+        PASSED,
+        NOT_RUN,
+    )
     assert outcomes.pop("the_install_s_own_store_keeps_and_returns_an_object") == (
         NOT_RUN,
         acceptance_checks_storage.NO_STORE_IS_CONNECTED,
@@ -889,6 +905,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
             NOT_RUN,
             acceptance_checks_recovery.NO_SCHEDULED_RUN_YET,
         )
+    # A test image may carry no built console, in which case the shell check says so; the install's
+    # own image does, and `tests/unit/test_acceptance_checks_localisation.py` serves a bundle.
+    assert outcomes.pop("the_console_is_served_as_an_installable_shell")[0] in (PASSED, NOT_RUN)
     # Nothing started the application against this database, so nothing furnished it;
     # `tests/unit/test_acceptance_operations_console.py` furnishes one and the check passes.
     assert outcomes.pop("the_install_was_furnished_once_by_the_product") == (

@@ -197,6 +197,18 @@ class MemoryHeld:
         self.locked.append(suspension_id)
         return self.rows.get(suspension_id)
 
+    async def endorse(self, endorsed: SuspendedAction) -> bool:
+        current = self.rows.get(endorsed.id)
+        if (
+            not self.writes_land
+            or current is None
+            or current.state is not ApprovalState.PENDING
+            or current.endorsed_by
+        ):
+            return False
+        self.writes[endorsed.id] = endorsed
+        return True
+
     async def record(self, decided: SuspendedAction, entry: AuditEntry) -> AuditEntry | None:
         if decided.id in self.moved and decided.state is ApprovalState.APPROVED:
             # What `StoredSuspensions` raises when `0120`'s trigger refuses the approval of a
@@ -308,7 +320,11 @@ def test_an_approver_in_reach_approves_once_and_one_ledger_entry_records_it(
     response = approve(client, "u_narrow", "m_1")
 
     assert response.status_code == 200, response.text
-    assert response.json() == {"suspension_id": "m_1", "verdict": "approved"}
+    assert response.json() == {
+        "suspension_id": "m_1",
+        "verdict": "approved",
+        "awaiting_second": False,
+    }
     stored = store.rows["m_1"]
     assert (stored.state, stored.decided_by) == (ApprovalState.APPROVED, "u_narrow")
     [entry] = store.ledger.entries
@@ -355,7 +371,11 @@ def test_taking_an_agent_s_action_over_leaves_it_unrun_and_the_ledger_says_taken
 
     assert card["may_take_over"] is True
     assert response.status_code == 200, response.text
-    assert response.json() == {"suspension_id": "m_1", "verdict": "taken_over"}
+    assert response.json() == {
+        "suspension_id": "m_1",
+        "verdict": "taken_over",
+        "awaiting_second": False,
+    }
     stored = store.rows["m_1"]
     assert (stored.state, stored.decided_by) == (ApprovalState.REJECTED, "u_narrow")
     [entry] = store.ledger.entries

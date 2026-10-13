@@ -534,3 +534,131 @@ def test_a_paused_automation_says_why_in_words_for_every_reason() -> None:
     assert set(routes.STOPPED_BECAUSE) == {one.value for one in PausedBecause} | {
         one.value for one in stops
     }
+
+
+# ------------------------------------------------------------------ one a person wrote (M39.9.2.2)
+def written(
+    trigger: Any,
+    *,
+    task: str,
+    condition: Any = None,
+    tools: tuple[str, ...] = ("search_tickets",),
+) -> Any:
+    from brain.console.automation_authoring import Authored
+
+    return Authored(
+        name="I check each morning whether any ticket is overdue",
+        instruction="Look at the tickets and tell me which are overdue by more than a week.",
+        guards="Without it an overdue ticket is found when the client chases, not by us.",
+        trigger=trigger,
+        tools=tools,
+        condition=condition,
+        task=task,
+    )
+
+
+def listed_authored(one: Automation, authored: Any, *, cadence: Any = None) -> Listed:
+    from brain.console.automation_authoring import AUTHORED_TEMPLATE
+
+    return Listed(
+        automation=one,
+        template_id=AUTHORED_TEMPLATE,
+        guards=authored.guards,
+        stopped_because=None,
+        runs=(),
+        cadence=cadence,
+        authored=authored,
+    )
+
+
+def test_an_automation_a_person_wrote_is_listed_with_its_trigger_condition_and_tools_in_words(
+    client: TestClient, schedules: Schedules
+) -> None:
+    """The leaf's card: the trigger and the condition said in words, what it is told, what it may
+    use, and that writes wait. Its cadence is its own, so a start is offered with the next run
+    that cadence gives. Delete this and an automation a person wrote is dropped from the list
+    because no template names it, or drawn without what they asked for."""
+    from brain.console.automation_authoring import (
+        WRITES_WAIT_FOR_A_PERSON,
+        Condition,
+        ConditionOp,
+        TriggerChoice,
+    )
+    from brain.console.automation_gallery import Cadence, Every
+    from brain.orchestration.unattended import TriggerKind
+
+    cadence = Cadence(every=Every.DAY, hour_utc=5)
+    one = written(
+        TriggerChoice(kind=TriggerKind.SCHEDULE, cadence=cadence),
+        task=QUESTIONS.task,
+        condition=Condition(field="freshdesk.ticket.due_by", op=ConditionOp.IS_OVER, value="7"),
+    )
+    schedules.rows["auto_written"] = listed_authored(
+        an_automation("auto_written", template=QUESTIONS), one, cadence=cadence
+    )
+
+    shown = items(client, "u_admin")["auto_written"]
+
+    assert shown["schedule"] == "every day at 05:00 UTC"
+    assert shown["authored"] == {
+        "trigger": "Runs every day at 05:00 UTC",
+        "fires": True,
+        "condition": "only when the ticket due by (freshdesk) is more than 7 days ago",
+        "instruction": one.instruction_text,
+        "tools": ["search_tickets"],
+        "from_template": None,
+        "writes_wait": WRITES_WAIT_FOR_A_PERSON,
+    }
+    assert shown["start_confirmation"] is not None
+    assert items(client, "u_admin")["auto_one"]["authored"] is None
+
+
+def test_a_trigger_nothing_fires_is_listed_saying_so_and_cannot_be_started(
+    client: TestClient, schedules: Schedules
+) -> None:
+    """A webhook is saved and shown and its start is not offered, the sentence says why, and a
+    start pressed anyway is the one 404. Delete this and a control that reaches nothing is drawn
+    for a trigger no install fires."""
+    from brain.console.automation_authoring import NOTHING_FIRES_THIS_YET, TriggerChoice
+    from brain.orchestration.unattended import TriggerKind
+
+    one = written(
+        TriggerChoice(kind=TriggerKind.WEBHOOK, source="ticket_closed"), task=QUESTIONS.task
+    )
+    schedules.rows["auto_hook"] = listed_authored(
+        an_automation("auto_hook", template=QUESTIONS), one
+    )
+
+    shown = items(client, "u_admin")["auto_hook"]
+
+    assert shown["schedule"] == "Runs when ticket closed is called from outside"
+    assert shown["authored"]["fires"] is False
+    assert shown["start_confirmation"] is None
+    assert shown["cannot_start"] == NOTHING_FIRES_THIS_YET
+    missing = refusal(listing(client, "u_admin", "no_such_agent"))
+    pressed = change(client, "u_admin", START, "auto_hook", "0" * 64)
+    assert pressed.status_code == 404
+    assert pressed.json()["message"] == missing["message"]
+    assert schedules.calls == []
+
+
+def test_an_instruction_is_listed_and_says_what_it_still_needs_before_it_can_be_started(
+    client: TestClient, schedules: Schedules
+) -> None:
+    """The instruction task has no performer yet, so its start is refused in words, not scheduled
+    to fail. Delete this and a start is offered for an automation whose first run is refused."""
+    from brain.console.automation_authoring import AUTHORED_TASK, TriggerChoice
+    from brain.console.automation_gallery import Cadence, Every
+    from brain.orchestration.unattended import TriggerKind
+
+    cadence = Cadence(every=Every.DAY, hour_utc=5)
+    one = written(TriggerChoice(kind=TriggerKind.SCHEDULE, cadence=cadence), task=AUTHORED_TASK)
+    base = an_automation("auto_words", template=QUESTIONS)
+    schedules.rows["auto_words"] = listed_authored(
+        replace(base, task=AUTHORED_TASK), one, cadence=cadence
+    )
+
+    shown = items(client, "u_admin")["auto_words"]
+
+    assert shown["start_confirmation"] is None
+    assert "an agent run with nobody present" in shown["cannot_start"]
