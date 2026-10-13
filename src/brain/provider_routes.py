@@ -1235,6 +1235,15 @@ async def _view(request: Request, asked: Asked, calls: ModelCalls) -> ProvidersV
     )
 
 
+async def breaker_states(request: Request, asked: Asked) -> list[RungStateView] | None:
+    """Every live rung with the breaker its attempts produced, or None for a reader who may not
+    read the matrix. What System health draws its breakers from, so the two screens cannot say
+    different things about one rung (M27.13.2)."""
+    if not may_read(asked.reach, asked.now):
+        return None
+    return (await _view(request, asked, models_of(request).calls)).rungs
+
+
 def switchable(plan: Planned) -> tuple[str, ...]:
     """Every provider a switch or a check may name: built in, added, and the local server."""
     return listed_providers(plan)
