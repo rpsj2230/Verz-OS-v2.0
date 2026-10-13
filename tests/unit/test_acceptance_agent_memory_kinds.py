@@ -69,7 +69,7 @@ def test_on_a_real_database_a_kind_left_out_is_kept_and_obeyed_and_nothing_is_le
 def _anybody_may_change_it(monkeypatch: pytest.MonkeyPatch) -> None:
     import brain.agent_memory_kinds_routes as routes
 
-    monkeypatch.setattr(routes, "may_change_channels", lambda _record, _asked: True)
+    monkeypatch.setattr(routes, "may_steward_or_administer", lambda _record, _asked: True)
 
 
 def _the_run_ignores_the_setting(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -34,7 +34,7 @@ import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
 import { ManifestForm } from "../../components/ManifestForm";
-import { readManifestForm } from "../../components/manifestSections";
+import { readManifestForm, readSetElsewhere } from "../../components/manifestSections";
 import { ProcedureCanvas } from "../../components/ProcedureCanvas";
 import type { DrawingPayload } from "../../components/procedure";
 import {
@@ -110,6 +110,9 @@ import {
 
 export const LOADING_DRAFT = "Loading this draft.";
 export const LOADING_FORM = "Loading the form.";
+export const SET_ELSEWHERE_HEADING = "Set on another page";
+export const SET_ELSEWHERE_LEDE =
+  "These are part of an agent but not of this form. Each is set in one place, and it is linked here.";
 export const STEPS_LABEL = "Draft steps";
 export const PROBLEMS_HEADING = "Not whole yet";
 export const WRITE_HEADING = "Write the agent";
@@ -138,8 +141,8 @@ export const PUBLISH_LABEL = "Publish";
 export const APPROVE_LABEL = "Approve and publish";
 export const DECLINE_LABEL = "Send back";
 export const WHO_CAN_FIND = "Who can find the new agent";
-export const ONLY_ME = "Only me";
-export const MY_DEPARTMENT = "My department";
+export const ONLY_ME = "Personal agent: only me";
+export const MY_DEPARTMENT = "Team agent: my department";
 export const HISTORY_HEADING = "History";
 export const REACHES_FURTHER = "Reaches further than before";
 export const SECOND_PERSON = "It will wait for a second person who is not you and whose own access covers all of it.";
@@ -192,6 +195,12 @@ function questionFor(pending: Pending, draft: Draft): { question: string; conseq
   }
 }
 
+/** A reader who may make only their own agent is offered the personal choice alone. A server that
+ * names no kinds is an older one, and it offers both as it always did. */
+function mayMakeTeam(draft: Draft): boolean {
+  return draft.agentKinds.length === 0 || draft.agentKinds.includes("team");
+}
+
 function bodyFor(
   pending: Pending,
   draft: Draft,
@@ -207,6 +216,7 @@ function bodyFor(
       return {
         revision: draft.revision,
         for_department: forDepartment,
+        agent_kind: forDepartment ? "team" : "personal",
         // An edit keeps the agent's own channels, so only a new agent sends the boxes.
         ...(draft.kind === "new" ? { channels: ticked(draft.channels, channels) } : {}),
       };
@@ -388,6 +398,7 @@ function DraftAnswer({ draftId, step }: { readonly draftId: string; readonly ste
   const writing = step === "write" && draft?.yours === true;
   const form = useResource<unknown>(writing ? BUILDER_FORM_API_PATH : null);
   const sections = useMemo(() => (form.data === null ? [] : readManifestForm(form.data)), [form.data]);
+  const setElsewhere = useMemo(() => readSetElsewhere(form.data), [form.data]);
 
   const [pending, setPending] = useState<Pending | null>(null);
   const [sending, setSending] = useState(false);
@@ -514,6 +525,23 @@ function DraftAnswer({ draftId, step }: { readonly draftId: string; readonly ste
             )}
           </div>
         </SectionCard>
+        {setElsewhere.length === 0 ? null : (
+          <SectionCard title={SET_ELSEWHERE_HEADING} lede={SET_ELSEWHERE_LEDE}>
+            <ul className="m-0 flex list-none flex-col gap-3 p-0">
+              {setElsewhere.map((one) => (
+                <li key={one.part} className="flex min-w-0 flex-col gap-0.5">
+                  <span className="text-sm font-semibold text-ink">{one.title}</span>
+                  <span className="text-[13px] text-body">{one.sentence}</span>
+                  {one.address === "" ? null : (
+                    <Link to={one.address} className="w-fit text-[12.5px] text-acc-text underline-offset-4 hover:underline">
+                      {`Open ${one.title.toLowerCase()}`}
+                    </Link>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </SectionCard>
+        )}
       </>
     );
   } else if (step === "procedure") {
@@ -688,17 +716,19 @@ function DraftAnswer({ draftId, step }: { readonly draftId: string; readonly ste
                     />
                     {ONLY_ME}
                   </label>
-                  <label className="flex min-h-11 items-center gap-2 text-sm sm:min-h-8">
-                    <input
-                      type="radio"
-                      name="draft-audience"
-                      checked={forDepartment}
-                      onChange={() => {
-                        setForDepartment(true);
-                      }}
-                    />
-                    {MY_DEPARTMENT}
-                  </label>
+                  {mayMakeTeam(draft) ? (
+                    <label className="flex min-h-11 items-center gap-2 text-sm sm:min-h-8">
+                      <input
+                        type="radio"
+                        name="draft-audience"
+                        checked={forDepartment}
+                        onChange={() => {
+                          setForDepartment(true);
+                        }}
+                      />
+                      {MY_DEPARTMENT}
+                    </label>
+                  ) : null}
                 </fieldset>
               )}
               {draft.kind !== "new" ? null : (

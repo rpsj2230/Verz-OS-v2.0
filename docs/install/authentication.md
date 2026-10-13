@@ -93,8 +93,9 @@ list comes from is also the one people sign in through. For **Google Workspace**
 Entra** the realm then carries that directory as an identity provider, restricted to your own
 domain or tenant, which is the location you gave on the staff list screen. It is never brokered
 without one: a Google broker with no domain, or a Microsoft broker with no tenant, lets anybody
-with an account at that vendor sign in and be given an account here. **Lark and LDAP are not
-brokered** by this release, and people sign in with accounts held in the realm. Whenever the
+with an account at that vendor sign in and be given an account here. **Lark is brokered another
+way**, described in "Signing in with Lark" below, and **LDAP is not brokered** by this release, so
+its people sign in with accounts held in the realm. Whenever the
 setting names a directory that is not brokered, the Settings screen's findings say why, in a
 sentence naming the setting to change.
 
@@ -139,6 +140,63 @@ To switch brokering on for Google Workspace or Microsoft Entra:
    should not be run.
 
 5. Open the sign-in page. It offers your directory beside the password form.
+
+## Signing in with Lark
+
+A company whose staff list is Lark can offer **Sign in with Lark** beside the password form. A person
+on the staff list presses it, signs in to Lark as they always do, and lands in the console as the
+account the staff sync made for them, with no password. It is off until you set it up, and it
+changes nothing for anybody until then.
+
+**What it does and does not do.** It signs a person in to the account that already exists for their
+work address. **It never makes an account**: a person Lark signs in who the staff list does not name
+has no account to be found, and is refused by the sign-in service, so it does not matter which
+Lark accounts exist. A leaver whose account the next staff sync closed is refused as well. Nobody
+is sent an email at any step. **It is ordinary sign-in and not strong sign-in:** Lark's own sign-in
+is not the password and second factor the console asks for before an administrator's button or an
+approval, so a person who signs in with Lark is asked to sign in again with their password and
+second factor to press one, as they are after a password alone.
+
+**What you set up, once.** Lark is not a standard OpenID Connect provider, so this install puts a
+small translation between the sign-in service and Lark (`/lark-sign-in/token`, on your own web
+address). It holds nothing: it passes the application's secret to Lark in the one request that needs
+it and forgets it.
+
+1. In the Lark developer console, open the application you made for the staff list (or make a
+   custom application, which only your own company can sign in to), and add this return address to
+   its **Security settings** redirect URLs, with your identity provider's address and your realm
+   (`brain` unless you changed it):
+
+   ```
+   https://<identity-provider-host>/realms/<realm>/broker/lark/endpoint
+   ```
+
+2. On the same application's **Permissions & scopes**, under the permissions a user grants, add
+   `contact:user.email:readonly` and `contact:user.employee:readonly`, and release a new version.
+3. Make Lark the staff source on **Staff sources** (or in the wizard), so `INSTALL_STAFF_SOURCE` is
+   `lark` and `INSTALL_STAFF_SOURCE_LOCATION` is `larksuite.com` or `feishu.cn`.
+4. Set `INSTALL_BROKERED_DIRECTORY` to `lark` and `INSTALL_BROKERED_CLIENT_ID` to the application's
+   **App ID** (it is not a secret). The wizard writes the first when the staff source is Lark.
+5. Put the application's **App Secret** in the identity provider's vault, on the server, exactly as
+   step 3 of the Google and Microsoft steps above says: a file named
+   `<realm>_brokered-directory-client-secret`. You type it and nobody else sees it.
+6. On a new install, start the stack: the realm is imported with Lark in it. On an install whose
+   realm already exists, give it the sign-in flow and the Lark entry in one step, from any machine
+   that can reach the identity provider (the application prints the entry; the script makes both
+   and reads them back):
+
+   ```
+   docker compose exec -T app python -m brain.ops.realm_import --identity-provider > lark.json
+   KC_URL=https://<identity-provider-host> KEYCLOAK_ADMIN=<admin user> \
+     KEYCLOAK_ADMIN_PASSWORD=<its password> sh ops/keycloak/lark-sign-in.sh lark.json
+   ```
+
+   If the first command prints a reason and nothing else, the install is not set up for Lark yet,
+   and the reason names the setting to change. The Settings screen shows the same reason.
+
+7. Open the sign-in page. It offers **Lark** beside the password form. A person on the staff list
+   whose account the staff sync made presses it and signs in; a person who is not on the list is
+   refused, and so is a leaver.
 
 ## Reading the staff list on the wizard's screen
 

@@ -7,6 +7,22 @@
 
 import { type PageCase, UNBROKEN } from "../pageFixtures";
 
+/** One artifact as the API names it, every value an unbreakable token. */
+const ARTIFACT = {
+  artifact_id: UNBROKEN,
+  kind: UNBROKEN,
+  agent_id: UNBROKEN,
+  produced_for: UNBROKEN,
+  produced_at: "2019-03-01T09:00:00Z",
+  state: "current",
+  superseded_by: "",
+  run_id: UNBROKEN,
+  agent_version: UNBROKEN,
+  kept_as: UNBROKEN,
+  kept_until: "2999-01-01T00:00:00Z",
+  kept_because: UNBROKEN,
+};
+
 export const PAGES: Readonly<Record<string, PageCase>> = {
   // My workspace. An agent id and an item id sit in tables that scroll; a memory statement, the
   // disclosure line and every served sentence sit outside them and must wrap.
@@ -53,6 +69,57 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
           { channel: "lark", bound: true, bound_at: "2019-03-01T09:00:00Z", may_bind: true },
           { channel: "webhook", bound: false, bound_at: null, may_bind: true },
         ],
+        told: UNBROKEN,
+      },
+      "/api/v1/me/preferences": {
+        learning: { opted_out: false, cost: UNBROKEN },
+        channels: [
+          { channel: "lark", primary: true, chosen: true, notify: ["approval"], may_carry_an_approval: true },
+          { channel: "webhook", primary: false, chosen: false, notify: [], may_carry_an_approval: false },
+        ],
+        primary: "lark",
+        approval_route: "lark",
+        approval_choices: ["lark", "console"],
+        notice_kinds: ["approval", "digest"],
+        quiet: { start: "22:00", end: "07:00" },
+        quiet_applies_to: ["digest"],
+        approvals_are_never_held: UNBROKEN,
+        ignored: [],
+      },
+      "/api/v1/me/devices": {
+        devices: [
+          {
+            session_id: UNBROKEN,
+            channel: UNBROKEN,
+            second_factor: true,
+            started_at: "2019-03-01T09:00:00Z",
+            expires_at: "2019-03-02T09:00:00Z",
+            is_this_one: false,
+          },
+        ],
+        more: false,
+      },
+      "/api/v1/me/reads": {
+        reads: [{ at: "2019-03-01T09:00:00Z", actor_id: UNBROKEN, agent_id: UNBROKEN, record_kind: UNBROKEN }],
+        more: false,
+      },
+      "/api/v1/me/artifacts": {
+        artifacts: [ARTIFACT],
+        more: false,
+      },
+      "/api/v1/me/shared": {
+        items: [{ artifact: ARTIFACT, shared_by: UNBROKEN, shared_at: "2019-03-01T09:00:00Z" }],
+        more: false,
+      },
+      "/api/v1/me/shares": {
+        shares: [{ artifact_id: UNBROKEN, shared_with: UNBROKEN, shared_at: "2019-03-01T09:00:00Z" }],
+        more: false,
+      },
+      "/api/v1/me/agents/requestable": {
+        agents: [{ agent_id: UNBROKEN, display_name: UNBROKEN, asked: false }],
+      },
+      "/api/v1/me/stored": {
+        stores: [{ store: UNBROKEN, holds: UNBROKEN, deletion: UNBROKEN }],
         told: UNBROKEN,
       },
       "/api/v1/me/accounts": {

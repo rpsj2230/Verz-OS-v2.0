@@ -577,8 +577,15 @@ def test_the_sync_may_delete_from_its_own_table() -> None:
     assert expected in grants
 
 
-#: The tables the application role may delete from, each argued in the test below.
-DELETE_GRANTED = ("auth.directory_role_grant", "obs.application_log")
+#: The tables the application role may delete from, each argued in the test below. The last two
+#: are a person's own record: a setting they keep (`0229`), erased with them, and an artifact they
+#: handed to a colleague (`0230`), which only they may withdraw. Neither is anybody's audit trail.
+DELETE_GRANTED = (
+    "auth.directory_role_grant",
+    "obs.application_log",
+    "auth.member_preference",
+    "agent.artifact_share",
+)
 
 
 def test_no_other_table_in_any_migration_grants_delete() -> None:
