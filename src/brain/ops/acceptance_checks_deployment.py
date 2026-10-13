@@ -157,7 +157,7 @@ def _this_processor() -> str:
 
 # ------------------------------------------------------------------- 1. the worker's layout
 @check(
-    leaves=("M32.4.1.4",),
+    leaves=("M32.4.1.4", "M17.1.3"),
     sentence=(
         "The worker running the suite was started from its container's declared allocation: "
         "its own start-up checks refuse nothing, it drains a queue per traffic class with that "

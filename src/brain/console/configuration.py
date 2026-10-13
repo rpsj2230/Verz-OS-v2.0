@@ -79,7 +79,14 @@ from brain.identity.staff_accounts import NOBODY
 from brain.identity.staff_source import EmploymentType
 from brain.install import BY_NAME, INSTALLATION, Belongs, Setting, saved_values
 from brain.knowledge.search import vector_store_refusal
-from brain.locale import CURRENCY_PATTERN, SHIPPED_TAGS, LocaleError, accent_set, rules_for
+from brain.locale import (
+    CURRENCY_PATTERN,
+    SHIPPED_TAGS,
+    LocaleError,
+    accent_set,
+    is_right_to_left,
+    rules_for,
+)
 from brain.models.assembly import HOSTED_PROFILE, LOCAL_PROFILE, MODEL_PROFILES, local_only
 from brain.models.default_ladder import LOCAL_COMPLETION_MODEL
 from brain.ops.inference import SERVED_MODELS
@@ -739,6 +746,14 @@ def _time_of_day_problem(value: str) -> str:
 def _locales_problem(value: str) -> str:
     shipped = ", ".join(SHIPPED_TAGS)
     tags = [one.strip() for one in value.split(",") if one.strip()]
+    for one in tags:
+        if is_right_to_left(one):
+            # The deferral's own sentence, which names the trigger this refusal is. A generic
+            # "not shipped" would hide that the product knows of right-to-left and chose to wait.
+            try:
+                rules_for(one)
+            except LocaleError as deferred:
+                return str(deferred)
     try:
         for one in tags:
             rules_for(one)
