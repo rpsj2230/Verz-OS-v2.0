@@ -512,6 +512,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/console/connectors",
       "/api/v1/console/incidents",
       "/api/v1/console/incidents/acknowledgement",
+      "/api/v1/console/system-health",
       "/api/v1/console/connectors/{connector}",
       "/api/v1/console/connectors/{connector}/export",
       "/api/v1/console/connectors/{connector}/probe",
