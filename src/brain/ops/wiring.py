@@ -31,8 +31,9 @@ component must make, and `pooler_misuse` refuses the combination rather than tru
 whoever writes the compose entry will remember.
 
 **Two of these components run the same image and the same command, and the second one is
-here because of arithmetic.** `brain-worker` is 384 MiB across seven slots, so a job gets
-about 48 MiB, and the knowledge door admits a 50 MiB PDF. A parse in that container cannot
+here because of arithmetic.** `brain-worker` runs seven slots of 48 MiB (inside 384 MiB
+until 2026-10-13, 768 MiB now, for headroom and not for more jobs), so a job gets about
+48 MiB, and the knowledge door admits a 50 MiB PDF. A parse in that container cannot
 hold its own input, never mind read it, and parsing is the one workload whose size is chosen
 by somebody outside the company. `brain-parse-worker` is sized for the largest file the door
 will admit; `brain.knowledge.parse_budget.parse_worker_gaps` is what compares the two ends
@@ -264,8 +265,18 @@ class Component:
 #: answer for `full` is no.
 COMPONENTS: Final[tuple[Component, ...]] = (
     Component(
+        # **768 MiB since 2026-10-13, and the reason is a measurement.** On the owner's install the
+        # worker was OOM-killed about every half hour, thirty times in a day, with one python
+        # process holding about 339 MB of anonymous memory against this limit when it was 384 MiB.
+        # The container usually survives the kill and the install acceptance run, which runs in it,
+        # does not: no run had completed since the day before. 339 MB of one process's anonymous
+        # memory is already 88% of 384 before the page cache and the other processes the cgroup also
+        # counts, so 384 was too tight for what this container runs. 768 is double, which leaves the
+        # measured process room to grow by as much again. `MIB_PER_SLOT` and the slot count are
+        # unchanged: the slots are the queue's cap on jobs, and the extra memory is headroom, not
+        # more jobs.
         name="brain-worker",
-        memory_mib=384,
+        memory_mib=768,
         profiles=frozenset({"standard", "full"}),
         wiring=Wiring.DIRECT,
         needs_session_state=True,
@@ -273,7 +284,7 @@ COMPONENTS: Final[tuple[Component, ...]] = (
     ),
     Component(
         # Separate from `brain-worker` because of arithmetic rather than tidiness. The
-        # general worker is 384 MiB across seven slots, which is 48 MiB of slot for a job,
+        # general worker holds seven slots of 48 MiB each (inside a larger limit since 2026-10-13),
         # and the knowledge door admits a 50 MiB PDF: a parse there cannot hold its own
         # input. The size below is what the door's largest admissible file costs once
         # expanded, plus the reserve the cgroup counts and a parse budget does not.

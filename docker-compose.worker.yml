@@ -28,10 +28,11 @@
 #
 # | cap | value | enforced by | what it does not cover |
 # | --- | --- | --- | --- |
-# | cgroup limit | 384M | the kernel, by killing the container | nothing; it is the backstop |
+# | cgroup limit | 768M | the kernel, by killing the container | nothing; it is the backstop |
 # | slot budget | 7 slots x 48 MiB = 336 MiB | `brain.ops.worker.preflight`, before the first fetch | one job that leaks |
+# | slot share | at most 75% of the limit (576 MiB of 768) | `brain.ops.container_limit`, at start, against the limit the kernel states | the rest of the process, which is what the other quarter is for |
 #
-# 336 sits strictly below 384 for the same reason every pair in the trace ledger does: the
+# 336 sits below the 576 a plan may spend, and that below 768, for the same reason every pair in the trace ledger does: the
 # quantity being capped is not the whole of what the cgroup counts. `MIB_PER_SLOT` is the
 # working set of one in-flight job and the gap is the interpreter, the connection pool and
 # the imports. And it is honest about what it misses: a single job that leaks is still an OOM
@@ -178,7 +179,7 @@ services:
       BRAIN_WORKER_POOL_MAX: "15"
       # glibc gives a threaded process up to eight arenas per core and never returns them,
       # so resident memory climbs to a plateau set by the host's core count rather than by
-      # the container's limit. On this box that plateau is above 384M. Two arenas costs a
+      # the container's limit. On this box that plateau was above 384M. Two arenas costs a
       # little allocator contention and is the one memory knob CPython actually has.
       MALLOC_ARENA_MAX: "2"
       PYTHONUNBUFFERED: "1"
@@ -187,7 +188,7 @@ services:
         limits:
           # Matches the `brain-worker` component in `brain.ops.wiring`, which is where the
           # budget is decided and what every profile's arithmetic is computed from.
-          memory: 384M
+          memory: 768M
     healthcheck:
       # Readiness, not liveness, and `brain.ops.wiring` says what it means: the queue driver
       # has fetched at least once and the database is reachable. `--ready` reads the

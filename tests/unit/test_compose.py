@@ -431,8 +431,8 @@ def test_the_deployment_and_the_budget_describe_the_same_host_once_both_gaps_are
     answers differ by 1088 MiB with nothing saying which is right."""
     files = profile_files()
 
-    assert summed_mib(files) == 15872
-    assert deployment_mib(files) == 14848
+    assert summed_mib(files) == 16256
+    assert deployment_mib(files) == 15232
     assert undeployed_mib("full", files) == 0
     assert unbudgeted_mib("full", files) == 1088
 
@@ -471,7 +471,7 @@ def test_the_host_this_profile_needs_is_larger_than_the_whole_of_the_measured_ma
     """**The honest answer to "why is there no full profile deployed", and it is not the same
     answer as the budget's.** `budget_breaches("full")` compares wave 2 against a cap measured
     on one machine, which is a fact about that machine and not about the product. This is the
-    fact about the product: the profile needs 15104 MiB of reservations, and the machine the
+    fact about the product: the profile needs 15488 MiB of reservations, and the machine the
     measurements were taken on has 11960 MiB in total, so it does not fit there with every
     neighbour removed and nothing left for the kernel.
 
@@ -483,7 +483,7 @@ def test_the_host_this_profile_needs_is_larger_than_the_whole_of_the_measured_ma
     head, which is how "it does not fit our server" became "it cannot be built"."""
     files = profile_files()
 
-    assert host_mib_for("full", files) == 15104
+    assert host_mib_for("full", files) == 15488
     assert host_mib_for("full", files) == (
         deployment_mib(files) + undeployed_mib("full", files) + HOST_RESERVE_MIB
     )
