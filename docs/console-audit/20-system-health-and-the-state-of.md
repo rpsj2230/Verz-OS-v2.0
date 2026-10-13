@@ -3,17 +3,23 @@
 - **Screens:** `/`, `/models`, `/runs`, `/stop`
 - **Tables:** `ops.halt`
 - **Installation values:** none
-- **Measured here:** 5 routes, 2 called by no screen; 2 write routes, 2 with all three proofs; 0 gaps.
+- **Measured here:** 11 routes, 8 called by no screen; 2 write routes, 2 with all three proofs; 1 gaps.
 
 | Route | Called by |
 | --- | --- |
 | `GET /api/v1/console/overview` | `/` |
 | `GET /api/v1/console/overview/figures` | `/` |
 | `GET /api/v1/halts` | `/stop` |
+| `GET /api/v1/help/alerts` | **no screen** |
+| `GET /api/v1/help/alerts/{control}` | **no screen** |
+| `GET /api/v1/help/playbook` | **no screen** |
+| `GET /api/v1/help/runbooks` | **no screen** |
+| `GET /api/v1/help/runbooks/{key}` | **no screen** |
+| `GET /api/v1/help/what-it-sees` | **no screen** |
 | `POST /api/v1/halts` | **no screen** |
 | `POST /api/v1/halts/resume` | **no screen** |
 
-No gap recorded.
+- **Gap.** No page draws the help routes yet: the runbooks, the alert steps, the incident playbook and what the system can see are served and nothing links to them. Recorded: brain.help_routes serves them to a reader of the screen each is about (M34.4.1, M34.3.2.1, M34.3.1.1, M34.3.1.2), and the console has not been given a Help page or a link from each screen to its runbook.
 
 **Every write to this area, followed to the system.**
 

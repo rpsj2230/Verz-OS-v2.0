@@ -73,6 +73,8 @@ export type Limits = components["schemas"]["LimitsView"];
 export type Capacity = components["schemas"]["CapacityView"];
 /** One capacity sizing, at its busiest minute, with Little's law worked (M22.3.1, M22.3.2). */
 export type Sizing = components["schemas"]["SizingView"];
+/** One scaling move, what makes it due and whether this install is past that (M36.1.1.4). */
+export type ScalingMove = components["schemas"]["MoveView"];
 
 /**
  * Written down because dropping the label is the single change that makes these screens lie,

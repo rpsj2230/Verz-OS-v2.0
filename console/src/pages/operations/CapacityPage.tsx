@@ -21,12 +21,16 @@
  * `brain.ops.admission`, so this page draws them and computes nothing; the first limit reached at ten
  * and a hundred times today's volume is the product's documented sentence.
  *
- * Task ids: M27.7.27, M27.16.1, M22.3.1, M22.3.2, M22.3.4
+ * **The scaling moves are listed with whether each is due, and a move nothing measures says so** (M36.1.1.4,
+ * M36.1.2.4, M36.1.3.3, M36.1.4.3). The API decides each from `brain.ops.scaling`; this page draws the
+ * sentence it sends and a due flag it was sent, and never turns an unmeasured move into "not due".
+ *
+ * Task ids: M27.7.27, M27.16.1, M22.3.1, M22.3.2, M22.3.4, M36.1.1.4, M36.1.2.4, M36.1.3.3, M36.1.4.3
  */
 
 import { useResource } from "../../api/useResource";
 import { KpiStrip, Note, SectionCard, StatCard, type EntityColumn } from "../../components/kit";
-import { CAPACITY_API_PATH, type Capacity as CapacityBody, type Connection, type Sizing } from "../installQuery";
+import { CAPACITY_API_PATH, type Capacity as CapacityBody, type Connection, type ScalingMove, type Sizing } from "../installQuery";
 import { OpsPage, PLATFORM, WholeList } from "./parts";
 
 export const CAPACITY_HEADING = "Capacity";
@@ -49,6 +53,10 @@ export const SIZING_LEDE =
   "Each sizing is the busiest minute's questions a second times how long each is in flight, which is how many are in flight at once. A day's total sizes a machine that is never busy.";
 export const NO_SIZINGS = "No sizing is recorded";
 export const FIRST_LIMIT_HEADING = "The first limit reached at ten and a hundred times";
+export const MOVES_HEADING = "When to scale";
+export const MOVES_LEDE =
+  "Each move below is due when what it watches passes its figure. A move nothing here measures says so, and is not shown as not due.";
+export const NO_MOVES = "No scaling move is recorded";
 
 function perSecond(value: number): string {
   return `${value.toLocaleString("en-GB")} a second`;
@@ -71,6 +79,29 @@ const SIZING_COLUMNS: readonly EntityColumn<Sizing>[] = [
   },
   { id: "slots", header: "Slots needed", align: "end", cell: (row) => row.slots_needed.toLocaleString("en-GB"), text: (row) => String(row.slots_needed) },
   { id: "reason", header: "Where the figure came from", hidden: true, cell: (row) => row.reason, text: (row) => row.reason },
+];
+
+function figure(value: number | null | undefined, unit: string): string {
+  return value === null || value === undefined ? "Not measured" : `${value.toLocaleString("en-GB")} ${unit}`;
+}
+
+function dueWord(value: boolean | null | undefined): string {
+  if (value === null || value === undefined) return "Not measured";
+  return value ? "Due" : "Not due";
+}
+
+const MOVE_COLUMNS: readonly EntityColumn<ScalingMove>[] = [
+  {
+    id: "move",
+    header: "Move",
+    hideable: false,
+    cell: (row) => `${row.move.replaceAll("_", " ")}: ${row.observable.replaceAll("_", " ")}`,
+    text: (row) => `${row.move} ${row.observable}`,
+  },
+  { id: "due", header: "Due", cell: (row) => dueWord(row.due), text: (row) => dueWord(row.due) },
+  { id: "threshold", header: "Due past", align: "end", cell: (row) => figure(row.threshold, row.unit), text: (row) => figure(row.threshold, row.unit) },
+  { id: "measured", header: "Here", align: "end", cell: (row) => figure(row.measured, row.unit), text: (row) => figure(row.measured, row.unit) },
+  { id: "said", header: "What it says", cell: (row) => row.said, text: (row) => row.said },
 ];
 
 function mib(value: number): string {
@@ -143,6 +174,16 @@ export function CapacityPage() {
               rowId={(row) => row.name}
               rowLabel={(row) => row.name}
               empty={NO_SIZINGS}
+            />
+            <WholeList
+              title={MOVES_HEADING}
+              lede={MOVES_LEDE}
+              caption={MOVES_HEADING}
+              columns={MOVE_COLUMNS}
+              rows={page.moves ?? []}
+              rowId={(row) => `${row.move}:${row.observable}`}
+              rowLabel={(row) => row.observable}
+              empty={NO_MOVES}
             />
             {page.first_limit ? (
               <SectionCard title={FIRST_LIMIT_HEADING}>
