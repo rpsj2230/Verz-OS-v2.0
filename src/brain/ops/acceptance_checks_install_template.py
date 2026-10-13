@@ -131,8 +131,8 @@ async def the_installer_steps_say_when_done_and_what_to_do_on_failure(h: Harness
     sentence=(
         "The installer mints the database password, the application role's password and the "
         "setup secret on the client's own server; and every credential this install's "
-        "application holds is non-empty, long enough to have been generated, and not one value "
-        "doing for two credentials."
+        "application holds is long enough to have been generated and not one value doing for "
+        "two credentials."
     ),
 )
 async def every_secret_the_install_holds_was_minted_here_and_none_repeats(h: Harness) -> None:
@@ -150,9 +150,10 @@ async def every_secret_the_install_holds_was_minted_here_and_none_repeats(h: Har
     # else's variables, and a short token of the platform's is not this install's secret.
     environment = process_environment()
     names = {one for accepted in application_reads().values() for one in accepted}
-    found = unminted_secrets(
-        {name: environment[name] for name in sorted(names) if name in environment}
-    )
+    # A credential left blank is a feature nobody configured (Langfuse, say), not one the
+    # installer failed to mint, and the compose files refuse to start without the ones it does.
+    held = {name: environment[name] for name in sorted(names) if environment.get(name, "").strip()}
+    found = unminted_secrets(held)
     if found:
         # Names only, never values, to the worker's log; the result names nothing.
         log.warning("acceptance.secrets_not_minted", findings=list(found))
@@ -307,6 +308,13 @@ async def the_updates_screen_names_the_version_and_whether_newer_exists(
     asked = await c.asked(reader)
     with c.as_route():
         view = await updates(c.request(), asked)
+    watch = getattr(c.app.state, "release_watch", None)
+    if watch is not None:
+        # A look the page started, if the release check is on, is let finish rather than left
+        # running past the check.
+        from brain.ops.acceptance_operations_console import settled as looked
+
+        await looked(watch)
     if not view.running.tag and not view.running.cannot_say:
         raise CheckFailedError("the screen neither names the running release nor says why not")
     if view.running.tag and view.running.cannot_say:
