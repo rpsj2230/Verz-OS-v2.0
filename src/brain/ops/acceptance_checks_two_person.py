@@ -250,11 +250,9 @@ async def a_money_action_runs_only_after_two_other_people_approve_it(h: Harness)
     if not (await _database_says(h, asker, fresh, endorse_as) or "").endswith(ASKER_DOES_NOT):
         raise CheckFailedError("the database allowed the person an action runs as to endorse it")
     await pressed(first, fresh)
-    for who, why in (
-        (first, "the endorser to decide it"),
-        (asker, "the person it runs as to decide it"),
-    ):
-        if not (await _database_says(h, who, fresh, decide_as) or "").endswith(TWO_OTHERS):
-            raise CheckFailedError(f"the database allowed {why}")
+    if not (await _database_says(h, first, fresh, decide_as) or "").endswith(TWO_OTHERS):
+        raise CheckFailedError("the database allowed the endorser to decide the action")
+    if not (await _database_says(h, asker, fresh, decide_as) or "").endswith(TWO_OTHERS):
+        raise CheckFailedError("the database allowed the person it runs as to decide the action")
     if await _database_says(h, second, fresh, decide_as) is not None:
         raise CheckFailedError("the database refused the second person's approval")
