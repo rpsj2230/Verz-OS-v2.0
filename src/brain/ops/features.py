@@ -302,6 +302,25 @@ SHARED_TOOL_START: Final = Feature(
     read_by=("brain.ops.shared_start:universal_when_on",),
 )
 
+#: The website widget's answers written by the model. Off until its owner has seen it on his
+#: install: every visitor question then costs a model call, paid by the install, asked by strangers
+#: with no budget of their own (needs-rupash 139, option B). The cap is `widget_daily_spend`.
+WIDGET_MODEL_ANSWERS: Final = Feature(
+    name="widget_model_answers",
+    title="Let the website widget write its answers with the model",
+    what=(
+        "A visitor's question is answered by a short reply the model writes from the passages you "
+        "have marked public and from nothing else, with those passages shown beside it. What the "
+        "replies cost a day is capped by the figure on the Rate limits screen, and once it is used "
+        "up the widget answers with the passages themselves until midnight UTC."
+    ),
+    while_off=(
+        "The widget answers with the published passages, word for word, and no model is called "
+        "for a visitor."
+    ),
+    read_by=("brain.widget_answers:model_answers_on",),
+)
+
 #: Every feature this product can switch on, in the order the screen lists them.
 FEATURES: Final[tuple[Feature, ...]] = (
     PROMPT_EDITING,
@@ -311,6 +330,7 @@ FEATURES: Final[tuple[Feature, ...]] = (
     BUDGET_ENFORCEMENT,
     SUPERVISION_REVIEW,
     SHARED_TOOL_START,
+    WIDGET_MODEL_ANSWERS,
 )
 
 

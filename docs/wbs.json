@@ -1279,7 +1279,10 @@
     "M10.7.2",
     "M10.7.3",
     "M10.7.4",
-    "M10.7.5"
+    "M10.7.5",
+    "M10.7.6",
+    "M10.7.7",
+    "M10.7.8"
    ],
    "leaf_texts": [
     "Channel adapter interface with normalise, send, capabilities",
@@ -1318,7 +1321,10 @@
     "An anonymous website widget visitor holds one grant over knowledge an administrator marked public and nothing else, a question about anything else is answered as nothing found, marking or unmarking an item public is audited with who did it, and a department admin can mark only their own department's knowledge public",
     "Every shipped channel is proved on an install: on each chat channel, by email, through the REST API and in the web application a bound person asks and gets a permission-correct answer through that channel's own credential with progress streamed, a sender bound to nobody learns nothing about the company, a message whose signature does not verify is refused unread, a platform retry produces one answer, a waiting approval notice reaches the person it names, the conversation continues on a second channel, and an agent not enabled on a channel refuses there, with the checks recorded",
     "Group chat and channel policy are proved on an install: in one group chat people with different reach see a shared message at the floor of everyone present and each receives their own body privately or as a link where the gate re-runs, a channel whose policy excludes a sensitivity class refuses to carry it, and an approval card is offered only where approvals are allowed, with the checks recorded",
-    "The website widget is proved on an install: an anonymous visitor on a website is answered only from knowledge marked public, a question about anything else returns nothing found, and repeated requests from one origin are capped and the session expires sooner than a signed-in one, with the checks recorded"
+    "The website widget is proved on an install: an anonymous visitor on a website is answered only from knowledge marked public, a question about anything else returns nothing found, and repeated requests from one origin are capped and the session expires sooner than a signed-in one, with the checks recorded",
+    "The website widget's answer is written by the model from the passages an administrator marked public and from nothing else, with those passages shown beside it, when the owner has switched model answers on; with the switch off, or when the model cannot answer, the visitor is given the passages themselves",
+    "What the website widget's model answers may cost a day is a figure the owner sets on the Rate limits screen, each answer's cost is counted from the spend ledger under the widget's own name, and once the day's figure is used up the widget answers with the passages until midnight UTC",
+    "Proved on the install: with model answers switched on and a cap, a visitor's question is answered by the model from the public passage alone, the cost is on the spend ledger under the widget, and the answer after the cap is used up is the passages"
    ],
    "leaf_waves": {
     "M10.7.3": 3

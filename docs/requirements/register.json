@@ -18703,6 +18703,20 @@
     "M39.10.7"
    ],
    "decision": "needs-rupash 189: how a team agent may use mail; open until answered"
+  },
+  {
+   "id": "DEC-139B",
+   "source": "needs-rupash 139 (decided 2026-10-13, option B)",
+   "area": "Channels",
+   "requirement": "The website widget's answers are written by the model from the public passages only, under a daily spending cap the owner sets in the console, and the widget falls back to the passages once the cap is reached.",
+   "leaves": [
+    "M10.7.6",
+    "M10.7.7"
+   ],
+   "proof": [
+    "M10.7.8"
+   ],
+   "decision": null
   }
  ]
 }
