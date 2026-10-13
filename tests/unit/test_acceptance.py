@@ -746,6 +746,16 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     # Nor a cache to keep a conversation's notes in; `tests/unit/test_acceptance_session.py` runs it
     # with a client in memory standing in the cache's place.
     assert outcomes.pop("session_memory_is_one_conversations_own_and_silent")[0] == NOT_RUN
+    # No worker has run on this database, so there is no retention report to read and no ledger
+    # partition for the months ahead; `tests/unit/test_acceptance_checks_data_governance.py` and
+    # `test_acceptance_checks_scaling_reads.py` write what the worker writes and run them.
+    assert (
+        outcomes.pop("the_retention_report_reaches_every_store_and_says_why_it_did_not")[0]
+        == NOT_RUN
+    )
+    assert (
+        outcomes.pop("the_ledger_has_a_partition_for_this_month_and_each_one_ahead")[0] == NOT_RUN
+    )
     # No currency is set here, so no cost is recorded and a department's pace is withheld by
     # design; `tests/unit/test_acceptance_company_views.py` sets one and runs it.
     assert (

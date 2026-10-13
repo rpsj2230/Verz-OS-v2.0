@@ -836,7 +836,7 @@ async def a_run_leases_its_key_and_the_next_run_reads_a_replaced_one(h: Harness)
 
 # ------------------------------------------ 5. whose key, how long, and once for many
 @check(
-    leaves=("M11.2.5", "M11.5.1", "M11.5.4", "M11.5.2"),
+    leaves=("M11.2.5", "M11.5.1", "M11.5.4", "M11.5.2", "M36.2.1.1", "M36.2.1.2"),
     sentence=(
         "A live Xero read runs only under the service key the source declares; one asked under "
         "the asker's own credentials borrows no key and makes no call. A silent source is cut off "
