@@ -170,7 +170,9 @@ class RequestTelemetryRow(Base):
     #: What a reasoning model spent thinking, a part of `tokens_out`, and where the request's time
     #: went by gate step (M27.15.6; migration 0215). Null before 0215 and where nothing measured.
     reasoning_tokens: Mapped[int | None] = mapped_column(Integer)
-    stage_ms: Mapped[dict[str, float] | None] = mapped_column(JSONB)
+    # none_as_null: an unmeasured request is SQL NULL, which the check allows, and not the JSON null
+    # that the column type would otherwise write, which the check refuses as not an object.
+    stage_ms: Mapped[dict[str, float] | None] = mapped_column(JSONB(none_as_null=True))
 
     __table_args__ = (
         CheckConstraint(one_of("traffic_class", TrafficClass), name="traffic_class"),
