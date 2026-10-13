@@ -35,6 +35,7 @@ from brain.ops import (
     acceptance_checks_connectors_area,
     acceptance_checks_evaluation,
     acceptance_checks_knowledge_models,
+    acceptance_checks_lark_sign_in,
     acceptance_checks_people,
     acceptance_checks_proof_gaps,
     acceptance_checks_recovery,
@@ -959,6 +960,12 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         "departments_managed_on_people_are_not_the_staff_sync_s",
     ):
         assert outcomes.pop(list_check) == (NOT_RUN, acceptance_checks_people.NO_STAFF_LIST_IS_READ)
+    # No install here brokers sign-in to Lark, so the bridge has nothing at its address to ask;
+    # `tests/unit/test_acceptance_lark_sign_in.py` brokers it and the check passes.
+    assert outcomes.pop("the_lark_bridge_names_the_person_lark_names_and_nobody_else") == (
+        NOT_RUN,
+        acceptance_checks_lark_sign_in.THIS_INSTALL_DOES_NOT_BROKER_SIGN_IN_TO_LARK,
+    )
     # Nobody has recorded a check on the Requirement checks screen here, so each area's leaf says
     # so; `tests/unit/test_acceptance_checks_requirement_areas.py` records them and it passes.
     for area_check in registered(("brain.ops.acceptance_checks_requirement_areas",)):
