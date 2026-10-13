@@ -20,6 +20,7 @@ front of a bare server. Nothing in them names another company's installation.
 | [scaling.md](scaling.md) | A read replica, and splitting the stack across two hosts |
 | [threat-model.md](threat-model.md) | Every surface an install exposes, and what stands in the way |
 | [handover.md](handover.md) | A company leaving: its data exported and checkable, the install removed, a certificate |
+| [images.md](images.md) | Every container image the files pin, and the day each tag was seen to exist |
 
 ## Which half of this is checked
 
