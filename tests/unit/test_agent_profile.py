@@ -489,15 +489,16 @@ def sources_under(root: Path) -> dict[str, str]:
 
 
 def test_the_page_is_told_a_runs_cost_is_recorded_because_the_usage_recorder_writes_it() -> None:
-    """Read off the source rather than trusted: exactly one module under `src/brain` reaches
-    `brain.ops.spend_store.record`, the usage recorder the lane's `finally` reaches, the flag says
-    a cost is recorded, and the diagnostic agrees.
+    """Read off the source rather than trusted: exactly two modules under `src/brain` reach
+    `brain.ops.spend_store.record`, the usage recorder the lane's `finally` reaches and the website
+    widget's own answer (`brain.widget_answers`), which writes a visitor's answer's cost under the
+    widget's name and never an agent's; the flag says a cost is recorded, and the diagnostic agrees.
 
     What breaks if this is deleted: the day the writer goes, the page goes on saying a figure is
     recorded and draws every agent's nought as a measurement, or a second writer lands unseen."""
     every = sources_under(SRC)
     assert "brain.ops.spend_store" in every
-    assert spend_writers(every) == ("brain.ops.usage_store",)
+    assert spend_writers(every) == ("brain.ops.usage_store", "brain.widget_answers")
     assert RUN_SPEND_IS_RECORDED is True
     assert profile_gaps(sources=every) == ()
 
