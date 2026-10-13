@@ -2,6 +2,7 @@
   "_why": "Tasks whose install check passes against something the check made up, so the pass is not yet proof the install reaches the real thing. Read by brain.ops.proof_sweep; see A_RESULT_ON_SOMETHING_MADE_UP_IS_HELD. A task leaves this list when its check runs against the real thing, in the commit that says so.",
   "held": {
     "M1.1.8": "the check asks the application's own bridge on a Lark made up for it; the sign-in service linking a person to their account is shown only by the owner's own Lark sign-in (needs-rupash 197)",
+    "M12.4.7": "passes by approving the eight starter skills inside its own transaction, which shows furnishing, rehearsal, approval and assignment work and not that the library holds eight approved skills; held until a person on the install has approved them (needs-rupash 181)",
     "M3.7.2": "passes on a scripted model, which shows the shared start holds only what everybody holds and names a person no tool they lack; held until the install shows the saving, a real second question whose start the provider reports as cached input tokens (needs-rupash 175, A)",
     "M1.6.13": "passes against a stand-in the check made (accounts, a roster or a role handed to it); held until the install shows it on its own",
     "M1.6.16": "passes against a stand-in the check made (accounts, a roster or a role handed to it); held until the install shows it on its own",
