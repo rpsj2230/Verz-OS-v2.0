@@ -32,6 +32,13 @@ from brain.ops.acceptance_run import Harness
 #: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
 CHECK_ORDER: Final = 1920
 
+#: The digest check's own reason, stated here as a sentence because a reason a check raises must
+#: be a literal in the module that raises it (`tests/unit/test_acceptance.py`).
+THE_LEARNING_DIGEST_IS_SWITCHED_OFF: Final = (
+    "an administrator has switched the weekly learning digest off on this install, so nobody is "
+    "told their week, and that telling was not checked"
+)
+
 
 # ------------------------------------------------------------- 1. learning (M40.4.1.4)
 @check(
@@ -171,11 +178,7 @@ async def a_digest_is_held_by_quiet_hours_and_by_a_channel_that_omits_it(
     from brain.member.preferences import PreferenceKey, clock
     from brain.memory.digest import DIGEST_PERIOD
     from brain.ops.acceptance_checks import _HeldLedger, _Secret
-    from brain.ops.acceptance_checks_learning_digest import (
-        THE_LEARNING_DIGEST_IS_SWITCHED_OFF,
-        _on_slack,
-        _sent,
-    )
+    from brain.ops.acceptance_checks_learning_digest import _on_slack, _sent
     from brain.ops.acceptance_escalation import _Kept
     from brain.ops.member_preference_store import StoredPreferences
 
