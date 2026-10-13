@@ -15127,7 +15127,7 @@
    "proof": [
     "M30.6.8"
    ],
-   "decision": null
+   "decision": "needs-rupash 215: the wizard takes the logo as an address; whether it should upload one is asked"
   },
   {
    "id": "GAP2-16",
