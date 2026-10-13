@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-13T14:31:49.274084+00:00",
-  "commit": "a270fc97",
-  "commit_subject": "Install checks for the client deployment template (M42, eleven leaves) (#558)",
+  "generated_at": "2026-10-13T15:07:51.460848+00:00",
+  "commit": "a305a940",
+  "commit_subject": "The daily backup report, its alert and five hosting and recovery install checks (M30) (#576)",
   "total": 1625,
   "done": 864,
   "percent": 53.2,
