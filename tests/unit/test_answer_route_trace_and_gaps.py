@@ -23,6 +23,7 @@ from brain.core.department import GAP_TEMPLATE, departments_named, gaps_for_ques
 from brain.core.entitlement import Capability, Grant
 from brain.core.redaction import ChannelPayload, RedactionTrace
 from brain.core.scope import Scope
+from brain.gate.finish import Finished
 from brain.ops.trace_sink import CountingTraceSink
 from tests.fixtures.console_http import gate_wiring, headers
 from tests.unit.test_answer_route_model import READER, READER_GRANTS
@@ -73,6 +74,37 @@ def test_the_sink_is_handed_the_redactors_trace_with_the_withheld_field_named(
     assert trace.withheld_field_names() == (f"{VISIBLE.entity}.title",)
     assert trace.redaction_count == 1
     assert "LOCKEDTITLEVERMILION" not in trace.model_dump_json()
+
+
+class Finishes:
+    """A recorder that keeps what each finished request was handed."""
+
+    def __init__(self) -> None:
+        self.seen: list[Finished] = []
+
+    async def finished(self, request: Finished) -> None:
+        self.seen.append(request)
+
+
+def test_a_request_finishes_with_the_count_the_redactor_took_out_and_nought_when_none(
+    client: TestClient,
+) -> None:
+    """Needs-rupash 181 A, through the real route and the model lane's own redaction. A reader
+    without the passage title finishes with a redaction count of one; a reader who holds every
+    grant finishes with nought, which is a measurement that the redactor walked the answer and
+    took nothing out, not an absence. Delete this and the audit screen's count of redacted
+    requests reads a column no answer fills."""
+    redacted = Finishes()
+    plain = Finishes()
+    client.app.state.gate = gate_wiring({READER: _without("read:knowledge.title")})  # type: ignore[attr-defined]
+    client.app.state.request_recorders = (redacted,)  # type: ignore[attr-defined]
+    _text(client, QUESTION)
+    client.app.state.gate = gate_wiring(READER_GRANTS)  # type: ignore[attr-defined]
+    client.app.state.request_recorders = (plain,)  # type: ignore[attr-defined]
+    _text(client, QUESTION)
+
+    assert [one.redaction_count for one in redacted.seen] == [1]
+    assert [one.redaction_count for one in plain.seen] == [0]
 
 
 def test_the_applications_sink_logs_the_names_and_counts_and_never_a_value(

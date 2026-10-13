@@ -95,6 +95,16 @@ A_PROMOTION_IS_EARNED_ON_THE_KEY_SINCE_IT_LAST_MOVED: Final = (
     "rung cannot rise on a figure somebody chose."
 )
 
+#: Why a rung can be raised only as far as the agent was published at (needs-rupash 179 A).
+A_RUNG_IS_NEVER_RAISED_BEYOND_THE_RUNG_THE_AGENT_WAS_PUBLISHED_AT: Final = (
+    "Publishing an agent is approved, by two people when it widens anything, so the rung an entry "
+    "went out at is the most any later press may reach on it. Going higher means publishing "
+    "again, where the approval is. Lowering always works, and a rung lowered since may be raised "
+    "back to where it was published and no further. It is asked of the leash the agent was "
+    "installed with and never of its moves, so a raise cannot move the ceiling it is judged "
+    "against."
+)
+
 # ------------------------------------------------------------ what a refusal says
 LOWERING_MUST_LOWER: Final = "That setting is not lower than the one it has now."
 RAISING_MUST_RAISE: Final = "That setting is not higher than the one it has now."
@@ -108,6 +118,10 @@ A_SECOND_PERSON_MUST_CONFIRM: Final = (
 )
 THE_PROPOSER_CANNOT_CONFIRM: Final = (
     "The rise has to be confirmed by somebody other than the person who proposed it."
+)
+RAISING_BEYOND_THE_PUBLISHED_RUNG: Final = (
+    "That setting is higher than the one this agent was published at, so it cannot be set here. "
+    "Publish the agent again at the setting you want, which is where it is approved."
 )
 RAISING_WAITS_FOR_THE_REVIEW: Final = (
     "It is under supervision and its review has not found it ready, so no setting can rise yet."
@@ -374,8 +388,14 @@ def raising(
     record: Record,
     pending: LeashMove | None,
     supervision: PinOutcome | None,
+    published: AutonomyTier,
 ) -> LeashMove:
     """A press to raise a rung: a proposal, a raise, or a refusal (M39.3.2.2, M39.3.2.4).
+
+    `published` is the rung this entry went out at, from the leash the agent was installed with
+    and not from its moves, and the press is refused above it (needs-rupash 179 A, M33.2.2.4). See
+    `A_RUNG_IS_NEVER_RAISED_BEYOND_THE_RUNG_THE_AGENT_WAS_PUBLISHED_AT`. It has no default, so a
+    caller that forgets it is a type error and not a ceiling nobody set.
 
     `pending` is the newest move for this key when it is a proposal to the same rung. Across an
     irreversible boundary with no proposal pending, the press is the proposal; with one pending,
@@ -387,6 +407,8 @@ def raising(
     was = rung_of(leash, agent_id, target, scope)
     if to <= was:
         raise LeashMoveError(RAISING_MUST_RAISE)
+    if to > published:
+        raise LeashMoveError(RAISING_BEYOND_THE_PUBLISHED_RUNG)
     irreversible = effect in IRREVERSIBLE
     confirming = (
         irreversible

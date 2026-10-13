@@ -354,6 +354,10 @@ class Finished:
     #: The one source the lane's readers read, or None when they read none or more than one
     #: (M27.1.5). A name, never a record.
     connector: str | None = None
+    #: How many fields and records the redactor took out of the answer this request composed, or
+    #: None when it walked none (needs-rupash 181 A). A count in the object an auditor reads,
+    #: never in a payload.
+    redaction_count: int | None = None
     #: Milliseconds the request spent in each gate step it entered, keyed by the step's lower-case
     #: name, or None when its recorder had no clock (M27.15.6). A name and a duration, never
     #: anything a step handled.
