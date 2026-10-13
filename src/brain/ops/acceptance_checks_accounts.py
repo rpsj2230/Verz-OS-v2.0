@@ -38,7 +38,7 @@ joined to their row by their address's digest, and a second read makes nobody. T
 is named as a reserved principal through `new_id`, so nothing outside the harness's rolled-back
 transaction ever holds them.
 
-Task ids: M38.5.1, M1.6.16, M1.6.17, M1.6.14, M1.6.15, M40.7.1, M1.10.3, M1.6.20, M1.6.21
+Task ids: M38.5.1, M1.6.16, M1.6.17, M1.6.14, M1.6.15, M40.7.1, M1.10.3, M1.6.20, M1.6.21, M26.1.1
 """
 
 from __future__ import annotations
@@ -156,7 +156,7 @@ async def _disabled(h: Harness, principal_id: str) -> bool:
 
 
 @check(
-    leaves=("M1.6.16", "M1.6.17"),
+    leaves=("M1.6.16", "M1.6.17", "M26.1.1"),
     sentence=(
         "On reserved people and stand-in accounts: an active person is given an account bound to "
         "their Brain person, one a person made is linked and kept, a leaver's is closed and their "
