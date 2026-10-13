@@ -648,6 +648,60 @@ describe("the loop guard", () => {
   });
 });
 
+describe("an account nobody has linked", () => {
+  test("is told once what has to happen and by whom, and the console stops at the first refusal", async () => {
+    // What breaks if this is deleted: a person Keycloak knows and this system does not is sent
+    // round the sign-in page until the loop guard gives up, and is then told only that their
+    // account may not have been added, with nobody named who can add it (M27.15.4).
+    const idp = fakeIdentityProvider({
+      api: (url) => {
+        if (url.includes("/sign-in/status")) {
+          return jsonResponse({ linked: false, told: "Your account is not linked yet.", administrators: ["Grace Teo", "Ada Okafor"] });
+        }
+        return url.startsWith("/api/") ? jsonResponse({ message: "Sign in to continue." }, 401) : null;
+      },
+    });
+    const loaded = await loadConsole({ idp });
+    loaded.idp.queueToken({
+      access_token: "ACCESS-TOKEN-0",
+      refresh_token: "REFRESH-TOKEN",
+      id_token: "ID-TOKEN",
+      expires_in: 300,
+    });
+    await loaded.session.beginSignIn("/");
+    const returnedState = loaded.location.lastAssigned().searchParams.get("state") ?? "";
+    await loaded.session.completeSignIn(
+      new URLSearchParams({ code: "AUTHORISATION-CODE", state: returnedState }),
+    );
+    const redirectsBefore = loaded.location.assign.mock.calls.length;
+    await loaded.client.request("/me");
+
+    expect(loaded.session.getSessionState().status).toBe("failed");
+    expect(loaded.session.getSessionState().message).toBe("Your account is not linked yet. Ask Grace Teo, Ada Okafor.");
+    expect(loaded.session.isSignedIn()).toBe(false);
+    expect(loaded.location.assign.mock.calls.length).toBe(redirectsBefore);
+  });
+
+  test("a status that cannot be read leaves the old behaviour: forget the session and let the guard decide", async () => {
+    // The sibling: a failing status route must not trap a person on a screen that says nothing
+    // useful, so anything but a clear "not linked" is the earlier path.
+    const idp = fakeIdentityProvider({
+      api: (url) =>
+        url.startsWith("/api/") ? jsonResponse({ message: "Sign in to continue." }, url.includes("/sign-in/status") ? 500 : 401) : null,
+    });
+    const loaded = await loadConsole({ idp });
+    loaded.idp.queueToken({ access_token: "A", refresh_token: "R", id_token: "I", expires_in: 300 });
+    await loaded.session.beginSignIn("/");
+    const returnedState = loaded.location.lastAssigned().searchParams.get("state") ?? "";
+    await loaded.session.completeSignIn(
+      new URLSearchParams({ code: "AUTHORISATION-CODE", state: returnedState }),
+    );
+    await loaded.client.request("/me");
+
+    expect(loaded.session.getSessionState().status).toBe("unknown");
+  });
+});
+
 describe("signing out", () => {
   test("signing out ends the session at the identity provider", async () => {
     // What breaks if this is deleted: the bug that looks like a feature. Forgetting the

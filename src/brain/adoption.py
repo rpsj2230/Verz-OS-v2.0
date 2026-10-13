@@ -115,7 +115,7 @@ one either, and when a harness does it is excluded here only by recording its pe
 `PrincipalKind.SERVICE`. See `AN_EVALUATION_RUN_IS_EXCLUDED_ONLY_BY_ASKING_AS_A_SERVICE`.
 
 Task ids: M34.1.1.1, M34.1.1.2, M34.1.1.3, M34.1.2.1, M34.1.2.2, M34.1.2.3, M34.2.1.1
-Task ids: M34.2.2.3, M34.3.1.1, M34.3.1.2, M37.3.2.4
+Task ids: M34.2.2.3, M34.3.1.1, M34.3.1.2, M37.3.2.4, M27.7.17
 """
 
 from __future__ import annotations
@@ -1064,6 +1064,35 @@ def adoption_by_department(
     cannot disagree about who may know how much a department asked.
     """
     return department_lines(questions_in_reach(asked, reachable, start=start, end=end), reachable)
+
+
+def stopped_by_department(
+    asked: Sequence[Asked],
+    reachable: frozenset[str],
+    *,
+    start: datetime,
+    end: datetime,
+) -> dict[str, int]:
+    """People who asked in the window before `[start, end)` and not in it, per department.
+
+    "Who has stopped" (M27.7.17): the windows are the same length, the people are the same people
+    `questions_in_reach` chooses for the line (never a machine, never outside the reach), and a
+    department's figure is a count of people in a department the reader's usage grant admits, so it
+    is the same kind of figure as the line's own `people` and reveals nothing about a department the
+    reader has no line for. **There is no figure for how many there were before and no share:** a
+    count of the people who stopped beside a total they were drawn from is a rate, and a rate is a
+    headcount with a label on it, which `AN_ADOPTION_LINE_IS_BUILT_FROM_PEOPLE_AND_THE_READERS_OWN_
+    REACH_ONLY` refuses. A person who asked in both, or in neither, is not counted.
+    """
+    span = end - start
+    before = questions_in_reach(asked, reachable, start=start - span, end=start)
+    during = questions_in_reach(asked, reachable, start=start, end=end)
+    asking = {(one.department, one.principal_id) for one in during}
+    stopped = {(one.department, one.principal_id) for one in before} - asking
+    figures = dict.fromkeys(reachable, 0)
+    for department, _ in stopped:
+        figures[department] += 1
+    return figures
 
 
 def department_lines(

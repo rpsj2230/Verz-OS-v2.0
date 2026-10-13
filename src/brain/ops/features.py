@@ -283,6 +283,27 @@ SUPERVISION_REVIEW: Final = Feature(
     read_by=("brain.ops.supervision_review:review_switch_is_on",),
 )
 
+#: Furnishing a new install's library with the eight starter skills. Off until the owner decides
+#: needs-rupash 185: whether they arrive waiting for a person's review, which is the recommended
+#: answer and the only one this builds, or approved by the product, which nothing here does.
+STARTER_SKILLS_SWITCH: Final = Feature(
+    name="starter_skills",
+    title="Furnish the library with the starter skills",
+    what=(
+        "At the next start the library gains eight ready-made skills: an SEO audit, keyword "
+        "research, a website health check, ticket analysis, complaint analysis, a monthly SEO "
+        "report, proposal generation and website troubleshooting. Each arrives waiting for "
+        "review with its example tasks, and no agent can read one until a person has rehearsed "
+        "it and approved it."
+    ),
+    while_off=(
+        "The library holds only what an administrator added. Starter skills furnished while this "
+        "was on stay in the library, and one an administrator edited, retired or rejected is "
+        "never put back."
+    ),
+    read_by=("brain.ops.starter_skill_store:furnish_skills_when_on",),
+)
+
 #: Sharing the start of an agent run's request with everybody. Off because it changes the bytes sent
 #: to the model on every run; the owner decided what it may hold (needs-rupash 175, option A) and
 #: asked that it ship off until proved on his install with two real questions.
@@ -331,6 +352,7 @@ FEATURES: Final[tuple[Feature, ...]] = (
     SUPERVISION_REVIEW,
     SHARED_TOOL_START,
     WIDGET_MODEL_ANSWERS,
+    STARTER_SKILLS_SWITCH,
 )
 
 

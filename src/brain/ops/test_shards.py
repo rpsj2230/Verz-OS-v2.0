@@ -110,16 +110,23 @@ def weight(path: Path) -> int:
     return max(1, path.read_bytes().count(b"\n"))
 
 
-def partition(weights: Mapping[str, int], shards: int) -> tuple[tuple[str, ...], ...]:
+def partition(
+    weights: Mapping[str, int], shards: int, *, allow_empty: bool = False
+) -> tuple[tuple[str, ...], ...]:
     """Every file into exactly one of `shards` groups, heaviest first onto the lightest group.
 
     Ties are broken by path and then by shard number, never by the order the mapping was
     built in, so every runner reaches the same answer from the same files.
+
+    **`allow_empty` is for a selection and never for the whole suite.** A selected run
+    (`brain.ops.test_plan`) can legitimately hand a shard nothing, and the caller then runs no
+    pytest at all instead of handing it no arguments; the whole suite has no such excuse, so
+    the default still refuses a split with a shard that would run everything.
     """
     if shards < 1:
         msg = f"a split needs at least one shard, not {shards}"
         raise ShardError(msg)
-    if len(weights) < shards:
+    if len(weights) < shards and not allow_empty:
         msg = (
             f"{len(weights)} test file(s) cannot fill {shards} shards, and an empty shard hands "
             "pytest no arguments, which runs the whole suite"

@@ -237,6 +237,18 @@ def test_a_token_whose_payload_is_not_json_is_refused():
         parse_unverified(f"{head}.bm90LWpzb24.{sig}")
 
 
+def test_a_token_made_of_words_is_refused_as_malformed_and_not_faulted():
+    """Three words with dots decode to bytes that are neither text nor JSON, which raised a
+    UnicodeDecodeError nothing caught and was a 500 on every route. It is the same refusal as any
+    other malformed token. Delete this and a stranger's garbage in the Authorization header is a
+    server fault in the log and a 500 on the wire.
+    """
+    for wire in ("not.a.token", "a.b.c", "....", "x.y.z"):
+        with pytest.raises(TokenRefusedError) as caught:
+            parse_unverified(wire)
+        assert caught.value.reason is TokenRefusal.MALFORMED
+
+
 # --------------------------------------------------------------- validation
 def test_a_well_formed_token_from_the_right_issuer_and_audience_verifies():
     """The happy path. If this breaks, everything below is passing for the wrong reason."""

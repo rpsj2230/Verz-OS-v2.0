@@ -92,6 +92,24 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         truncated: false,
       },
       "/api/v1/govern/staff_sources/transfers": { transfers: [] },
+      // The automations that run as this person, the list narrowed to them (M27.15.18).
+      "/api/v1/console/automations": {
+        items: [
+          {
+            automation_id: "auto_1",
+            name: UNBROKEN,
+            agent_id: "quote-helper",
+            agent_name: UNBROKEN,
+            owner_name: UNBROKEN,
+            schedule: UNBROKEN,
+            state: "running",
+            next_run_at: null,
+            last_run_at: null,
+            last_outcome: null,
+          },
+        ],
+        next_cursor: null,
+      },
     },
   },
   "/people/:personId/:view": {

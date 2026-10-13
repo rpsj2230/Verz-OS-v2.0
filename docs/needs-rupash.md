@@ -2,11 +2,152 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**36 items are open: 196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **193,** which formats an agent's generated documents start with and which libraries may be added, **192,** whether sensitive actions that cannot be undone need a second person, **191,** whether an agent may ever answer with nothing behind it, **189,** how a team agent may use mail without one person's mail reaching anybody else, **188,** whether five console tasks that ask for what the design does not do are narrowed, **187,** whether the chat tools show progress while an answer is made, **186,** whether answers keep using the old search index while a new embedding model is built, **185,** which person approves the eight starter skills, **184,** which outside AI services are offered first and what they count as, **183,** whether a skill is refused when its agent lacks one of its tools, **182,** what a skill names when it needs knowledge, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **167,** whether a chat room or channel belongs to exactly one agent, **163,** the short list of what stops tasks being proved on your install, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **134,** connecting the Slack channel, **132,** connecting the email channel, **131,** making staff accounts work on your install, **127 and 128,** things for you to do (switch on the Lark chat channel, and connect Xero, HubSpot and Freshdesk), **and 91,** the
+**42 items are open: 220,** which speech service turns dictation into text, **219,** whether an approver may amend an action before approving it, **218,** whether the product may count how often each knowledge item is read, **202,** three disclosure decisions on screens I built (who the sign-in page names, what the landing figures show a reader without the spend screens, and whether every file download is written down), **201,** who an agent is shared with and whether its page has a browsing switch, **200,** what happens to a person's agents when the person is switched off, **196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **193,** which formats an agent's generated documents start with and which libraries may be added, **192,** whether sensitive actions that cannot be undone need a second person, **191,** whether an agent may ever answer with nothing behind it, **189,** how a team agent may use mail without one person's mail reaching anybody else, **188,** whether five console tasks that ask for what the design does not do are narrowed, **187,** whether the chat tools show progress while an answer is made, **186,** whether answers keep using the old search index while a new embedding model is built, **185,** which person approves the eight starter skills, **184,** which outside AI services are offered first and what they count as, **183,** whether a skill is refused when its agent lacks one of its tools, **182,** what a skill names when it needs knowledge, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **167,** whether a chat room or channel belongs to exactly one agent, **163,** the short list of what stops tasks being proved on your install, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **134,** connecting the Slack channel, **132,** connecting the email channel, **131,** making staff accounts work on your install, **127 and 128,** things for you to do (switch on the Lark chat channel, and connect Xero, HubSpot and Freshdesk), **and 91,** the
 checks only you can do on your install; it waits for the Knowledge upload grants (item 105) to land.
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 220. Which speech service turns a person's dictation into text on the Ask page?
+
+**In plain terms:** task M40.7.3 says a person can attach a file to a question, which works today, and
+speak a question, which does not: no speech-to-text tool is registered on the install, so there is nothing
+to send the recording to. A recording is a person's voice, so choosing the service decides who hears it.
+
+**Option A: a speech service you name, called through the tool catalogue like any other tool.** Dictation
+is switched off until you name one and set its key in the vault. The text it returns is read at the
+person's own reach and kept nowhere but in the question they send.
+
+**Option B: speech built into the person's browser.** Nothing leaves the person's computer for our side
+to see, and quality and language support depend on their browser. There is no key and no vendor, and the
+task is closed by what it is for.
+
+**Option C: no dictation.** The task is closed as not wanted and the Ask page keeps typing and files.
+
+**My recommendation:** B first, because it needs no vendor, no key and no decision about who hears a
+voice; A can be added later behind the same button if the browsers prove too patchy.
+
+**What I need from you:** reply "220: A" (and say which service), "220: B" or "220: C".
+
+## 219. May an approver amend an action before approving it, or only approve or reject?
+
+**In plain terms:** task M40.6.1.2 says an approver can approve, reject or amend, each written down.
+Approve and reject are built and recorded. Amend is deliberately not offered: amending would mean the
+approver edits what an agent prepared, and the product has no way to raise the edited version through
+the same gate that checks the original, so a recorded amendment would describe something that never
+happened.
+
+**Option A: amend is a rejection plus a replacement.** The approver rejects the original with the reason
+"amended", and the replacement is raised through the gate as a new approval, which is checked at the
+approver's reach like any other and waits for a second person where the action needs one. The ledger
+shows both. It is the safe shape and it costs the approver one more press.
+
+**Option B: closed by what it is for.** Take over (already built) hands the approver the work to do
+themselves, which covers the need. Amend is dropped from the task.
+
+**My recommendation:** B. Take over already lets an approver fix an action and run it as themselves, and
+A adds a second approval for a case the owner has not yet met.
+
+**What I need from you:** reply "219: A" or "219: B".
+
+## 218. May the product count how often each knowledge item is read, so an author can see whether anyone uses it?
+
+**In plain terms:** task M40.3.1.3 says an author can see how many times what they wrote has been used.
+Today the search log records that a question was answered and never which item it drew on, on purpose:
+a record of who read which item is also a record of what each person was curious about, and the log was
+built so it cannot say.
+
+**Option A: count per item, not per person.** A counter on each item goes up when an answer draws on it.
+It holds no person, no question and no time of day, only a number and the month. An author sees "used 14
+times this month" and nothing else. It is a small new table, and the number itself can still hint at one
+person when a department of two uses the item.
+
+**Option B: count only above a floor.** As A, but an author is told nothing until an item has been used by
+at least five different people, then "used by several people". This keeps the hint away at the cost of
+saying nothing about a quiet department's items.
+
+**Option C: closed by what it is for.** The knowledge card already shows when an item was verified and
+when it is due, which is what an author needs to keep it true. No use count.
+
+**My recommendation:** B. It answers "does anyone read this" without ever telling an author who.
+
+**What I need from you:** reply "218: A", "218: B" or "218: C".
+
+## 202. Three things I built tell a reader a little more than you may want: who administers, what the figures show, and which downloads are written down
+
+**In plain terms:** while building the console I made three choices about what a person is told, and each
+is a disclosure, so each is yours to confirm.
+
+**a. The sign-in page names the administrators.** A person who signs in through your company's identity
+provider but has not been linked to an account here used to be sent round in a circle. They now see one
+sentence saying their account is not linked yet and who can link it, by name. They are not yet a member,
+so this tells a stranger who runs the system; the identity provider has already vouched that they work
+for your company.
+
+**b. The landing page figures follow the period and the department a reader reads.** A reader who does
+not hold the Usage or Budget screens used to get nothing for those figures. I narrowed them to what that
+reader's own questions cost, rather than withholding them, because a person is always told their own
+figures. I did not build a per-department split of the approvals queue, because a count of the queue by
+department would tell a reader how many approvals sit in departments they cannot see.
+
+**c. Every download of an agent's stored file is written down.** Opening a file an agent kept now leaves a
+line in the read log: who opened it, which file, when. It stays for as long as the log is kept. It
+records that a file was opened and never what it contained.
+
+**Options for each:** A, as built. B, the stricter version: (a) the page says only "ask an administrator"
+and names nobody; (b) a reader without the spend screens sees no cost figure at all; (c) only the
+downloads of a file under a restricted label are written down.
+
+**My recommendation:** A for all three. A person the identity provider has vouched for is already inside
+the company, a person's own figures are theirs, and a read log that skips ordinary files cannot answer
+"who opened this" for the file somebody later calls sensitive.
+
+**What I need from you:** reply "202: a A, b A, c A", changing a letter for any you want stricter.
+
+## 201. Who may find and use an agent, and does its page need a browsing switch?
+
+**In plain terms:** an agent's page lets you say who can use it: everybody, one department, or only its
+owner. That is a single choice, so an agent cannot be shared with Sales and Support together, and cannot
+be given to two named people. Separately, its Behaviour tab has a switch for whether the agent may learn
+from the questions it is asked, and one for browsing the web. The learning switch works on the server
+and has no button on the page yet. The browsing switch has no meaning yet, because the sealed browser
+that would run it has never been started on an install, and the page already shows "computer use" as not
+offered.
+
+**Question 1, who an agent is shared with.** Option A: keep one choice. Option B: allow several
+departments and named people, which needs a small new table of who an agent is shared with, a control on
+the page to add and remove them, and the same rule as today that nobody can be shown an agent they could
+not already see.
+
+**Question 2, the switches.** Option A: show a learning switch on the page and show browsing as "not
+offered", as computer use is. Option B: show both as working switches.
+
+**My recommendation:** 1 B, because a shared agent used by two departments is the ordinary case, and 2 A,
+because a switch that does nothing teaches people to ignore switches.
+
+**What I need from you:** reply "201: 1 B, 2 A", changing either choice.
+
+## 200. When a person is switched off, what happens to the agents they own?
+
+**In plain terms:** switching a person off stops them signing in and removes what they could see. It does
+not touch the agents they own: those keep answering the people they are shared with, still in the
+switched-off person's name. A hand-over is only queued when the staff list itself shows the person has
+left, and nothing is queued for a person you switch off by hand. A person's page does list the agents they
+own, and Hand over exists, so nothing is hidden, but nothing prompts anyone to use it.
+
+**Option A: leave it as it is.** Switching a person off changes only the person. An administrator moves
+their agents using the list on the person's page.
+
+**Option B: switch off the person's agents too**, queue each for adoption by a department administrator,
+and bring them back when the person is switched on again.
+
+**Option C: a setting with A as its default.** "When a person is switched off, switch off their agents and
+queue them for adoption." Off until you turn it on.
+
+**My recommendation:** C, with it off. An agent a department relies on stopping silently because someone
+went on leave is its own incident; a company that wants the stricter rule can turn it on.
+
+**What I need from you:** reply "200: A", "200: B" or "200: C".
 
 ## 196. Is the React Flow task closed by what it is for, as item 123 asks for the table library?
 
