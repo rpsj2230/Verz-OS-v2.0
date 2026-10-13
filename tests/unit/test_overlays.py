@@ -19,6 +19,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -176,6 +177,22 @@ def test_the_image_carries_the_step_and_every_file_an_overlay_starts() -> None:
         assert f"!{mounted}" in ignored
         settled = mounted.removeprefix("ops/")
         assert copies[f"{target}/settings/{settled}"] == mounted
+
+
+def test_every_file_in_the_step_s_directory_is_let_through_the_ignore_file() -> None:
+    """The ignore file excludes all of `ops` and lets named files back in, so a script added to the
+    step's directory and sourced by another (the shared merge of the object store's access file)
+    is simply absent from the image unless somebody remembers the exception, and on the server the
+    script that sources it fails with a missing file. Read from the directory, not from a list of
+    the files the overlays name.
+
+    Delete this and the next file added beside `apply.sh` ships in no image."""
+    ignored = (REPO / ".dockerignore").read_text(encoding="utf-8").splitlines()
+    step = REPO / "ops" / "deploy" / "overlays"
+    files = sorted(one.name for one in step.iterdir() if one.is_file())
+
+    assert "s3-identity.sh" in files
+    assert [name for name in files if f"!ops/deploy/overlays/{name}" not in ignored] == []
 
 
 # ------------------------------------------------------------------ the server
@@ -794,13 +811,20 @@ PREPARE_STUB = r"""#!/bin/sh
 S="$STUB_STATE"
 echo "$*" >> "$S/calls"
 case "$1" in
-  ps) [ -s "$S/db" ] && cat "$S/db"; exit 0 ;;
+  ps)
+    case "$*" in
+      *service=seaweedfs*) [ -s "$S/store" ] && cat "$S/store" ;;
+      *) [ -s "$S/db" ] && cat "$S/db" ;;
+    esac
+    exit 0 ;;
   inspect) echo "u"; echo "u_default"; exit 0 ;;
+  restart) exit 0 ;;
   exec)
     case "$*" in
       *POSTGRES_USER*) echo brain; exit 0 ;;
       *POSTGRES_DB*) echo brain; exit 0 ;;
       *psql*) cat >> "$S/sql"; exit 0 ;;
+      *s3_identities*) exec "$STUB_PYTHON" -m brain.ops.s3_identities merge ;;
     esac ;;
 esac
 exit 0
@@ -834,15 +858,22 @@ class Prepared:
     settings: Path
 
 
-def prepare(tmp_path: Path, *, db: bool = True) -> Prepared:
+def prepare(
+    tmp_path: Path, *, db: bool = True, access_file: str | None = None, store: bool = False
+) -> Prepared:
     """Run the real `langfuse.prepare.sh` from a copy of the step with the image's settings beside
-    it, against a stub docker whose database records the SQL it was handed."""
+    it, against a stub docker whose database records the SQL it was handed.
+
+    `access_file` is what the object store's access file holds before the run, and `store` says a
+    store container is running. The stub's `exec` of the merge runs the real
+    `brain.ops.s3_identities` in this interpreter, so what the script writes is what the
+    application would have written."""
     state = tmp_path / "state"
     bin_dir = tmp_path / "bin"
     step = tmp_path / "step"
     settings = tmp_path / "settings"
     for one in (state, bin_dir):
-        one.mkdir(exist_ok=True)
+        one.mkdir(parents=True, exist_ok=True)
     if not step.exists():
         shutil.copytree(SCRIPT.parent, step)
         for mounted in ("langfuse/clickhouse-memory.xml", "seaweedfs/provision.sh"):
@@ -852,15 +883,21 @@ def prepare(tmp_path: Path, *, db: bool = True) -> Prepared:
     fake.write_text(PREPARE_STUB, encoding="utf-8", newline="\n")
     fake.chmod(0o755)
     (state / "db").write_text("db-u\n" if db else "", encoding="utf-8", newline="\n")
+    (state / "store").write_text("store-u\n" if store else "", encoding="utf-8", newline="\n")
     (state / "calls").write_text("", encoding="utf-8", newline="\n")
     (state / "sql").write_text("", encoding="utf-8", newline="\n")
+    if access_file is not None:
+        (settings / "seaweedfs").mkdir(parents=True, exist_ok=True)
+        (settings / "seaweedfs" / "s3.json").write_text(access_file, encoding="utf-8", newline="\n")
     env = {
         **os.environ,
         "PATH": f"{bin_dir.as_posix()}{os.pathsep}{os.environ.get('PATH', '')}",
         "STUB_STATE": state.as_posix(),
+        "STUB_PYTHON": sys.executable,
         "BRAIN_OVERLAYS_SETTINGS": settings.as_posix(),
         "BRAIN_OVERLAYS_ENV": (settings / "overlays.env").as_posix(),
         "BRAIN_APP_PROJECT": "u",
+        "BRAIN_APP_CONTAINER": "app-u",
     }
     assert SH is not None
     done = subprocess.run(
@@ -966,6 +1003,136 @@ def test_the_settings_files_the_ledger_mounts_are_put_in_place_and_never_overwri
     tuned.write_text("<clickhouse><!-- tuned --></clickhouse>\n", encoding="utf-8")
     prepare(tmp_path)
     assert "tuned" in tuned.read_text(encoding="utf-8")
+
+
+#: An access file as an install that already runs the object store holds it: the application's
+#: identity with its own key, and one somebody added by hand.
+STORE_IDENTITIES = {
+    "identities": [
+        {
+            "name": "brain-application",
+            "credentials": [{"accessKey": "app" + "a" * 16, "secretKey": "app" + "b" * 32}],
+            "actions": ["Read", "Write", "List"],
+        },
+        {
+            "name": "backup-job",
+            "credentials": [{"accessKey": "bak" + "c" * 16, "secretKey": "bak" + "d" * 32}],
+            "actions": ["Read:backups", "Write:backups"],
+        },
+    ]
+}
+
+
+def _access(settings: Path) -> dict[str, object]:
+    import json
+
+    found = json.loads((settings / "seaweedfs" / "s3.json").read_text(encoding="utf-8"))
+    assert isinstance(found, dict)
+    return found
+
+
+@pytestmark_sh
+def test_the_ledger_is_added_to_the_access_file_beside_the_application_and_never_over_it(
+    tmp_path: Path,
+) -> None:
+    """The ledger's preparation used to write the whole access file with one identity, so switching
+    the ledger on removed the application's key from the object store at its next restart. It now
+    merges: the application's identity and one added by hand come back exactly as they went in, the
+    ledger's is added, and a second deploy changes nothing and leaves one ledger identity.
+
+    Delete this and the ledger can take the application's access to its own store away.
+
+    Neither a stale access file nor a stale secret is a fixture of any company: the keys here are
+    built from letters that no key generator produces."""
+    import json
+
+    before = json.dumps(STORE_IDENTITIES, indent=2) + "\n"
+    first = prepare(tmp_path, access_file=before)
+    assert first.code == 0, first.output
+    identities = _access(first.settings)["identities"]
+    assert isinstance(identities, list)
+    assert [one["name"] for one in identities] == ["brain-application", "backup-job", "langfuse"]
+    assert identities[:2] == STORE_IDENTITIES["identities"]
+    assert identities[2]["credentials"] == [
+        {
+            "accessKey": first.env["LANGFUSE_S3_ACCESS_KEY_ID"],
+            "secretKey": first.env["LANGFUSE_S3_SECRET_ACCESS_KEY"],
+        }
+    ]
+
+    kept = (first.settings / "seaweedfs" / "s3.json").read_bytes()
+    second = prepare(tmp_path)
+    assert second.code == 0, second.output
+    assert (second.settings / "seaweedfs" / "s3.json").read_bytes() == kept
+    assert [one["name"] for one in _access(second.settings)["identities"]].count("langfuse") == 1  # type: ignore[attr-defined]
+
+
+@pytestmark_sh
+def test_the_repository_s_placeholder_identity_does_not_survive_the_ledger_being_added(
+    tmp_path: Path,
+) -> None:
+    """The installer copies the repository's access file, whose application identity holds a key
+    that is the text `REPLACE_AT_DEPLOY_FROM_OPENBAO`, where none exists. The ledger's old
+    preparation removed it by writing over the file; the merge keeps every identity, so it has to
+    remove that one on purpose. Delete this and a key anybody who has read this repository holds
+    opens the object store.
+
+    Every other part of that file, including its comment, is kept."""
+    shipped = (REPO / "ops" / "seaweedfs" / "s3.json").read_text(encoding="utf-8")
+    assert "REPLACE_AT_DEPLOY_FROM_OPENBAO" in shipped
+
+    ran = prepare(tmp_path, access_file=shipped)
+
+    assert ran.code == 0, ran.output
+    kept = (ran.settings / "seaweedfs" / "s3.json").read_text(encoding="utf-8")
+    assert "REPLACE_AT_DEPLOY_FROM_OPENBAO" not in kept
+    document = _access(ran.settings)
+    assert [one["name"] for one in document["identities"]] == ["langfuse"]  # type: ignore[attr-defined]
+    assert "_comment" in document
+
+
+@pytestmark_sh
+def test_an_access_file_that_cannot_be_read_is_left_as_it_is_and_the_ledger_is_not_prepared(
+    tmp_path: Path,
+) -> None:
+    """A file that is not valid JSON may be the only record of who holds a key to the store, so the
+    preparation exits non-zero (which leaves the ledger out of that deploy and removes nothing)
+    with the file byte for byte as it was, and does not go on to make the ledger's database.
+
+    Delete this and unreadable becomes empty, which is how the application's line was lost."""
+    broken = '{"identities": [ {"name": "brain-application", '
+    ran = prepare(tmp_path, access_file=broken)
+
+    assert ran.code == 1
+    assert "could not be merged" in ran.output
+    assert (ran.settings / "seaweedfs" / "s3.json").read_text(encoding="utf-8") == broken
+    assert not (ran.settings / "seaweedfs" / "s3.json.new").exists()
+    assert ran.sql == ""
+
+
+@pytestmark_sh
+def test_a_running_store_is_restarted_when_an_identity_is_added_and_not_when_nothing_changed(
+    tmp_path: Path,
+) -> None:
+    """The store reads its access file when it starts, so an identity merged into a store that is
+    already running is refused by it until it restarts. The restart happens once, for the deploy
+    that changed the file, and a deploy that merges the identity already there restarts nothing; a
+    store that is not running is not touched, because it reads the file when it starts.
+
+    Delete this and the ledger's first start after the object store is switched on is refused until
+    somebody restarts the store, or every deploy restarts it."""
+    import json
+
+    before = json.dumps(STORE_IDENTITIES, indent=2) + "\n"
+    changed = prepare(tmp_path / "changed", access_file=before, store=True)
+    unchanged = prepare(tmp_path / "changed", store=True)
+    stopped = prepare(tmp_path / "stopped", access_file=before, store=False)
+
+    assert changed.code == unchanged.code == stopped.code == 0
+    assert [one for one in changed.calls if one.startswith("restart")] == ["restart store-u"]
+    assert [one for one in unchanged.calls if one.startswith("restart")] == []
+    assert [one for one in stopped.calls if one.startswith("restart")] == []
+    assert "restarted once" in changed.output
 
 
 @pytestmark_sh
