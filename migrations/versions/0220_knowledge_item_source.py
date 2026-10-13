@@ -28,8 +28,8 @@ The downgrade drops the checks and the columns, and with them every recorded add
 
 Task ids: M39.9.1.1, M39.9.1.5
 
-Revision ID: 0226
-Revises: 0212
+Revision ID: 0220
+Revises: 0219
 """
 
 from __future__ import annotations
@@ -37,10 +37,10 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0226"
+revision = "0220"
 # The head of origin/main when this was written. Other builders' numbers sit between, in the same
 # train, so the coordinator relinks this behind whichever of them lands last.
-down_revision = "0212"
+down_revision = "0219"
 branch_labels = None
 depends_on = None
 

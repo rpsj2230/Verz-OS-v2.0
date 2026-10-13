@@ -54,8 +54,8 @@ unique constraint would fail on a person's second one. It says so and changes no
 
 Task ids: M39.9.2.1, M17.4.2
 
-Revision ID: 0225
-Revises: 0212
+Revision ID: 0219
+Revises: 0217
 """
 
 from __future__ import annotations
@@ -63,8 +63,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0225"
-down_revision = "0212"
+revision = "0219"
+down_revision = "0217"
 branch_labels = None
 depends_on = None
 
