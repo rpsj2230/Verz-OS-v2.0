@@ -22,7 +22,7 @@ The downgrade drops the table. The documents it held are lost, which is the stat
 Task ids: M37.1.1.1
 
 Revision ID: 0241
-Revises: 0225
+Revises: 0240
 """
 
 from __future__ import annotations
@@ -32,9 +32,10 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "0241"
-# The plan's number after 0225. The coordinator re-points it at whichever migration is the head
-# when the train is assembled.
-down_revision = "0225"
+# The plan's number. On this branch it follows `0240` (the fan-out gate's table, which the same
+# Features page draws beside it); on the migration-only branch it follows 0225. The coordinator
+# re-points it at whichever migration is the head when the train is assembled.
+down_revision = "0240"
 branch_labels = None
 depends_on = None
 

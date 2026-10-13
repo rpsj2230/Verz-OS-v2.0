@@ -718,13 +718,39 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "Feature and module enablement": {
     screens: ["/features"],
-    routes: ["/api/v1/install/features*"],
-    tables: ["ops.plugin_install", "ops.plugin_version"],
+    routes: ["/api/v1/install/features*", "/api/v1/install/plugins*", "/api/v1/orchestration/rehearsals", "/api/v1/migration*"],
+    tables: ["ops.fanout_gate", "ops.migration_record", "ops.plugin_install", "ops.plugin_version"],
     installation: [],
     gaps: [
       {
-        what: "A plugin cannot be installed or enabled.",
-        because: "Nothing loads a plugin yet: the Features screen says plugins_have_no_loader, and ops.plugin_install has no writer a route calls.",
+        what: "A recorded plugin is not loaded: switching one on changes its record and nothing runs.",
+        because:
+          "The points that take code run it in a sidecar or a sandbox and neither runner exists, so the panel says no_plugin_is_loaded; M29.2.4 (a drain on upgrade) and M29.2.5 (an isolation tier enforced by a host) wait on one.",
+      },
+      {
+        what: "A weighed plan starts nothing: no coordinating agent exists to dispatch the agents it would split across.",
+        because:
+          "The panel says nothing_is_started; the planner that asks a model for subtasks, the callee allow-list and the specialist run are M18.5.x, and the global parallelism budget at dispatch is M18.3.5.",
+      },
+      {
+        what: "Nothing in a migration reaches the old system: a revocation, a job stopped and an act done are recorded as a person says they are.",
+        because:
+          "brain.migration.decommission says nothing here can check any of them, so a cutover is refused only while an act with a security consequence is unrecorded; the exporter and the old system's side of the comparison are a plugin that does not exist (M37.1.2, M37.1.3.1).",
+      },
+      {
+        what: "A saved migration document is not an entry in the audit ledger.",
+        because:
+          "ops.migration_record keeps a version per save with who saved it, appended and never edited, and a save changes nobody's access and no configuration.",
+      },
+      {
+        what: "A weighed plan is not an entry in the audit ledger.",
+        because:
+          "ops.fanout_gate is its own record of who weighed what and when (numbers and a verdict, written in the session's own name and never edited), and weighing a plan changes nobody's access and no configuration.",
+      },
+      {
+        what: "A plugin's install, enable, upgrade, rollback or removal is not an entry in the audit ledger.",
+        because:
+          "ops.plugin_install has no trigger that appends one, and adding it is a migration that widens the ledger's action list and subject grammar; the route logs who pressed it and the row keeps its history of versions.",
       },
     ],
   },

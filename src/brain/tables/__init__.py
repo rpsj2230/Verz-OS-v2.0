@@ -83,6 +83,7 @@ from brain.tables.elevation import ElevationRequestRow
 from brain.tables.entity_merge import EntityMergeRow, EntityUnmergeRow
 from brain.tables.erasure import ErasureOutcome, ErasureRequestRow
 from brain.tables.escalation import EscalationRow
+from brain.tables.fanout_gate import FanoutGateRow
 from brain.tables.fast_lane import FastPathRuleRow
 from brain.tables.gate import (
     CapabilityGrantRow,
@@ -541,6 +542,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0223_templates_and_audience. A draft and an offer each name an agent and a person as values.
     "agent.template_draft",
     "agent.audience_extra",
+    # 0240_fanout_gate. Points at nothing: a run and an administrator are values, so a decision of
+    # the gate outlives both.
+    "ops.fanout_gate",
     # 0241_migration_record. Points at nothing: a person is a value, so a saved version outlives the
     # person who saved it.
     "ops.migration_record",
@@ -613,6 +617,7 @@ __all__ = [
     "ErasureRequestRow",
     "EscalationRow",
     "EvaluationCandidateRow",
+    "FanoutGateRow",
     "FastPathRuleRow",
     "FieldPolicyRow",
     "GoldenQuestionRow",

@@ -95,7 +95,7 @@ class ItemAsked(BaseModel):
     permissions: list[Short] = Field(default_factory=list, max_length=64)
 
 
-class DecisionAsked(BaseModel):
+class ItemDecisionAsked(BaseModel):
     """What happens to one item, and why."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -122,7 +122,7 @@ class RegisterAsked(BaseModel):
 
     surveyed: list[Literal["knowledge", "prompt", "tool", "conversation"]]
     items: list[ItemAsked] = Field(default_factory=list, max_length=MOST_ITEMS)
-    decisions: list[DecisionAsked] = Field(default_factory=list, max_length=MOST_ITEMS)
+    decisions: list[ItemDecisionAsked] = Field(default_factory=list, max_length=MOST_ITEMS)
     mappings: list[MappingAsked] = Field(default_factory=list, max_length=MOST_ITEMS)
 
 
@@ -228,7 +228,7 @@ class WhoAndWhen(BaseModel):
     at: datetime
 
 
-class RegisterView(BaseModel):
+class MigrationRegisterView(BaseModel):
     """The register as saved and what is outstanding in it."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -281,7 +281,7 @@ class WorkspacePage(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    register: RegisterView
+    inventory: MigrationRegisterView
     parallel: ParallelView
     cutover: CutoverView
     workspace_is_on: bool
@@ -446,13 +446,15 @@ def decommission_of(body: CutoverAsked) -> cutover_module.Decommission:
         raise _refusal(refused) from None
 
 
-def register_view(saved: migration_record_store.Saved | None) -> RegisterView:
+def register_view(saved: migration_record_store.Saved | None) -> MigrationRegisterView:
     if saved is None:
-        return RegisterView(saved=None, document=None, agreed=False, gaps=[])
+        return MigrationRegisterView(saved=None, document=None, agreed=False, gaps=[])
     document = RegisterAsked.model_validate(saved.body)
     catalogue, decisions, mappings = register_of(document)
     gaps = inventory.catalogue_gaps(catalogue, decisions, mappings)
-    return RegisterView(saved=_who(saved), document=document, agreed=not gaps, gaps=list(gaps))
+    return MigrationRegisterView(
+        saved=_who(saved), document=document, agreed=not gaps, gaps=list(gaps)
+    )
 
 
 def parallel_view(saved: migration_record_store.Saved | None, now: datetime) -> ParallelView:
@@ -520,7 +522,7 @@ def cutover_view(saved: migration_record_store.Saved | None) -> CutoverView:
 
 async def _page(session: AsyncSession, now: datetime) -> WorkspacePage:
     return WorkspacePage(
-        register=register_view(await migration_record_store.newest(session, RecordKind.REGISTER)),
+        inventory=register_view(await migration_record_store.newest(session, RecordKind.REGISTER)),
         parallel=parallel_view(
             await migration_record_store.newest(session, RecordKind.PARALLEL), now
         ),
@@ -549,8 +551,10 @@ async def workspace(request: Request, asked: Asked) -> WorkspacePage:
         return await _page(session, asked.now)
 
 
-@router.put("/migration/register", response_model=RegisterView, responses=COMMON_RESPONSES)
-async def save_register(request: Request, body: RegisterAsked, asked: Asked) -> RegisterView:
+@router.put("/migration/register", response_model=MigrationRegisterView, responses=COMMON_RESPONSES)
+async def save_register(
+    request: Request, body: RegisterAsked, asked: Asked
+) -> MigrationRegisterView:
     """Save a version of the register: what the old system holds, what happens to each of it and
     what its permissions become. The gaps are computed from what was saved and not stored."""
     if not may_run_a_migration(asked.reach, asked.now):

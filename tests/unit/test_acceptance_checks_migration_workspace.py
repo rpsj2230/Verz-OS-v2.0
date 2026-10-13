@@ -168,7 +168,6 @@ def test_a_completion_that_survives_an_edit_fails_the_cutover_check(
 ) -> None:
     """A save that keeps the earlier completion. Delete this and M37.1.4.1 closes on a cutover that
     was changed after it was reported and still reads as reported."""
-    from brain import migration_routes
     from brain.ops import acceptance_checks_migration_workspace as module
     from brain.ops import migration_record_store
 
@@ -181,5 +180,5 @@ def test_a_completion_that_survives_an_edit_fails_the_cutover_check(
             body = {**body, "reported_complete": carried}
         await real(session, kind, body, by=by)
 
-    monkeypatch.setattr(migration_routes.migration_record_store, "save", keeping)
+    monkeypatch.setattr(migration_record_store, "save", keeping)
     assert _failed(install, CUTOVER) == module.A_COMPLETION_SURVIVED_AN_EDIT

@@ -353,8 +353,8 @@ def test_the_page_computes_what_is_outstanding_from_what_was_saved(
     client, _ = served
     page = get(client, "u_admin", BASE).json()
     assert page["workspace_is_on"] is True
-    assert page["register"]["agreed"] is False
-    assert any("p1" in gap and "nothing decided" in gap for gap in page["register"]["gaps"])
+    assert page["inventory"]["agreed"] is False
+    assert any("p1" in gap and "nothing decided" in gap for gap in page["inventory"]["gaps"])
     assert page["parallel"]["may_cut_over"] is False
     assert page["parallel"]["disagreements"] == ["q1"]
     assert page["parallel"]["unreviewed"] == ["q1"]

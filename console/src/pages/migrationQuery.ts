@@ -14,7 +14,7 @@
 import type { components } from "../api/schema";
 
 export type WorkspaceBody = components["schemas"]["WorkspacePage"];
-export type RegisterBody = components["schemas"]["RegisterView"];
+export type RegisterBody = components["schemas"]["MigrationRegisterView"];
 export type ParallelBody = components["schemas"]["ParallelView"];
 export type CutoverBody = components["schemas"]["CutoverView"];
 
@@ -53,11 +53,11 @@ export const COMPLETE_PATH = `${MIGRATION_API_PATH}/cutover/complete`;
 /** One sentence on where a document stands, from what the API computed. */
 export function standing(key: Document["key"], body: WorkspaceBody): string {
   if (key === "register") {
-    return body.register.saved === null || body.register.saved === undefined
+    return body.inventory.saved === null || body.inventory.saved === undefined
       ? NOTHING_SAVED
-      : body.register.agreed
+      : body.inventory.agreed
         ? "Every item is decided and every permission mapped."
-        : `${body.register.gaps.length} still outstanding.`;
+        : `${body.inventory.gaps.length} still outstanding.`;
   }
   if (key === "parallel") {
     return body.parallel.saved === null || body.parallel.saved === undefined
@@ -80,7 +80,7 @@ export function standing(key: Document["key"], body: WorkspaceBody): string {
 /** What is outstanding in a document, one finding to a line. */
 export function findings(key: Document["key"], body: WorkspaceBody): readonly string[] {
   if (key === "register") {
-    return body.register.gaps;
+    return body.inventory.gaps;
   }
   if (key === "parallel") {
     return [...body.parallel.gaps, ...body.parallel.unreviewed.map((one) => `Unreviewed disagreement: ${one}`)];
@@ -93,8 +93,8 @@ export function readWorkspace(payload: unknown): WorkspaceBody | null {
   if (typeof payload !== "object" || payload === null) {
     return null;
   }
-  const body = payload as { register?: unknown; parallel?: unknown; cutover?: unknown };
-  return typeof body.register === "object" && typeof body.parallel === "object" && typeof body.cutover === "object"
+  const body = payload as { inventory?: unknown; parallel?: unknown; cutover?: unknown };
+  return typeof body.inventory === "object" && typeof body.parallel === "object" && typeof body.cutover === "object"
     ? (payload as WorkspaceBody)
     : null;
 }

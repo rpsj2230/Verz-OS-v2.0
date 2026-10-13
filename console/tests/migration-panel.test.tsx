@@ -67,7 +67,7 @@ function cutover(overrides: Record<string, unknown> = {}): Record<string, unknow
 
 function page(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    register: register(),
+    inventory: register(),
     parallel: period(),
     cutover: cutover(),
     workspace_is_on: true,
@@ -106,7 +106,7 @@ describe("what the migration panel draws", () => {
       [READ]: () =>
         json(
           page({
-            register: register({ saved: SAVED, gaps: ["prompt_1: catalogued and nothing decided"] }),
+            inventory: register({ saved: SAVED, gaps: ["prompt_1: catalogued and nothing decided"] }),
             parallel: period({ saved: SAVED, gaps: ["days running: 1"], unreviewed: ["q_differ"] }),
             cutover: cutover({ saved: SAVED, acts_outstanding: ["M37.2.6.1: every grant withdrawn"] }),
           }),
@@ -218,7 +218,7 @@ describe("the shapes", () => {
     // What breaks if this is deleted: a field renamed in `brain.migration_routes` that the panel
     // goes on reading, which renders as an empty sentence in production.
     expect(Object.keys(page()).sort()).toEqual(backendModelFields(ROUTES, "WorkspacePage").sort());
-    expect(Object.keys(register()).sort()).toEqual(backendModelFields(ROUTES, "RegisterView").sort());
+    expect(Object.keys(register()).sort()).toEqual(backendModelFields(ROUTES, "MigrationRegisterView").sort());
     expect(Object.keys(period()).sort()).toEqual(backendModelFields(ROUTES, "ParallelView").sort());
     expect(Object.keys(cutover()).sort()).toEqual(backendModelFields(ROUTES, "CutoverView").sort());
   });

@@ -159,7 +159,7 @@ class _Routes:
             await asking_as(self.h, who, strong=True),
         )
 
-    async def complete(self, who: str) -> Any:
+    async def report_complete(self, who: str) -> Any:
         from brain.migration_routes import report_cutover_complete
 
         return await report_cutover_complete(
@@ -396,7 +396,7 @@ async def a_cutover_is_not_complete_while_a_gated_act_is_unrecorded(h: Harness) 
     if view.may_report_complete or len(view.acts_outstanding) != len(THE_GATED_ACTS):
         raise CheckFailedError(A_COMPLETION_WAS_ALLOWED)
 
-    words = await _refusal_words(routes.complete(admin))
+    words = await _refusal_words(routes.report_complete(admin))
     if words is None:
         raise CheckFailedError(A_COMPLETION_WAS_ALLOWED)
     if not all(leaf in words for leaf in THE_GATED_ACTS):
@@ -410,7 +410,7 @@ async def a_cutover_is_not_complete_while_a_gated_act_is_unrecorded(h: Harness) 
         ],
     }
     await routes.cutover(admin, recorded)
-    if await _refusal_words(routes.complete(admin)) is not None:
+    if await _refusal_words(routes.report_complete(admin)) is not None:
         raise CheckFailedError(A_COMPLETION_WAS_REFUSED)
     reported = (await routes.page(admin)).cutover
     if reported.reported_complete is None or reported.reported_complete.by != admin:
