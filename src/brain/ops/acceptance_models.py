@@ -56,7 +56,7 @@ vault for good, and each write would reach the audit ledger through the vault's 
 no transaction rolls back. Rotating a real provider's slot would handle a real key. So there is no
 check for it; see `ROTATION_IS_NOT_CHECKED_BECAUSE_A_SLOT_CANNOT_BE_RETIRED`.
 
-Task ids: M38.5.1, M3.6.3, M5.7.1, M5.6.1, M5.6.3, M38.2.2.2
+Task ids: M38.5.1, M3.6.3, M5.7.1, M5.6.1, M5.6.3, M38.2.2.2, M27.15.6
 """
 
 from __future__ import annotations
@@ -445,6 +445,9 @@ async def asked(
     its start carries a later time, and a read time after the moment of asking is one the product
     rightly refuses to date.
     """
+    from datetime import UTC
+    from datetime import datetime as wall
+
     from starlette.requests import Request
 
     from brain.api_routes import Answering, Question, answered_for
@@ -461,7 +464,9 @@ async def asked(
     now = h.now if at is None else at
     outcome = await answered_for(
         request,
-        open_trace(trace_of(h, n), now, Channel.CONSOLE),
+        # With the wall clock the route opens its own recorder with, so the request row carries
+        # the time each step took (M27.15.6) exactly as one asked in the console does.
+        open_trace(trace_of(h, n), now, Channel.CONSOLE, clock=lambda: wall.now(UTC)),
         Answering(principal=person, reach=reach, channel=Channel.CONSOLE, now=now),
         Question(question=question, agent=agent, kinds=tuple(kinds)),
     )
@@ -486,6 +491,9 @@ ROW_COLUMNS: Final = (
     "model",
     "fallback_count",
     "tokens_in",
+    "tokens_out",
+    "reasoning_tokens",
+    "stage_ms",
 )
 
 
@@ -683,12 +691,13 @@ def routed(row: dict[str, Any] | None) -> dict[str, Any]:
 
 
 @check(
-    leaves=("M3.6.3",),
+    leaves=("M3.6.3", "M27.15.6"),
     sentence=(
         "Two questions from a member of acceptance_a, one a rule answers without a model and one "
         "a model answers through the install's own ladder, each leave a request row holding the "
         "routed lane, the rule that chose it, the tier and the step that settled it, the second "
-        "the tier its call was sent to."
+        "the tier its call was sent to, and both the time each gate step took; the model's also "
+        "the reasoning tokens, a part of its output."
     ),
 )
 async def a_request_row_holds_the_route_it_was_given(h: Harness) -> None:
@@ -715,6 +724,30 @@ async def a_request_row_holds_the_route_it_was_given(h: Harness) -> None:
     walked = await attempts_of(h, trace_of(h, 2))
     if not walked or walked[0][2] != modelled["routed_tier"]:
         raise CheckFailedError("the row's tier was not the level the model call was sent to")
+    _timed_and_counted(ruled, modelled)
+
+
+def _timed_and_counted(ruled: dict[str, Any], modelled: dict[str, Any]) -> None:
+    """M27.15.6. Each row says where its time went, and the model's says what it spent thinking.
+
+    A reasoning count is read out of the output count and never beyond it, and a request that
+    called no model has none; a time is in a step the gate has and is not negative.
+    """
+    from brain.ops.telemetry import STAGE_NAMES
+
+    for row in (ruled, modelled):
+        stages = row["stage_ms"]
+        if not isinstance(stages, dict) or "record" not in stages:
+            raise CheckFailedError("a request row did not say how long each gate step took")
+        if set(stages) - STAGE_NAMES or any(one < 0 for one in stages.values()):
+            raise CheckFailedError("a request row named a gate step the gate does not have")
+    reasoning, output = modelled["reasoning_tokens"], modelled["tokens_out"]
+    if reasoning is None or output is None or not 0 <= reasoning <= output:
+        raise CheckFailedError(
+            "a model's request row did not hold its reasoning tokens as a part of its output"
+        )
+    if ruled["reasoning_tokens"] is not None:
+        raise CheckFailedError("a request no model answered recorded reasoning tokens")
 
 
 # --------------------------------------------------------- M38.2.2.2 asked in the console
