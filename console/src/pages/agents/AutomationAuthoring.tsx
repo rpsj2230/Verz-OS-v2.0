@@ -27,16 +27,16 @@
 
 import { Plus } from "lucide-react";
 import { useCallback, useState, type FormEvent } from "react";
-import { request } from "../api/client";
-import type { ApiFailure } from "../api/errors";
-import { useResource } from "../api/useResource";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { Textarea } from "./ui/textarea";
-import { FailureNotice } from "../ui/FailureNotice";
-import { Notice } from "../ui/Notice";
-import { FORM, Field, SELECT, Status, Submit } from "../pages/knowledge/formParts";
-import { ConfirmAction } from "./ConfirmAction";
+import { request } from "../../api/client";
+import type { ApiFailure } from "../../api/errors";
+import { useResource } from "../../api/useResource";
+import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import { Textarea } from "../../components/ui/textarea";
+import { FailureNotice } from "../../ui/FailureNotice";
+import { Notice } from "../../ui/Notice";
+import { FORM, Field, SELECT, Status, Submit } from "../knowledge/formParts";
+import { ConfirmAction } from "../../components/ConfirmAction";
 import {
   authoringCreateApiPath,
   authoringOptionsApiPath,
@@ -54,7 +54,7 @@ import {
   type Draft,
   type Every,
   type TriggerKind,
-} from "../pages/automationAuthoringQuery";
+} from "../automationAuthoringQuery";
 
 export const NEW_AUTOMATION = "New automation";
 export const NEW_HEADING = "New automation";

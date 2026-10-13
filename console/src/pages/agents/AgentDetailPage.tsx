@@ -55,7 +55,7 @@ import { ChevronDown, IdCard, Info, LayoutDashboard, Settings } from "lucide-rea
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
-import { AutomationAuthoring } from "../../components/AutomationAuthoring";
+import { AutomationAuthoring } from "./AutomationAuthoring";
 import { AutomationGallery } from "../../components/AutomationGallery";
 import { AgentAutomations } from "../../components/AgentAutomations";
 import { ROSTER_ADDRESS } from "../../components/agentWorkspaceState";

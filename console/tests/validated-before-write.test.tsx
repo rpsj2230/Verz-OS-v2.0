@@ -225,7 +225,7 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "sentence drawn beside the field. " +
     "tests/unit/test_settings_routes.py holds a refused value writing no row; the page case draws " +
     "no editable row, so no form is opened here.",
-  "src/components/AutomationAuthoring.tsx":
+  "src/pages/agents/AutomationAuthoring.tsx":
     "The New automation form opens behind a press on an agent's Automations tab, which the page cases do " +
     "not make. Its Review button stays disabled until the cadence and the instruction are chosen, the API " +
     "judges the whole request and answers a refusal that names what is missing before anything is " +

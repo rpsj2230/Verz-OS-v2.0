@@ -173,10 +173,10 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/components/AutomationGallery.tsx automationInstallApiPath(agentId)": [
     at("POST /api/v1/agents/{agent_id}/automations", "automationInstallApiPath", automationInstallApiPath("quote-helper")),
   ],
-  "src/components/AutomationAuthoring.tsx authoringPreviewApiPath(agentId)": [
+  "src/pages/agents/AutomationAuthoring.tsx authoringPreviewApiPath(agentId)": [
     at("POST /api/v1/agents/{agent_id}/automation-authoring/preview", "authoringPreviewApiPath", authoringPreviewApiPath("quote-helper")),
   ],
-  "src/components/AutomationAuthoring.tsx authoringCreateApiPath(agentId)": [
+  "src/pages/agents/AutomationAuthoring.tsx authoringCreateApiPath(agentId)": [
     at("POST /api/v1/agents/{agent_id}/automations/authored", "authoringCreateApiPath", authoringCreateApiPath("quote-helper")),
   ],
   "src/components/AgentAutomations.tsx path": [

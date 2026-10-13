@@ -15,7 +15,7 @@
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
-import { NEW_AUTOMATION, REVIEW, SAVE, SAVED_TITLE } from "../src/components/AutomationAuthoring";
+import { NEW_AUTOMATION, REVIEW, SAVE, SAVED_TITLE } from "../src/pages/agents/AutomationAuthoring";
 import {
   draftBody,
   readAuthoringOptions,
