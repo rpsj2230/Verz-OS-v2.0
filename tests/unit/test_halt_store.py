@@ -606,6 +606,79 @@ def test_a_resume_from_the_screen_needs_words_and_says_whose_stop_it_lifts(
     assert [(one["scope"], one["target"]) for one in after] == [("agent", "a_one")]
 
 
+def test_a_department_administrator_may_stop_an_agent_only_when_its_department_is_theirs() -> None:
+    """**Needs-rupash 160 A.** A grant scoped to one department matches a halt on an agent only when
+    the agent's department is supplied and is that department: another department's agent, an agent
+    with no department and one whose department was not looked up are each not theirs, while an
+    unrestricted reader stops any of them. A department supplied for any other axis is ignored.
+    Delete this and a department's administrator is either unable to stop their own agent, or able
+    to stop any agent whose department nobody looked up."""
+    web = reader("u_web", Scope.department("web"))
+    everywhere = reader("u_all", Scope.unrestricted())
+
+    assert may_act(web, HaltScope.AGENT, "helper", NOW, department="web")
+    assert not may_act(web, HaltScope.AGENT, "helper", NOW, department="finance")
+    assert not may_act(web, HaltScope.AGENT, "helper", NOW, department="")
+    assert not may_act(web, HaltScope.AGENT, "helper", NOW)
+    assert not may_act(web, HaltScope.CONNECTOR, "xero", NOW, department="web")
+    for department in ("web", "finance", ""):
+        assert may_act(everywhere, HaltScope.AGENT, "helper", NOW, department=department)
+
+
+@pytest.mark.needs_db
+def test_a_department_administrator_stops_and_lifts_one_agent_of_their_own_department(
+    served: TestClient, database: str
+) -> None:
+    """**Needs-rupash 160 A on PostgreSQL.** The web department's administrator stops the web agent,
+    sees the stop listed and lifts it with words; the finance agent and an agent with no
+    department are the 404 an address that does not exist is, and nothing is written for them. The
+    company-wide administrator stops the agent with no department. Delete this and a department's
+    administrator cannot stop the agent misbehaving in their own department, or can stop one of
+    another's."""
+    from tests.fixtures.console_http import get, post
+    from tests.fixtures.scratch_postgres import sql
+
+    for agent, department in (("web_helper", "web"), ("fin_helper", "finance"), ("shared", None)):
+        sql(
+            database,
+            "INSERT INTO agent.agent (id, display_name, persona, tier, visibility, owner_id,"
+            " department, scope, capabilities, allowed_tools, required_tools, max_side_effect,"
+            " created_by) VALUES (%s, 'Helper', 'Answer briefly.', 'main', %s,"
+            " 'u_narrow', %s, '{\"clauses\": []}', '{}', '{}', '{}', 'none', 'u_admin')",
+            agent,
+            "company" if department is None else "department",
+            department,
+        )
+    own = post(served, "u_admin", "/api/v1/halts", {"scope": "agent", "target": "web_helper"})
+    other = post(served, "u_admin", "/api/v1/halts", {"scope": "agent", "target": "fin_helper"})
+    unowned = post(served, "u_admin", "/api/v1/halts", {"scope": "agent", "target": "shared"})
+    listed = get(served, "u_admin", "/api/v1/halts").json()["halts"]
+    lifted = post(
+        served,
+        "u_admin",
+        "/api/v1/halts/resume",
+        {"scope": "agent", "target": "web_helper", "reason": FIXED},
+    )
+    elsewhere = post(
+        served,
+        "u_admin",
+        "/api/v1/halts/resume",
+        {"scope": "agent", "target": "fin_helper", "reason": FIXED},
+    )
+    company = post(served, "u_elsewhere", "/api/v1/halts", {"scope": "agent", "target": "shared"})
+
+    assert own.status_code == 201, own.text
+    assert (other.status_code, unowned.status_code, elsewhere.status_code) == (404, 404, 404)
+    assert [(one["scope"], one["target"]) for one in listed] == [("agent", "web_helper")]
+    assert lifted.status_code == 200, lifted.text
+    assert company.status_code == 201
+    assert sql(database, "SELECT target, act, actor_role FROM ops.halt ORDER BY at") == [
+        ("web_helper", "halt", "scoped administrator"),
+        ("web_helper", "resume", "scoped administrator"),
+        ("shared", "halt", "install administrator"),
+    ]
+
+
 # ------------------------------------------------------------------ the answer route
 
 

@@ -6,11 +6,13 @@ grant to the room: `INSTALLING_INTO_A_ROOM_IS_NOT_A_GRANT_TO_THE_ROOM`). Nothing
 because no surface declared the feature and nothing held a room. Lark now reads the bot's own
 joining and leaving events into `ops.channel_room`, and this is the route over the rest.
 
-**Who installs is who switches the agent's channels.** A group install moves where people who may
-already ask the agent can ask it, exactly as switching a channel does, so it is the same question,
-`agent_lifecycle_routes.may_change_channels`: the agent's steward or a holder of the lifecycle
-authority over its row. Anybody else is the one 404 an agent that does not exist gets, for reading
-the rooms as for writing them, because a room's name is a fact about the company's conversations.
+**Who installs is the agent's steward or a holder of the lifecycle authority over its row**
+(`agent_lifecycle_routes.may_install_in_groups`). It was the same question as switching the
+agent's channels until needs-rupash 178 A made that the department administrator's alone; which
+rooms an agent answers in is a narrower thing than which surfaces, and the owner's decision named
+the surfaces, so the room install keeps its rule rather than being narrowed with them. Anybody
+else is the one 404 an agent that does not exist gets, for reading the rooms as for writing them,
+because a room's name is a fact about the company's conversations.
 
 **What is said in the room is not decided here, or by the install.** A message there is answered by
 the installed agent at `brain.channels.room.floor`, the intersection of everybody present,
@@ -36,7 +38,7 @@ from brain.agent_lifecycle_routes import (
     _no_agent_here,
     _not_changed,
     lifecycles_of,
-    may_change_channels,
+    may_install_in_groups,
     visible,
 )
 from brain.agent_routes import declared_channels, product_field_policy
@@ -177,7 +179,7 @@ async def _changeable(request: Request, agent_id: str, asked: Asking) -> AgentRe
     found = await lifecycles_of(request).agent(agent_id)
     if found is None or not visible(found.record, asked):
         raise _no_agent_here(asked, "agent")
-    if not may_change_channels(found.record, asked):
+    if not may_install_in_groups(found.record, asked):
         raise _no_agent_here(asked, "scope")
     return found.record
 

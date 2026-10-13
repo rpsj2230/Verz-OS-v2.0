@@ -121,6 +121,7 @@ from brain.ops.connector_sync import (
 )
 from brain.ops.credentials import KEY_FIELD, Credentials, VaultState
 from brain.ops.openbao import StaticVersion, VaultRefusedError, VaultUnreachableError
+from brain.role_refusals import CONNECTING_A_SOURCE_NEEDS_THE_CONNECTOR_CAPABILITY
 from tests.fixtures.connector_examples import example_settings, identifier
 from tests.fixtures.http_client import Response
 from tests.unit.test_api_routes import (
@@ -991,11 +992,20 @@ def test_a_caller_who_may_not_connect_this_source_is_refused_before_anything_is_
         post(client, "u_none", LISTING, connection_body(settings={}, credential="")),
         post(client, "u_narrow", LISTING, connection_body("lark_base")),
     ]
+    # Somebody who can open the Connectors screen and holds no authority over this source is told
+    # which capability connects it (needs-rupash 178 A, M33.8.3), the same sentence for a source
+    # that ships and one that does not; somebody who cannot open it is told nothing of one.
     for refused in refusals:
-        assert (refused.status_code, without_trace(refused)) == (
-            404,
-            {"message": Absent.public_message},
-        )
+        if refused.status_code == 403:
+            assert without_trace(refused) == {
+                "message": CONNECTING_A_SOURCE_NEEDS_THE_CONNECTOR_CAPABILITY
+            }
+        else:
+            assert (refused.status_code, without_trace(refused)) == (
+                404,
+                {"message": Absent.public_message},
+            )
+    assert [one.status_code for one in refusals] == [404, 403, 404, 403, 404, 403]
     assert records.asked == 0 and vault.written == []
     assert post(client, "u_narrow", LISTING, connection_body("xero")).status_code == 200
 
@@ -1009,7 +1019,8 @@ def test_a_password_only_session_holding_the_authority_connects_nothing(
     attach(app, records, vault)
     weak = post(client, "u_admin", LISTING, connection_body(), claims={"amr": ["pwd"]})
 
-    assert weak.status_code == 404
+    assert weak.status_code == 403
+    assert without_trace(weak) == {"message": CONNECTING_A_SOURCE_NEEDS_THE_CONNECTOR_CAPABILITY}
     assert records.asked == 0 and vault.written == []
     assert INSTALL_AUTHORITY.value.startswith("admin:")
 
@@ -1105,13 +1116,21 @@ def test_disconnecting_records_who_did_and_a_second_disconnect_is_the_one_refusa
     asked = records.asked
     for refused in (
         post(client, "u_admin", disconnect_path("xero")),
-        post(client, "u_narrow", disconnect_path("hubspot")),
         post(client, "u_none", disconnect_path("hubspot")),
-        post(client, "u_admin", disconnect_path("Not-A-Name")),
     ):
         assert (refused.status_code, without_trace(refused)) == (
             404,
             {"message": Absent.public_message},
+        )
+    # A reader of the Connectors screen who holds no authority over the source asked for is told
+    # which capability disconnects it (needs-rupash 178 A), whether or not it is connected.
+    for told in (
+        post(client, "u_narrow", disconnect_path("hubspot")),
+        post(client, "u_admin", disconnect_path("Not-A-Name")),
+    ):
+        assert (told.status_code, without_trace(told)) == (
+            403,
+            {"message": CONNECTING_A_SOURCE_NEEDS_THE_CONNECTOR_CAPABILITY},
         )
     assert records.asked == asked + 1
     assert "hubspot" in records.rows and vault.written == []
