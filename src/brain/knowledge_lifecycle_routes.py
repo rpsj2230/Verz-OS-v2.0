@@ -170,6 +170,7 @@ from brain.knowledge.solutions import (
     may_decide,
 )
 from brain.knowledge.uploads import (
+    ReadUpload,
     ReceivedUpload,
     assert_safe_filename,
     read_arriving,
@@ -1229,9 +1230,30 @@ async def new_version(
         return refused("file", "not_added", str(exc))
     if isinstance(read, ParseFailure):
         return refused("file", read.cause.value, read.message())
+    return await write_successor(request, asked, authority, predecessor, chain, read, review_by)
+
+
+async def write_successor(
+    request: Request,
+    asked: Asking,
+    authority: Authority,
+    predecessor: StoredItem,
+    chain: tuple[StoredItem, ...],
+    read: ReadUpload,
+    review_by: datetime,
+    *,
+    already: str = "this file is already a version of this document",
+) -> VersionAddedView | JSONResponse:
+    """Write what was read as the newer version of `predecessor`, or say why it cannot be.
+
+    **The one place a document is superseded over HTTP.** A file sent to `POST .../versions` and a
+    link fetched again by the agent's Knowledge section both end here, so what a successor may not
+    be (the file already on file, wider than what it replaces, without a review date ahead) is
+    decided once. The caller has already decided that the person may act on `predecessor`.
+    """
     successor = KnowledgeItem.model_validate({**read.item.model_dump(), "review_by": review_by})
     if successor.item_id in {one.item_id for one in chain}:
-        return refused("file", "already_on_file", "this file is already a version of this document")
+        return refused("file", "already_on_file", already)
     try:
         assert_replaceable(predecessor, successor)
     except (LibraryError, KnowledgeError, VisibilityError) as exc:
@@ -1240,7 +1262,7 @@ async def new_version(
     revision = embedding_revision()
 
     async def write(session: AsyncSession) -> Job | None:
-        again = await held_item(session, item_id)
+        again = await held_item(session, predecessor.item_id)
         if again is None or again.owner_id != predecessor.owner_id:
             msg = "the document changed while its new version was being read"
             raise LifecycleStoreError(msg)
@@ -1253,7 +1275,7 @@ async def new_version(
     except (LifecycleStoreError, ChunkStoreError) as exc:
         return refused("item", "moved", str(exc), status=409)
     except DBAPIError:
-        log.warning("knowledge.version_refused_by_database", item=item_id)
+        log.warning("knowledge.version_refused_by_database", item=predecessor.item_id)
         return refused(
             "item",
             "moved",

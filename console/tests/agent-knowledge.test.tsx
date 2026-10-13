@@ -6,7 +6,7 @@
  * **Mounted through the application's own route table** and answered by a stand-in API that
  * records every request, as `agent-artifacts.test.tsx` mounts the Artifacts section.
  *
- * Task ids: M39.2.3.5, M39.9.1.1, M39.9.1.2, M39.9.1.3, M39.9.1.4, M39.9.1.6
+ * Task ids: M39.2.3.5, M39.9.1.5, M39.9.1.1, M39.9.1.2, M39.9.1.3, M39.9.1.4, M39.9.1.6
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -16,6 +16,8 @@ import { DOES_NOT_MATCH, EMPTY_TITLE, NOTHING_YOURS_TO_SEE, SHOW_MORE, WIDEN_THR
 import {
   agentKnowledgeApiPath,
   agentKnowledgeLinkApiPath,
+  agentKnowledgeRefetchApiPath,
+  agentKnowledgeRetireApiPath,
   agentKnowledgeUploadApiPath,
   readAgentKnowledge,
   readKnowledgeAdded,
@@ -293,6 +295,9 @@ describe("the other sources", () => {
     const hrefs = [...container.querySelectorAll('[data-slot="knowledge-other-sources"] a')].map((one) => one.getAttribute("href"));
     expect(hrefs).toContain("/connectors/ledger");
     expect(hrefs).toContain("/skills/ssl-renewal-runbook");
+  });
+});
+
 describe("the figures beside each document", () => {
   test("a document the agent drew on says how often, one it never touched says so, and the basis is stated once", async () => {
     // What breaks if this is deleted: M39.2.3.5's per-item figures reaching the page without saying
@@ -389,5 +394,124 @@ describe("the Knowledge section", () => {
     const read = readAgentKnowledge({ items: [{ item_id: "x" }, item("y")], rule: [{ field: "department" }] });
     expect(read?.items.map((one) => one.itemId)).toEqual(["y"]);
     expect(read?.rule).toEqual([]);
+  });
+});
+
+function dialogButton(label: string): HTMLButtonElement {
+  const found = [...document.querySelectorAll('[role="alertdialog"] button')].find((one) => one.textContent === label);
+  if (found === undefined) {
+    throw new Error(`no ${label} button in the confirmation`);
+  }
+  return found as HTMLButtonElement;
+}
+
+async function press(container: HTMLElement, label: string): Promise<void> {
+  const button = await waitFor(() => {
+    const found = [...container.querySelectorAll('[data-slot="knowledge-item"] button')].find((one) => one.textContent === label);
+    if (found === undefined) {
+      throw new Error(`no ${label} button on a row`);
+    }
+    return found;
+  });
+  await act(async () => {
+    fireEvent.click(button);
+  });
+}
+
+describe("how a document arrived, and what may be done to it", () => {
+  test("a file, a link and a document that recorded nothing are each said as recorded, and no act is drawn where the API offered none", async () => {
+    // What breaks if this is deleted: M39.9.1.1's way of arriving drawn as a guess for an old
+    // document, or a Retire button drawn for a reader the API did not offer it to.
+    const wire = knowledgeWire({
+      items: [
+        item("file", { arrived_as: "file" }),
+        item("link", { arrived_as: "link", can_retire: true, can_refetch: true }),
+        item("old"),
+      ],
+    });
+    const { container, idp } = await consoleAt(answers(wire));
+    const said = rows(container).map((one) => one.querySelector('[data-slot="knowledge-arrival"]')?.textContent);
+    expect(said).toEqual(["added as a file", "added from a link", "how it was added is not recorded"]);
+    const acts = rows(container).map((one) => one.querySelector('[data-slot="knowledge-acts"]') !== null);
+    expect(acts).toEqual([false, true, false]);
+    expect(posts(idp)).toEqual([]);
+  });
+
+  test("retiring asks first, sends the agent's own address once confirmed and draws the list again without it", async () => {
+    // What breaks if this is deleted: M39.9.1.5's retire acting without a confirmation, or leaving a
+    // retired document on the list the agent draws from.
+    const retire = `POST /api/v1${agentKnowledgeRetireApiPath(AGENT, "two")}`;
+    const table = answers(knowledgeWire({ items: [item("one"), item("two", { can_retire: true })] }), {
+      [retire]: { body: { item_id: "two", title: "Title of two", said: "Retired." } },
+    });
+    const { container, idp } = await consoleAt(table);
+    await press(container, "Retire");
+    await waitFor(() => {
+      expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain("No agent answers from it");
+    });
+    expect(posts(idp)).toEqual([]);
+    table[`GET /api/v1${agentKnowledgeApiPath(AGENT, 0)}`] = { body: knowledgeWire({ items: [item("one")] }) };
+    await act(async () => {
+      fireEvent.click(dialogButton("Retire"));
+    });
+    await waitFor(() => {
+      expect(rows(container)).toHaveLength(1);
+    });
+    expect(posts(idp).map((one) => one.url.replace(/^.*\/api\/v1/, ""))).toEqual([agentKnowledgeRetireApiPath(AGENT, "two")]);
+    expect(rows(container)[0]?.textContent).toContain("Title of one");
+  });
+
+  test("a retire the API refuses is shown in its words and the document stays listed", async () => {
+    // What breaks if this is deleted: a refused retire drawn as done, so the person believes a
+    // document no longer answers.
+    const retire = `POST /api/v1${agentKnowledgeRetireApiPath(AGENT, "two")}`;
+    const refusal = { message: "I could not find that.", problems: [] };
+    const { container } = await consoleAt(
+      answers(knowledgeWire({ items: [item("two", { can_retire: true })] }), { [retire]: { status: 404, body: refusal } }),
+    );
+    await press(container, "Retire");
+    await waitFor(() => {
+      expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
+    });
+    await act(async () => {
+      fireEvent.click(dialogButton("Retire"));
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("I could not find that.");
+    });
+    expect(rows(container)).toHaveLength(1);
+  });
+
+  test("fetching a link again happens only when a person presses it, asks for a review date and confirms, and sends no address", async () => {
+    // What breaks if this is deleted: M39.9.1.5's refetch fetched on load, or without confirming
+    // that it replaces the version answers use, or sent an address a caller could point elsewhere.
+    const refetch = `POST /api/v1${agentKnowledgeRefetchApiPath(AGENT, "link")}`;
+    const table = answers(knowledgeWire({ items: [item("link", { arrived_as: "link", can_refetch: true })] }), {
+      [refetch]: { status: 201, body: { item_id: "newer", supersedes: "link", title: "Title", level: "department", department: "web", passages: 1, found_by: "text search" } },
+    });
+    const { container, idp } = await consoleAt(table);
+    expect(posts(idp)).toEqual([]);
+    await press(container, "Fetch the page again");
+    await waitFor(() => {
+      expect(container.querySelector('[data-slot="knowledge-fetch-again"] form')).not.toBeNull();
+    });
+    expect(posts(idp)).toEqual([]);
+    change(container, "review_by", "2999-01-01");
+    await act(async () => {
+      fireEvent.submit(container.querySelector('[data-slot="knowledge-fetch-again"] form') as HTMLFormElement);
+    });
+    await waitFor(() => {
+      expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain("from the address it was added from");
+    });
+    expect(posts(idp)).toEqual([]);
+    await act(async () => {
+      fireEvent.click(dialogButton("Fetch the page again"));
+    });
+    await waitFor(() => {
+      expect(posts(idp)).toHaveLength(1);
+    });
+    const [sent] = posts(idp);
+    expect(sent?.url.endsWith(agentKnowledgeRefetchApiPath(AGENT, "link"))).toBe(true);
+    expect(Object.keys(JSON.parse(String(sent?.init.body)))).toEqual(["review_by"]);
   });
 });
