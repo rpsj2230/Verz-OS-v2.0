@@ -124,6 +124,7 @@ from brain.tables.manifest_draft import (
     ManifestRevisionRow,
 )
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
+from brain.tables.migration_record import MigrationRecordRow
 from brain.tables.model_health import (
     ChainDepthAlertRow,
     ProviderHealthRow,
@@ -540,6 +541,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0223_templates_and_audience. A draft and an offer each name an agent and a person as values.
     "agent.template_draft",
     "agent.audience_extra",
+    # 0241_migration_record. Points at nothing: a person is a value, so a saved version outlives the
+    # person who saved it.
+    "ops.migration_record",
 )
 
 __all__ = [
@@ -630,6 +634,7 @@ __all__ = [
     "MarkRow",
     "MessageRole",
     "MessageRow",
+    "MigrationRecordRow",
     "ModelAttemptRow",
     "ModelProviderRow",
     "OAuthConsentRow",
