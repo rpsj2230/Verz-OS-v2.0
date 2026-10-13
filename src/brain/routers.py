@@ -85,6 +85,7 @@ from brain.agent_lifecycle_routes import router as agent_lifecycle_router
 
 # Where a link to one tab of one agent lands for the person following it, or the one 404.
 from brain.agent_link_routes import router as agent_link_router
+from brain.agent_memory_kinds_routes import router as agent_memory_kinds_router
 from brain.agent_memory_routes import router as agent_memory_router
 
 # An agent's pinned provider and model, tried before its tier. See `brain.agent_model_routes`.

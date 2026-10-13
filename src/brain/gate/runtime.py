@@ -726,6 +726,7 @@ class AgentRuntime:
             task=self.skill_cards,
             asker=lane.hints,
             knowledge=None,
+            kinds=self.record.memory_kinds,
         )
         run.context = parts.note()
         messages: list[DriverMessage] = [
