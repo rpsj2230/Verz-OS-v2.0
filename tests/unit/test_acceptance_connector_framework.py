@@ -29,7 +29,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -380,6 +380,125 @@ def test_the_ceiling_check_fails_when_the_plan_reads_against_an_invented_ceiling
         FAILED,
         "the worker's plan reads a source against another ceiling",
     )
+
+
+def test_the_ceiling_check_fails_when_the_throttle_holds_a_bucket_of_another_capacity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """M11.3.1 broken the other way: the throttle spends from a bucket twice the size of the one the
+    documented row derives, which still refuses eventually and still sits under the ceiling. Delete
+    this and a burst can be wrong by any amount short of the whole minute with the check green,
+    because the check's own bucket and the throttle's are both derived and would move together."""
+    from brain.ops.token_bucket import DEFAULT_BURST_SECONDS, BucketState
+
+    original = BucketState.take
+
+    def roomier(self: BucketState, connector: str, **kwargs: Any) -> Any:
+        return original(self, connector, **{**kwargs, "burst_seconds": 2 * DEFAULT_BURST_SECONDS})
+
+    monkeypatch.setattr(BucketState, "take", roomier)
+    assert ran("a_burst_is_paced_by_the_source_s_documented_ceiling") == (
+        FAILED,
+        "a burst of live reads was not the bucket's burst",
+    )
+
+
+def test_the_ceiling_check_fails_when_a_read_past_the_burst_is_refused_as_something_else(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """M11.3.5 broken: a read the bucket turns away is reported as an open circuit. Delete this and
+    a person told a source is down, when it is only busy, passes the check with the right count of
+    reads made."""
+    from brain.connectors.federation import FailureReason
+    from brain.connectors.live_read import Admission, LiveThrottle
+
+    original = LiveThrottle.admit
+
+    def misnamed(self: LiveThrottle, connector: str, *, now: datetime) -> Admission:
+        admission = original(self, connector, now=now)
+        if admission.wait_seconds > 0:
+            return Admission(refused=FailureReason.CIRCUIT_OPEN)
+        return admission
+
+    monkeypatch.setattr(LiveThrottle, "admit", misnamed)
+    assert ran("a_burst_is_paced_by_the_source_s_documented_ceiling") == (
+        FAILED,
+        "a live read past the bucket's burst was not refused as quota",
+    )
+
+
+def test_the_ceiling_check_passes_when_the_process_stalls_between_two_questions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The burst is counted at one instant, so a stall of a third of a second between the
+    questions earns the bucket nothing: on the owner's install the check read eleven reads where
+    the bucket holds ten, because Xero's bucket refills one a second and the executor spun on its
+    no-op sleep until the token arrived. Delete this and the check can go back to the wall clock
+    and fail on a loaded server with the product right, which is what kept it red twice running."""
+    import time
+
+    original = framework._ask
+
+    async def stalled(*args: Any, **kwargs: Any) -> Any:
+        time.sleep(0.3)
+        return await original(*args, **kwargs)
+
+    monkeypatch.setattr(framework, "_ask", stalled)
+    assert ran("a_burst_is_paced_by_the_source_s_documented_ceiling") == (PASSED, "")
+
+
+def test_the_burst_check_reads_the_clock_it_is_handed_and_not_the_wall_clock() -> None:
+    """`_ask` hands the throttle the clock it is given, and a manual clock moves only when moved.
+    Delete this and the seam can be dropped, leaving every question on the wall clock with no test
+    saying why the burst check needs it not to be."""
+    manual = framework._ManualClock(LONG_AGO)
+    assert manual() == LONG_AGO
+
+    async def count_what_the_throttle_was_told() -> list[datetime]:
+        from brain.connectors.live_read import Admission, LiveThrottle
+
+        told: list[datetime] = []
+
+        class Recording(LiveThrottle):
+            def admit(self, connector: str, *, now: datetime) -> Admission:
+                told.append(now)
+                return super().admit(connector, now=now)
+
+        rig = framework._rig(without_a_database())
+        answered = framework._Answering(lambda url: framework._listed(url))
+        await framework._ask(
+            rig.sources(answered),
+            (framework._call(0, "00000000-0000-4000-8000-000000000000"),),
+            throttle=Recording(),
+            clock=manual,
+        )
+        return told
+
+    assert asyncio.run(count_what_the_throttle_was_told()) == [LONG_AGO]
+    manual.advance(timedelta(seconds=90))
+    assert manual() == LONG_AGO + timedelta(seconds=90)
+
+
+def test_the_live_read_check_passes_when_calls_into_a_source_start_late(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The fan-out is counted in who is in flight together, so reads that reach a source up to two
+    fifths of a second apart are still seen to have run at once. The check used to compare the
+    question's elapsed time with its critical path and read a slow machine as an executor that
+    made them one after another. Delete this and the check can go back to a stopwatch and fail
+    on a loaded server for a fan-out that was made at once."""
+    import time
+
+    original = framework._Answering.get
+    arrivals = {"n": 0}
+
+    def late(self: Any, url: str, **kwargs: Any) -> Any:
+        arrivals["n"] += 1
+        time.sleep(0.2 * (arrivals["n"] % 3))
+        return original(self, url, **kwargs)
+
+    monkeypatch.setattr(framework._Answering, "get", late)
+    assert ran("a_live_read_uses_the_service_key_ends_on_time_and_is_made_once") == (PASSED, "")
 
 
 def test_the_breaker_check_fails_when_quota_refusals_count_as_ill_health(

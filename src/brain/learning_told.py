@@ -95,6 +95,7 @@ from starlette.requests import Request
 from brain.console.own_things import is_own
 from brain.core.entitlement import EntitlementSet
 from brain.gate.resolve import EntitlementStore
+from brain.member.connections import NotificationKind
 from brain.memory.correction import Correction, corrected
 from brain.memory.digest import Learning, MemoryItem, WeeklyDigest, weekly_digest
 from brain.memory.signals import Signal
@@ -103,7 +104,7 @@ from brain.ops.notices import NoticeKind, notice_is_on
 from brain.tables.channel import DeliveryOutcome
 from brain.tables.learning import LearningRow
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
-from brain.tell_later import tell
+from brain.tell_later import hold_for, tell
 
 log = structlog.get_logger()
 
@@ -448,6 +449,10 @@ class Told:
     #: Planned and not delivered, or with nowhere to send: no address, a channel off, a reach gone.
     undelivered: int = 0
     switched_off: bool = False
+    #: Not sent because the person's own settings hold it for now (quiet hours, or this channel
+    #: is not where they want a digest). The pass is not finished while any is held, so the next
+    #: one asks again, and the operation ledger makes a second send of the same week impossible.
+    held: int = 0
     #: The load reached `MOST_LEARNINGS_PER_PASS`, so the oldest of the week were not read.
     full: bool = False
 
@@ -459,6 +464,7 @@ class Told:
             "sent" if self.sent else "nothing new sent",
             *(["some were already sent this week"] if self.already else []),
             *(["some could not be delivered"] if self.undelivered else []),
+            *(["some are held for their person's own settings"] if self.held else []),
             *(["the week's load came back full"] if self.full else []),
         ]
         return f"the learning digest: {'; '.join(said)}"
@@ -492,7 +498,7 @@ async def send_learning_digests(
         if only is not None
         else sorted({one.formation.principal_id for one in loaded.learnings})
     )
-    sent = already = undelivered = 0
+    sent = already = undelivered = held = 0
     for person in people:
         # An ended reach is not skipped here: recall admits nothing to it, so its week is empty,
         # and `tell` refuses it again when the message would leave.
@@ -505,12 +511,16 @@ async def send_learning_digests(
         )
         if not worth_sending(digest):
             continue
+        if await hold_for(request, person, NotificationKind.DIGEST, now=now) is not None:
+            held += 1
+            continue
         delivered = await tell(
             request,
             person,
             digest_text(digest, page=page, zone=zone),
             intent_ref=intent_ref_for(covered),
             now=now,
+            kind=NotificationKind.DIGEST,
         )
         if delivered is None or delivered.outcome is not DeliveryOutcome.SENT:
             undelivered += 1
@@ -518,7 +528,7 @@ async def send_learning_digests(
             sent += 1
         else:
             already += 1
-    return Told(sent=sent, already=already, undelivered=undelivered, full=loaded.full)
+    return Told(sent=sent, already=already, undelivered=undelivered, held=held, full=loaded.full)
 
 
 async def learning_pass(app: FastAPI, *, now: datetime, done: str) -> str:
@@ -552,7 +562,7 @@ async def learning_pass(app: FastAPI, *, now: datetime, done: str) -> str:
         week=week,
     )
     log.info("learning digest pass", said=told.summary())
-    return done if told.switched_off else week.key
+    return done if told.switched_off or told.held else week.key
 
 
 async def keep_sending_learning_digests(app: FastAPI) -> None:

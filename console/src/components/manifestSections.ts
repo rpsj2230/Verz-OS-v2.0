@@ -63,6 +63,38 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * A part of an agent the builder links to and does not hold: what it is, where it is set, and the
+ * address to go to, which is empty for a part set on this same page at a later step. The API's own
+ * words and addresses; the console adds none (needs-rupash 170 A).
+ */
+export interface SetElsewhere {
+  readonly part: string;
+  readonly title: string;
+  readonly sentence: string;
+  readonly address: string;
+}
+
+/** The parts the form document links to, in the order the API sent them, or none when it sent none. */
+export function readSetElsewhere(payload: unknown): readonly SetElsewhere[] {
+  if (!isObject(payload) || !Array.isArray(payload.set_elsewhere)) {
+    return [];
+  }
+  const found: SetElsewhere[] = [];
+  for (const entry of payload.set_elsewhere) {
+    if (
+      isObject(entry) &&
+      typeof entry.part === "string" &&
+      typeof entry.title === "string" &&
+      typeof entry.sentence === "string" &&
+      typeof entry.address === "string"
+    ) {
+      found.push({ part: entry.part, title: entry.title, sentence: entry.sentence, address: entry.address });
+    }
+  }
+  return found;
+}
+
 /** The sections of a builder form document, in the order the API sent them. */
 export function readManifestForm(payload: unknown): readonly ManifestSection[] {
   if (!isObject(payload) || payload.schema !== MANIFEST_FORM_SCHEMA) {

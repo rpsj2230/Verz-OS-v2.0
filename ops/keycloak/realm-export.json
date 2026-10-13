@@ -809,6 +809,31 @@
         { "authenticator": "conditional-user-configured", "authenticatorFlow": false, "requirement": "REQUIRED", "priority": 10 },
         { "authenticator": "auth-otp-form", "authenticatorConfig": "otp-method-reference", "authenticatorFlow": false, "requirement": "REQUIRED", "priority": 20 }
       ]
+    },
+    {
+      "_comment": [
+        "The first-login flow of the Lark identity provider (M1.1.8), named by",
+        "brain.identity.brokering.LINK_FLOW_ALIAS. It links a person Lark has signed in to the",
+        "account that already exists for their work address, and creates nobody: there is no Create",
+        "User If Unique step, so a person with no account fails the flow, and the sign-in service",
+        "refuses a disabled account itself, which is what a leaver the staff sync closed is.",
+        "Review Profile is absent too, so nobody is asked to type anything about themselves.",
+        "Both steps are REQUIRED: Detect Existing Broker User finds the account by the address the",
+        "broker was told and, when there is none, ends the flow; Automatically Set Existing User",
+        "links it without sending the verification email or the re-authentication page the default",
+        "flow puts in front of a link, which would send a person mail the owner decided nobody is",
+        "sent (needs-rupash 115). The default 'first broker login' flow is left alone and is still",
+        "the one Google and Microsoft use."
+      ],
+      "alias": "brain link by work address",
+      "description": "Links a brokered Lark person to the account the staff sync made, and creates nobody",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        { "authenticator": "idp-detect-existing-broker-user", "authenticatorFlow": false, "requirement": "REQUIRED", "priority": 10 },
+        { "authenticator": "idp-auto-link", "authenticatorFlow": false, "requirement": "REQUIRED", "priority": 20 }
+      ]
     }
   ],
 

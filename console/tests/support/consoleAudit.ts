@@ -326,6 +326,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents/{agent_id}/learning",
       "/api/v1/console/agents/{agent_id}/stats",
       "/api/v1/agents/{agent_id}/budget",
+      "/api/v1/agents/{agent_id}/budget/ceilings",
       "/api/v1/agents/{agent_id}/capabilities",
       "/api/v1/agents/{agent_id}/preview",
       "/api/v1/agents/{agent_id}/knowledge*",
@@ -767,7 +768,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
   "Scheduled jobs and background work": {
     screens: ["/jobs", "/jobs/:name", "/jobs/:name/:view", "/runs"],
     routes: ["/api/v1/jobs*", "/api/v1/operate/runs", "/api/v1/operations/interrupted"],
-    tables: ["ops.control_run", "ops.operation", "ops.acceptance_result"],
+    tables: ["ops.control_run", "ops.operation", "ops.acceptance_result", "ops.dead_letter"],
     installation: [],
     gaps: [
       {
@@ -793,8 +794,25 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/company/activity",
       "/company/consumption",
     ],
-    routes: ["/api/v1/report/*", "/api/v1/me/workspace", "/api/v1/company/*", "/api/v1/quality/*"],
+    routes: [
+      "/api/v1/report/*",
+      "/api/v1/me/workspace",
+      "/api/v1/me/preferences*",
+      "/api/v1/me/devices*",
+      "/api/v1/me/reads",
+      "/api/v1/me/artifacts*",
+      "/api/v1/me/stored",
+      "/api/v1/me/shares",
+      "/api/v1/me/shared*",
+      "/api/v1/me/agents/*",
+      "/api/v1/me/agent-requests",
+      "/api/v1/company/*",
+      "/api/v1/quality/*",
+    ],
     tables: [
+      "agent.artifact_share",
+      "agent.agent_request",
+      "auth.member_preference",
       "ops.question_asked",
       "ops.question_gap",
       "ops.report_refresh",

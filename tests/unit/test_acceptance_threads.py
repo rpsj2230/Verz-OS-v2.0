@@ -57,7 +57,7 @@ def test_the_module_declares_one_check_per_group_of_leaves() -> None:
         (KEPT, ("M9.1.1", "M9.1.3")),
         (LARK, ("M9.1.2",)),
         (FOLLOW, ("M9.2.3",)),
-        (CORRECT, ("M9.2.4",)),
+        (CORRECT, ("M9.2.4", "M40.2.1.1")),
         (CONVERSATIONS, ("M39.8.9",)),
     ]
 
@@ -269,6 +269,19 @@ def test_a_correction_kept_nowhere_fails_the_correction_check(
 
     monkeypatch.setattr(thread_store.StoredThreads, "corrections", nowhere)
     assert "contradiction" in _failed(install, CORRECT)
+
+
+@pytest.mark.needs_db
+def test_a_workspace_that_counts_no_correction_fails_the_correction_check(
+    install: str, issuer: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """My workspace saying nothing was marked wrong however many were. Delete this and M40.2.1.1
+    closes on a figure beside the questions that never moves."""
+    from brain import mine_routes
+
+    real = mine_routes.corrections_said
+    monkeypatch.setattr(mine_routes, "corrections_said", lambda made: real(0))
+    assert "did not say how many" in _failed(install, CORRECT)
 
 
 @pytest.mark.needs_db

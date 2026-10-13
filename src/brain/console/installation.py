@@ -97,7 +97,7 @@ from __future__ import annotations
 import enum
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Final
 
 from brain.console.configuration import LABELS
@@ -577,6 +577,60 @@ def install_facts(
                 )
             )
     return tuple(facts)
+
+
+# ------------------------------------------------- how long approvals wait (M35.4.5)
+#: Said when no approval has been decided in the look-back, so there is nothing to take a median of.
+NO_APPROVAL_HAS_BEEN_DECIDED: Final = (
+    "no approval has been decided yet, so there is no typical wait to measure"
+)
+
+#: Said when the install's database has no view of approval waits, or it could not be read.
+THE_APPROVAL_WAITS_COULD_NOT_BE_READ: Final = (
+    "the database could not be asked how long approvals wait, which a database that has not been "
+    "upgraded to this release cannot answer"
+)
+
+
+def approval_wait_facts(typical: timedelta | None, *, readable: bool = True) -> tuple[Fact, ...]:
+    """The typical approval wait, and whether push for approvals is now worth building (M35.4.5).
+
+    One duration and never a count, because the number of decided approvals is a fact about what
+    people were asked. `readable` is False when the database could not be asked, which is unknown
+    with its reason and never a wait of nothing. See `brain.ops.approval_wait`.
+    """
+    from brain.locale import PUSH_IS_DUE_ABOVE_HOURS
+    from brain.ops.approval_wait import push_is_wanted, worded
+
+    if not readable:
+        return (
+            Fact(
+                name="typical approval wait",
+                source=Source.UNKNOWN,
+                because=THE_APPROVAL_WAITS_COULD_NOT_BE_READ,
+            ),
+        )
+    if typical is None:
+        return (
+            Fact(
+                name="typical approval wait",
+                source=Source.UNKNOWN,
+                because=NO_APPROVAL_HAS_BEEN_DECIDED,
+            ),
+        )
+    due = push_is_wanted(typical)
+    return (
+        Fact(name="typical approval wait", source=Source.MEASURED, value=worded(typical)),
+        Fact(
+            name="push notifications for approvals",
+            source=Source.MEASURED,
+            value=(
+                f"now worth building: the typical wait is past {PUSH_IS_DUE_ABOVE_HOURS} hours"
+                if due
+                else f"not needed yet: the typical wait is within {PUSH_IS_DUE_ABOVE_HOURS} hours"
+            ),
+        ),
+    )
 
 
 # ------------------------------------------------- rate limits and throttling (M27.6.3)
