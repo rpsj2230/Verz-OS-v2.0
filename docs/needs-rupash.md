@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**44 items are open: 220,** which speech service turns dictation into text, **219,** whether an approver may amend an action before approving it, **218,** whether the product may count how often each knowledge item is read, **210,** whether an automation a person wrote in words may call a model with nobody present, **209,** what starts an automation that waits for a change in a source or a call from outside, **202,** three disclosure decisions on screens I built (who the sign-in page names, what the landing figures show a reader without the spend screens, and whether every file download is written down), **201,** who an agent is shared with and whether its page has a browsing switch, **200,** what happens to a person's agents when the person is switched off, **196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **193,** which formats an agent's generated documents start with and which libraries may be added, **192,** whether sensitive actions that cannot be undone need a second person, **191,** whether an agent may ever answer with nothing behind it, **189,** how a team agent may use mail without one person's mail reaching anybody else, **188,** whether five console tasks that ask for what the design does not do are narrowed, **187,** whether the chat tools show progress while an answer is made, **186,** whether answers keep using the old search index while a new embedding model is built, **185,** which person approves the eight starter skills, **184,** which outside AI services are offered first and what they count as, **183,** whether a skill is refused when its agent lacks one of its tools, **182,** what a skill names when it needs knowledge, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **167,** whether a chat room or channel belongs to exactly one agent, **163,** the short list of what stops tasks being proved on your install, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **134,** connecting the Slack channel, **132,** connecting the email channel, **131,** making staff accounts work on your install, **127 and 128,** things for you to do (switch on the Lark chat channel, and connect Xero, HubSpot and Freshdesk), **and 91,** the
+**46 items are open: 220,** which speech service turns dictation into text, **219,** whether an approver may amend an action before approving it, **218,** whether the product may count how often each knowledge item is read, **216,** what counts as a delegation when a person moves department, **215,** whether the setup wizard takes a logo as an upload or as the address of a picture you already host, **210,** whether an automation a person wrote in words may call a model with nobody present, **209,** what starts an automation that waits for a change in a source or a call from outside, **202,** three disclosure decisions on screens I built (who the sign-in page names, what the landing figures show a reader without the spend screens, and whether every file download is written down), **201,** who an agent is shared with and whether its page has a browsing switch, **200,** what happens to a person's agents when the person is switched off, **196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **193,** which formats an agent's generated documents start with and which libraries may be added, **192,** whether sensitive actions that cannot be undone need a second person, **191,** whether an agent may ever answer with nothing behind it, **189,** how a team agent may use mail without one person's mail reaching anybody else, **188,** whether five console tasks that ask for what the design does not do are narrowed, **187,** whether the chat tools show progress while an answer is made, **186,** whether answers keep using the old search index while a new embedding model is built, **185,** which person approves the eight starter skills, **184,** which outside AI services are offered first and what they count as, **183,** whether a skill is refused when its agent lacks one of its tools, **182,** what a skill names when it needs knowledge, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **167,** whether a chat room or channel belongs to exactly one agent, **163,** the short list of what stops tasks being proved on your install, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **134,** connecting the Slack channel, **132,** connecting the email channel, **131,** making staff accounts work on your install, **127 and 128,** things for you to do (switch on the Lark chat channel, and connect Xero, HubSpot and Freshdesk), **and 91,** the
 checks only you can do on your install; it waits for the Knowledge upload grants (item 105) to land.
 Each says in plain terms what it is, what I recommend, and every step.
 
@@ -72,6 +72,53 @@ when it is due, which is what an author needs to keep it true. No use count.
 **My recommendation:** B. It answers "does anyone read this" without ever telling an author who.
 
 **What I need from you:** reply "218: A", "218: B" or "218: C".
+
+## 216. What counts as a delegation when a person moves department?
+
+**In plain terms:** task M26.2.3 says that when a person changes department, each delegation they own is
+re-evaluated, and one that would now go beyond what they may reach is paused, never quietly narrowed. The
+rule is written and tested. What is missing is the thing it applies to: nothing in the product is called a
+delegation, and there is no record of one. The two things that act in a person's name today are an
+automation they own and a deputy they appoint to cover a role. I will not guess which of these you mean,
+because pausing the wrong one stops somebody's work.
+
+**Option A: both.** When the nightly sync sees a person has moved, their automations and their deputy
+appointments are paused until they confirm them again, and each is listed on their own page and their
+department administrator's. An automation that stays inside what they can now reach is not paused.
+
+**Option B: automations only.** A deputy appointment keeps running because it is a role the administrator
+gave, not something the person made for themselves.
+
+**Option C: build a delegation as its own thing,** a person lending a slice of their own reach to a named
+colleague for a time. It is more work and nobody has asked for it yet.
+
+**My recommendation:** A. An automation runs with its owner's reach and a deputy covers the owner's role, so
+a move changes what both can safely do. C can follow if you want people to lend their reach.
+
+**What I need from you:** reply "216: A", "216: B" or "216: C".
+
+## 215. Does the setup wizard take a logo as an upload, or as the address of a picture you already host?
+
+**In plain terms:** task M42.5.5 says the setup wizard asks for a company name, a logo upload and a web
+address. What I built asks for the logo's address instead: you paste where the picture already is, on your
+own website, and nothing is stored here. I did that because the wizard runs before anybody has signed in
+and before an object store is necessarily connected, so there is nowhere safe to put a file yet. I should
+have asked you before narrowing the task.
+
+**Option A: an address, as built.** Simple and safe. If the address stops working the logo disappears,
+and you change it later on the Branding screen.
+
+**Option B: a real upload in the wizard.** The wizard would need an object store connected before first
+run, and the standard install does not have one, so the wizard would refuse to continue on the smallest
+install.
+
+**Option C: an address in the wizard, and an upload on the Branding screen once you are signed in.** The
+install keeps the picture itself from then on.
+
+**My recommendation:** A for now, then C when the Branding screen is built, so the first install never
+depends on a store.
+
+**What I need from you:** reply "215: A", "215: B" or "215: C".
 
 ## 210. May an automation a person wrote in words call a model with nobody present?
 
