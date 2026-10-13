@@ -14,10 +14,10 @@
  * not. A 404 is the API saying this caller may not open it, and the page does not explain further.
  *
  * **What the design draws and nothing records is a sentence where the design draws it.** The
- * corrections under the questions figure, the Undo all control, the Verified and Used 30d columns
- * of the knowledge card, and the connected accounts are each the API's own sentence, because
+ * Verified and Used 30d columns of the knowledge card are each the API's own sentence, because
  * nothing on an install records them. `brain.console.own_things` names the decisions each would
- * need.
+ * need. The corrections under the questions figure are the API's own count since 2026-10-13
+ * (M40.2.1.1), and Undo all is the API's own route (M40.4.1.2).
  *
  * **What it learned about me can be edited and forgotten here** (M16.4.2): each item has Edit,
  * which keeps what the person writes instead, and Forget, confirmed in words that say the record
@@ -29,7 +29,7 @@
  * The Connected accounts card also lists the sources a person may connect their own account with,
  * and sends them to the vendor to do it (`components/MyAccounts.tsx`, M11.8.6).
  *
- * Task ids: M27.7.28, M16.4.2, M11.8.6
+ * Task ids: M27.7.28, M16.4.2, M11.8.6, M40.4.1.2
  */
 
 import { useCallback, useState } from "react";
@@ -44,6 +44,7 @@ import { FailureNotice } from "../ui/FailureNotice";
 import { when } from "./artifactsQuery";
 import {
   EDIT_API_PATH,
+  FORGET_ALL_API_PATH,
   FORGET_API_PATH,
   PROVISION_WORDS,
   WORKSPACE_API_PATH,
@@ -86,6 +87,12 @@ export const FORGET_LABEL = "Forget";
 export const SAVE_LABEL = "Save";
 export const CANCEL_LABEL = "Cancel";
 export const KEEP_IT = "Keep it";
+export const UNDO_ALL_LABEL = "Undo all";
+export const UNDO_ALL_QUESTION = "Forget everything learnt about you?";
+export const UNDO_ALL_CONSEQUENCE =
+  "Each memory stops being used in your answers at once. The records that they were learnt stay, " +
+  "and nothing you said in a conversation is deleted.";
+export const UNDONE_ALL = "Everything learnt about you has been forgotten.";
 export const WHAT_IT_SHOULD_SAY = "What it should say";
 export const WHAT_IT_TAKES = "One sentence about you, up to 280 characters, in your own words.";
 export const WRITE_SOMETHING = "Write what it should say before saving, or cancel to keep it.";
@@ -201,12 +208,14 @@ function WhatItLearned({
   const [draft, setDraft] = useState("");
   const [blank, setBlank] = useState(false);
   const [forgetting, setForgetting] = useState<Learned | null>(null);
+  const [forgettingAll, setForgettingAll] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const settle = useCallback(
     (result: Awaited<ReturnType<typeof request<unknown>>>) => {
       setBusy(false);
       setForgetting(null);
+      setForgettingAll(false);
       setEditing(null);
       if (!result.ok) {
         onOutcome({ said: "", failure: result.failure }, false);
@@ -226,6 +235,16 @@ function WhatItLearned({
     },
     [onOutcome, settle],
   );
+  const forgetAll = useCallback(() => {
+    setBusy(true);
+    onOutcome(NO_OUTCOME, false);
+    void (async () => {
+      const result = await request<unknown>(FORGET_ALL_API_PATH, { method: "POST" });
+      setBusy(false);
+      setForgettingAll(false);
+      onOutcome(result.ok ? { said: UNDONE_ALL, failure: null } : { said: "", failure: result.failure }, result.ok);
+    })();
+  }, [onOutcome]);
   const save = useCallback(
     (memoryId: string, statement: string) => {
       setBusy(true);
@@ -331,6 +350,31 @@ function WhatItLearned({
         </ul>
       )}
       <p className="note">{workspace.learned_undo}</p>
+      {workspace.learned.length === 0 ? null : (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={busy}
+          onClick={() => {
+            setForgettingAll(true);
+          }}
+        >
+          {UNDO_ALL_LABEL}
+        </Button>
+      )}
+      <ConfirmDialog
+        open={forgettingAll}
+        question={UNDO_ALL_QUESTION}
+        consequence={UNDO_ALL_CONSEQUENCE}
+        confirmLabel={UNDO_ALL_LABEL}
+        cancelLabel={KEEP_IT}
+        busy={busy}
+        onConfirm={forgetAll}
+        onCancel={() => {
+          setForgettingAll(false);
+        }}
+      />
       <ConfirmDialog
         open={forgetting !== null}
         question={forgetting === null ? "" : `${FORGET_LABEL} "${forgetting.statement}"?`}

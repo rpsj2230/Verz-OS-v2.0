@@ -3,7 +3,7 @@
 - **Screens:** `/library`, `/library/:itemId`, `/library/:itemId/:view`, `/solutions`, `/corrections`, `/learning`, `/learning/:view`, `/memory`, `/memory/:subject`, `/memory/:subject/:view`, `/me/undo/:memoryId`, `/records`, `/records/:entity`, `/classification`, `/classification/:entity`, `/classification/:entity/:column`, `/duplicates`, `/rules`, `/artifacts`
 - **Tables:** `know.item`, `know.chunk`, `know.steward_task`, `know.solution`, `know.learning_candidate`, `know.candidate_evidence`, `mem.learned_rule`, `mem.rule_occurrence`, `mem.adaptive`, `mem.persistent`, `mem.learning`, `mem.correction`, `gate.fast_path_rule`, `gate.field_policy`, `agent.artifact`, `agent.artifact_change`, `know.classified_table`, `know.classified_row`, `er.review_item`, `er.merge`, `er.unmerge`, `er.observation`, `er.blocked_value`
 - **Installation values:** `INSTALL_VECTOR_STORE`, `INSTALL_EMBEDDING_REVISION`, `INSTALL_KNOWLEDGE_SCANNER`, `INSTALL_CLAMAV_ADDRESS`
-- **Measured here:** 53 routes, 7 called by no screen; 29 write routes, 29 with all three proofs; 7 gaps.
+- **Measured here:** 54 routes, 7 called by no screen; 30 write routes, 30 with all three proofs; 7 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -51,6 +51,7 @@
 | `POST /api/v1/me/learning/undo` | `/me/undo/:memoryId` |
 | `POST /api/v1/me/memory/edit` | `/me` |
 | `POST /api/v1/me/memory/forget` | `/me` |
+| `POST /api/v1/me/memory/forget-all` | `/me` |
 | `POST /api/v1/resolution/review/{item_id}/decision` | `/duplicates` |
 | `POST /api/v1/resolution/weights/promote` | `/duplicates` |
 | `POST /api/v1/rules` | `/rules` |
@@ -93,6 +94,7 @@
 | `POST /api/v1/me/learning/undo` | `/me/undo/:memoryId` | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_a_person_holding_no_grant_at_all_undoes_what_was_learnt_from_them` in `tests/unit/test_mine_routes.py` |
 | `POST /api/v1/me/memory/edit` | `/me` | `test_an_edit_reaches_the_rows_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_edit_reaches_the_rows_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_a_member_edits_a_memory_and_the_replacement_changes_the_words_and_nothing_else` in `tests/unit/test_mine_routes.py` |
 | `POST /api/v1/me/memory/forget` | `/me` | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_a_member_forgets_a_memory_formed_from_their_own_words` in `tests/unit/test_mine_routes.py` |
+| `POST /api/v1/me/memory/forget-all` | `/me` | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_undo_all_forgets_what_the_page_shows_about_the_person_and_nothing_of_anybody_elses` in `tests/unit/test_mine_routes.py` |
 | `POST /api/v1/resolution/review/{item_id}/decision` | `/duplicates` | `test_a_reviewed_merge_moves_one_pointer_and_records_who_when_and_on_what` in `tests/unit/test_merge_store.py` (database, in CI) | `test_a_reviewed_merge_moves_one_pointer_and_records_who_when_and_on_what` in `tests/unit/test_merge_store.py` (database, in CI) | `test_on_a_real_database_the_review_check_passes_and_nothing_is_left_behind` in `tests/unit/test_acceptance_review.py` (database, in CI) |
 | `POST /api/v1/resolution/weights/promote` | `/duplicates` | `test_a_run_keeps_a_fit_nobody_scores_with_until_a_reviewer_promotes_it` in `tests/unit/test_calibration_store.py` (database, in CI) | `test_a_run_keeps_a_fit_nobody_scores_with_until_a_reviewer_promotes_it` in `tests/unit/test_calibration_store.py` (database, in CI) | `test_on_a_real_database_the_calibration_check_passes_and_nothing_is_left_behind` in `tests/unit/test_acceptance_calibration.py` (database, in CI) |
 | `POST /api/v1/rules` | `/rules` | `test_the_store_adds_reads_per_department_and_retires` in `tests/unit/test_rule_routes.py` (database, in CI) | `test_a_rule_added_and_retired_is_on_the_ledger_under_whoever_did_it` in `tests/unit/test_rule_routes.py` (database, in CI) | `test_on_a_real_database_the_department_rule_check_passes_and_leaves_nothing_behind` in `tests/unit/test_acceptance_dept_rules.py` (database, in CI) |
