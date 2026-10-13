@@ -49,7 +49,12 @@ from brain.console.agent_automations import (
     history,
     schedule_basis,
 )
-from brain.console.automation_gallery import may_open_gallery, template_by_id
+from brain.console.automation_authoring import (
+    NOTHING_FIRES_THIS_YET,
+    WRITES_WAIT_FOR_A_PERSON,
+    Authored,
+)
+from brain.console.automation_gallery import Cadence, may_open_gallery, template_by_id
 from brain.console.automation_schedule import (
     NotConfirmedError,
     ScheduleShown,
@@ -141,6 +146,24 @@ class RunView(BaseModel):
     result: list[str]
 
 
+class AuthoredCardView(BaseModel):
+    """What a person wrote, in words, for the card: when it runs, whether something must be true,
+    what it is told and what it may use. See `brain.console.automation_authoring`."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    #: The trigger in words, and whether anything on this install fires that kind.
+    trigger: str
+    fires: bool
+    #: The condition in words, or null when it runs every time.
+    condition: str | None = None
+    instruction: str
+    tools: list[str]
+    #: The template it began from, or null when it began from words.
+    from_template: str | None = None
+    writes_wait: str = WRITES_WAIT_FOR_A_PERSON
+
+
 class AutomationView(BaseModel):
     """One of an agent's automations, and what this reader may do to it."""
 
@@ -162,6 +185,8 @@ class AutomationView(BaseModel):
     stop_confirmation: str | None = None
     #: Why it cannot be started on this install, when that is why.
     cannot_start: str | None = None
+    #: What a person wrote, when they wrote it and it did not come from a template alone.
+    authored: AuthoredCardView | None = None
 
 
 class AutomationsView(BaseModel):
@@ -249,6 +274,25 @@ async def _visible(
     return record, tuple(one for one in every if one.automation.automation_id in seen)
 
 
+def authored_view(one: Authored) -> AuthoredCardView:
+    """What a person wrote, as the card says it."""
+    return AuthoredCardView(
+        trigger=one.trigger.words(),
+        fires=one.trigger.fires,
+        condition=None if one.condition is None else one.condition.words(),
+        instruction=one.instruction_text,
+        tools=list(one.tools),
+        from_template=one.template_id,
+    )
+
+
+def _schedule_words(listed: Listed, cadence: Cadence | None) -> str:
+    """When it runs, in words: the cadence, or what the trigger says when it is not a schedule."""
+    if cadence is not None:
+        return cadence.words()
+    return "" if listed.authored is None else listed.authored.trigger.words()
+
+
 def run_view(run: RunRecord, asked: Asking) -> RunView:
     return RunView(
         finished_at=run.finished_at,
@@ -262,9 +306,9 @@ def automation_view(listed: Listed, agent: AgentRecord, asked: Asking) -> Automa
     """One automation as this reader sees it, or None when its template is gone."""
     one = listed.automation
     template = template_by_id(listed.template_id)
-    if template is None:
+    if template is None and listed.authored is None:
         return None
-    cadence = listed.cadence or template.cadence
+    cadence = listed.cadence or (None if template is None else template.cadence)
     live = listed.owner_live(asked.now)
     shown = history(
         one,
@@ -277,9 +321,10 @@ def automation_view(listed: Listed, agent: AgentRecord, asked: Asking) -> Automa
         (run for run in listed.runs if shown.last is not None and run.finished_at == shown.last.at),
         None,
     )
-    start = shown_start(one, cadence, now=asked.now)
+    start = None if cadence is None else shown_start(one, cadence, now=asked.now)
     startable = (
-        not listed.removed
+        start is not None
+        and not listed.removed
         and live
         and start.becomes is not None
         and may_start(one, asked.reach, agent=agent, becomes=start.becomes, now=asked.now)
@@ -295,19 +340,24 @@ def automation_view(listed: Listed, agent: AgentRecord, asked: Asking) -> Automa
     cannot_start = None
     if one.paused and not listed.removed:
         cannot_start = ADOPT_IT_FIRST if not live else cannot_start_because(one, agent, asked.now)
+        if cannot_start is None and cadence is None:
+            cannot_start = NOTHING_FIRES_THIS_YET
     return AutomationView(
         automation_id=one.automation_id,
         name=one.name,
         runs_as=one.runs_as.id,
         runs_as_name=one.runs_as.display_name,
-        schedule=cadence.words(),
+        schedule=_schedule_words(listed, cadence),
         next_run_at=one.next_run_at,
         paused_because=paused_because,
         last_run=None if last is None else run_view(last, asked),
-        start_confirmation=start.confirmation if startable else None,
-        start_becomes=start.becomes if startable else None,
-        stop_confirmation=shown_stop(one, cadence).confirmation if stoppable else None,
+        start_confirmation=start.confirmation if startable and start is not None else None,
+        start_becomes=start.becomes if startable and start is not None else None,
+        stop_confirmation=(
+            shown_stop(one, cadence).confirmation if stoppable and cadence is not None else None
+        ),
         cannot_start=cannot_start,
+        authored=None if listed.authored is None else authored_view(listed.authored),
     )
 
 
@@ -344,12 +394,16 @@ async def _change(
     agent, seen = await _visible(request, agent_id, asked)
     listed = next((one for one in seen if one.automation.automation_id == automation_id), None)
     template = None if listed is None else template_by_id(listed.template_id)
-    if listed is None or template is None:
+    if listed is None or (template is None and listed.authored is None):
         raise _not_here("automation", asked)
     one = listed.automation
-    cadence = listed.cadence or template.cadence
+    cadence = listed.cadence or (None if template is None else template.cadence)
     if listed.removed:
         raise _not_here("removed", asked)
+    if cadence is None:
+        # An automation whose trigger nothing fires has no cadence to start from or stop at, and is
+        # answered as one that does not exist, as any other control the reader is not offered is.
+        raise _not_here("trigger", asked)
     shown: ScheduleShown
     if starting:
         shown = shown_start(one, cadence, now=asked.now)

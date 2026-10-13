@@ -184,6 +184,12 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.automation_gallery_routes:AutomationInstalls.install": (
             Repeat.WRITES_THIS_SYSTEMS_DATABASE
         ),
+        # New automation: an agent read, and a write of a person's own automation in this system's
+        # table, whose id is derived from the confirmed terms, so a second press of the same
+        # confirmation meets the key and writes nothing.
+        "brain.automation_authoring_routes:AutomationAuthors.author": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
         # Starting and stopping an installed automation: a read of an agent's automations and a
         # write of its next run and the schedule row beside it, conditional on the next run shown,
         # so a second press finds the automation already moved and writes nothing.

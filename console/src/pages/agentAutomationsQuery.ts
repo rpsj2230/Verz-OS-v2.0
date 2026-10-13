@@ -38,6 +38,17 @@ export interface AutomationRunShown {
   readonly result: readonly string[];
 }
 
+/** What a person wrote, as `AuthoredCardView` sends it: said in words, for the card. */
+export interface AuthoredShown {
+  readonly trigger: string;
+  /** Whether anything on this install fires this kind of trigger. */
+  readonly fires: boolean;
+  readonly condition?: string;
+  readonly instruction: string;
+  readonly tools: readonly string[];
+  readonly writesWait: string;
+}
+
 /** One installed automation, as `AutomationView` sends it. */
 export interface InstalledAutomationShown {
   readonly automationId: string;
@@ -54,6 +65,8 @@ export interface InstalledAutomationShown {
   readonly stopConfirmation?: string;
   /** Why it cannot be started on this install. */
   readonly cannotStart?: string;
+  /** Present when a person wrote it rather than installing it as it is. */
+  readonly authored?: AuthoredShown;
 }
 
 export interface AgentAutomationsAnswer {
@@ -88,6 +101,33 @@ const DIGEST = /^[0-9a-f]{64}$/;
 function confirmation(value: unknown): string | undefined {
   const found = said(value);
   return found !== undefined && DIGEST.test(found) ? found : undefined;
+}
+
+function authoredOf(value: unknown): AuthoredShown | undefined {
+  const fields = fieldsOf(value);
+  const trigger = said(fields?.["trigger"]);
+  const instruction = said(fields?.["instruction"]);
+  const writesWait = said(fields?.["writes_wait"]);
+  const tools = fields?.["tools"];
+  if (
+    trigger === undefined ||
+    instruction === undefined ||
+    writesWait === undefined ||
+    typeof fields?.["fires"] !== "boolean" ||
+    !Array.isArray(tools) ||
+    !(tools as readonly unknown[]).every((one) => said(one) !== undefined)
+  ) {
+    return undefined;
+  }
+  const condition = said(fields["condition"]);
+  return {
+    trigger,
+    fires: fields["fires"],
+    instruction,
+    writesWait,
+    tools: tools as readonly string[],
+    ...(condition === undefined ? {} : { condition }),
+  };
 }
 
 function runOf(value: unknown): AutomationRunShown | undefined {
@@ -153,6 +193,7 @@ export function readAgentAutomations(payload: unknown): AgentAutomationsAnswer |
     const becomes = said(entry?.["start_becomes"]);
     const stopConfirmation = confirmation(entry?.["stop_confirmation"]);
     const cannotStart = said(entry?.["cannot_start"]);
+    const authored = authoredOf(entry?.["authored"]);
     found.push({
       automationId,
       name,
@@ -167,6 +208,7 @@ export function readAgentAutomations(payload: unknown): AgentAutomationsAnswer |
         : { start: { confirmation: startConfirmation, becomes } }),
       ...(stopConfirmation === undefined ? {} : { stopConfirmation }),
       ...(cannotStart === undefined ? {} : { cannotStart }),
+      ...(authored === undefined ? {} : { authored }),
     });
   }
   return { items: found, resultRule };

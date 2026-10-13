@@ -13,6 +13,7 @@ import {
   automationInstallApiPath,
   automationPreviewApiPath,
 } from "../../../src/pages/automationGalleryQuery";
+import { authoringCreateApiPath, authoringOptionsApiPath, authoringPreviewApiPath } from "../../../src/pages/automationAuthoringQuery";
 import { modelPinApiPath } from "../../../src/pages/agentModelPinQuery";
 import { agentBudgetApiPath } from "../../../src/pages/agents/AgentSpend";
 import { memoryDeletionApiPath, memoryEditApiPath, promotionApiPath } from "../../../src/pages/agents/agentMemoryQuery";
@@ -85,6 +86,12 @@ const DRAFT_DECLINED_PRESSED = t(
 );
 
 export const READ_AFTER_AN_ACTION: Readonly<Record<string, ReadAfterAnAction>> = {
+  // New automation's options are read when a person opens the Automations section, with the gallery.
+  "GET /api/v1/agents/{agent_id}/automation-authoring": {
+    screen: "/agents/:agentId/:tab",
+    spelled: "authoringOptionsApiPath",
+    built: authoringOptionsApiPath("quote-helper"),
+  },
   // The gallery is read when a person opens an agent's Automations section, not when its page opens.
   "GET /api/v1/agents/{agent_id}/automation-templates": {
     screen: "/agents/:agentId/:tab",
@@ -158,6 +165,12 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/components/AutomationGallery.tsx automationInstallApiPath(agentId)": [
     at("POST /api/v1/agents/{agent_id}/automations", "automationInstallApiPath", automationInstallApiPath("quote-helper")),
+  ],
+  "src/components/AutomationAuthoring.tsx authoringPreviewApiPath(agentId)": [
+    at("POST /api/v1/agents/{agent_id}/automation-authoring/preview", "authoringPreviewApiPath", authoringPreviewApiPath("quote-helper")),
+  ],
+  "src/components/AutomationAuthoring.tsx authoringCreateApiPath(agentId)": [
+    at("POST /api/v1/agents/{agent_id}/automations/authored", "authoringCreateApiPath", authoringCreateApiPath("quote-helper")),
   ],
   "src/components/AgentAutomations.tsx path": [
     at(
@@ -451,6 +464,20 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_automation_gallery_routes", "test_one_confirmed_request_writes_the_automation_its_registry_entry_and_its_audit_context"),
     audit: t("test_agent_automation_store", "test_an_install_writes_one_row_one_ledger_entry_and_a_second_install_writes_neither", true),
     behaviour: t("test_automation_gallery_routes", "test_one_confirmed_request_writes_the_automation_its_registry_entry_and_its_audit_context"),
+  },
+  "POST /api/v1/agents/{agent_id}/automation-authoring/preview": {
+    row: { notApplicable: "A preview writes no row: it shows what saving would store and what it would have done, and keeps nothing." },
+    audit: { notApplicable: "A preview changes nothing, so there is nothing for the ledger to record." },
+    behaviour: t("test_automation_authoring_routes", "test_the_preview_shows_the_terms_the_rehearsal_and_a_digest_and_writes_nothing"),
+  },
+  "POST /api/v1/agents/{agent_id}/automations/authored": {
+    row: t("test_automation_authoring_routes", "test_one_confirmed_request_writes_one_paused_automation_as_the_caller"),
+    audit: t(
+      "test_automation_authoring_store",
+      "test_a_written_automation_reads_back_arrives_in_the_ledger_and_install_is_still_once",
+      true,
+    ),
+    behaviour: t("test_automation_authoring_routes", "test_a_confirmation_for_other_words_is_refused_and_writes_nothing"),
   },
   "POST /api/v1/agents/{agent_id}/automations/{automation_id}/start": {
     row: t("test_automation_run_store", "test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who", true),
