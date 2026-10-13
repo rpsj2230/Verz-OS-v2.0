@@ -322,6 +322,45 @@ AGENT_ITEM_COUNTS: Final = Feature(
     read_by=("brain.ops.agent_item_use:counting_is_on",),
 )
 
+#: Refusing a skill an agent cannot use. Off until the owner decides needs-rupash 178 and 179: a
+#: skill that names tools or knowledge an agent lacks is today assigned and shown with what the
+#: agent cannot reach, and refusing it is a change in what an administrator can do in one step.
+SKILL_NEEDS: Final = Feature(
+    name="skill_needs",
+    title="Refuse a skill an agent cannot use",
+    what=(
+        "Giving a skill to an agent is refused when a tool the skill names is outside the agent's "
+        "own tools or when a department whose knowledge it needs is outside the agent's scope. "
+        "The refusal names what is missing, and nothing is widened: the agent changes only "
+        "through its own publish."
+    ),
+    while_off=(
+        "A skill is given to any agent and the screen shows which of its tools the agent can "
+        "reach. A skill given while this was on stays given."
+    ),
+    read_by=("brain.skill_routes:assign_skill",),
+)
+
+#: Drafting a skill from a description. Off because it sends a person's words to a model: an install
+#: chooses whether a description of a procedure may leave for the model it has set up. What it
+#: drafts is never more than an import, waiting undecided for a second person (M12.4.14).
+SKILL_DRAFTING: Final = Feature(
+    name="skill_drafting",
+    title="Draft a skill from a description",
+    what=(
+        "An administrator who may add skills describes what a skill should do, and the model "
+        "this install has set up drafts its instructions, the departments whose knowledge it "
+        "needs, the tools it uses and some example tasks. The draft is added to the library "
+        "waiting for review, exactly as a skill imported from a file is, and no agent can read "
+        "it until a second person has approved it."
+    ),
+    while_off=(
+        "Skills are added by pasting or uploading a file, or from a repository or an address. A "
+        "draft made while this was on stays in the library, waiting for review."
+    ),
+    read_by=("brain.skill_draft_routes:draft_skill",),
+)
+
 #: Every feature this product can switch on, in the order the screen lists them.
 FEATURES: Final[tuple[Feature, ...]] = (
     PROMPT_EDITING,
@@ -332,6 +371,8 @@ FEATURES: Final[tuple[Feature, ...]] = (
     SUPERVISION_REVIEW,
     SHARED_TOOL_START,
     AGENT_ITEM_COUNTS,
+    SKILL_NEEDS,
+    SKILL_DRAFTING,
 )
 
 
