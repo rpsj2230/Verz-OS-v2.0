@@ -35,7 +35,16 @@ shown before something ran in somebody's name. The principal and the agent are v
 reason `0014` gives: a key into `auth.principal` would make deleting a person delete what was
 approved in their name.
 
-Task ids: M35.3.1.1, M33.6.1.3, M27.9.3
+**Two people, when the action is one that cannot be taken back (`0221`).** `two_person` is set when
+the action is raised, and then a first approval writes `endorsed_by` and `endorsed_at` and leaves
+the row pending, so that a different person has to decide it. The checks below are the rule in
+the database, beside the route's, because a statement run by hand reaches the table and not the
+route: the asker never endorses, only a two-person row is endorsed, an endorsement is a person and
+an instant together, and a two-person row is approved only by somebody who is neither its endorser
+nor the person who asked, and only once it has been endorsed. See
+`THE_DATABASE_HOLDS_THE_SECOND_PERSON_AS_WELL_AS_THE_ROUTE`.
+
+Task ids: M35.3.1.1, M33.6.1.3, M27.9.3, M13.7.7
 """
 
 from __future__ import annotations
@@ -43,7 +52,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Final
 
-from sqlalchemy import CheckConstraint, DateTime, Index, String, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Index, String, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -67,6 +76,14 @@ AN_AMENDMENT_IS_RECORDED_AGAINST_A_DIGEST_THE_ROW_DOES_NOT_HOLD: Final = (
     "the original, and this row holds only the original's. An amended entry written from the row "
     "would name the action that was not allowed, so the table refuses the verdict until it holds "
     "the replacement's digest, which is also when amending can be offered at all."
+)
+
+#: Why the second person is a constraint and not only a route.
+THE_DATABASE_HOLDS_THE_SECOND_PERSON_AS_WELL_AS_THE_ROUTE: Final = (
+    "A route that asks for two people is a door, and the table is reached by statements that never "
+    "went through it. So an approval of a two-person row is refused by a check unless somebody "
+    "other than its endorser and the person who asked decided it, and the endorser is refused when "
+    "they are the asker."
 )
 
 #: Widths, named once so the model, the migration and the store agree.
@@ -117,6 +134,11 @@ class SuspensionRow(TimestampMixin, Base):
     verdict: Mapped[str | None] = mapped_column(String(VERDICT_CHARS), nullable=True)
     #: Why, on every verdict but an approval. A code in `REASON_CODE`'s grammar, never prose.
     reason_code: Mapped[str | None] = mapped_column(String(REASON_CODE_CHARS), nullable=True)
+    #: Whether this action needs two different people, fixed when it was raised (`0221`).
+    two_person: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    #: The first approver of a two-person action, who did not decide it, and when.
+    endorsed_by: Mapped[str | None] = mapped_column(String(ID_CHARS), nullable=True)
+    endorsed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         CheckConstraint(f"id ~ '{IDENTIFIER}'", name="id_is_an_identifier"),
@@ -158,6 +180,25 @@ class SuspensionRow(TimestampMixin, Base):
         CheckConstraint(
             "(reason_code IS NULL) = (verdict IS NULL OR verdict = 'approved')",
             name="every_verdict_but_an_approval_says_why",
+        ),
+        CheckConstraint(
+            "endorsed_by IS NULL OR endorsed_at IS NOT NULL",
+            name="an_endorsement_names_its_instant",
+        ),
+        CheckConstraint(
+            "endorsed_at IS NULL OR endorsed_by IS NOT NULL",
+            name="an_endorsement_instant_names_its_person",
+        ),
+        CheckConstraint(
+            "endorsed_by IS NULL OR two_person", name="only_a_two_person_row_is_endorsed"
+        ),
+        CheckConstraint(
+            "endorsed_by IS NULL OR endorsed_by <> principal_id", name="the_asker_does_not_endorse"
+        ),
+        CheckConstraint(
+            "NOT two_person OR state <> 'approved' OR (endorsed_by IS NOT NULL "
+            "AND decided_by <> endorsed_by AND decided_by <> principal_id)",
+            name="a_two_person_row_is_approved_by_two_others",
         ),
         Index(
             "ix_suspension_pending_capability",

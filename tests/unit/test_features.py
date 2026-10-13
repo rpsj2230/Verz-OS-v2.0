@@ -107,9 +107,14 @@ def test_every_declared_reader_asks_about_its_feature_and_nothing_else_asks() ->
         "brain.staff_source_routes",
         "brain.resolution.merge_store",
         "brain.ops.budget_stop_store",
+        "brain.gate.suspension_store",
         "brain.ops.supervision_review",
         "brain.ops.shared_start",
         "brain.widget_answers",
+        "brain.ops.agent_item_use",
+        "brain.skill_routes",
+        "brain.skill_draft_routes",
+        "brain.automation_authoring_routes",
         "brain.ops.starter_skill_store",
     }
 
@@ -227,9 +232,14 @@ def test_switching_a_feature_on_writes_its_row_and_the_next_read_sees_it(
         "release_check": False,
         "unattended_entity_merge": False,
         "budget_enforcement": False,
+        "two_person_approval": False,
         "supervision_review": False,
         "shared_tool_start": False,
         "widget_model_answers": False,
+        "agent_item_counts": False,
+        "skill_needs": False,
+        "skill_drafting": False,
+        "automation_authoring": False,
         "starter_skills": False,
     }
 

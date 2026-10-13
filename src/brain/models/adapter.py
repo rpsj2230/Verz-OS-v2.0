@@ -142,6 +142,9 @@ class Completion:
     input_tokens: int = 0
     output_tokens: int = 0
     cached_input_tokens: int = 0
+    #: The part of `output_tokens` the model spent reasoning, where the provider reports it
+    #: (M27.15.6). A part of the output count and never an addition to it.
+    reasoning_tokens: int = 0
     served_model: str = ""
 
 
@@ -360,6 +363,7 @@ class SdkDriver:
                 input_tokens=completion.input_tokens,
                 output_tokens=completion.output_tokens,
                 cached_input_tokens=completion.cached_input_tokens,
+                reasoning_tokens=completion.reasoning_tokens,
             ),
             finish_reason=completion.finish_reason,
         )
@@ -543,12 +547,14 @@ def completion_from_sdk(raw: Any) -> Completion:
     message = getattr(first, "message", None)
     usage = getattr(raw, "usage", None)
     cached = getattr(getattr(usage, "prompt_tokens_details", None), "cached_tokens", 0)
+    reasoning = getattr(getattr(usage, "completion_tokens_details", None), "reasoning_tokens", 0)
     return Completion(
         text=getattr(message, "content", None) or "",
         finish_reason=getattr(first, "finish_reason", None) or "",
         input_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
         output_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
         cached_input_tokens=int(cached or 0),
+        reasoning_tokens=int(reasoning or 0),
         served_model=str(getattr(raw, "model", "") or ""),
     )
 

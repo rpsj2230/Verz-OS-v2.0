@@ -45,7 +45,7 @@ def mail_check() -> Check:
 
 def test_the_mail_check_proves_the_leaf_that_gives_the_sign_in_service_the_relay() -> None:
     """Delete this and the check can close a leaf it does not exercise."""
-    assert mail_check().leaves == ("M40.7.1",)
+    assert mail_check().leaves == ("M40.7.1", "M40.1.1.4")
 
 
 @pytest.fixture

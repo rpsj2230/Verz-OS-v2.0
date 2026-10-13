@@ -89,6 +89,7 @@ def _an_older_agent(url: str) -> None:
     from brain.agents.model import AgentAudience, AgentAuthority, AgentRecord
     from brain.knowledge.visibility import Visibility
     from brain.tables.agent import AgentRow
+    from tests.fixtures.scratch_postgres import row_the_database_can_hold
 
     record = AgentRecord(
         agent_id=AGENT,
@@ -98,9 +99,9 @@ def _an_older_agent(url: str) -> None:
         authority=AgentAuthority(),
         created_by="u_one",
     )
-    row = agent_values(record)
-    for added in ("channels", "max_turns", "max_tool_calls"):
-        del row[added]
+    # The database is at the revision 0189 revises: a row of then, without 0189's three columns
+    # and without any the agent table has gained since (0225's memory kinds).
+    row = row_the_database_can_hold(url, "agent.agent", agent_values(record))
     engine = create_engine(url.replace("postgresql://", "postgresql+psycopg://", 1))
     try:
         with engine.begin() as conn:

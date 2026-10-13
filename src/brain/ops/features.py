@@ -342,6 +342,103 @@ WIDGET_MODEL_ANSWERS: Final = Feature(
     read_by=("brain.widget_answers:model_answers_on",),
 )
 
+#: Counting which documents an agent's answers cite, for the Knowledge section's figures. Off
+#: because it is a new record kept on every answer: `brain.ops.agent_item_use` keeps an agent, a
+#: document, a day and a count, and no question, person or passage. While off, the section shows no
+#: figure rather than noughts.
+AGENT_ITEM_COUNTS: Final = Feature(
+    name="agent_item_counts",
+    title="Count which documents an agent's answers cite",
+    what=(
+        "Each answer an agent gives adds one to a count for every document it cited, by day, and "
+        "the agent's Knowledge section shows beside each document how many answers drew on it in "
+        "the last thirty days and which it has not touched. The count records the agent, the "
+        "document and the day, and nothing about who asked or what was asked."
+    ),
+    while_off=(
+        "Nothing is counted and the Knowledge section shows no figure beside a document. Counts "
+        "already kept stay, and are shown again if the switch is turned back on."
+    ),
+    read_by=("brain.ops.agent_item_use:counting_is_on",),
+)
+
+#: Refusing a skill an agent cannot use. Off until the owner decides needs-rupash 178 and 179: a
+#: skill that names tools or knowledge an agent lacks is today assigned and shown with what the
+#: agent cannot reach, and refusing it is a change in what an administrator can do in one step.
+SKILL_NEEDS: Final = Feature(
+    name="skill_needs",
+    title="Refuse a skill an agent cannot use",
+    what=(
+        "Giving a skill to an agent is refused when a tool the skill names is outside the agent's "
+        "own tools or when a department whose knowledge it needs is outside the agent's scope. "
+        "The refusal names what is missing, and nothing is widened: the agent changes only "
+        "through its own publish."
+    ),
+    while_off=(
+        "A skill is given to any agent and the screen shows which of its tools the agent can "
+        "reach. A skill given while this was on stays given."
+    ),
+    read_by=("brain.skill_routes:assign_skill",),
+)
+
+#: Drafting a skill from a description. Off because it sends a person's words to a model: an install
+#: chooses whether a description of a procedure may leave for the model it has set up. What it
+#: drafts is never more than an import, waiting undecided for a second person (M12.4.14).
+SKILL_DRAFTING: Final = Feature(
+    name="skill_drafting",
+    title="Draft a skill from a description",
+    what=(
+        "An administrator who may add skills describes what a skill should do, and the model "
+        "this install has set up drafts its instructions, the departments whose knowledge it "
+        "needs, the tools it uses and some example tasks. The draft is added to the library "
+        "waiting for review, exactly as a skill imported from a file is, and no agent can read "
+        "it until a second person has approved it."
+    ),
+    while_off=(
+        "Skills are added by pasting or uploading a file, or from a repository or an address. A "
+        "draft made while this was on stays in the library, waiting for review."
+    ),
+    read_by=("brain.skill_draft_routes:draft_skill",),
+)
+
+#: Writing a new automation on an agent's own page. Off because it is a new way to start unattended
+#: work, and the owner decided what a trigger and a condition may be (needs-rupash 177, option A)
+#: and asked that it ship off until proved on his install with two real people.
+AUTOMATION_AUTHORING: Final = Feature(
+    name="automation_authoring",
+    title="Write a new automation on an agent's page",
+    what=(
+        "The agent's Automations section offers New automation: start from a named outcome or from "
+        "words, choose when it runs and whether something must be true first, name what the agent "
+        "may use, read what it would have done at its last few triggers, and save it. It is saved "
+        "paused, runs as the person who wrote it, and somebody else has to start it."
+    ),
+    while_off=(
+        "Automations are installed from the gallery as they are and nothing new can be written. "
+        "One written while this was on stays, is shown on the page, and can still be stopped."
+    ),
+    read_by=("brain.automation_authoring_routes:authoring_is_on",),
+)
+
+#: A second person for actions that cannot be taken back. Off until the owner answers needs-rupash
+#: 192, which decides whether it covers every sensitive effect (option A, recommended) or money only
+#: (option B): `brain.gate.suspension_store.needs_second_person` is the one place that changes.
+TWO_PERSON_APPROVAL: Final = Feature(
+    name="two_person_approval",
+    title="Two different people approve an action that cannot be taken back",
+    what=(
+        "An approval of an action with a sensitive effect, such as a client message, a payment or "
+        "a deletion, needs two different people. The first approves and the action waits; the "
+        "second approves and it runs. Neither may be the person who asked for it."
+    ),
+    while_off=(
+        "One person approves such an action, and that person may be the one who asked for it "
+        "where the agent's rung allows it. An approval already waiting for a second person "
+        "still needs one."
+    ),
+    read_by=("brain.gate.suspension_store:put_suspension",),
+)
+
 #: Every feature this product can switch on, in the order the screen lists them.
 FEATURES: Final[tuple[Feature, ...]] = (
     PROMPT_EDITING,
@@ -349,9 +446,14 @@ FEATURES: Final[tuple[Feature, ...]] = (
     RELEASE_CHECK,
     UNATTENDED_ENTITY_MERGE,
     BUDGET_ENFORCEMENT,
+    TWO_PERSON_APPROVAL,
     SUPERVISION_REVIEW,
     SHARED_TOOL_START,
     WIDGET_MODEL_ANSWERS,
+    AGENT_ITEM_COUNTS,
+    SKILL_NEEDS,
+    SKILL_DRAFTING,
+    AUTOMATION_AUTHORING,
     STARTER_SKILLS_SWITCH,
 )
 

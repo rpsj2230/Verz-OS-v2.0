@@ -54,7 +54,10 @@ MODULE = "brain.ops.acceptance_checks_lifecycle"
 #: Each check and the leaf it proves, as the coordinator scoped them.
 LEAVES = {
     "a_newer_version_supersedes_the_older_and_answers_use_the_newer": ("M7.4.5",),
-    "a_company_wide_request_waits_until_another_approver_approves_it": ("M7.4.4",),
+    "a_company_wide_request_waits_until_another_approver_approves_it": (
+        "M7.4.4",
+        "M40.3.1.4",
+    ),
     "a_review_that_fell_due_opens_its_steward_s_task_until_verified": ("M7.4.6",),
     "a_solution_answers_only_once_somebody_else_approves_it": ("M7.6.2",),
 }

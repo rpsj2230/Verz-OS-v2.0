@@ -51,6 +51,9 @@ import {
   categoriesTyped,
   categorisedSentence,
   chosen,
+  descriptionProblem,
+  DRAFT_PATH,
+  draftedSentence,
   editedSentence,
   findingWords,
   IMPORT_PATH,
@@ -69,6 +72,7 @@ import {
   type Categorised,
   type LibrarySkill,
   type PackageBody,
+  type SkillDraft,
 } from "../skillsQuery";
 
 /** What a finished write says, drawn above the page while it is read again. */
@@ -110,6 +114,10 @@ export const REPOSITORY_FORMAT =
   "The repository as owner/repository, the full forty-character commit (not a branch), and the folder " +
   "holding the SKILL.md, left empty for the top folder. Only the SKILL.md is taken.";
 export const ADDRESS_FORMAT = "An https:// address on GitHub answering with a SKILL.md or a .zip holding one.";
+export const DESCRIBE_LABEL = "What the skill should do";
+export const DRAFT_IT = "Draft the skill";
+export const DESCRIBE_FORMAT =
+  "Describe the skill in your own words: when it is used and what it should do. A model drafts it, with the knowledge it needs, the tools it uses and some example tasks, and it is added waiting for review like any other.";
 export const PROCEDURE_LABEL = "The document";
 export const IMPORT_PROCEDURE = "Import the procedure";
 export const PROCEDURE_FORMAT =
@@ -370,6 +378,55 @@ export function ImportSkillForm({ onTold }: { readonly onTold: Tell }) {
       <div>
         <Button type="submit" disabled={busy || problem !== null}>
           {IMPORT}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/** Describe a skill and have it drafted (M12.4.14). */
+export function DescribeSkillForm({ onTold }: { readonly onTold: Tell }) {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const problem = descriptionProblem(text);
+
+  async function draft(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (problem !== null) {
+      return;
+    }
+    setBusy(true);
+    setFailure(null);
+    const result = await request<SkillDraft>(DRAFT_PATH, { method: "POST", body: { description: text.trim() } });
+    setBusy(false);
+    if (result.ok) {
+      setText("");
+      onTold({ ok: true, sentence: draftedSentence(result.data), details: result.data.findings.map((one) => one.message) });
+    } else {
+      setFailure(result.failure);
+    }
+  }
+
+  return (
+    <form className="flex min-w-0 flex-col gap-3" aria-label="Describe a skill" onSubmit={(event) => void draft(event)}>
+      <Note>{DESCRIBE_FORMAT}</Note>
+      {failure === null ? null : <FailureNotice failure={failure} fields={["description"]} />}
+      <Field id="skills-describe" label={DESCRIBE_LABEL}>
+        <Textarea
+          id="skills-describe"
+          name="description"
+          rows={6}
+          value={text}
+          onChange={(event) => {
+            setText(event.target.value);
+          }}
+        />
+      </Field>
+      <Problem text={text === "" ? null : problem} />
+      <div>
+        <Button type="submit" disabled={busy || problem !== null}>
+          {DRAFT_IT}
         </Button>
       </div>
     </form>

@@ -797,7 +797,7 @@ def _member(read: ConsoleRead, department: str) -> tuple[tuple[str, Scope], ...]
 
 
 @check(
-    leaves=("M33.3.1.1",),
+    leaves=("M33.3.1.1", "M40.2.1.2", "M40.2.2.4"),
     sentence=(
         "A member of acceptance_a with an agent of their own and a department agent opens their "
         "workspace through its route: both are listed, theirs as personal; another member's "

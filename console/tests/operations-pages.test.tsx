@@ -773,11 +773,23 @@ describe("Storage", () => {
           since: "2019-03-06T09:00:00Z",
           blocks: ["xero.list_invoices", "xero.get_invoice"],
           blocks_unknown: "",
+          acknowledged_by: "ACK-PERSON",
+          acknowledged_at: "2019-03-06T10:00:00Z",
         },
-        { subject: "laravel", state: "degraded", since: "2019-03-06T09:00:00Z", blocks: [], blocks_unknown: "BLOCKS-UNKNOWN-SENTENCE" },
+        {
+          subject: "laravel",
+          state: "degraded",
+          since: "2019-03-06T09:00:00Z",
+          blocks: [],
+          blocks_unknown: "BLOCKS-UNKNOWN-SENTENCE",
+          acknowledged_by: "",
+          acknowledged_at: null,
+        },
       ],
       unread: "",
       told: "TOLD-SENTENCE",
+      may_acknowledge: false,
+      acknowledging_means: "ACK-MEANS",
     };
     expect(Object.keys(body).sort()).toEqual(backendModelFields(INCIDENT_ROUTES, "IncidentsView").sort());
     expect(Object.keys(body.items[0] ?? {}).sort()).toEqual(backendModelFields(INCIDENT_ROUTES, "IncidentView").sort());
@@ -788,6 +800,47 @@ describe("Storage", () => {
     expect(text).toContain("Slow or partly failing");
     expect(text).toContain("BLOCKS-UNKNOWN-SENTENCE");
     expect(text).toContain("TOLD-SENTENCE");
+    expect(text).toContain("ACK-PERSON");
+    // The control is the API's flag drawn: a reader it is not offered to is shown none.
+    expect(screen.queryByRole("button", { name: "Acknowledge" })).toBeNull();
+    expect(text).not.toContain("ACK-MEANS");
+  });
+
+  test("Incidents offers Acknowledge only where the API says so, once per incident, and sends the incident as listed", async () => {
+    // What breaks if this is deleted: the control drawn for a reader the API refuses, offered again
+    // for an incident somebody already acknowledged, or sent with anything but the source and the
+    // instant the page drew (M27.15.45).
+    const incident = (subject: string, by: string) => ({
+      subject,
+      state: "down",
+      since: "2019-03-06T09:00:00Z",
+      blocks: ["x.y"],
+      blocks_unknown: "",
+      acknowledged_by: by,
+      acknowledged_at: by === "" ? null : "2019-03-06T10:00:00Z",
+    });
+    const body = {
+      items: [incident("xero", ""), incident("laravel", "SOMEBODY")],
+      unread: "",
+      told: "TOLD",
+      may_acknowledge: true,
+      acknowledging_means: "ACK-MEANS",
+    };
+    const sent: unknown[] = [];
+    const { container } = await open("/incidents", {
+      "GET /api/v1/console/incidents": () => ({ body }),
+      "POST /api/v1/console/incidents/acknowledgement": (_url, init) => {
+        sent.push(JSON.parse(String(init?.body)));
+        return { body: incident("xero", "ME") };
+      },
+    });
+    expect(mainText(container)).toContain("ACK-MEANS");
+    const buttons = screen.getAllByRole("button", { name: "Acknowledge" });
+    expect(buttons).toHaveLength(1);
+    fireEvent.click(buttons[0] as HTMLElement);
+    await waitFor(() => {
+      expect(sent).toEqual([{ subject: "xero", since: "2019-03-06T09:00:00Z" }]);
+    });
   });
 
   test("Incidents says what the API could not read rather than that nothing is degraded", async () => {
