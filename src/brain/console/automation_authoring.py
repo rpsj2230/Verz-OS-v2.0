@@ -155,7 +155,7 @@ A_TRIGGER_NOTHING_FIRES_IS_SAID_TO_BE_ONE: Final = (
 )
 
 # ------------------------------------------------------------------ the figures
-#: The placeholder template id an authored automation carries. `0225` and
+#: The placeholder template id an authored automation carries. `0219` and
 #: `brain.tables.agent_automation.AUTHORED_TEMPLATE` hold the same word, held equal by a test.
 AUTHORED_TEMPLATE: Final = "authored"
 

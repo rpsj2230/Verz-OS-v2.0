@@ -110,7 +110,7 @@ def authored_values(authoring: Authoring) -> dict[str, Any]:
     """What writing an automation a person wrote stores: an install's columns and the authored ones.
 
     The install's columns first, through `row_values`, so the two kinds of row cannot disagree
-    about what an automation is, and then the eleven `0225` added. A schedule's cadence is three
+    about what an automation is, and then the eleven `0219` added. A schedule's cadence is three
     columns and any other trigger's is none, which the migration's checks hold.
     """
     one = authoring.authored

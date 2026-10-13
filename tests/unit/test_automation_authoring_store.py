@@ -1,6 +1,6 @@
 """A written automation reaches the system: the migration, the row and the ledger entry.
 
-The first half needs no server: it holds what `0225` copied to the live definitions and the model
+The first half needs no server: it holds what `0219` copied to the live definitions and the model
 it must match. The second half builds a database to head and proves a written automation arrives
 in the three places `docs/admin-console.md` names: the row, which reads back as what was written;
 the one `compose_change` entry the trigger appends, as `authored_install`; and the behaviour, which
@@ -50,7 +50,7 @@ from brain.tables.agent_automation import AgentAutomationRow
 from tests.fixtures.retirable import has_pgvector, retirable
 from tests.fixtures.scratch_postgres import run, sql
 from tests.unit.test_agent_automation_store import (
-    ADDED_BY_0225,
+    ADDED_BY_0219,
     AGENT,
     TEMPLATE,
     an_installation,
@@ -59,7 +59,7 @@ from tests.unit.test_agent_automation_store import (
 from tests.unit.test_automation_owner_store import app_engine, as_app
 from tests.unit.test_tables import VERSIONS, migration_module
 
-MIGRATION = VERSIONS / "0225_authored_automation.py"
+MIGRATION = VERSIONS / "0219_authored_automation.py"
 
 AUTHOR = "u_author"
 
@@ -115,7 +115,7 @@ def words(quoted: str) -> set[str]:
 
 
 def test_the_migration_holds_the_words_the_application_uses() -> None:
-    """`0225` copies the placeholder template, the trigger kinds, the cadences, the comparisons and
+    """`0219` copies the placeholder template, the trigger kinds, the cadences, the comparisons and
     the instruction bounds, for the reason `0009` gives. Delete this and one side can change alone:
     a comparison the form offers and the check refuses after the person confirmed, or an
     instruction the application admits and the table does not."""
@@ -128,8 +128,8 @@ def test_the_migration_holds_the_words_the_application_uses() -> None:
     assert migration.CHECKS == table_module.AUTHORING_CHECKS
     assert migration.INSTRUCTION_MIN == MINIMUM_INSTRUCTION
     assert migration.INSTRUCTION_MAX == MAXIMUM_INSTRUCTION
-    assert {name for name, _ in migration.COLUMNS} == ADDED_BY_0225
-    assert {c.name for c in AgentAutomationRow.__table__.columns} >= ADDED_BY_0225
+    assert {name for name, _ in migration.COLUMNS} == ADDED_BY_0219
+    assert {c.name for c in AgentAutomationRow.__table__.columns} >= ADDED_BY_0219
 
 
 def test_a_written_automation_is_its_installs_columns_plus_exactly_the_added_ones() -> None:
@@ -251,7 +251,7 @@ def test_the_database_holds_the_two_shapes_apart_whatever_wrote_the_row() -> Non
     installed from a template carrying authoring, an authored one with no instruction, no trigger,
     a schedule with no cadence, an event with a cadence, a condition with a word nothing offers:
     each refused. The sibling is the valid row, accepted. Delete this and a check can be dropped
-    from `0225` with every stubbed test still green. **Skips without pgvector.**"""
+    from `0219` with every stubbed test still green. **Skips without pgvector.**"""
     with retirable("brain_automation_authoring_checks") as url:
         if not has_pgvector(url):
             pytest.skip("the chain to head needs pgvector")

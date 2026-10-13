@@ -22,7 +22,7 @@ record of what ran in their name. The agent is a value too, because an agent is 
 than deleted and a key would guard a deletion nothing performs.
 
 **The template is required, and an authored automation carries the placeholder `authored`.**
-`brain.console.automation_authoring` lets a person write one, and `0225` gives it eleven nullable
+`brain.console.automation_authoring` lets a person write one, and `0219` gives it eleven nullable
 columns for what they said: the trigger, the cadence a schedule needs, one condition, the
 instruction and the tools it names. They are nullable so that a row installed from a template
 carries none of them, which `ck_automation_only_an_authored_row_carries_authoring` holds, and the
@@ -84,7 +84,7 @@ MINIMUM_GUARDS: Final = 12
 CEILING_PRINCIPAL_PREFIX: Final = "agent:"
 
 
-#: What an authored row says, name and expression, held where a row cannot get round it. `0225`
+#: What an authored row says, name and expression, held where a row cannot get round it. `0219`
 #: argues each rule and carries the same text, held equal to this by a test.
 AUTHORING_CHECKS: Final[tuple[tuple[str, str], ...]] = (
     (

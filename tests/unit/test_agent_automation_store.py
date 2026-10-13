@@ -146,9 +146,9 @@ def test_the_migration_and_the_model_hold_the_live_grammars_and_widths_they_copi
     assert len(new_automation_id()) <= table_module.AUTOMATION_ID_CHARS
 
 
-#: The columns, the check and the index `0225` added to what `0055` built, which the model carries
+#: The columns, the check and the index `0219` added to what `0055` built, which the model carries
 #: and `0055`'s own rendering does not.
-ADDED_BY_0225 = frozenset(
+ADDED_BY_0219 = frozenset(
     {
         "trigger_kind",
         "trigger_source",
@@ -166,7 +166,7 @@ ADDED_BY_0225 = frozenset(
 
 
 def as_0055_built_it() -> Table:
-    """The model's table without what `0225` added, and with the constraint `0225` replaced."""
+    """The model's table without what `0219` added, and with the constraint `0219` replaced."""
     model = metadata.tables["agent.automation"]
     # In the model's order, under their bare names, which the convention prefixes.
     kept = [
@@ -179,7 +179,7 @@ def as_0055_built_it() -> Table:
     return Table(
         "automation",
         MetaData(naming_convention=metadata.naming_convention),
-        *[column._copy() for column in model.columns if column.name not in ADDED_BY_0225],
+        *[column._copy() for column in model.columns if column.name not in ADDED_BY_0219],
         *kept,
         UniqueConstraint(
             "agent_id", "template_id", "runs_as_id", name="uq_automation_agent_template_person"
@@ -268,7 +268,7 @@ def test_the_registry_entry_read_back_out_of_the_row_is_the_entry_the_install_ca
     assert set(values) == {one.name for one in AgentAutomationRow.__table__.columns} - {
         "created_at",
         "updated_at",
-        *ADDED_BY_0225,
+        *ADDED_BY_0219,
     }
 
 
