@@ -185,12 +185,21 @@ def _empty() -> Passages:
     return Passages()
 
 
+#: The one caller of `assemble` that is not an answer path: the install check for an agent's
+#: kinds of memory, which asks the real assembler what it obeys (M39.7.1) rather than restating it.
+AN_INSTALL_CHECK_ASKS_THE_ASSEMBLER = (
+    "ops.acceptance_checks_agent_memory_kinds."
+    "an_agent_leaves_out_a_kind_of_memory_and_no_run_is_shown_it"
+)
+
+
 def test_only_the_assembler_reads_a_turns_recollections_and_only_prompt_of_builds_a_prompt() -> (
     None
 ):
     """`ONE_PLACE_ASSEMBLES_WHAT_A_MODEL_IS_SHOWN`, held to the source: nothing under `src/brain`
     calls `prompt_for` but `prompt_of`, nothing calls `assemble` but the two answer paths (the
-    model lane's `draft` and the agent runtime's loop), and `draft` reads no recollection itself.
+    model lane's `draft` and the agent runtime's loop) and the one install check that asks the real
+    assembler what it obeys, and `draft` reads no recollection itself.
 
     Delete this and a second assembler can be written beside the first, with the trace naming
     the parts of one and the model shown the parts of the other."""
@@ -225,7 +234,13 @@ def test_only_the_assembler_reads_a_turns_recollections_and_only_prompt_of_build
                     callers[name].add(f"{module.removeprefix('brain.')}.{function.name}")
 
     assert callers["prompt_for"] == {"gate.model_lane.prompt_of"}
-    assert callers["assemble"] == {"gate.model_lane.draft", "gate.runtime._loop"}
+    assert callers["assemble"] == {
+        "gate.model_lane.draft",
+        "gate.runtime._loop",
+        # An install check handing the run's own assembler an agent's stored kinds, to see what
+        # the assembler obeys. It calls the one assembler and assembles nothing itself.
+        AN_INSTALL_CHECK_ASKS_THE_ASSEMBLER,
+    }
     drafted = ast.unparse(ast.parse(inspect.getsource(model_lane.draft)))
     assert ".hints()" not in drafted
     assert turn_context.ONE_PLACE_ASSEMBLES_WHAT_A_MODEL_IS_SHOWN

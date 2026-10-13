@@ -32,8 +32,12 @@ from brain.ops.acceptance_operations_console import asking_as, console_for, refu
 from brain.ops.acceptance_run import Harness
 
 #: Where this module's checks stand on the Install page. See
-#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
-CHECK_ORDER: Final = 1740
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`. **Before the memory roll-ups
+#: (880), not after every module**, because the promotion roll-up reads this module's check of a
+#: tier-three decision as the proof of its second clause (M16.7.14), and a roll-up sees only the
+#: checks that ran earlier in the run: at 1740 it waited for this check for ever and could never
+#: pass.
+CHECK_ORDER: Final = 876
 
 A, B = RESERVED_DEPARTMENTS
 

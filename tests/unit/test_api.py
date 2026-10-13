@@ -277,6 +277,10 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
     `brain.agent_builder_routes` answers every write on a draft with the same body, for the same
     reason: a draft saved since, a publish that is not checked, an agent that moved.
 
+    **Setting which kinds of memory an agent keeps is another, for its 409**
+    (`brain.agent_memory_kinds_routes`): a page that no longer shows the row is answered with the
+    lifecycle's own `NotChangedView`, as the lifecycle moves beside it are.
+
     **Installing an agent into a group chat is another, for its 409** (`brain.agent_group_routes`):
     a chat that already has an agent, that the bot has left, or a channel the agent does not answer
     on is the same `NotChangedView`, so the confirmation can say why nothing was installed.
@@ -312,6 +316,7 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
         PUBLICATION_PATH,
         TRANSFER_PATH,
     )
+    from brain.agent_memory_kinds_routes import MEMORY_KINDS_PATH
     from brain.agent_upgrade_routes import ACCEPT_PATH as UPGRADE_ACCEPT_PATH
     from brain.agent_upgrade_routes import DECLINE_PATH as UPGRADE_DECLINE_PATH
     from brain.credential_routes import CREDENTIALS_PATH
@@ -359,6 +364,7 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
                 CHANNELS_PATH,
                 DUPLICATE_PATH,
                 INSTALL_PATH,
+                MEMORY_KINDS_PATH,
                 DRAFTS_PATH,
                 EDIT_PATH,
                 EXPORT_PATH,

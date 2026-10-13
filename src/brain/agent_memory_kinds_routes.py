@@ -33,6 +33,7 @@ from sqlalchemy import text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.agent_lifecycle_routes import (
+    _TOLD,
     IT_MOVED,
     MOVED,
     _no_agent_here,
@@ -204,7 +205,7 @@ async def agent_memory_kinds(request: Request, agent_id: str, asked: Asked) -> M
 @router.post(
     MEMORY_KINDS_PATH,
     response_model=MemoryKindsView,
-    responses={**COMMON_RESPONSES, 409: {"description": "Nothing was changed, and why."}},
+    responses=_TOLD,
 )
 async def set_agent_memory_kinds(
     request: Request, agent_id: str, body: MemoryKindsAsked, asked: Asked
