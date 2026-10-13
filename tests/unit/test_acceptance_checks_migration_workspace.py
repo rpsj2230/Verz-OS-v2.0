@@ -3,8 +3,8 @@ head and failing with the product broken.
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M37.1.1.1, M37.1.1.2, M37.1.1.3, M37.1.3.2, M37.1.3.3, M37.1.4.1, M37.1.4.2, M37.1.4.3,
-M37.1.4.4, M37.7.5
+Task ids: M37.1.1.1, M37.1.1.2, M37.1.1.3, M37.1.3.2, M37.1.3.3
+Task ids: M37.1.4.1, M37.1.4.2, M37.1.4.3, M37.1.4.4, M37.7.5
 """
 
 from __future__ import annotations

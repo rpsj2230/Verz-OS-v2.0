@@ -5,8 +5,8 @@ back with what is outstanding computed and never stored.
 The stub holds `ops.setting` in memory and answers the read of `ops.migration_record` by kind; the
 writes are proved against PostgreSQL by `brain.ops.acceptance_checks_migration_workspace`.
 
-Task ids: M37.1.1.1, M37.1.1.2, M37.1.1.3, M37.1.3.2, M37.1.3.3, M37.1.4.1, M37.1.4.2, M37.1.4.3,
-M37.1.4.4, M37.7.5
+Task ids: M37.1.1.1, M37.1.1.2, M37.1.1.3, M37.1.3.2, M37.1.3.3
+Task ids: M37.1.4.1, M37.1.4.2, M37.1.4.3, M37.1.4.4, M37.7.5
 """
 
 from __future__ import annotations
