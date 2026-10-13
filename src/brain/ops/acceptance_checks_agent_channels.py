@@ -1,9 +1,10 @@
 """Install check for the channels an agent is offered on and the switch that enables one.
 
-An agent's page lists the surfaces a run of it could be carried on, and the agent's steward switches
-one on. The two are one rule asked twice: a surface is offered, and may be switched on, only when it
-can carry the most sensitive thing the run could return, which is `E_run(caller, agent)` read
-against the product's own field policy and each adapter's own declaration of what it may carry
+An agent's page lists the surfaces a run of it could be carried on, and its department's
+administrator switches one on. The two are one rule asked twice: a surface is offered, and may be
+switched on, only when it can carry the most sensitive thing the run could return, which is
+`E_run(caller, agent)` read against the product's own field policy and each adapter's own
+declaration of what it may carry
 (`brain.console.workspace_capabilities.offered_channels`). The unit tests run the rule over a
 hand-made policy. What they cannot show is that, on an install, over the product's real policy and
 the adapters it really ships, an agent reaching nothing sensitive is offered every surface, one
@@ -18,7 +19,8 @@ A restricted field is not asked: an agent's ceiling does not carry one, so no ag
 
 **What the agent is offered is asked of the page's own route, and the switch of the lifecycle
 route.** The offered surfaces are `agent_workspace`'s `channels`, read as a person who may open the
-agent; the switch is `change_agent_channels` as the agent's steward, which answers 200 with the
+agent; the switch is `change_agent_channels` as the agent's department administrator (the steward
+no longer may, needs-rupash 178 A), which answers 200 with the
 channels now enabled or a refusal in words that name no surface.
 
 Task ids: M39.2.4.1, M39.2.4.2
@@ -30,7 +32,13 @@ import json
 from typing import Any, Final
 
 from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, CheckNotRunError, check
-from brain.ops.acceptance_agent_console import _asking, _console, _readers, _request
+from brain.ops.acceptance_agent_console import (
+    _asking,
+    _console,
+    _readers,
+    _request,
+    a_department_administrator,
+)
 from brain.ops.acceptance_run import Harness
 from brain.ops.acceptance_workspace import installed_agent
 
@@ -53,10 +61,13 @@ OFFERED_PAST_THE_CEILING: Final = (
 NOT_OFFERED_WHAT_CAN_CARRY_IT: Final = (
     "an agent was not offered a surface that can carry the most sensitive field it reaches"
 )
-NOT_SWITCHED_ON: Final = "an agent's steward could not switch on a surface the page offers"
-SWITCHED_ON_PAST_THE_CEILING: Final = (
-    "an agent's steward switched on a surface the page does not offer for it"
+NOT_SWITCHED_ON: Final = (
+    "an agent's department administrator could not switch on a surface the page offers"
 )
+SWITCHED_ON_PAST_THE_CEILING: Final = (
+    "an agent's department administrator switched on a surface the page does not offer for it"
+)
+THE_STEWARD_SWITCHED_IT: Final = "an agent's steward switched on a surface of its own agent"
 
 
 async def _offered(h: Harness, reader: str, agent_id: str) -> set[str]:
@@ -95,8 +106,9 @@ async def _switch_on(h: Harness, steward: str, agent_id: str, channel: str, now:
     leaves=("M39.2.4.1", "M39.2.4.2"),
     sentence=(
         "An agent reaching nothing sensitive is offered every surface the install ships and one "
-        "reaching a confidential field only the surfaces that can carry it; its steward can "
-        "switch on a surface the page offers and is refused one it does not."
+        "reaching a confidential field only the surfaces that can carry it; its department's "
+        "administrator can switch on a surface the page offers and is refused one it does not, "
+        "and its steward is refused either."
     ),
 )
 async def a_surface_is_offered_only_if_it_can_carry_the_agent(
@@ -111,6 +123,7 @@ async def a_surface_is_offered_only_if_it_can_carry_the_agent(
     steward = h.principal(A, "steward")
     # What the steward reaches is what the agents' ceilings are narrowed against.
     await h.person(steward, department=A, grants=_readers(confidential))
+    admin = await a_department_administrator(h)
     plain = await installed_agent(h, steward, suffix="_plain")
     careful = await installed_agent(h, steward, capabilities=(confidential,), suffix="_conf")
 
@@ -134,7 +147,7 @@ async def a_surface_is_offered_only_if_it_can_carry_the_agent(
     now = [Channel.CONSOLE.value]
     onto = sorted(narrowed - set(now))
     if onto:
-        done = await _switch_on(h, steward, careful, onto[0], now)
+        done = await _switch_on(h, admin, careful, onto[0], now)
         if done.status_code != 200 or sorted(json.loads(bytes(done.body))["channels"]) != sorted(
             [*now, onto[0]]
         ):
@@ -143,6 +156,10 @@ async def a_surface_is_offered_only_if_it_can_carry_the_agent(
     withheld = sorted(shipped - narrowed - set(now))
     if not withheld:
         raise CheckNotRunError(NO_FIELD_OF_THAT_CLASS)
-    refused = await _switch_on(h, steward, careful, withheld[0], now)
+    refused = await _switch_on(h, admin, careful, withheld[0], now)
     if refused.status_code == 200 or json.loads(bytes(refused.body)).get("outcome") != "refused":
         raise CheckFailedError(SWITCHED_ON_PAST_THE_CEILING)
+    # The agent's own steward holds no administrator's authority and is told which role does.
+    barred = await _switch_on(h, steward, careful, sorted(shipped - set(now))[0], now)
+    if barred.status_code != 403:
+        raise CheckFailedError(THE_STEWARD_SWITCHED_IT)

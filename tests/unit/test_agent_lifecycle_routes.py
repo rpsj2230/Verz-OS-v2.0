@@ -87,6 +87,7 @@ from brain.gate.context import Channel
 from brain.gate.injection import AutonomyTier
 from brain.knowledge.visibility import Visibility
 from brain.ops.learning_signal_store import StoredLearningPauses
+from brain.role_refusals import CHANGING_CHANNELS_NEEDS_THE_DEPARTMENT_ADMINISTRATOR
 from brain.tools.registry import ToolRegistry
 from tests.fixtures.console_http import gate_wiring, headers
 from tests.unit.test_agent_routes import KEY, agent_row, an_invoice, person
@@ -531,6 +532,8 @@ def test_every_reason_a_caller_may_not_act_is_the_one_404_a_missing_agent_gets(
     assert missing["lifecycle"][0] == 404
     assert len(set(missing.values())) == 1
 
+    #: The readers among these whose audience covers the agent.
+    sees_the_agent = {("u_wide", COMPANY), ("u_none", COMPANY), ("u_narrow", COMPANY)}
     cases = (
         ("u_wide", COMPANY, True),  # no authority at all
         ("u_none", COMPANY, True),  # nothing
@@ -579,7 +582,14 @@ def test_every_reason_a_caller_may_not_act_is_the_one_404_a_missing_agent_gets(
                 )
             ),
         }
-        assert seen == missing, (pid, agent_id, strong)
+        if (pid, agent_id) in sees_the_agent:
+            # Somebody who can see the agent is told which role switches its channels (needs-rupash
+            # 178 A) and every other route is still the missing agent's refusal.
+            told = seen.pop("channels")
+            assert told == (403, CHANGING_CHANNELS_NEEDS_THE_DEPARTMENT_ADMINISTRATOR), pid
+            assert seen == {k: v for k, v in missing.items() if k != "channels"}, pid
+        else:
+            assert seen == missing, (pid, agent_id, strong)
     # Without a second factor the answer is still a 404, in the sentence every administrative
     # route gives a weak sign-in since W0.2, and nothing is written.
     weak = console.post(
@@ -985,6 +995,7 @@ def test_the_lifecycle_view_says_what_the_reader_may_do(console: Console) -> Non
         "may_duplicate": True,
         "duplicate_unavailable": None,
         "level": "company",
+        "agent_kind": "team",
         "may_publish": False,
         "channels": list(console.memory.agents[COMPANY].record.channels),
         # Every channel but the website widget, which declares nothing it can carry yet.
@@ -1129,13 +1140,14 @@ def test_a_publication_by_somebody_without_the_visibility_authority_is_the_one_4
 
 
 # ------------------------------------------------------------------ channels (M13.7.4)
-def test_an_agent_s_steward_switches_its_channels_and_the_store_is_told_who_did_it(
+def test_an_agent_s_steward_is_told_which_role_switches_its_channels_and_nothing_is_written(
     console: Console,
 ) -> None:
-    """**A_STEWARD_OR_AN_ADMINISTRATOR_SWITCHES_AN_AGENT_S_CHANNELS, the steward's half.** The
-    steward holds no lifecycle authority and still switches the agent's channels; the view says
-    so and the store is told who. Delete this and an existing agent can only be made answerable by
-    an administrator, which leaves every steward's new agent mute until somebody else acts."""
+    """**A_DEPARTMENT_ADMINISTRATOR_SWITCHES_AN_AGENT_S_CHANNELS, the steward's half (needs-rupash
+    178 A).** The steward holds no lifecycle authority, sees the agent, and is refused in the
+    sentence naming the department administrator; the view does not offer them the control, and
+    the store is never told. Delete this and the steward can again decide where an agent is asked
+    without the department's administrator, which the owner decided against."""
     view = console.get("u_wide", path(LIFECYCLE_PATH, agent_id=SALES))
     switched = console.post(
         "u_wide",
@@ -1143,14 +1155,10 @@ def test_an_agent_s_steward_switches_its_channels_and_the_store_is_told_who_did_
         {"channels": ["lark", "console", "lark"], "expected": []},
     )
 
-    assert view.status_code == 200
-    assert view.json()["may_change_channels"] is True
-    assert view.json()["channels"] == []
-    assert switched.status_code == 200, switched.text
-    assert switched.json()["channels"] == ["console", "lark"]
-    [change] = console.memory.changes
-    assert (change.before.channels, change.after.channels) == ((), ("console", "lark"))
-    assert change.actor_id == "u_wide"
+    assert view.status_code == 404
+    assert switched.status_code == 403, switched.text
+    assert switched.json()["message"] == CHANGING_CHANNELS_NEEDS_THE_DEPARTMENT_ADMINISTRATOR
+    assert console.memory.changes == []
 
 
 def test_an_administrator_over_the_row_switches_an_agent_s_channels(console: Console) -> None:
@@ -1164,19 +1172,28 @@ def test_an_administrator_over_the_row_switches_an_agent_s_channels(console: Con
     assert console.memory.agents[COMPANY].record.channels == ("email",)
 
 
-def test_anybody_else_is_answered_as_if_the_agent_did_not_exist(console: Console) -> None:
-    """A reader who sees the agent and is neither its steward nor an administrator over it gets the
-    one 404 a missing agent gets, and nothing is written. Delete this and the route tells a reader
-    which agents exist by answering them differently."""
-    refused = console.post(
+def test_a_reader_who_sees_the_agent_is_told_the_role_and_one_who_cannot_is_told_nothing(
+    console: Console,
+) -> None:
+    """A reader who sees the agent and is not an administrator over it is told which role changes
+    its channels, a 403 with nothing written; a reader who cannot see an agent is answered as for
+    a missing one, so the sentence never says an agent exists to somebody who could not have seen
+    it. Delete this and the route either answers a stranger differently from a missing agent, or
+    leaves a reader who can see the agent not knowing whom to ask."""
+    told = console.post(
         "u_wide", path(CHANNELS_PATH, agent_id=COMPANY), {"channels": ["email"], "expected": []}
     )
+    private = console.post(
+        "u_prefix", path(CHANNELS_PATH, agent_id=PRIVATE), {"channels": ["email"], "expected": []}
+    )
     missing = console.post(
-        "u_wide", path(CHANNELS_PATH, agent_id=MISSING), {"channels": ["email"], "expected": []}
+        "u_prefix", path(CHANNELS_PATH, agent_id=MISSING), {"channels": ["email"], "expected": []}
     )
 
-    assert refusal(refused) == refusal(missing)
-    assert refused.status_code == 404
+    assert told.status_code == 403
+    assert told.json()["message"] == CHANGING_CHANNELS_NEEDS_THE_DEPARTMENT_ADMINISTRATOR
+    assert refusal(private) == refusal(missing)
+    assert private.status_code == 404
     assert console.memory.changes == []
 
 
@@ -1262,3 +1279,89 @@ def test_a_channel_it_could_be_carried_on_is_switched_on_and_one_already_on_may_
     assert "widget" in [one["name"] for one in kept.json()["channel_choices"]]
     assert off.status_code == 200, off.text
     assert console.memory.agents[COMPANY].record.channels == ("lark",)
+
+
+def the_widget_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A field policy with one public field, one internal, and a Lark-only deployment."""
+    from brain.core.field_policy import Classification, FieldPolicy, FieldRule
+
+    only_lark_is_declared(monkeypatch)
+    policy = FieldPolicy(
+        rules=(
+            FieldRule(
+                entity="faq",
+                field="answer",
+                required_capability=Capability(value="read:faq.answer"),
+                classification=Classification.PUBLIC,
+            ),
+            FieldRule(
+                entity="client",
+                field="name",
+                required_capability=Capability(value="read:client.name"),
+                classification=Classification.INTERNAL,
+            ),
+        )
+    )
+    monkeypatch.setattr(lifecycle_routes, "product_field_policy", lambda: policy)
+
+
+def with_ceiling(console: Console, **ceiling: object) -> None:
+    from brain.agents.model import AgentAuthority
+
+    found = console.memory.agents[COMPANY]
+    record = found.record.model_copy(update={"authority": AgentAuthority(**ceiling)})  # type: ignore[arg-type]
+    console.memory.agents[COMPANY] = replace(found, record=record)
+
+
+def test_the_website_widget_is_offered_to_an_agent_that_reads_only_public_knowledge(
+    console: Console, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**Needs-rupash 162 A.** An agent whose ceiling names one public field and nothing else is
+    switched onto the website widget; the sibling below is the agent that reads more. Delete this
+    and the widget can never be offered, which strands the website's agent behind a release."""
+    the_widget_policy(monkeypatch)
+    with_ceiling(console, capabilities=(Capability(value="read:faq.answer"),))
+
+    done = console.post(
+        "u_admin",
+        path(CHANNELS_PATH, agent_id=COMPANY),
+        {"channels": ["widget"], "expected": []},
+    )
+
+    assert done.status_code == 200, done.text
+    assert console.memory.agents[COMPANY].record.channels == ("widget",)
+
+
+def test_the_website_widget_is_never_offered_to_an_agent_that_reads_more_than_public_knowledge(
+    console: Console, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**Needs-rupash 162 A, the refusal.** An agent reading one internal field, one calling a
+    tool and one that may write are each refused the widget in the
+    domain's own sentence, and nothing is written. Delete this and an agent that reads company
+    data can be put in front of visitors who never signed in."""
+    from brain.core.envelope import SideEffect
+
+    the_widget_policy(monkeypatch)
+    reading_more = (
+        {
+            "capabilities": (
+                Capability(value="read:faq.answer"),
+                Capability(value="read:client.name"),
+            )
+        },
+        {"capabilities": (Capability(value="read:faq.answer"),), "allowed_tools": frozenset({"t"})},
+        {
+            "capabilities": (Capability(value="read:faq.answer"),),
+            "max_side_effect": SideEffect.WRITE,
+        },
+    )
+    for ceiling in reading_more:
+        with_ceiling(console, **ceiling)
+        refused = console.post(
+            "u_admin",
+            path(CHANNELS_PATH, agent_id=COMPANY),
+            {"channels": ["widget"], "expected": []},
+        )
+        assert refused.status_code != 200, ceiling
+        assert refused.json()["sentence"] == CANNOT_CARRY_IT
+    assert console.memory.changes == []

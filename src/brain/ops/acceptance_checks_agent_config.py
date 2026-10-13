@@ -44,7 +44,13 @@ from datetime import timedelta
 from typing import Any, Final
 
 from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, CheckNotRunError, check
-from brain.ops.acceptance_agent_console import _asking, _console, _readers, _request
+from brain.ops.acceptance_agent_console import (
+    _asking,
+    _console,
+    _readers,
+    _request,
+    a_department_administrator,
+)
 from brain.ops.acceptance_run import Harness
 from brain.ops.acceptance_workspace import installed_agent
 
@@ -89,7 +95,8 @@ def _surfaces() -> tuple[Any, Any]:
 
 
 async def _answering_on(h: Harness, steward: str, agent_id: str, *channels: str) -> None:
-    """The agent switched on these surfaces through the lifecycle route, as its steward does."""
+    """The agent switched on these surfaces through the lifecycle route, as its department's
+    administrator does (needs-rupash 178 A)."""
     from brain.agent_lifecycle_routes import ChannelsAsked, change_agent_channels
     from brain.gate.context import Channel
 
@@ -101,7 +108,9 @@ async def _answering_on(h: Harness, steward: str, agent_id: str, *channels: str)
         await _asking(h, steward, strong=True),
     )
     if done.status_code != 200:
-        raise CheckFailedError("an agent's steward could not switch on a surface that carries it")
+        raise CheckFailedError(
+            "an agent's department administrator could not switch on a surface that carries it"
+        )
 
 
 def _told(answer: Any) -> dict[str, Any]:
@@ -141,8 +150,9 @@ async def an_agent_is_installed_into_a_group_chat_and_taken_out_again(h: Harness
     second = await installed_agent(h, steward, suffix="_second")
     # The first agent answers on the surface with no groups as well, so that a refusal there can
     # only be the surface's and never the agent's not answering on it.
-    await _answering_on(h, steward, first, groups.value, plain.value)
-    await _answering_on(h, steward, second, groups.value)
+    admin = await a_department_administrator(h)
+    await _answering_on(h, admin, first, groups.value, plain.value)
+    await _answering_on(h, admin, second, groups.value)
 
     room = f"acceptance_{h.run}_{h.word().lower()}"
     # A room the bot is noted in on the surface with no groups too, so that the refusal there can

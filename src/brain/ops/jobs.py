@@ -1142,7 +1142,7 @@ def interrupt(
 
 # ------------------------------------------------ dead letters and the operator (M17.1.5)
 class DeadLetterReason(enum.StrEnum):
-    """Why a job was set aside. Three, and each one sends a person somewhere different.
+    """Why a job was set aside. Four, and each one sends a person somewhere different.
 
     That is the test for a member here rather than tidiness of vocabulary: two reasons that
     lead to the same action are one reason with two names, and a reader triaging a screen
@@ -1158,6 +1158,9 @@ class DeadLetterReason(enum.StrEnum):
     #: dead-letter verdict arriving here. Look at the host or at the size of the job, not at
     #: the task's own logic.
     RE_DRIVEN_TOO_OFTEN = "re_driven_too_often"
+    #: It was running when its worker stopped, and its task is not declared safe to run twice, so
+    #: nothing ran it again. Look at what it had done before anybody asks for it to be repeated.
+    QUARANTINED_AFTER_A_STOP = "quarantined_after_a_stop"
 
 
 #: What a reader needs to see somebody else's dead letters.

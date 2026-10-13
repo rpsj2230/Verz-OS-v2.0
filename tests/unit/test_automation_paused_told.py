@@ -121,7 +121,14 @@ class Teller:
     keys: set[tuple[str, str]] = field(default_factory=set)
 
     async def __call__(
-        self, request: Any, person: str, said: str, *, intent_ref: str, now: datetime
+        self,
+        request: Any,
+        person: str,
+        said: str,
+        *,
+        intent_ref: str,
+        now: datetime,
+        kind: Any = None,
     ) -> Sent:
         first = (person, intent_ref) not in self.keys
         self.keys.add((person, intent_ref))
