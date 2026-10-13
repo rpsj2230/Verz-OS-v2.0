@@ -116,6 +116,7 @@ from brain.agents.install_store import (
     prepared,
     rungs_above_the_start,
 )
+from brain.agents.kinds import AgentKind, kind_of
 from brain.agents.lifecycle import (
     AGENT_LIFECYCLE_CAPABILITY,
     archive,
@@ -334,6 +335,9 @@ class LifecycleView(BaseModel):
     duplicate_unavailable: str | None = None
     #: Who may find the agent: personal, department or company. What a publication names.
     level: str = ""
+    #: `team` or `personal`, derived from the level and never stored (M39.10.1). The agent's page
+    #: names it.
+    agent_kind: str = ""
     #: Holds the visibility authority, is not the steward, and the agent is neither archived nor
     #: already company-wide. Presentation only: `publish_agent` asks every question again.
     may_publish: bool = False
@@ -455,6 +459,8 @@ class DuplicateAsked(BaseModel):
     expected_hash: str = Field(pattern=DIGEST)
     #: False: the maker alone. True: the maker's own department.
     for_department: bool = False
+    #: The kind of the copy, which when given decides `for_department` (M39.10.1).
+    agent_kind: AgentKind | None = None
 
 
 class TemplateInstallAsked(BaseModel):
@@ -465,6 +471,8 @@ class TemplateInstallAsked(BaseModel):
     display_name: str | None = Field(default=None, max_length=DISPLAY_NAME_CHARS)
     expected_digest: str = Field(pattern=DIGEST)
     for_department: bool = False
+    #: The kind of the new agent, which when given decides `for_department` (M39.10.1).
+    agent_kind: AgentKind | None = None
     #: The channels the new agent answers on, as the person ticked them; none answers nowhere.
     channels: EnabledChannels = ()
 
@@ -901,6 +909,7 @@ def lifecycle_view(found: FoundAgent, asked: Asking, key: str | None) -> Lifecyc
         may_duplicate=installs and unavailable is None,
         duplicate_unavailable=unavailable,
         level=record.audience.level.value,
+        agent_kind=kind_of(record.audience).value,
         may_publish=bool(publishable((record,), asked.reach, asked.now)),
         channels=list(record.channels),
         channel_choices=channel_choices_for(record, asked),
@@ -1127,6 +1136,11 @@ async def change_agent_channels(
     return JSONResponse(status_code=200, content=view.model_dump(mode="json"))
 
 
+def for_department_of(for_department: bool, kind: AgentKind | None) -> bool:
+    """Whether the new agent is a team's: the kind when it was named, else the older flag."""
+    return for_department if kind is None else kind is AgentKind.TEAM
+
+
 def _audience_for(asked: Asking, for_department: bool) -> AgentAudience | str:
     """The new agent's audience, or the sentence saying why it cannot be the one asked for."""
     department = asked.caller.principal.primary_department
@@ -1244,7 +1258,7 @@ async def duplicate_agent(
         store,
         draft_for,
         display_name=body.display_name,
-        for_department=body.for_department,
+        for_department=for_department_of(body.for_department, body.agent_kind),
         asked=asked,
         source=found.record,
         # A copy answers where the agent it copies answers, so duplicating never makes a mute one.
@@ -1320,7 +1334,7 @@ async def install_version(
         store,
         draft_for,
         display_name=name,
-        for_department=body.for_department,
+        for_department=for_department_of(body.for_department, body.agent_kind),
         asked=asked,
         source=None,
         channels=body.channels,

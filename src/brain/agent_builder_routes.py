@@ -110,8 +110,14 @@ from brain.agents.creation import (
 )
 from brain.agents.install import Installation, MissingKind, rehearse
 from brain.agents.install_store import prepared
+from brain.agents.kinds import (
+    AgentKind,
+    kinds_a_person_may_make,
+    personal_agents_on,
+    refusal_for,
+)
 from brain.agents.lifecycle import ARCHIVE_IS_TERMINAL
-from brain.agents.model import AgentAudience, AgentState, EnabledChannels
+from brain.agents.model import AgentAudience, AgentRecord, AgentState, EnabledChannels
 from brain.agents.template import SignedManifest, TemplateManifest, materialise, publish
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked, Asking
@@ -163,6 +169,7 @@ from brain.console.screens import screen
 from brain.core.errors import Absent, Failed
 from brain.gate.injection import AutonomyTier
 from brain.gate.screening import NOTHING_MATCHED
+from brain.knowledge.visibility import Visibility
 from brain.routing_routes import sessions_of
 from brain.tools.registry import ToolRegistry
 
@@ -374,6 +381,9 @@ class AgentDraftView(BaseModel):
     channels: list[ChannelChoiceView] = Field(default_factory=channel_choices)
     #: `brain.agent_lifecycle_routes.NO_CHANNEL_ANSWERS_NOWHERE`.
     channels_note: str = NO_CHANNEL_ANSWERS_NOWHERE
+    #: The kinds of agent this reader may make: `team` and `personal`, or `personal` alone, or none.
+    #: What the page offers, and nothing more: publishing asks again (M39.10.1, M39.10.2).
+    agent_kinds: list[str] = Field(default_factory=list)
 
 
 class DraftStartAsked(BaseModel):
@@ -409,6 +419,9 @@ class DraftPublishAsked(BaseModel):
     revision: int = Field(ge=FIRST_REVISION)
     #: False: the author alone. True: the author's own department.
     for_department: bool = False
+    #: The kind of agent, which when given decides `for_department`: a personal agent is the
+    #: author's alone and a team agent is their department's. Left out, `for_department` stands.
+    agent_kind: AgentKind | None = None
     #: For a new agent: the channels it answers on, as the author ticked them (M13.7.4). None
     #: ticked answers nowhere. An edit keeps the agent's own, as it keeps its audience.
     channels: EnabledChannels = ()
@@ -617,9 +630,65 @@ def _row(agent_id: str, audience: AgentAudience) -> dict[str, str]:
     return row
 
 
-def _reaches(asked: Asking, agent_id: str, audience: AgentAudience) -> bool:
-    """Whether this caller's authority to make agents reaches an agent with this audience."""
+def _reaches(
+    asked: Asking, agent_id: str, audience: AgentAudience, *, personal_on: bool = False
+) -> bool:
+    """Whether this caller's authority to make agents reaches an agent with this audience.
+
+    A person who holds no install authority reaches exactly one audience, their own alone, and only
+    while `personal_agents` is on. See
+    `brain.agents.kinds.A_PERSON_MAKES_ONLY_THEIR_OWN_PERSONAL_AGENT`.
+    """
+    if (
+        personal_on
+        and audience.level is Visibility.PERSONAL
+        and audience.owner_id == asked.caller.principal.id
+    ):
+        return True
     return _in_reach(asked.reach, AGENT_INSTALL_CAPABILITY, _row(agent_id, audience), asked.now)
+
+
+async def _personal_on(request: Request) -> bool:
+    """Whether a person may make their own agent now. Off with no database."""
+    return await personal_agents_on(sessions_of(request))
+
+
+async def _may_edit(request: Request, record: AgentRecord, asked: Asking) -> bool:
+    """Whether this caller may start a draft that changes this agent: the install authority over its
+    row, or, while a person may make their own agent, the owner of a personal one.
+
+    The same two answers `_reaches` gives to a publish, asked of an agent that exists, and the
+    switch is read only when the owner's half is the one in question. Anybody else's personal agent
+    is not visible to them at all, so it never reaches here."""
+    if holds(AGENT_INSTALL_CAPABILITY, record, asked):
+        return True
+    if record.audience.level is not Visibility.PERSONAL:
+        return False
+    return record.audience.owner_id == asked.caller.principal.id and await _personal_on(request)
+
+
+async def _may_build(request: Request, asked: Asking) -> None:
+    """Admit the builder to the install authority and, while a person may make their own agent,
+    to anybody signed in. Everyone else gets the one 404 `_builds` raises.
+
+    Starting a draft is not the act that needs authority: publishing is, and the publish asks the
+    audience it makes (`_reaches`), so a person admitted here can still publish nothing but an
+    agent only they can find."""
+    if asked.reach.scope_for(
+        AGENT_INSTALL_CAPABILITY, asked.now
+    ) is None and not await _personal_on(request):
+        raise _no_draft_here(asked, "capability")
+
+
+async def _kinds_for(request: Request, asked: Asking) -> list[str]:
+    """The kinds of agent this reader may make, for the page to offer and no more."""
+    installs = asked.reach.scope_for(AGENT_INSTALL_CAPABILITY, asked.now) is not None
+    return [
+        one.value
+        for one in kinds_a_person_may_make(
+            installs=installs, personal_on=await _personal_on(request)
+        )
+    ]
 
 
 def _latest(draft: AgentDraft) -> Revision:
@@ -726,7 +795,7 @@ async def _openable(
 
     Their own, or one waiting that they could approve. Everything else is the one 404.
     """
-    _builds(asked)
+    await _may_build(request, asked)
     store = drafts_of(request)
     draft = await store.draft(draft_id)
     if draft is None:
@@ -743,7 +812,7 @@ async def _own(
     request: Request, draft_id: str, asked: Asking
 ) -> tuple[AgentDraftStore, AgentDraft]:
     """A draft this caller wrote. Anybody else's is the one 404."""
-    _builds(asked)
+    await _may_build(request, asked)
     store = drafts_of(request)
     draft = await store.draft(draft_id)
     if draft is None or draft.owner_id != asked.caller.principal.id:
@@ -785,6 +854,7 @@ def _view(
     widened: Sequence[str] | None,
     key: str | None,
     drawable: Sequence[str],
+    agent_kinds: Sequence[str] = (),
 ) -> AgentDraftView:
     latest = _latest(draft)
     document = latest.document()
@@ -806,6 +876,7 @@ def _view(
         widened=list(widened or ()),
         drawable_tools=list(drawable),
         publish_unavailable=NO_SIGNING_KEY_HERE if key is None else None,
+        agent_kinds=list(agent_kinds),
     )
 
 
@@ -965,16 +1036,16 @@ _TOLD: Final[dict[int | str, dict[str, object]]] = {
 
 
 @router.get(FORM_PATH, response_model=BuilderFormView, responses=COMMON_RESPONSES)
-async def builder_form(asked: Asked) -> JSONResponse:
+async def builder_form(request: Request, asked: Asked) -> JSONResponse:
     """The form a draft is written in, one JSON Schema per section, cut from the manifest's own."""
-    _builds(asked)
+    await _may_build(request, asked)
     return JSONResponse(status_code=200, content=form_document())
 
 
 @router.get(DRAFTS_PATH, response_model=AgentDraftsPage, responses=COMMON_RESPONSES)
 async def agent_drafts(request: Request, asked: Asked) -> AgentDraftsPage:
     """This reader's drafts, newest first, and the publishes waiting for them to approve."""
-    _builds(asked)
+    await _may_build(request, asked)
     store = drafts_of(request)
     mine = await store.drafts_owned_by(asked.caller.principal.id)
     waiting = [
@@ -1025,7 +1096,12 @@ async def _start(
     )
     log.info("agent draft started", draft=draft_id, agent=agent_id, kind=kind.value, by=me)
     view = _view(
-        started, asked, widened=None, key=key, drawable=await _drawable(request, started, asked)
+        started,
+        asked,
+        widened=None,
+        key=key,
+        drawable=await _drawable(request, started, asked),
+        agent_kinds=await _kinds_for(request, asked),
     )
     return JSONResponse(status_code=201, content={**view.model_dump(mode="json"), **(extra or {})})
 
@@ -1038,7 +1114,7 @@ async def start_agent_draft(request: Request, body: DraftStartAsked, asked: Aske
     version of one, read behind the gallery's own grant. The draft is a copy: it starts from the
     template's words, and publishing it makes an agent of its own lineage.
     """
-    _builds(asked)
+    await _may_build(request, asked)
     store = drafts_of(request)
     if body.template_id is None:
         agent_id = mint_agent_id("", suffix=secrets.token_hex(ID_SUFFIX_BYTES))
@@ -1075,12 +1151,12 @@ async def edit_agent_as_draft(request: Request, agent_id: str, asked: Asked) -> 
     `brain.agent_lifecycle_routes`' order, with one 404 for all three. An archived agent is refused
     in the domain's own words, and an agent with no install has nothing to start from.
     """
-    _builds(asked)
+    await _may_build(request, asked)
     store = drafts_of(request)
     found = await store.agent(agent_id)
     if found is None or not visible(found.record, asked):
         raise _no_draft_here(asked, "agent")
-    if not holds(AGENT_INSTALL_CAPABILITY, found.record, asked):
+    if not await _may_edit(request, found.record, asked):
         raise _no_draft_here(asked, "scope")
     if found.record.state is AgentState.ARCHIVED:
         return _not_changed(REFUSED, ARCHIVE_IS_TERMINAL)
@@ -1130,11 +1206,11 @@ async def export_agent_manifest(request: Request, agent_id: str, asked: Asked) -
     amount, a number, a code) redacted. Prose is kept: the persona is the agent. What was redacted
     is named by kind and place and never by value.
     """
-    _builds(asked)
+    await _may_build(request, asked)
     found = await drafts_of(request).agent(agent_id)
     if found is None or not visible(found.record, asked):
         raise _no_draft_here(asked, "agent")
-    if not holds(AGENT_INSTALL_CAPABILITY, found.record, asked):
+    if not await _may_edit(request, found.record, asked):
         raise _no_draft_here(asked, "scope")
     if found.install is None:
         return _not_changed(REFUSED, NO_INSTALL_TO_START_FROM)
@@ -1194,7 +1270,7 @@ async def import_agent_manifest(
     document the manifest model refuses still lands, with what it refuses listed as the draft's
     problems, as a saved draft's are.
     """
-    _builds(asked)
+    await _may_build(request, asked)
     store = drafts_of(request)
     me = asked.caller.principal.id
     agent_id = mint_agent_id("", suffix=secrets.token_hex(ID_SUFFIX_BYTES))
@@ -1255,11 +1331,11 @@ async def agent_publications(request: Request, agent_id: str, asked: Asked) -> P
     """
     from brain.builder.publication_store import StoredPublications
 
-    _builds(asked)
+    await _may_build(request, asked)
     found = await drafts_of(request).agent(agent_id)
     if found is None or not visible(found.record, asked):
         raise _no_draft_here(asked, "agent")
-    if not holds(AGENT_INSTALL_CAPABILITY, found.record, asked):
+    if not await _may_edit(request, found.record, asked):
         raise _no_draft_here(asked, "scope")
     sessions = sessions_of(request)
     if sessions is None:
@@ -1286,7 +1362,12 @@ async def agent_draft(request: Request, draft_id: str, asked: Asked) -> AgentDra
     _, draft, widened = await _openable(request, draft_id, asked)
     key = template_key_of(request)
     return _view(
-        draft, asked, widened=widened, key=key, drawable=await _drawable(request, draft, asked)
+        draft,
+        asked,
+        widened=widened,
+        key=key,
+        drawable=await _drawable(request, draft, asked),
+        agent_kinds=await _kinds_for(request, asked),
     )
 
 
@@ -1522,10 +1603,25 @@ async def publish_agent_draft(
     view, settled, decision = await _check(request, draft, found, asked)
     if not view.passed or settled is None or decision is None:
         return _not_changed(REFUSED, " ".join(view.problems))
-    audience = await _audience_asked(store, draft, found, body.for_department)
+    for_department = (
+        body.for_department if body.agent_kind is None else body.agent_kind is AgentKind.TEAM
+    )
+    personal_on = await _personal_on(request)
+    if found is None:
+        # A new agent is of the kind its maker may make; an edit keeps the agent's own audience.
+        installs = asked.reach.scope_for(AGENT_INSTALL_CAPABILITY, asked.now) is not None
+        wanted = AgentKind.TEAM if for_department else AgentKind.PERSONAL
+        refusal = refusal_for(
+            wanted,
+            kinds_a_person_may_make(installs=installs, personal_on=personal_on),
+            personal_on=personal_on,
+        )
+        if refusal is not None:
+            return _not_changed(REFUSED, refusal)
+    audience = await _audience_asked(store, draft, found, for_department)
     if isinstance(audience, str):
         return _not_changed(REFUSED, audience)
-    if not _reaches(asked, draft.agent_id, audience):
+    if not _reaches(asked, draft.agent_id, audience, personal_on=personal_on):
         return _not_changed(REFUSED, OUTSIDE_YOUR_AUTHORITY)
     me = asked.caller.principal.id
     if second_people_needed(view.widened) > 0:
@@ -1535,7 +1631,7 @@ async def publish_agent_draft(
             actor_id=me,
             at=asked.now,
             widened=True,
-            for_department=body.for_department,
+            for_department=for_department,
             channels=body.channels,
         )
         if not await store.record(draft.draft_id, asked_for, by=_by(asked)):
@@ -1553,7 +1649,7 @@ async def publish_agent_draft(
         act=DraftAct.PUBLISHED,
         actor_id=me,
         at=asked.now,
-        for_department=body.for_department,
+        for_department=for_department,
         channels=body.channels,
     )
     return await _publish(request, store, draft, audience, found, (done,), asked, key, decision)
