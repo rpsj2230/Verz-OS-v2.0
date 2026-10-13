@@ -390,6 +390,17 @@ async def record_steward(session: AsyncSession, item: StoredItem, *, to: str) ->
     )
 
 
+async def record_archive(session: AsyncSession, item: StoredItem) -> None:
+    """Withdraw a document and its passages through `0216`'s `know.archive_item`.
+
+    The one write that moves a row out of `know.item`'s policy, made by a function that repeats the
+    reach the session was told. When the document moved first, or is no longer within reach, the
+    function raises and the driver's error leaves here untouched: the transaction is the route's to
+    abandon, as it is for a new version whose supersession the database refused.
+    """
+    await session.execute(text("SELECT know.archive_item(:id)"), {"id": item.item_id})
+
+
 async def write_version(
     session: AsyncSession,
     predecessor: StoredItem,

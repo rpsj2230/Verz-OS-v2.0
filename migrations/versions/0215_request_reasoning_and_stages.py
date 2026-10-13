@@ -34,10 +34,9 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision = "0219"
-# The head of origin/main when this was written (e75f096). 0213 to 0218 are the other builders'
-# numbers in the same train, so the coordinator relinks this behind whichever of them lands last.
-down_revision = "0212"
+revision = "0215"
+# Linked into the chain by the coordinator's migration train (0213, 0214, then this).
+down_revision = "0214"
 branch_labels = None
 depends_on = None
 

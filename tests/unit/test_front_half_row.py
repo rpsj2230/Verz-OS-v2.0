@@ -197,9 +197,9 @@ def database() -> Iterator[str]:
         migrate(DATABASE, "upgrade", "0100")
         migrate(DATABASE, "stamp", "0108")
         migrate(DATABASE, "upgrade", "0113")
-        # 0219 adds the reasoning tokens and the time spent in each gate step (M27.15.6).
+        # 0215 adds the reasoning tokens and the time spent in each gate step (M27.15.6).
         migrate(DATABASE, "stamp", "0212")
-        migrate(DATABASE, "upgrade", "0219")
+        migrate(DATABASE, "upgrade", "0215")
         yield scratch
     finally:
         drop(DATABASE)
@@ -263,7 +263,7 @@ def test_the_front_halfs_columns_are_written_as_the_application_role(database: s
 
 
 def test_the_stage_times_and_reasoning_tokens_are_written_and_read_back(database: str) -> None:
-    """0219's two columns, run for real: a stage map lands as a JSON object keyed by gate step,
+    """0215's two columns, run for real: a stage map lands as a JSON object keyed by gate step,
     a request with none lands null, and a stage map that is not an object is refused by its
     check.
 

@@ -168,7 +168,7 @@ class RequestTelemetryRow(Base):
     routed_tier: Mapped[str | None] = mapped_column(String(TIER_CHARS))
     tier_basis: Mapped[str | None] = mapped_column(String(BASIS_CHARS))
     #: What a reasoning model spent thinking, a part of `tokens_out`, and where the request's time
-    #: went by gate step (M27.15.6; migration 0219). Null before 0219 and where nothing measured.
+    #: went by gate step (M27.15.6; migration 0215). Null before 0215 and where nothing measured.
     reasoning_tokens: Mapped[int | None] = mapped_column(Integer)
     stage_ms: Mapped[dict[str, float] | None] = mapped_column(JSONB)
 
