@@ -32,7 +32,7 @@ skills fetched from GitHub keep their public names, because renaming them would 
 the import pins; if the install's library already holds either, the check says not run rather than
 asking an import the library would refuse for a reason that is not the product's.
 
-Task ids: M38.5.1, M27.15.57, M12.4.9
+Task ids: M38.5.1, M27.15.57, M12.4.9, M42.6.4
 """
 
 from __future__ import annotations
@@ -267,7 +267,7 @@ async def _changes(
 
 # ------------------------------------------------------ 1. a paste or an upload (M12.2.1)
 @check(
-    leaves=("M12.2.1", "M12.2.4", "M12.2.5", "M12.4.9", "M12.4.12"),
+    leaves=("M12.2.1", "M12.2.4", "M12.2.5", "M12.4.9", "M12.4.12", "M42.6.4"),
     sentence=(
         "A SKILL.md pasted and one uploaded in a zip land in the library and the review queue "
         "undecided, their instructions withheld from every agent and no pin possible; a SKILL.md "

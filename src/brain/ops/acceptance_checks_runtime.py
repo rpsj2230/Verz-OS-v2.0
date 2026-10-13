@@ -108,6 +108,11 @@ class _NoPassages:
         return TypedResult[KnowledgePassage](records=(), source="")
 
 
+def _scripted(replies: list[str], before: Any = None) -> _Scripted:
+    """A scripted model, for a check in another module that runs the same agent."""
+    return _Scripted(replies, before=before)
+
+
 def _proposal(word: str) -> str:
     return json.dumps({"tool": SEARCH, "arguments": {"question": word}})
 

@@ -15,7 +15,10 @@
  * (now a figure in the install's zone), the sentence explaining automation (now a card's line), and
  * a table that drew 0.00 on every install where nothing had been priced.
  *
- * Task ids: M27.7.15, M27.16.1
+ * **Under the breakdown are the report's other three readings** (`SpendDetail`): what one answer costs,
+ * the question shapes that cost most and the budgets that are stopped (M21.3.3, M21.3.4, M21.3.6).
+ *
+ * Task ids: M27.7.15, M27.16.1, M21.3.3, M21.3.4, M21.3.6
  */
 
 import { useState } from "react";
@@ -33,6 +36,7 @@ import {
   spendReportPath,
   type SpendReportBody,
 } from "../spendQuery";
+import { SpendDetail } from "./SpendDetail";
 import { USAGE_AND_COST } from "./UsagePage";
 import {
   BarList,
@@ -191,6 +195,9 @@ export function SpendPage() {
         <Switch label={DIMENSION_LABEL} value={dimension} options={SPEND_DIMENSIONS} onChange={setDimension} />
       </div>
       {content}
+      {answer.busy || answer.failure !== null ? null : (
+        <SpendDetail days={period} currency={report?.currency ?? "XXX"} recorded={report !== null && report.built && costNotRecorded(report) === null} />
+      )}
     </div>
   );
 }

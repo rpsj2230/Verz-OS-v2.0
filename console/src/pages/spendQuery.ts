@@ -232,6 +232,23 @@ export function daysBefore(now: Date, days: number): string {
   return day.toISOString().slice(0, 10);
 }
 
+/** The distribution of what an answer cost, as `brain.spend_detail_routes.CostPerAnswerView` sends it. */
+export type CostPerAnswerBody = components["schemas"]["CostPerAnswerView"];
+
+/** The question shapes that cost most, as `brain.spend_detail_routes.ShapesView` sends them. */
+export type SpendShapesBody = components["schemas"]["ShapesView"];
+
+/** The budget stops in force this reader may be told about, as `StopsView` sends them. */
+export type SpendStopsBody = components["schemas"]["StopsView"];
+
+/**
+ * One of the Spend report's other readings, over the last `days` where it takes a window. The
+ * stop list is a state and not a window, so it is asked with none.
+ */
+export function spendDetailPath(reading: "cost-per-answer" | "shapes" | "stops", days: number | null): string {
+  return days === null ? `${SPEND_API_PATH}/${reading}` : `${SPEND_API_PATH}/${reading}?days=${String(days)}`;
+}
+
 /** The whole request for one dimension over the last `days`, ending today. */
 export function spendReportPath(dimension: string, days: number, now: Date): string {
   return `${SPEND_API_PATH}?${DIMENSION_PARAMETER}=${dimension}&${SINCE_PARAMETER}=${daysBefore(now, days)}`;

@@ -2,11 +2,155 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**53 items are open: 223,** what may start an automation besides the clock, **222,** whether the install may measure how long approvals wait and show only the typical figure, **221,** who is told when a safety mechanism has not run, **220,** which speech service turns dictation into text, **219,** whether an approver may amend an action before approving it, **218,** whether the product may count how often each knowledge item is read, **216,** what counts as a delegation when a person moves department, **215,** whether the setup wizard takes a logo as an upload or as the address of a picture you already host, **210,** whether an automation a person wrote in words may call a model with nobody present, **209,** what starts an automation that waits for a change in a source or a call from outside, **203,** what "only towards stricter" means for how a connected source's own permissions are followed, **202,** three disclosure decisions on screens I built (who the sign-in page names, what the landing figures show a reader without the spend screens, and whether every file download is written down), **201,** who an agent is shared with and whether its page has a browsing switch, **200,** what happens to a person's agents when the person is switched off, **199,** whether these are the criteria to hold the Maintenance Agent to, **198,** going live with your real systems, the order and one rule for the recordings, **197,** sign in with Lark, what you do and one question, **196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **193,** which formats an agent's generated documents start with and which libraries may be added, **192,** whether sensitive actions that cannot be undone need a second person, **191,** whether an agent may ever answer with nothing behind it, **189,** how a team agent may use mail without one person's mail reaching anybody else, **188,** whether five console tasks that ask for what the design does not do are narrowed, **187,** whether the chat tools show progress while an answer is made, **186,** whether answers keep using the old search index while a new embedding model is built, **185,** which person approves the eight starter skills, **184,** which outside AI services are offered first and what they count as, **183,** whether a skill is refused when its agent lacks one of its tools, **182,** what a skill names when it needs knowledge, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **167,** whether a chat room or channel belongs to exactly one agent, **163,** the short list of what stops tasks being proved on your install, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **134,** connecting the Slack channel, **132,** connecting the email channel, **131,** making staff accounts work on your install, **127 and 128,** things for you to do (switch on the Lark chat channel, and connect Xero, HubSpot and Freshdesk), **and 91,** the
+**59 items are open: 226,** whether a question is estimated before it is answered and refused when the estimate exceeds what is left, **225,** whether two scaling leaves are closed by what they are for (one pass over the screens, and the ledger's partitioning trigger), **224,** whether the sentence a person is refused with names the budget and who can raise it, **232,** what declares that an install has a residency constraint, **231,** which chat backup and safety alerts are sent to, **230,** whether a browser run that steps outside what was approved suspends and asks again or ends, **223,** what may start an automation besides the clock, **222,** whether the install may measure how long approvals wait and show only the typical figure, **221,** who is told when a safety mechanism has not run, **220,** which speech service turns dictation into text, **219,** whether an approver may amend an action before approving it, **218,** whether the product may count how often each knowledge item is read, **216,** what counts as a delegation when a person moves department, **215,** whether the setup wizard takes a logo as an upload or as the address of a picture you already host, **210,** whether an automation a person wrote in words may call a model with nobody present, **209,** what starts an automation that waits for a change in a source or a call from outside, **203,** what "only towards stricter" means for how a connected source's own permissions are followed, **202,** three disclosure decisions on screens I built (who the sign-in page names, what the landing figures show a reader without the spend screens, and whether every file download is written down), **201,** who an agent is shared with and whether its page has a browsing switch, **200,** what happens to a person's agents when the person is switched off, **199,** whether these are the criteria to hold the Maintenance Agent to, **198,** going live with your real systems, the order and one rule for the recordings, **197,** sign in with Lark, what you do and one question, **196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **193,** which formats an agent's generated documents start with and which libraries may be added, **192,** whether sensitive actions that cannot be undone need a second person, **191,** whether an agent may ever answer with nothing behind it, **189,** how a team agent may use mail without one person's mail reaching anybody else, **188,** whether five console tasks that ask for what the design does not do are narrowed, **187,** whether the chat tools show progress while an answer is made, **186,** whether answers keep using the old search index while a new embedding model is built, **185,** which person approves the eight starter skills, **184,** which outside AI services are offered first and what they count as, **183,** whether a skill is refused when its agent lacks one of its tools, **182,** what a skill names when it needs knowledge, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **167,** whether a chat room or channel belongs to exactly one agent, **163,** the short list of what stops tasks being proved on your install, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **134,** connecting the Slack channel, **132,** connecting the email channel, **131,** making staff accounts work on your install, **127 and 128,** things for you to do (switch on the Lark chat channel, and connect Xero, HubSpot and Freshdesk), **and 91,** the
 checks only you can do on your install; it waits for the Knowledge upload grants (item 105) to land.
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 226. Should a question be estimated before it is answered, and refused when the estimate is more than is left?
+
+**In plain terms:** task M21.2.1 says each question's cost is estimated before it is answered, from the
+lane, the model tier, how many tools it may use and how much it retrieves, and M21.2.2 says a question
+whose estimate is more than the budget has left is refused before any model is called. The estimating is
+built and tested (`spend.estimate`) and is used only when an agent is rehearsed. What runs on every real
+question is the stop you chose in item 169: when a budget is **already used up**, the next question is
+refused before anything is spent. A question that would take a budget **past** its limit is answered, and
+the budget stops the question after it.
+
+**Option A: keep it as decided in item 169.** Only a used-up budget stops a question. The two estimate
+leaves are closed as not wanted. Nothing new runs on the answer path, and a limit is overshot by at most
+the one question that crossed it.
+
+**Option B: estimate every question and refuse the ones that would cross a limit.** The estimate is a
+guess before the model is called, so some questions are refused that would have fitted and some are
+answered that go over. It adds a lookup to every question. It is built behind a switch that ships off,
+like the stop itself.
+
+**Option C: estimate, and warn instead of refusing.** The person is told this question is likely to take
+the budget past its limit and may go ahead. The limit still stops the question after it.
+
+**My recommendation:** A. You have already chosen to stop when a limit is used up and to watch a week of
+"would have stopped" figures first; an estimate would refuse questions on a guess, and the overshoot it
+prevents is one question.
+
+**What I need from you:** reply "226: A", "226: B" or "226: C".
+
+## 225. Are two scaling leaves closed by what they are for: one pass over the screens, and the ledger's partitioning trigger?
+
+**In plain terms:** two tasks in the scaling group say something the build deliberately does differently.
+
+**a. M36.2.2.2, "collapse the screens into a single pass".** Every piece of text is checked for personal
+data and secrets by several screens in turn. A single pass that reports exactly the same thing is built and
+tested (`screen_in_one_pass`), and what it was measured to do is no faster: Python's pattern matching has no
+way to search for many patterns at once, so the single pass does the same work in a different order.
+
+**b. M36.1.1.4, "partition the ledger when it has too many rows or is too slow".** The ledger is already
+cut into monthly partitions by the worker. The trigger the product uses is the length of time the ledger is
+kept against the size of a partition, which is true from the day the install is made. A row count would fire
+only after the table is already large, which is the moment partitioning is hardest to do.
+
+**Option A: both are closed by what they are for.** The screens stay as they are, with the single pass kept
+in case the language gains the means to make it pay. The ledger's trigger is the retention window, shown on
+the Capacity page, and a row count is not added.
+
+**Option B: build what the tasks literally say.** Switch the answer path to the single pass anyway, and add a
+row-count and slow-query trigger on the Capacity page as well as the window.
+
+**My recommendation:** A for both. (a) changes nothing a person can see and was measured not to help. (b) the
+page already says the ledger is due and partitioned, and a measured row count would say it later.
+
+**What I need from you:** reply "225: a A, b A", changing a letter for either you want built.
+
+## 224. Should the sentence a person is refused with, when a budget stops them, name the budget and who can raise it?
+
+**In plain terms:** task M21.2.6 says a person stopped by a budget is told which budget was hit and who can
+raise it. What the product says today, deliberately, is one sentence naming neither: "A spending limit that
+covers your questions has been reached, so this question was not answered. Whoever manages that budget has
+been told, and questions are answered again when its period ends." The reason is that a refusal naming a
+department's budget tells the person that budget exists and, from two refusals a week apart, how fast
+everybody else is spending it.
+
+**Option A: as built.** Everybody gets the one sentence. The budget and who manages it are on the Spend
+page's list of stops for the people who may read that spend.
+
+**Option B: name it to the people it is theirs to know.** A person stopped by their own allowance is told
+it is theirs and who manages their department's budgets. A person who may read that department's spend is
+told which budget and until when. Everybody else gets the one sentence. The code for this is built
+(`spend_view.told_about`) and is called from the refusal.
+
+**Option C: name it to everybody.** Simplest to read, and tells a stranger which budgets exist.
+
+**My recommendation:** B. A person stopped by their own allowance should be able to find who can raise it,
+and a refusal that names only what the reader is already entitled to read discloses nothing new.
+
+**What I need from you:** reply "224: A", "224: B" or "224: C".
+
+## 232. What declares that an install has a residency constraint?
+
+**In plain terms:** task M30.6.4 says that switching on a tunnel or an edge proxy on an install with a
+residency constraint must first tell the administrator that encryption then ends at the provider's edge,
+and record that they accepted it. The product has no setting that says an install has such a constraint:
+residency exists today only as a model-routing choice. Without something that declares one, the warning
+has nothing to be shown for.
+
+**Option A: a setting the administrator turns on during setup or later, "This install must keep data in
+one place".** The wizard asks it once. When it is on, switching on a tunnel or an edge proxy stops at a
+prompt that says what the provider can read, and the acceptance is written down with who and when.
+
+**Option B: the existing model-routing residency choice is the declaration.** Nothing new to set, but an
+install whose models are in one region and whose data is not would be told nothing.
+
+**Option C: always show the warning when a tunnel or proxy is enabled.** No declaration needed; every
+install that uses one accepts it once.
+
+**My recommendation:** C, because it needs no new setting and no install is told less than the truth; A
+can be added later for installs that want the stricter promise.
+
+**What I need from you:** reply "232: A", "232: B" or "232: C".
+
+## 231. Which chat do backup and safety-mechanism alerts go to?
+
+**In plain terms:** the product can now work out that the newest backup is older than the install's
+promised recovery point, that a restore rehearsal did not verify, or that a safety mechanism has not run.
+Until now nothing sent any of these anywhere: the notice said "no channel is chosen for it yet". What is
+built sends each one, once a day while it holds, to the conversation already chosen for the evening digest
+under Settings, **Send the evening digest to**, and writes down that it did. The text names the kind of
+fault and the age, never what a backup contains.
+
+**Option A: use the evening digest's conversation, as built.** One place to watch, nothing new to set. If
+the digest is switched off, the alerts are recorded on the Recovery screen and sent nowhere.
+
+**Option B: a separate setting, "Send alerts to".** An alerts-only room is possible and the digest can stay
+on a broader staff channel. One more setting to choose.
+
+**Option C: email the operations alert holders.** Needs the mail channel connected and a person named.
+
+**My recommendation:** A now, because it works the day the digest does and the room is already approved
+for internal content; B if you want alerts kept out of a busy room.
+
+**What I need from you:** reply "231: A", "231: B" or "231: C".
+
+## 230. When a browser run steps outside what a person approved, does it suspend and ask again, or end?
+
+**In plain terms:** task M19.9.1 says an action outside the approved envelope suspends the run and sends a
+new approval that names the breach, while actions inside the envelope are never interrupted. What is built
+does something narrower and safer to reason about: a person approves the whole envelope (the pages, the
+actions, how many times) before the container starts, and the first action outside it ends the run, which
+is destroyed. Nothing in a run asks mid-way, because the action that breached came from a page nobody has
+seen, and a held-open container with a live sign-in is itself a risk.
+
+**Option A: keep it as built.** A breach ends the run and the person is told which action was refused. To
+go further they start a new run with a wider envelope, which is approved again from the start.
+
+**Option B: build the suspension.** A breach holds the run, raises an approval naming the refused action,
+and the run continues if it is approved inside the window. The container and its session stay open while a
+person decides, and what they are approving is one action on a page they have not seen.
+
+**My recommendation:** A. It keeps the promise that nothing outside what was read beforehand ever happens,
+and it costs a person one more press when a run needs more. B can be added later behind its own switch.
+
+**What I need from you:** reply "230: A" or "230: B".
 
 ## 223. What may start an automation besides the clock, and who vouches for an event that arrives from outside?
 

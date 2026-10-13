@@ -74,6 +74,8 @@ DELIVERS_THROUGH_THE_DOOR: frozenset[str] = frozenset(
         "brain.channels.telegram",
         "brain.channels.whatsapp",
         "brain.ops.digest_delivery",
+        # The day's backup alerts, one message to the digest's room per day and set of alerts.
+        "brain.ops.backup_report_run",
         # A test message to the email relay, keyed on the configuration it tests.
         "brain.ops.mail",
         # A webhook delivery, keyed per attempt since 2026-09-17.
