@@ -18,6 +18,7 @@ from brain.console.configuration import (
 )
 from brain.identity.brokering import (
     BROKERED_BY,
+    LINK_FLOW_ALIAS,
     NOT_BROKERED_BY_THIS_RELEASE,
     VAULT_KEY,
     VAULT_REFERENCE,
@@ -114,8 +115,8 @@ def test_no_registered_application_means_no_broker_and_says_which_setting(client
     assert "INSTALL_BROKERED_CLIENT_ID" in refused.problem
 
 
-def test_lark_ldap_and_an_unknown_value_are_refused_with_a_reason_and_none_is_silent() -> None:
-    """Delete this and `lark` can read as brokered while people sign in with realm passwords, or
+def test_ldap_and_an_unknown_value_are_refused_with_a_reason_and_none_is_silent() -> None:
+    """Delete this and `ldap` can read as brokered while people sign in with realm passwords, or
     `none` can report a problem on every install that chose not to broker."""
     for directory in NOT_BROKERED_BY_THIS_RELEASE:
         refused = brokering(**{**GOOGLE, "directory": directory})
@@ -141,7 +142,7 @@ def test_the_pairing_of_directory_and_staff_source_is_the_wizards() -> None:
 
 def test_the_settings_screen_reports_a_directory_it_will_not_broker() -> None:
     """Delete this and a chosen directory that is not brokered is shown as a plain value."""
-    chosen = {"INSTALL_BROKERED_DIRECTORY": "lark", "INSTALL_MODEL_PROFILE": "hosted"}
+    chosen = {"INSTALL_BROKERED_DIRECTORY": "ldap", "INSTALL_MODEL_PROFILE": "hosted"}
     brokered = {
         "INSTALL_BROKERED_DIRECTORY": "google",
         "INSTALL_BROKERED_CLIENT_ID": GOOGLE["client_id"],
@@ -149,11 +150,11 @@ def test_the_settings_screen_reports_a_directory_it_will_not_broker() -> None:
         "INSTALL_STAFF_SOURCE_LOCATION": "northwind.example",
     }
 
-    assert any("'lark'" in one for one in findings(chosen, {}))
+    assert any("'ldap'" in one for one in findings(chosen, {}))
     assert findings(brokered, {}) == ()
     # A saved wizard answer outranks the environment here as everywhere.
     assert any(
-        "'lark'" in one for one in findings(brokered, {"INSTALL_BROKERED_DIRECTORY": "lark"})
+        "'ldap'" in one for one in findings(brokered, {"INSTALL_BROKERED_DIRECTORY": "ldap"})
     )
 
 
@@ -167,3 +168,98 @@ def test_the_local_profile_sentence_says_when_nothing_local_can_answer() -> None
     hosted = profile_told({"INSTALL_MODEL_PROFILE": "hosted"}, {})
     assert (LOCAL_PROFILE_HAS_NO_MODEL_THAT_ANSWERS in local) is not local_model_answers()
     assert LOCAL_PROFILE_HAS_NO_MODEL_THAT_ANSWERS not in hosted
+
+
+# ------------------------------------------------------------------------------ Lark (M1.1.8)
+LARK = {
+    "directory": "lark",
+    "client_id": "cli_a1b2c3d4e5f6",
+    "staff_source": "lark",
+    "location": "larksuite.com",
+    "origin": "https://brain.northwind.example",
+}
+
+
+def test_lark_is_brokered_through_the_installs_own_bridge_and_lark_s_own_page() -> None:
+    """The positive case. Delete this and a `brokering` that refuses Lark passes every refusal
+    test below, and no Lark company can ever sign in with Lark."""
+    lark = brokering(**LARK)
+
+    assert lark.problem == ""
+    entry = lark.provider
+    assert entry["alias"] == "lark" and entry["providerId"] == "oidc" and entry["enabled"] is True
+    config = entry["config"]
+    assert (
+        config["authorizationUrl"] == "https://accounts.larksuite.com/open-apis/authen/v1/authorize"
+    )
+    assert config["tokenUrl"] == "https://brain.northwind.example/lark-sign-in/token"
+    assert config["clientId"] == LARK["client_id"]
+    assert config["clientSecret"] == VAULT_REFERENCE
+    assert "userInfoUrl" not in config
+    json.dumps(entry)
+    feishu = brokering(**{**LARK, "location": "feishu.cn"}).provider["config"]
+    assert feishu["authorizationUrl"].startswith("https://accounts.feishu.cn/")
+
+
+def test_the_lark_entry_signs_nobody_new_in_and_trusts_no_signature_it_never_receives() -> None:
+    """**The Lark entry's first-login flow is the link-only one, so a stranger is refused rather
+    than given an account.** Delete this and the entry can name the default flow, which creates
+    an account for anybody Lark signs in and emails the person to confirm the link."""
+    entry = brokering(**LARK).provider
+    config = entry["config"]
+
+    default_flow: str = "first broker login"
+    assert entry["firstBrokerLoginFlowAlias"] == LINK_FLOW_ALIAS
+    assert entry["firstBrokerLoginFlowAlias"] != default_flow
+    assert config["validateSignature"] == "false" and config["useJwksUrl"] == "false"
+    assert config["disableUserInfo"] == "true" and config["disableNonce"] == "true"
+    assert config["pkceEnabled"] == "false"
+
+
+def test_the_realm_carries_the_flow_the_lark_entry_names_and_it_creates_nobody() -> None:
+    """Delete this and the entry can name a flow the realm lacks, which is an import Keycloak
+    refuses, or the flow can gain a step that creates an account for a stranger."""
+    realm = json.loads((REPO / "ops" / "keycloak" / "realm-export.json").read_text("utf-8"))
+    flows = {one["alias"]: one for one in realm["authenticationFlows"]}
+
+    flow = flows[LINK_FLOW_ALIAS]
+    steps = [(one["authenticator"], one["requirement"]) for one in flow["authenticationExecutions"]]
+    assert flow["topLevel"] is True and flow["providerId"] == "basic-flow"
+    assert steps == [
+        ("idp-detect-existing-broker-user", "REQUIRED"),
+        ("idp-auto-link", "REQUIRED"),
+    ]
+    named = {one["authenticator"] for one in flow["authenticationExecutions"]}
+    assert not named & {"idp-create-user-if-unique", "idp-email-verification", "idp-confirm-link"}
+
+
+@pytest.mark.parametrize(
+    ("change", "said"),
+    [
+        ({"staff_source": "google_workspace"}, "no Lark staff list"),
+        ({"staff_source": "spreadsheet"}, "no Lark staff list"),
+        ({"location": "northwind.example"}, "not one of Lark's two platforms"),
+        ({"location": "unset"}, "not one of Lark's two platforms"),
+        ({"origin": ""}, "no public address"),
+        ({"origin": "unset"}, "no public address"),
+        ({"client_id": "unset"}, "INSTALL_BROKERED_CLIENT_ID"),
+    ],
+)
+def test_lark_without_what_it_needs_is_not_brokered_and_says_which_setting(
+    change: dict[str, str], said: str
+) -> None:
+    """Delete this and a Lark entry can be emitted with a platform the secret must not be sent
+    to, no address to return to, or no staff list for the link to find an account in."""
+    refused = brokering(**{**LARK, **change})
+
+    assert refused.provider == {}
+    assert said in refused.problem
+
+
+def test_the_lark_sign_in_asks_only_for_what_the_staff_sync_is_already_given() -> None:
+    """Delete this and the sign-in can ask for a scope the company's application was never
+    granted for the staff list, which Lark refuses at its own page."""
+    from brain.connectors.staff_directories import LARK_SYNC_SCOPES
+    from brain.identity.lark_sign_in import SIGN_IN_SCOPES
+
+    assert set(SIGN_IN_SCOPES.split()) <= set(LARK_SYNC_SCOPES.split())

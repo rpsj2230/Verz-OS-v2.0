@@ -25,6 +25,7 @@ const STATISTICS = {
   until: "2019-03-04T09:00:00Z",
   refusals: [{ shape: "enumeration", reads_as: UNBROKEN, occurrences: 2 }],
   redacted_entries: 1,
+  redacted_requests: null,
   read_at_most: 5000,
 };
 

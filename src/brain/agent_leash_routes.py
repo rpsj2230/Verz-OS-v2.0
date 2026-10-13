@@ -467,6 +467,17 @@ async def agent_leash(request: Request, agent_id: str, asked: Asked) -> AgentLea
     )
 
 
+def published_rung(configured: Leash, agent_id: str, target: str, scope: Scope) -> AutonomyTier:
+    """The rung this entry was published at: the leash the agent was installed with, unmoved.
+
+    An agent with no install that constructs, or an entry the install never named, was published
+    at the missing entry's rung, so nothing can be raised on it here: going higher means
+    publishing again (needs-rupash 179 A). Its own function so the ceiling is one thing a test
+    can set, and so it is read from `configured` and never from the moves.
+    """
+    return rung_of(configured, agent_id, target, scope)
+
+
 def _refused(message: str, status: int = 409) -> JSONResponse:
     return JSONResponse(status_code=status, content={"message": message})
 
@@ -514,6 +525,9 @@ async def move_agent_rung(
                 ),
                 pending=newest,
                 supervision=None if state.pin is None else state.pin.outcome,
+                # The rung the entry was installed at, which a move never changes (needs-rupash
+                # 179 A).
+                published=published_rung(configured, agent_id, body.target, body.scope),
             )
     except LeashMoveError as refused:
         return _refused(str(refused))

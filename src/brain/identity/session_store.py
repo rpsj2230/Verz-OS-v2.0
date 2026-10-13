@@ -224,6 +224,15 @@ def live_sessions(now: datetime, limit: int) -> Select[Any]:
     )
 
 
+def live_sessions_of(principal_id: str, now: datetime, limit: int) -> Select[Any]:
+    """One person's own sessions not ended and not past their ceiling, newest first, bounded.
+
+    The member's device list (M40.1.1.3). Narrowed in the statement by the person, so what leaves
+    the database is already theirs.
+    """
+    return live_sessions(now, limit).where(SessionRow.principal_id == principal_id)
+
+
 def one_live_session(session_id: str, now: datetime) -> Select[Any]:
     """One session that may still be ended, with its row locked until the transaction ends.
 
@@ -309,6 +318,16 @@ class StoredSessions:
         """Every live session, newest first, and whether the load came back full."""
         async with self.sessions() as session, session.begin():
             rows = (await session.execute(live_sessions(now, limit))).mappings().all()
+        return tuple(stored_session(dict(row)) for row in rows), len(rows) >= limit
+
+    async def open_sessions_of(
+        self, principal_id: str, *, now: datetime, limit: int
+    ) -> tuple[tuple[StoredSession, ...], bool]:
+        """One person's own live sessions, newest first, and whether the load came back full."""
+        async with self.sessions() as session, session.begin():
+            rows = (
+                (await session.execute(live_sessions_of(principal_id, now, limit))).mappings().all()
+            )
         return tuple(stored_session(dict(row)) for row in rows), len(rows) >= limit
 
     async def end(
