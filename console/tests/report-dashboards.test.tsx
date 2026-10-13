@@ -344,8 +344,8 @@ describe("Adoption", () => {
     const page = await reportAt("/adoption", {
       [ADOPTION]: {
         items: [
-          { department: "finance", questions: 0, people: 0 },
-          { department: "support", questions: 12, people: 3 },
+          { department: "finance", questions: 0, people: 0, stopped: 0 },
+          { department: "support", questions: 12, people: 3, stopped: 2 },
         ],
         next_cursor: null,
         truncated: false,
@@ -357,8 +357,8 @@ describe("Adoption", () => {
       [...row.querySelectorAll("td")].map((cell) => cell.textContent),
     );
     expect(rows).toEqual([
-      ["finance", "0", "0"],
-      ["support", "12", "3"],
+      ["finance", "0", "0", "0"],
+      ["support", "12", "3", "2"],
     ]);
     expect(page.root.querySelector("ul[aria-label='Quiet departments']")?.textContent).toBe("web");
     expect(figure(page.root, "Quiet departments")).toBe("1");

@@ -83,6 +83,18 @@ export interface Unrecorded {
   readonly why: string;
 }
 
+/** One run in the Dashboard's list of recent runs (M27.15.27): who asked, how it ended, how long. */
+export interface RecentRun {
+  readonly at: string;
+  /** The person's name when the directory holds one, else their id. */
+  readonly who: string;
+  /** The request's own word: answered, nothing_returned or failed. */
+  readonly status: string;
+  readonly durationMs: number;
+  /** A person sent it, as against an automation or the system's own run. */
+  readonly byAPerson: boolean;
+}
+
 /** One agent's figures as this console holds them. */
 export interface AgentStats {
   /** Whose requests: "own" or "everyone". */
@@ -98,6 +110,8 @@ export interface AgentStats {
   readonly unrecorded: readonly Unrecorded[];
   /** Sent only to a reader of everybody's spend, and only with a monthly budget set. */
   readonly projection?: Projection;
+  /** The newest runs the reader is counted over, newest first. Empty is "none", never a count. */
+  readonly recent: readonly RecentRun[];
 }
 
 /** The figure `unrecorded` names a run's cost by. `brain.console.entity_stats.RUN_COST_IS_NOT_RECORDED`. */
@@ -198,6 +212,17 @@ export function readAgentStats(payload: unknown): AgentStats | null {
     }
   }
   const projection = readProjection(fields["projection"]);
+  const recent: RecentRun[] = [];
+  for (const one of listOf(fields["recent"])) {
+    const row = fieldsOf(one);
+    const at = instant(row?.["at"]);
+    const who = said(row?.["name"]) ?? said(row?.["principal_id"]);
+    const status = said(row?.["status"]);
+    const durationMs = measured(row?.["duration_ms"]);
+    if (at !== undefined && who !== undefined && status !== undefined && durationMs !== undefined) {
+      recent.push({ at, who, status, durationMs, byAPerson: row?.["by_a_person"] !== false });
+    }
+  }
   return {
     ...(basis === undefined ? {} : { basis }),
     ...(costBasis === undefined ? {} : { costBasis }),
@@ -207,6 +232,7 @@ export function readAgentStats(payload: unknown): AgentStats | null {
     atLeast: fields["at_least"] === true,
     periods,
     unrecorded,
+    recent,
   };
 }
 

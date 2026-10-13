@@ -50,6 +50,19 @@ export const OVERVIEW_API_PATH = "/console/overview";
 /** How the last seven days' requests ended. */
 export const FIGURES_API_PATH = "/console/overview/figures";
 
+/** The windows the figures can be asked over, in the route's own words (M27.15.17), and what each says. */
+export const FIGURE_RANGES: readonly (readonly [string, string])[] = [
+  ["7d", "Last 7 days"],
+  ["30d", "Last 30 days"],
+  ["90d", "Last 90 days"],
+  ["mtd", "Month to date"],
+];
+
+/** Where the figures are asked for over one window. The first is the route's own default. */
+export function figuresApiPath(range: string): string {
+  return range === FIGURE_RANGES[0]?.[0] ? FIGURES_API_PATH : `${FIGURES_API_PATH}?range=${encodeURIComponent(range)}`;
+}
+
 /** The roster, read wide enough to count one page of it. The route's own largest page. */
 export const ROSTER_PAGE_ROWS = 200;
 export const AGENTS_API_PATH = `/agents?limit=${String(ROSTER_PAGE_ROWS)}`;

@@ -420,6 +420,10 @@ from brain.routing_routes import router as routing_router
 # `brain.rule_routes`.
 from brain.rule_routes import router as rule_router
 
+# One search box over the console: each module's own list route asked for one query as the person
+# asking, so no match and not permitted are one answer. See `brain.search_routes`.
+from brain.search_routes import router as search_router
+
 # Service accounts: an integration registered at its owner's reach, a key shown once, and both
 # taken away, behind `admin:credential`. See `brain.service_account_routes`.
 from brain.service_account_routes import router as service_account_router
@@ -469,6 +473,11 @@ from brain.stewardship_routes import router as stewardship_router
 # is, behind `admin:storage` over everything. Never an object's name. See
 # `brain.storage_routes`.
 from brain.storage_routes import router as storage_router
+
+# System health: every part, the worker, the vault, object storage, the breakers and which
+# guarantees are held, for a reader of Incidents over the whole installation. See
+# `brain.system_health_routes`.
+from brain.system_health_routes import router as system_health_router
 
 # A person's own threads, listed, searched and reopened at the reach held now. See
 # `brain.thread_routes`.

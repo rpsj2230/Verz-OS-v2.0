@@ -18,7 +18,7 @@
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import { NOT_RECORDED } from "../src/components/kit";
 import { Button } from "../src/components/ui/button";
@@ -71,6 +71,7 @@ const TRACE = "trace-overview";
 
 interface Page {
   readonly root: Element;
+  readonly idp: ReturnType<typeof fakeIdentityProvider>;
 }
 
 function json(body: unknown, status = 200): Response {
@@ -118,7 +119,7 @@ async function overviewWith(
     },
     { timeout: 10_000 },
   );
-  return { root: root() };
+  return { root: root(), idp };
 }
 
 function section(root: Element, name: string): Element | null {
@@ -257,6 +258,23 @@ describe("what the Overview draws", () => {
     expect(figure(page.root, SOURCES_LABEL)).toBe("1");
     expect(figure(page.root, COST_LABEL)).toBe(`${UNBROKEN} 1,284.50`);
     expect(beneath(page.root, COST_LABEL)).toBe(basisWords("everyone"));
+  });
+
+  test("the figures are asked over the window the reader presses, and the heading says which", async () => {
+    // What breaks if this is deleted: a landing screen stuck on a fixed week, or one whose heading
+    // still says seven days over figures asked for thirty (M27.15.17).
+    const page = await overviewWith();
+    const button = [...page.root.querySelectorAll("[aria-label='Window the figures cover'] button")].find(
+      (one) => one.textContent === "Last 30 days",
+    );
+    await act(async () => {
+      fireEvent.click(button as Element);
+    });
+    await waitFor(() => {
+      expect(page.idp.urls.some((url) => url.includes("/console/overview/figures?range=30d"))).toBe(true);
+    });
+    expect(page.root.querySelector("section[aria-label='Last 30 days']")).not.toBeNull();
+    expect(page.root.querySelector("section[aria-label='Last 7 days']")).toBeNull();
   });
 
   test("a cost summed over the reader's own requests says so, even beside everybody's counts", async () => {

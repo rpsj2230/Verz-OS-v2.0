@@ -149,7 +149,10 @@ def test_ci_enforces_the_floor_once_over_every_shard_combined() -> None:
     combine = next(i for i, line in enumerate(lines) if "coverage combine" in line)
     report = next(i for i, line in enumerate(lines) if "coverage report" in line)
     download = next(
-        one for one in job["steps"] if str(one.get("uses", "")).startswith("actions/download")
+        one
+        for one in job["steps"]
+        if str(one.get("uses", "")).startswith("actions/download")
+        and str(one["with"]["pattern"]).startswith("coverage")
     )
     shards = jobs["tests"]["strategy"]["matrix"]["shard"]
     uploaded = next(

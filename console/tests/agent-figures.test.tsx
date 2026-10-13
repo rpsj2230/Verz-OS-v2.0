@@ -482,3 +482,32 @@ describe("waiting on a person (M27.15.30)", () => {
     expect(mounted.container.textContent).not.toContain("Waiting on a person");
   });
 });
+
+
+// ------------------------------------------------------------------------ recent runs
+
+describe("recent runs (M27.15.27)", () => {
+  test("the newest runs are listed with who asked, how each ended and how long it took", async () => {
+    // What breaks if this is deleted: the Dashboard going back to a note that says no route lists
+    // an agent's runs, so a reader has nowhere to see what the agent has just been doing.
+    const stats = statsWire() as Record<string, unknown>;
+    stats["recent"] = [
+      { at: "2019-03-04T09:42:00Z", principal_id: "p_heavy", name: "Heavy Person", status: "answered", duration_ms: 900, by_a_person: true },
+      { at: "2019-03-04T08:00:00Z", principal_id: "p_light", name: null, status: "nothing_returned", duration_ms: 2400, by_a_person: false },
+    ];
+    const mounted = await consoleAt(`/agents/${AGENT}`, answers(stats));
+    const list = mounted.container.querySelector('[data-slot="recent-runs"]');
+    expect(list?.textContent).toContain("Heavy Person");
+    expect(list?.textContent).toContain("Answered");
+    expect(list?.textContent).toContain("p_light (automation)");
+    expect(list?.textContent).toContain("Nothing returned");
+    expect(list?.textContent).toContain("2.4 s");
+  });
+
+  test("an agent with no run the reader is counted over is told so, with no figure", async () => {
+    // The sibling: an empty list says there is nothing to list and no count of anything left out.
+    const mounted = await consoleAt(`/agents/${AGENT}`, answers(statsWire()));
+    expect(mounted.container.querySelector('[data-slot="recent-runs"]')).toBeNull();
+    expect(mounted.container.textContent).toContain("No runs to list.");
+  });
+});

@@ -256,10 +256,10 @@ def test_the_architecture_agrees_with_the_workspace_about_what_an_agent_is_made_
     of. Listing the ceiling beside the persona invites exactly the merge the paragraph under
     the table exists to forbid.
 
-    M39.1.1.1 names the ten and `brain.console.workspace.Part` is that list, so the document
+    M39.1.1.1 names the twelve and `brain.console.workspace.Part` is that list, so the document
     was the only one of the three that disagreed.
 
-    Compared against the enum rather than a number here, so an eleventh part fails this rather
+    Compared against the enum rather than a number here, so a thirteenth part fails this rather
     than being invisible.
 
     Delete this and the document goes back to describing an agent that is not the one this
