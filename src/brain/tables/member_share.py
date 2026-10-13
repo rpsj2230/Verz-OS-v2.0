@@ -43,7 +43,9 @@ class ArtifactShareRow(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("artifact_id", "shared_by", "shared_with", name="one_share_each"),
+        UniqueConstraint(
+            "artifact_id", "shared_by", "shared_with", name="uq_artifact_share_one_each"
+        ),
         CheckConstraint("shared_by <> shared_with", name="not_with_oneself"),
         CheckConstraint("length(btrim(artifact_id)) > 0", name="artifact_present"),
         CheckConstraint("length(btrim(shared_by)) > 0", name="sharer_present"),
@@ -69,7 +71,7 @@ class AgentRequestRow(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("agent_id", "requested_by", name="one_request_each"),
+        UniqueConstraint("agent_id", "requested_by", name="uq_agent_request_one_each"),
         CheckConstraint("length(btrim(agent_id)) > 0", name="agent_present"),
         CheckConstraint("length(btrim(requested_by)) > 0", name="asker_present"),
         CheckConstraint("length(btrim(department)) > 0", name="department_present"),

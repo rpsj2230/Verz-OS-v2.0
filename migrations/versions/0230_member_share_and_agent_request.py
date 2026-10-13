@@ -112,7 +112,9 @@ def upgrade() -> None:
         sa.Column(
             "shared_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
         ),
-        sa.UniqueConstraint("artifact_id", "shared_by", "shared_with", name="one_share_each"),
+        sa.UniqueConstraint(
+            "artifact_id", "shared_by", "shared_with", name="uq_artifact_share_one_each"
+        ),
         sa.CheckConstraint("shared_by <> shared_with", name="not_with_oneself"),
         sa.CheckConstraint("length(btrim(artifact_id)) > 0", name="artifact_present"),
         sa.CheckConstraint("length(btrim(shared_by)) > 0", name="sharer_present"),
@@ -140,7 +142,7 @@ def upgrade() -> None:
             server_default=sa.func.now(),
             nullable=False,
         ),
-        sa.UniqueConstraint("agent_id", "requested_by", name="one_request_each"),
+        sa.UniqueConstraint("agent_id", "requested_by", name="uq_agent_request_one_each"),
         sa.CheckConstraint("length(btrim(agent_id)) > 0", name="agent_present"),
         sa.CheckConstraint("length(btrim(requested_by)) > 0", name="asker_present"),
         sa.CheckConstraint("length(btrim(department)) > 0", name="department_present"),
