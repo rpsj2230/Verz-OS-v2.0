@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**68 items are open: 196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **193,** which formats an agent's generated documents start with and which libraries may be added, **192,** whether sensitive actions that cannot be undone need a second person, **191,** whether an agent may ever answer with nothing behind it, **186,** whether answers keep using the old search index while a new embedding model is built, **185,** which person approves the eight starter skills, **184,** which outside AI services are offered first and what they count as, **183,** whether a skill is refused when its agent lacks one of its tools, **182,** what a skill names when it needs knowledge, **181,** where the count of redactions on the audit screen should come from, **180,** whether an agent's parts include tools and workflows, and which kinds of memory an agent is told apart by, **179,** what the ceiling is that a leash may not be raised beyond, **178,** who may change which part of an agent, and whether a refusal names the role, **177,** which conditions an automation's trigger may carry, **176,** where a document added from an agent's own page lives, **175,** which tools the part of a model request that everybody shares may hold, **174,** whether a supervised agent's thirty-day review runs on its own each day, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **172,** whether a failing automation's pause also stops that agent's questions, **171,** whether a browser test counts as proof that a task works, **170,** which parts of an agent the builder lists as sections of its own, **169,** when to switch on spending limits that really stop requests, **167,** whether a chat room or channel belongs to exactly one agent, **166,** whether an agent's own run may send something without a person approving it, **165,** whether an administrator may choose how a connected source's own permissions are followed, **164,** whether your install runs an antivirus on uploads, **163,** the short list of what stops tasks being proved on your install, **162,** whether a new agent may be put on your website's chat widget, **161,** what "rehearsed" means before a skill can be approved, **160,** whether a department's administrator may stop one of that department's agents, **159,** what the Brain says when a client's name matches two records you can both see, **158,** whether an automation's canvas may have a step that runs an agent, **157,** one line for your install's database pooler, **156,** what your maintenance portal is, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
+**49 items are open: 196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **193,** which formats an agent's generated documents start with and which libraries may be added, **192,** whether sensitive actions that cannot be undone need a second person, **191,** whether an agent may ever answer with nothing behind it, **189,** how a team agent may use mail without one person's mail reaching anybody else, **188,** whether five console tasks that ask for what the design does not do are narrowed, **187,** whether the chat tools show progress while an answer is made, **186,** whether answers keep using the old search index while a new embedding model is built, **185,** which person approves the eight starter skills, **184,** which outside AI services are offered first and what they count as, **183,** whether a skill is refused when its agent lacks one of its tools, **182,** what a skill names when it needs knowledge, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **167,** whether a chat room or channel belongs to exactly one agent, **163,** the short list of what stops tasks being proved on your install, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **154,** a one-time server change for the sealed sandbox, **153,** how much of a question written in Chinese is hidden before it goes to an outside model, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **139,** whether the website widget's answers are written by the model or are the published passages, **138,** whether a Laravel client record is visible to one department or several, **137,**
 which of your systems holds client projects and their tickets, **136,** whether memory
 disagreeing with a connected system is settled by how memory is built, **134,** connecting the Slack channel, **133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
@@ -147,6 +147,101 @@ does not, and nothing in your plan asks for one.
 
 **What I need from you:** reply "191: A" or "191: B".
 
+## 189. How may a team agent use mail without one person's mail reaching anybody else?
+
+**In plain terms:** you asked for two kinds of agent. A **personal agent** belongs to one person, who may
+connect their own Gmail, calendar and documents to it, and nobody else can see or ask for them. A **team
+agent** belongs to a department and many people talk to it, so connecting one person's mailbox to it would
+put that person's mail in front of everybody who asks. The product already has the rule that stops this
+in general (an agent never sees more than the person asking, so nothing is shown to somebody who may not
+read it), but a team agent answers in shared places too, such as a room, its memory and its knowledge,
+and those are where mail could leak. This question is how a team agent may touch mail at all.
+
+**Option A: a team agent reads only a shared mailbox.** An administrator connects a team address (for
+example a support or sales mailbox that the whole team already shares) to the team agent. A person's own
+mail is never available to a team agent; it is only available to that person's personal agent. Simplest,
+and nothing can leak because nothing personal is ever connected to a team agent.
+
+**Option B: a team agent may use the asking person's own mail, in a private conversation only.** When
+Priya asks the team agent a question in her own private conversation, it may read Priya's mail with her
+own connection, for her, and show only her. Never in a room or a thread others can read, never written
+to the team agent's memory, knowledge or logs beyond her own run. Others who ask the same agent get
+nothing from her mail. More useful, and more places to get wrong.
+
+**Option C: both.** A shared mailbox an administrator connects for team mail, and a person's own mail
+available to a team agent only in that person's private conversation, never in a room, memory or
+knowledge.
+
+**My recommendation:** C, built as A first. The shared mailbox is the safe part and covers the team mail
+people actually share; the private-conversation path adds the personal part later, behind its own switch,
+once its refusals (a room, a memory, a log) have each been proved on your install.
+
+**What I need from you:** reply "189: A", "189: B" or "189: C". (Tasks M39.10.4 and M39.10.5.)
+
+## 188. Five console tasks ask for something the design deliberately does not do: narrow each?
+
+**In plain terms:** while proving the console tasks on your install, five of them turned out to ask for
+a thing the product was built not to do. Each is listed with what is built and what the task text asks.
+I recommend narrowing every one to what is built, and saying so on the task, rather than building the
+thing, because each would weaken a rule you set.
+
+1. **Who can see a named record (task 15.62).** The task says no screen may answer "who can see this
+   record". Your 2026-09-18 decision added a record access view, shown only to a person who can already
+   see that record. The task text is stale. Recommendation: narrow the task to the view that exists.
+2. **Identity provider and embedding size (tasks 15.49 and 11.4).** Both are read-only in Settings,
+   because changing either from a browser can lock every person out. The tasks ask for a console change
+   that updates redirect addresses. Recommendation: keep them read-only and move the change to the
+   installer's own command.
+3. **Switching modules on (task 8.10).** Modules cannot be enabled from Features; only flags can.
+   Recommendation: narrow the task to flags.
+4. **A service account's owner (task 15.26).** A service account's owner is always the person who
+   created it, never a field someone can edit. The task asks for owner and expiry to change from the
+   console. Recommendation: allow the expiry to change and keep the owner fixed.
+5. **Resolving an unknown side effect (tasks 13.3 and 15.46).** An action whose result is unknown can
+   leave that state only by being verified with the outside system. The tasks ask for a person to mark
+   it resolved, and for a button that re-sends a failed message. Recommendation: keep verification as
+   the only way out, and add the re-send button as a separate, smaller task.
+
+Budget stopping (tasks 12.5 and 7.15) waits on item 169 and is not repeated here.
+
+**Option A: narrow all five as recommended.** The tasks then close on what is built and proved.
+
+**Option B: build any of them as written.** Tell me which; each is a design change and a migration or a
+route, and 5 in particular needs your sign-off because a person's word would replace a check.
+
+**What I need from you:** reply "188: A", or "188: B" with the numbers you want built.
+
+## 187. Should the chat tools show progress while an answer is being made?
+
+**In plain terms:** your brief says an answer streams to the person with named steps ("looking in the price
+list", "checking what you may read") and that this holds on each way of asking: the web, Lark, Slack, Teams,
+Telegram, WhatsApp, email and the REST API. Today only the web page streams. On the chat tools the person
+sends a question and sees nothing until the finished answer arrives, because each chat tool's adapter was
+written to send one message, and the three that could edit a message as it grows were left switched off on
+purpose: editing once per word runs into each tool's rate limit and would spend the allowance kept for
+closing the answer. So the sentence "with progress streamed" is not true on any chat channel, and I should not
+write a check that pretends it is.
+
+**Option A: a short, named progress line that is edited in place, a few times per answer.** The chat tool
+gets "Looking in your documents" within a second or two, then the line is edited as each named step
+finishes (at most five edits), and the last edit is the answer. Only where the tool lets a message be edited
+(Lark and Teams today); Slack, Telegram, WhatsApp and email get the one finished answer, with a one-line
+"working on it" first where the tool allows it. Nothing the person may not read is ever in a progress line:
+the steps are the product's own words, never a document name.
+
+**Option B: stream the words as they are written.** What the web does. Rejected for chat: one edit per few
+words against each tool's rate limit, and a half-written answer sitting in a room that a later check might
+withhold.
+
+**Option C: leave chat as it is, and say so.** One finished answer on every chat tool, progress on the web
+only. I would then narrow the sentence in the register and say so on the Channels screen.
+
+**My recommendation:** A. It keeps the rate limits, never shows a half answer, and gives a person the
+reassurance the brief is after. I will build it behind a switch that ships off, and prove it on your install
+by asking a real question in Lark and reading the edits.
+
+**What I need from you:** reply "187: A", "187: B" or "187: C".
+
 ## 186. While a new embedding model is built, may answers use the old search index?
 
 **In plain terms:** search by meaning works by storing, beside every passage, a list of numbers that
@@ -265,220 +360,6 @@ scope to compare it with and nothing to refuse on.
 
 **What I need from you:** reply "182: A" or "182: B".
 
-## 181. Where should the audit screen's count of redactions come from?
-
-**In plain terms:** the Activity screen is meant to show an auditor two statistics: how often each kind of
-refusal happened, and how many entries carried a redaction (a value the ledger replaced with a marker
-instead of keeping). The count of redactions reads the marker out of the ledger's own entries. On a real
-install nothing writes that marker: every ledger entry on an install is written by the database itself from
-field names, so none of them can carry one, and the figure can only ever read nought. It is not wrong, it is
-a number that cannot move.
-
-**Option A: count the requests whose answer was redacted.** Each question's telemetry already records how
-many fields were redacted from its answer. Counted over the window, that is the figure an auditor means. The
-catch is that telemetry has no idea who may see it, so the count has to be kept to the readers who may see
-every request, or it would tell someone how much happened that they cannot see.
-
-**Option B: leave it as it is.** The count stays at nought on every install, which is true and tells the
-auditor nothing, and the leaf stays open.
-
-**My recommendation:** A, shown only to a reader whose audit grant covers everybody, as the company
-consumption figure is.
-
-**What I need from you:** nothing, or reply "181: B". (Task M33.4.1.3; the refusal half is built and works.)
-
-## 180. Does an agent have tools and workflows as parts of its own, and which kinds of memory is it told apart by?
-
-**In plain terms:** the task for an agent's composition lists twelve parts (persona, knowledge scope,
-connectors, skills, tools, workflows, channels, availability, leash, model policy, memory, automations). The
-page and the code have ten: there is no part for tools (they are attached, but not drawn as a part) and none
-for workflows. Separately, the task for memory says an agent is set up with which of five kinds it may read
-and write (the conversation, the task, the project, the person and its own). The memory built has three kinds:
-session, persistent and adaptive, told apart by how long they live, not by what they are about.
-
-**Option A: add tools as a part, and treat workflows as automations; keep memory's three kinds.** Tools are
-real and already attached per agent. A workflow is today what an automation runs, so it does not need its own
-row. For memory, the three built kinds stay and an agent's setting is which of them it may read and write.
-
-**Option B: add all of it as written.** Tools and workflows as separate parts, and five memory kinds, which is
-a new way of sorting everything the Brain remembers and would need a migration for what is stored.
-
-**My recommendation:** A. It uses what exists, and a workflow that is more than an automation can be added as
-a part the day one exists (the stored, versioned workflows of M17.4.2).
-
-**What I need from you:** nothing, or reply "180: B". (Tasks M39.1.1.1 and M39.7.1.)
-
-## 179. What is the ceiling that a leash may not be raised beyond?
-
-**In plain terms:** the task for a department administrator's leash says they can lower a leash at once but
-never raise one beyond "the ceiling". Nothing says which ceiling, and there are three it could mean.
-
-**Option A: the rung the agent was published at.** Publishing an agent is approved (by two people when it
-widens anything), so the rung it went out at is the most any later press may reach; going higher means
-publishing again. Lowering always works.
-
-**Option B: the default rung of what the tool does.** Reading may go to Autonomous, writing and sending to
-Assisted, and anything touching money stays at Shadow for ever. This is the rule the gate already applies
-when a run happens. It would also mean a money action could never be promoted, which contradicts the other task
-that lets a money rung rise with two approvers.
-
-**Option C: no ceiling beyond the evidence.** A rise needs counted clean runs and a named approver, as built,
-and a money rise needs two. Nothing else.
-
-**My recommendation:** A. It is the only one of the three that is decided by people in advance and does not
-fight the money rule.
-
-**What I need from you:** nothing, or reply "179: B" or "179: C". (Task M33.2.2.4.)
-
-## 178. Who may change which part of an agent, and should a refusal name the role?
-
-**In plain terms:** the task for an agent's parts says each has a named editor: the owner for persona,
-knowledge, skills, memory and automations; the department's administrator for connectors, channels, ceiling
-and leash; the super admin for model policy. And the refusal names the role it needs. What is built differs in
-two ways. An agent's steward can also change its connectors and its channels, not only the department's
-administrator. And the refusals disagree: tools, connectors, the leash and the budget say which role is needed,
-but the model setting and the Connectors screen answer as if the thing did not exist, so nobody learns which
-role to ask.
-
-**Option A: the task as written.** Only the department's administrator changes connectors and channels, the
-steward no longer can, and every refusal names its role. The role is not a secret: a person who can open the
-page already knows the part exists, and naming the role only tells them whom to ask.
-
-**Option B: keep the steward able to change them, and name the role in every refusal.** The steward is
-trusted with the agent, and each connector they attach is still limited by what they can read themselves.
-
-**Option C: leave it.** Some refusals name a role and some do not.
-
-**My recommendation:** B, because the steward already answers for the agent and cannot hand it a source they
-could not read; and the refusals should name the role everywhere a person can already see the page.
-
-**What I need from you:** nothing, or reply "178: A" or "178: C". (Tasks M39.8.1 and M33.8.3.)
-
-## 177. Which conditions may an automation's trigger carry?
-
-**In plain terms:** the New automation flow on an agent's page lets a person choose when an automation
-runs: on a schedule, when something happens in a connected system, or when another system calls it. They
-may also want a condition on top, such as "only when an invoice is more than seven days overdue". The
-question is how free that condition is. This sits behind the trigger kinds (task M17.4.1), so nothing is
-built for it yet.
-
-**Option A: a short named list.** A condition is one comparison of a field a connected system reports
-against a value: equals, is over, is under, contains, is within some days of now. Chosen from lists in the
-form, shown on the automation's card in words, and checked at the person's own reach. No code, and
-nothing that could read what the person cannot.
-
-**Option B: no conditions at first.** A trigger only says when to look. The automation's instruction
-(what the agent is told to do) decides whether there is anything to do that time. Simplest, and an
-automation that fires and finds nothing to do costs a run each time.
-
-**Option C: free expressions.** Rejected: an expression is code, and code in a condition is a way to
-reach data the person's grants do not allow.
-
-**My recommendation:** A, built after the trigger kinds. B is the fallback if you would rather start with
-less.
-
-**What I need from you:** nothing, or reply "177: B".
-
-## 176. Where does a document added from an agent's own page live?
-
-**In plain terms:** you asked for a Knowledge section on each agent's page, where a person adds
-documents and web pages as that agent's own context, as the AnyGen workspace does ("Add some context for
-the team": extract from links, upload from a device). Our knowledge is the company's, and every document
-says who may read it. So the question is whether what a person adds on an agent's page is the company's
-document like any other, or private to that one agent.
-
-**Option A: the company's document, as recommended.** The item joins the company's knowledge in the
-department or collection the person chooses (the one the agent's rule already draws on, by default), with
-the same classification and the same access as any document. The agent's section lists the items its rule
-reaches, and if the new one is outside that rule it says so and offers one press to widen the rule
-through a draft. The item also appears on the Knowledge page, and any other agent whose rule reaches it
-can draw on it. Nobody can read through an agent anything they could not read otherwise.
-
-**Option B: private to the agent.** The item is readable only by that agent's runs, and anybody who may
-run the agent gets answers from it. Easier to picture, but it is a second way to read a document, one
-that skips the reader's own access: somebody with no access to a contract could ask the agent that holds
-it. It would need a new permission design and breaks the rule that an agent is a lens and never a
-principal.
-
-**My recommendation:** A. It is what the code is built for (adding an item is not the same as the agent
-reaching it), and the section exists to say which it is. I am building it as A; "176: B" changes that.
-
-**What I need from you:** nothing, or reply "176: B".
-
-## 175. Which tools may the part of a model request that everybody shares hold?
-
-**In plain terms:** a model provider charges much less for the start of a request when it has seen the
-same start before, so the product keeps the start identical for everybody and puts what differs from
-person to person after it (M3.7.2). Your architecture says that shared start should list **every tool
-the product has**, with only the tools the person may use following it. The product's own rule says
-the opposite about one thing: a tool a person may not use is **absent** from what the model sees, never
-shown and refused, because a model that has been told about a tool it cannot use will say so ("there is
-a tool for that, but I may not use it for you"), and that sentence tells the person what exists.
-
-Today neither is done. The shared start holds the house rules and the agent's persona and **no tools
-at all**, no marker tells the provider where it may cache, and the list of tools shared by everybody
-is empty on the real question path, so no install has ever shown a cached start being reused. The two
-ways to settle it differ in what the model is told:
-
-**Option A: the shared start holds only the tools every person in the company already holds.** The tools
-only some people hold follow it, different per person, as now. The model never hears of a tool the
-person lacks, so there is nothing for it to repeat. The saving is smaller than the architecture's,
-because the shared part is only what everybody holds.
-
-**Option B: the shared start holds every tool, as the architecture says.** The biggest saving, and the
-same bytes for everybody. The model is then told about tools a person may not use, and the
-product's rule that a missing tool and a forbidden tool look the same to a person is gone for tools.
-
-**My recommendation:** A. A cost saving is not worth a sentence that tells a person what exists, and
-the architecture's reason for the union ("the cached bytes contain no per-user data") is met by A too:
-what is shared is what everybody holds.
-
-I will build it behind a switch that ships off, in either case, and prove it on your install with two
-real questions that reach the model, showing the second reuse the first's start. It needs your model
-provider to report cached tokens, which I read from its answer.
-
-**What I need from you:** reply "175: A" or "175: B".
-
-## 174. Should a supervised agent's thirty-day review run by itself each day?
-
-**In plain terms:** an agent you pin to Shadow (the receivables and renewal chaser is the first) is held
-at its bottom rung and is reviewed at thirty days against how often a person accepted its proposed
-actions unchanged. Today the review happens only when a person presses **Review** on the agent's page,
-so a pin whose thirty days are up simply waits, held, until somebody remembers. That is the safe
-direction, but it is not "reviewed at thirty days".
-
-I have built a daily check that does what **Review** does, for every pin whose thirty days are up,
-using the same decision (so it can never find an agent ready that **Review** would not). Below ninety
-percent of at least ten reviewed actions, or with nobody having reviewed enough, it holds the agent for
-another thirty days. At or over ninety it only marks the agent as **eligible**: raising its rung is still
-two people's decision, and nothing is ever released because a date passed. It writes the answer under the
-name `supervision-review`, so the history shows it as the system and not as a person.
-
-It ships **switched off** (Settings, Features, "Review supervised agents at thirty days on a schedule").
-While off it still looks each day and records only how many pins it would have extended or marked
-eligible, and writes nothing about any agent.
-
-Two smaller things you may want to change, both true of the Review button today as well:
-
-- **A review is not written to the audit log.** The pin's own row says who decided and when, but unlike
-  a move of an agent's rung it adds no entry to the tamper-evident ledger. Adding one is a small change
-  to the database that would also cover the button.
-- **An agent whose reviews contradict each other is skipped, not guessed at.** Two people giving
-  different verdicts on one action is left as it is and counted, and the pin stays held until somebody
-  settles it.
-
-**Option A: switch it on (what I recommend once you have seen a day of what it would do).** Pins are
-reviewed at thirty days without anybody pressing anything.
-
-**Option B: leave it off.** Nothing changes: a person presses **Review**, as now.
-
-**My recommendation:** A, after one day with the switch off, so the count it reports (how many it would
-extend, how many it would mark eligible) is what you switch it on against. The audit-log entry is worth
-adding in the same step if you want every review attributable on the ledger as a rung move is.
-
-**What I need from you:** nothing yet, or reply "174: A" to switch it on, or "174: B", or "174: A, and
-add the audit-log entry".
-
 ## 173. Connect Google Workspace so each person's own mail, calendar and documents can be asked about
 
 **In plain terms:** the Brain can read a person's own Gmail, Google Calendar and Google Drive to answer
@@ -521,105 +402,7 @@ worth having your own account connected and checked first.
 
 **What I need from you:** the steps above, or reply "173: B".
 
-## 172. When an automation keeps failing and is paused, should its agent's questions stop too?
-
-**In plain terms:** you can now stop one agent on its own (the stop screen's agent scope), and a stop on
-an agent refuses that agent's questions and its automations. Separately, when an automation fails
-repeatedly the Brain pauses it, so it stops running on its schedule until a person looks. The pause
-builds the same kind of stop, but today only the automation's schedule is held: the agent keeps
-answering people's questions.
-
-**Option A: a pause holds the schedule only (what is built).** A failing automation is a fault in one
-job. People can still ask the agent things, and the steward is told the automation was paused.
-
-**Option B: a pause also stops the agent's questions.** Safer if a failing automation might mean the
-agent itself is misbehaving, but it takes the agent away from everybody for a fault in one job, which is
-wider than a failing automation asked for, and it would stay stopped until somebody lifts it.
-
-**My recommendation:** A. A person who wants the whole agent stopped has the stop screen for that, with
-a written reason.
-
-**What I need from you:** nothing, or reply "172: B".
-
-## 171. Does a test that drives a real browser count as proof that a task works?
-
-**In plain terms:** a task is only closed when a test names it, and until now the check that enforces
-that read only the Python tests and the console's own tests. Four tasks about the console proving itself
-in a browser (two tabs refreshing, a page leaking nothing internal) were proved by the browser tests
-under `e2e/`, which the check never read, so it called them unproved and the build turned red. The
-browser tests are real: they open the product in a browser and press things, which is closer to your
-install than a test over stand-ins.
-
-I have made the check read the browser tests under `e2e/specs` and `e2e/lib` (not the page stubs under
-`e2e/pages`, which assert nothing), the same way it already reads the console's tests. Three deliberate
-breakages of that rule were each caught by a test.
-
-**Option A: browser tests count (what is built).** A task can be closed by a browser test that names it,
-as it can by a Python test or a console test.
-
-**Option B: they do not.** Those four tasks would need a Python test naming them, which would claim a
-Python test proves something that only a browser can show.
-
-**My recommendation:** A. A browser test is stronger evidence than a unit test, and the check still
-refuses a task that no test names.
-
-**What I need from you:** nothing, or reply "171: B".
-
-## 170. Which parts of an agent does the builder list as sections of its own?
-
-**In plain terms:** your plan lists eleven sections in the agent builder. Seven were built from the
-start, and "Connected sources" has now been added as the eighth. Three are not built, for a reason the
-builder's own rule gives: a section has to be a part of the agent's saved definition (its "manifest"),
-and these are not.
-
-- **Workflows (automations).** Automations are installed on each agent from the gallery, one at a
-  time, and that already works. A "workflows" part of the definition would be a second description of
-  the same thing.
-- **Memory.** What an agent remembers and learns comes from its own runs, which a template cannot
-  know in advance. It is already set on the agent's own Memory tab (including pausing learning).
-- **Channels (where it answers).** Decided per install when the agent is published, and changed later
-  from the agent's page (item 162). It is not a property of the template.
-
-**Option A: leave them out of the builder's sections** and let the builder link to where each is
-already set (the Automations gallery, the Memory tab, the publish step's channel choice). No change to
-what the product stores.
-
-**Option B: add them as parts of the definition.** A template could then carry default workflows,
-memory settings and channels. It needs a change to the stored definition (a database change), and a
-decision on which defaults, and it makes two places hold the same setting.
-
-**My recommendation:** A. Each of the three is already set in exactly one place; B would add a second.
-
-**What I need from you:** nothing, or reply "170: B".
-
-## 169. When should spending limits start to really stop requests?
-
-**In plain terms:** you chose how a spending limit should behave: warn first, then stop until the next
-period. Departments and agents have limits stored and versioned, and your screens show allowances. But
-**nothing enforces them today**: a department can spend past its limit with nothing stopping it, because
-the part that decides "this request is over the limit" is built and tested and not yet called by any
-request. That is the opposite of the risk you might expect, and it means no agent has ever been held at
-a limit.
-
-I am building enforcement **switched off**, as every new feature ships. While it is off, each request
-that *would have been stopped* is noted (the limit and the department, never the question), and the
-Spend screen shows those, so you can see what switching it on would do before it does it. When it is on,
-the first request over a limit opens a stop, warns the limit's owner, and every request in that
-department gets a plain sentence that a spending limit has been reached, until the next period starts.
-If the Brain cannot read the limits or the spend, requests are answered as they are today: a fault in
-the budget records never stops people working.
-
-**Option A: switch it on after you have seen a week of "would have stopped" figures.** I bring you
-the figures and you say when.
-
-**Option B: switch it on as soon as it ships.** Every limit already set starts to bite at once.
-
-**Option C: keep it off.** Limits stay warnings on the screens.
-
-**My recommendation:** A. Switching it on blind could start refusing requests on the day it ships.
-
-**What I need from you:** nothing yet. I will bring the figures after the first week, or reply "169: B"
-or "169: C".
+**Direction from you, 2026-10-12.** There are two kinds of agent, a **team agent** and a **personal agent**. Anybody may create their own personal agent from the builder. A department administrator or a super administrator may create both kinds. A person connects their own Gmail to their personal agent and nothing is shared, because it is theirs alone. For a team agent the person's mail must not reach anybody else, so item 189 asks how a team agent may use mail. The requirement and its tasks are on the plan (ANY-060, tasks M39.10.1 to M39.10.7). The steps above stay yours to do once.
 
 ## 167. Does a chat room or channel belong to exactly one agent?
 
@@ -644,74 +427,7 @@ leaks nothing. C can be added later without undoing it. I will not build it unti
 
 **What I need from you:** reply "167: A", "167: B" or "167: C".
 
-## 166. May an agent's own run send something without a person approving it?
-
-**In plain terms:** agents now run with tools they can call while they answer (the agent runtime).
-When an agent proposes an action that changes something outside the Brain, such as replying to a
-ticket, the Brain holds it for a person to approve, and only an approved action is sent. That is how it
-is built today, at every autonomy level. Your plan has agents earning higher levels through evidence,
-and at the higher levels an action could be sent with no person asked each time. **No agent has earned a
-higher level yet**, and a model's own words sending a real message or changing a real record with nobody
-asked is a bigger step than anything else in the runtime.
-
-**Option A: always held, for now.** A run's actions always wait for a person. Higher levels are
-reconsidered once agents have a track record on your install.
-
-**Option B: sent without approval at the higher levels.** Above the assisted level, an action the agent
-proposes is sent at once, through the same record of every operation and the same checks of who may do
-what. Each send is on the ledger, and you can stop any agent from the Stop screen.
-
-**My recommendation:** A. Nothing is lost by waiting, and if you want B later it is a small change.
-
-**What I need from you:** nothing, or reply "166: B".
-
-## 165. May an administrator choose how a connected source's own permissions are followed?
-
-**In plain terms:** some sources keep their own rules about who may see what (a shared folder, a
-private channel). For each connected source the Brain follows those rules in one of two ways: it asks
-the source about the person on every question, or it keeps a copy of the source's rule and checks it
-itself. Today which way is fixed by the connector as it was written, and the screen shows it. Your plan
-says an administrator *sets* it per connector (M33.5.1.3), and that choice was narrowed in the code
-without asking you. The Brain's own grants always apply as well, whichever way is used.
-
-**Option A: settable, but only towards stricter.** The screen offers the ways the connector supports,
-and an administrator may switch a source to a stricter one or off the source's rules altogether
-(leaving only the Brain's own grants); a way the connector cannot do is never offered. Each change is
-on the ledger.
-
-**Option B: keep it fixed by the connector.** The screen keeps saying which way it is, and changing it
-means a new version of the connector.
-
-**My recommendation:** A. It is what you asked for, and it can only ever make a source more careful.
-I will not build it until you answer.
-
-**What I need from you:** reply "165: A" or "165: B".
-
-## 164. Should your install scan uploaded files with an antivirus?
-
-**In plain terms:** every uploaded file is already checked for the shapes that attack a file reader
-(macros, scripts, broken archives), on every install. What no install has yet is an antivirus that
-recognises known malware. The Brain can use one (ClamAV, a free antivirus): set it on and every upload
-is scanned, and if the scanner is down an upload is refused rather than read unscanned. **But nothing
-in the product installs ClamAV yet**, so today the setting would point at nothing. One task waits on
-this (M7.1.3, a known test virus is refused).
-
-ClamAV holds its virus database in memory, commonly 1 to 1.5 GB; I would measure it on your server before you switch it on. Your server has roughly
-**376 MB** of its memory budget unclaimed after the sign-in service fix, so it does not fit today
-without taking memory from something else.
-
-**Option A: add ClamAV as an optional service, switched on later.** I build it the same way as the
-privacy detector (one word on Settings starts it, nothing changes until then), and you switch it on when
-item 120's memory work or a larger server makes room.
-
-**Option B: no antivirus.** Uploads keep the structural check only; the three checks are marked as not
-applying to your install, and the page says what that means: a known virus inside an ordinary document
-is not recognised.
-
-**My recommendation:** A. The build costs nothing on your server until it is switched on, and every
-other company that installs the Brain gets the choice too.
-
-**What I need from you:** reply "164: A" or "164: B".
+**Your reply, 2026-10-12.** "An agent can be called from multiple channels: web, Lark, Slack and so on." That is how it is built: an agent is switched on for each channel separately and is not tied to one. The question above is the other direction, whether one chat room may have more than one agent, so I will build option A (one room, one agent) unless you reply "167: B" or "167: C".
 
 ## 163. What stops tasks being proved on your install: one list
 
@@ -736,187 +452,6 @@ change. Each line is one action and points to the item with its steps. Nothing h
 
 **What I need from you:** nothing new; work down the list when you can, and tell me after each step so I
 run the checks again.
-
-## 162. May a new agent be put on your website's chat widget?
-
-**In plain terms:** an agent now answers only on the channels switched on for it, and the switch offers
-a channel only where the agent is allowed to work on it (M13.7.4 and M39.2.4.2). The console and the
-API answer the person asking, in their own signed-in session, so they are offered by name. Your
-website's chat widget is different: it answers visitors who are not signed in, and you decided it gives
-public knowledge only and never asks anybody to log in (item 26). Nothing yet says which agents are
-safe to face the public, so **the switch does not offer the widget at all**. An agent already on it
-keeps it and can be switched off it; no agent can be newly put on it.
-
-**Option A: allow it for an agent that can read only public knowledge.** The widget is offered on an
-agent whose ceiling holds nothing but the knowledge you marked public, checked by the same rule that
-decides what any channel may carry. An agent that can read anything more is never offered it.
-
-**Option B: keep it as built.** The widget keeps whichever agents answer on it today, and a new one is
-put there only by a change to the product.
-
-**My recommendation:** A. It keeps item 26's promise by construction, and lets you replace the website's
-agent without a release. I will not build it until you answer.
-
-**What I need from you:** reply "162: A" or "162: B".
-
-## 161. Before a skill is approved, its examples are rehearsed: what "rehearsed" means for now
-
-**In plain terms:** your plan says a skill's examples are rehearsed before anyone may approve it
-(M12.3.4). A skill will carry its examples inside its own file, each a task and the tools it should
-need, so a new version brings its own. Approving a version will be refused until its examples have
-been rehearsed against that exact version.
-
-Today a rehearsal asks no AI model anything. It checks that an agent holding the skill can reach every
-tool each example needs, for the person approving it, and records that. It does not yet judge whether
-the answer an example would get is a good one.
-
-**That is the narrowing.** Agents can now run with tools through one path (the agent runtime, being
-landed now), so the next step is a rehearsal that actually runs each example and shows the approver
-what it did, with nothing sent or changed. The record is built so that result can be added to it
-later.
-
-**Option A: build the reach check now, and add the real run once the agent runtime is live.**
-Approval is checked for what it can be today, and the screen says what was and was not checked.
-
-**Option B: hold approval-by-rehearsal until examples can be run for real.** Skills are approved as
-today until then.
-
-One more choice inside A: **a skill version with no examples at all is not held**, so the skills
-already in the library can still be reviewed. That also means somebody could leave examples out to
-skip the rehearsal. The alternative is to require at least one example on every new version.
-
-**My recommendation:** A, and versions without examples not held for now. I am building it that way.
-
-**What I need from you:** nothing, or reply "161: B", or "161: A, but require examples".
-
-## 160. May a department's administrator stop one of that department's agents?
-
-**In plain terms:** the Stop control can now stop one agent on its own (M13.7.3), as well as a
-connector, a department, a person or everything. Today only an administrator for the whole company can
-stop a single agent, because a stopped agent is recorded without a department, and a department's
-administrator may only stop things inside their department.
-
-**Option A: allow it.** When a department's administrator presses Stop on an agent, the Brain looks up
-the agent's department at that moment and records it, so the stop is theirs to make and theirs to lift.
-An agent with no department, or one shared across departments, stays a company-wide administrator's to
-stop.
-
-**Option B: keep it as built.** A department's administrator who wants an agent stopped stops their
-whole department, or asks a company-wide administrator.
-
-**My recommendation:** A. A department's administrator is the person nearest to an agent misbehaving
-in their department, and stopping is the safe direction. I will not build it until you answer.
-
-**What I need from you:** reply "160: A" or "160: B".
-
-## 159. When a client's name matches two records you can both see, the Brain says so
-
-**In plain terms:** ask "what does Acme owe us?" when two client records answer to "Acme" (one in
-Xero, one in HubSpot, say) and the Brain has not decided whether they are the same client. Today it
-gives the same sentence it gives when there is no such client at all. Your plan asks for the opposite
-(M14.6.5): say that the name matches more than one client, and never add their figures together.
-
-The rule it changes is one of the Brain's strictest: a person is never told *which kind* of nothing
-happened, because "two records matched" and "nothing exists" must not be told apart when one of the
-records is hidden from them. **That still holds.** The new sentence is given only when every matching
-record is one the person may already read, so it tells them nothing they could not look up. If one of
-the two is hidden from them, they are answered from the one they can see, exactly as if the hidden one
-did not exist, and a test checks the two replies are identical.
-
-Whoever may confirm a merge also gets a link to the "Possible duplicates" review; everybody else gets
-the plain sentence.
-
-**My recommendation:** allow it, as described. I am building it that way.
-
-**What I need from you:** nothing, or reply "159: no" to keep the old single sentence.
-
-## 158. May an automation's canvas have a step where an agent thinks? (optional)
-
-**In plain terms:** every agent now runs through one path, with tools it may call while it answers
-(M13.7.1). The plan says an automation "enters the same agent runtime". The automation canvas you
-have today is deliberately step by step: every step does one fixed thing, and no step asks a model
-anything, so a flow does the same thing every time it runs. That was decided when the canvas was
-built (item 30 and item 124).
-
-So an automation reaches an agent this way instead: **a schedule or a trigger starts an agent**, at
-the reach of the person the automation runs for, and the agent's answer is what the flow produces.
-Nothing changes on the canvas.
-
-**Option A, as built: the canvas stays fixed steps, and an agent is started by a schedule or a
-trigger.** A flow is predictable, and its steps can be read and checked.
-
-**Option B: add an "ask an agent" step inside a canvas.** A flow can then decide things midway, which
-also means it can do something different each time it runs, and its runs are harder to check.
-
-**My recommendation:** A. Nothing waits on this; I am building A.
-
-**Two things I decided for you while building, as you asked me to decide routine items** (tell me if
-either is wrong):
-
-- **Which channels an agent answers on.** An agent now answers only on the channels an administrator
-  switched on for it (M13.7.4). Agents that already exist keep every channel they reach today, so
-  nobody loses anything. A new agent starts with none, and the agent builder asks which channels to
-  switch on, so a new agent is never silent without anybody noticing. Asking for an agent on a channel
-  it is not on gets exactly the same reply as asking for an agent that does not exist.
-- **Where the client-matching weights are kept.** Your decision (f) put them in the exports volume. On
-  an install whose compose file Coolify stores, a release cannot add that volume to the application,
-  so the weights would never be written. They are kept in the Brain's own settings instead, readable
-  only by the worker and by whoever may confirm a merge. The offline matcher still writes its export to
-  the volume where the full install has one.
-
-**What I need from you:** nothing, or reply "158: B" if you want the canvas step.
-
-## 157. One line for your install's database pooler
-
-**In plain terms:** the Brain reaches your database through a pooler that lends out a fixed number of
-connections. The pooler counted its limit per login, and the application uses two logins, so on a busy
-day it could open twice the 20 connections the Brain plans for. The product now caps it at 20 across
-logins (#378). **Your install does not have that cap yet, because a release never edits the copy of
-the compose file Coolify keeps.** Nothing is broken today; this keeps it that way under load.
-
-**Option A: I do it.** Over SSH, through the tunnel to Coolify, I add the one line below to the
-`pgbouncer` service's `environment` in Coolify's copy, beside `DEFAULT_POOL_SIZE`, and redeploy once.
-Requests wait at the pooler for a moment while it restarts.
-
-```yaml
-      MAX_DB_CONNECTIONS: "20"
-```
-
-**Option B: you do it.**
-
-1. Open Coolify and choose the Brain application.
-2. Open the compose file editor.
-3. Find the `pgbouncer` service, then the line `DEFAULT_POOL_SIZE: "20"` under `environment`.
-4. Below it, add the line above with the same indentation.
-5. Press Save, then Redeploy.
-
-**My recommendation:** A.
-
-**What I need from you:** reply "157: A" or "157: B, done".
-
-## 156. What is your "maintenance portal"?
-
-**In plain terms:** the Maintenance Agent you asked for (Wave 3, M38.5.3 and M39.8.7) answers a
-maintenance question from your uploaded maintenance knowledge and the ticket desk, and the plan names
-a third source: "the maintenance portal" (M11.9.9). Nothing the Brain reads today is one, and I will
-not guess what it is. It is closely tied to item 137 (where client projects live).
-
-**Option A: maintenance records in your Laravel application.** If each website's maintenance plan,
-its scheduled work and its history sit in the Laravel database, whoever looks after it adds one more
-read-only view for maintenance beside the clients and staff views (and the project view, if you
-choose B in item 137). I write the view for them; the Brain reads only what it shows.
-
-**Option B: a separate system with its own web address and API.** If the portal is another product
-(a maintenance or hosting dashboard with an API), it connects through the new "Add an API" screen:
-you give its API description, a second person approves it, and it is read like any other source.
-
-**Option C: there is no separate portal.** If maintenance lives in Freshdesk tickets and your uploaded
-maintenance documents, the Maintenance Agent uses those two and nothing more, and I drop the third.
-
-**My recommendation:** tell me which is true today; if it is A, choose it together with item 137's B,
-so one change in Laravel adds both views.
-
-**What I need from you:** reply "156: A", "156: B (the portal's name)" or "156: C".
 
 ## 155. Recognising the same client across your systems: two choices before it is switched on
 
@@ -957,6 +492,23 @@ money always waits for a person.
 
 **What I need from you:** reply "155: 1A 2A" (my recommendation), or the options you prefer.
 
+**Your question, 2026-10-12, and the answer.** "Names differ between systems (Xero may say ABC Pte Ltd, Freshdesk
+ABC, the Laravel portal something else), so how will the right data be fetched, and make sure we are not syncing
+everything."
+
+- **The name alone never decides.** For each record the small index keeps its id, its name and, from the choice above,
+  a scrambled fingerprint of its email address, phone number or company registration number. Names are compared after
+  tidying (letters folded, punctuation and endings like Pte Ltd, Sdn Bhd and Inc removed), so "ABC Pte Ltd" and
+  "ABC" are candidates for the same client, but a candidate found only by name is never joined by itself.
+- **Two records with the same fingerprint, neither carrying money, are joined automatically** (choice 2, option A),
+  recorded and undone with one press. Anything weaker, and anything with invoices or deals, goes to the Possible
+  duplicates screen for a person to confirm.
+- **Until a person confirms, the Brain does not guess.** A question about "ABC" that matches two unconfirmed records
+  answers that the name matches more than one client and gives each one's result separately (item 159).
+- **Nothing is synced.** The index is the id, the name and the fingerprint. The answer is read live from each system at
+  the asker's own reach when somebody asks, and nothing it reads is kept in the Brain's tables.
+
+My recommendation stands: reply "155: 1A 2A", or tell me what to change.
 ## 154. One server change for the sealed sandbox: probably no downtime
 
 **In plain terms:** three things you asked for run code the Brain did not write: scripts inside
@@ -1953,6 +1505,614 @@ Record against the Tools area.
   - Computer use (CONA-25, ARC-B-028, OWN-98, OWN-106, ANY-022). This is deferred by your own
     requirement until the browser checks are done.
 - **The rest.** As in check 13.
+
+## 181. Where should the audit screen's count of redactions come from? - DECIDED 2026-10-12: A
+
+**In plain terms:** the Activity screen is meant to show an auditor two statistics: how often each kind of
+refusal happened, and how many entries carried a redaction (a value the ledger replaced with a marker
+instead of keeping). The count of redactions reads the marker out of the ledger's own entries. On a real
+install nothing writes that marker: every ledger entry on an install is written by the database itself from
+field names, so none of them can carry one, and the figure can only ever read nought. It is not wrong, it is
+a number that cannot move.
+
+**Option A: count the requests whose answer was redacted.** Each question's telemetry already records how
+many fields were redacted from its answer. Counted over the window, that is the figure an auditor means. The
+catch is that telemetry has no idea who may see it, so the count has to be kept to the readers who may see
+every request, or it would tell someone how much happened that they cannot see.
+
+**Option B: leave it as it is.** The count stays at nought on every install, which is true and tells the
+auditor nothing, and the leaf stays open.
+
+**My recommendation:** A, shown only to a reader whose audit grant covers everybody, as the company
+consumption figure is.
+
+**What I need from you:** nothing, or reply "181: B". (Task M33.4.1.3; the refusal half is built and works.)
+
+**Decided 2026-10-12: "181: A".** The audit screen counts the requests whose answer was redacted, shown only to a reader whose audit grant covers everybody. To be built (task M33.4.1.3).
+
+## 180. Does an agent have tools and workflows as parts of its own, and which kinds of memory is it told apart by? - DECIDED 2026-10-12: B
+
+**In plain terms:** the task for an agent's composition lists twelve parts (persona, knowledge scope,
+connectors, skills, tools, workflows, channels, availability, leash, model policy, memory, automations). The
+page and the code have ten: there is no part for tools (they are attached, but not drawn as a part) and none
+for workflows. Separately, the task for memory says an agent is set up with which of five kinds it may read
+and write (the conversation, the task, the project, the person and its own). The memory built has three kinds:
+session, persistent and adaptive, told apart by how long they live, not by what they are about.
+
+**Option A: add tools as a part, and treat workflows as automations; keep memory's three kinds.** Tools are
+real and already attached per agent. A workflow is today what an automation runs, so it does not need its own
+row. For memory, the three built kinds stay and an agent's setting is which of them it may read and write.
+
+**Option B: add all of it as written.** Tools and workflows as separate parts, and five memory kinds, which is
+a new way of sorting everything the Brain remembers and would need a migration for what is stored.
+
+**My recommendation:** A. It uses what exists, and a workflow that is more than an automation can be added as
+a part the day one exists (the stored, versioned workflows of M17.4.2).
+
+**What I need from you:** nothing, or reply "180: B". (Tasks M39.1.1.1 and M39.7.1.)
+
+**Decided 2026-10-12: "180: B".** Tools and workflows are parts of an agent in their own right, and memory is told apart in five kinds, as written. Your own words: "agents will have their context/knowledge, skills, connectors, etc": so an agent is composed of separately configured parts, each with its own section on its page. To be built (tasks M39.1.1.1 and M39.7.1; it adds a migration).
+
+## 179. What is the ceiling that a leash may not be raised beyond? - DECIDED 2026-10-12: A
+
+**In plain terms:** the task for a department administrator's leash says they can lower a leash at once but
+never raise one beyond "the ceiling". Nothing says which ceiling, and there are three it could mean.
+
+**Option A: the rung the agent was published at.** Publishing an agent is approved (by two people when it
+widens anything), so the rung it went out at is the most any later press may reach; going higher means
+publishing again. Lowering always works.
+
+**Option B: the default rung of what the tool does.** Reading may go to Autonomous, writing and sending to
+Assisted, and anything touching money stays at Shadow for ever. This is the rule the gate already applies
+when a run happens. It would also mean a money action could never be promoted, which contradicts the other task
+that lets a money rung rise with two approvers.
+
+**Option C: no ceiling beyond the evidence.** A rise needs counted clean runs and a named approver, as built,
+and a money rise needs two. Nothing else.
+
+**My recommendation:** A. It is the only one of the three that is decided by people in advance and does not
+fight the money rule.
+
+**What I need from you:** nothing, or reply "179: B" or "179: C". (Task M33.2.2.4.)
+
+**Decided 2026-10-12: "179: A".** A leash may not be raised beyond the rung the agent was published at. To be built (task M33.2.2.4).
+
+## 178. Who may change which part of an agent, and should a refusal name the role? - DECIDED 2026-10-12: A
+
+**In plain terms:** the task for an agent's parts says each has a named editor: the owner for persona,
+knowledge, skills, memory and automations; the department's administrator for connectors, channels, ceiling
+and leash; the super admin for model policy. And the refusal names the role it needs. What is built differs in
+two ways. An agent's steward can also change its connectors and its channels, not only the department's
+administrator. And the refusals disagree: tools, connectors, the leash and the budget say which role is needed,
+but the model setting and the Connectors screen answer as if the thing did not exist, so nobody learns which
+role to ask.
+
+**Option A: the task as written.** Only the department's administrator changes connectors and channels, the
+steward no longer can, and every refusal names its role. The role is not a secret: a person who can open the
+page already knows the part exists, and naming the role only tells them whom to ask.
+
+**Option B: keep the steward able to change them, and name the role in every refusal.** The steward is
+trusted with the agent, and each connector they attach is still limited by what they can read themselves.
+
+**Option C: leave it.** Some refusals name a role and some do not.
+
+**My recommendation:** B, because the steward already answers for the agent and cannot hand it a source they
+could not read; and the refusals should name the role everywhere a person can already see the page.
+
+**What I need from you:** nothing, or reply "178: A" or "178: C". (Tasks M39.8.1 and M33.8.3.)
+
+**Decided 2026-10-12: "178: A".** The task as written: only the department administrator changes an agent's connectors and channels, and the steward may not. A refusal names the role. To be built (tasks M39.8.1 and M33.8.3).
+
+## 177. Which conditions may an automation's trigger carry? - DECIDED 2026-10-12: A
+
+**In plain terms:** the New automation flow on an agent's page lets a person choose when an automation
+runs: on a schedule, when something happens in a connected system, or when another system calls it. They
+may also want a condition on top, such as "only when an invoice is more than seven days overdue". The
+question is how free that condition is. This sits behind the trigger kinds (task M17.4.1), so nothing is
+built for it yet.
+
+**Option A: a short named list.** A condition is one comparison of a field a connected system reports
+against a value: equals, is over, is under, contains, is within some days of now. Chosen from lists in the
+form, shown on the automation's card in words, and checked at the person's own reach. No code, and
+nothing that could read what the person cannot.
+
+**Option B: no conditions at first.** A trigger only says when to look. The automation's instruction
+(what the agent is told to do) decides whether there is anything to do that time. Simplest, and an
+automation that fires and finds nothing to do costs a run each time.
+
+**Option C: free expressions.** Rejected: an expression is code, and code in a condition is a way to
+reach data the person's grants do not allow.
+
+**My recommendation:** A, built after the trigger kinds. B is the fallback if you would rather start with
+less.
+
+**What I need from you:** nothing, or reply "177: B".
+
+**Decided 2026-10-12: "177: A".** A trigger's condition is one comparison from a short named list, built after the trigger kinds (tasks M39.9.2.1 to M39.9.2.4 and M17.4.1).
+
+## 176. Where does a document added from an agent's own page live? - DECIDED 2026-10-12: A
+
+**In plain terms:** you asked for a Knowledge section on each agent's page, where a person adds
+documents and web pages as that agent's own context, as the AnyGen workspace does ("Add some context for
+the team": extract from links, upload from a device). Our knowledge is the company's, and every document
+says who may read it. So the question is whether what a person adds on an agent's page is the company's
+document like any other, or private to that one agent.
+
+**Option A: the company's document, as recommended.** The item joins the company's knowledge in the
+department or collection the person chooses (the one the agent's rule already draws on, by default), with
+the same classification and the same access as any document. The agent's section lists the items its rule
+reaches, and if the new one is outside that rule it says so and offers one press to widen the rule
+through a draft. The item also appears on the Knowledge page, and any other agent whose rule reaches it
+can draw on it. Nobody can read through an agent anything they could not read otherwise.
+
+**Option B: private to the agent.** The item is readable only by that agent's runs, and anybody who may
+run the agent gets answers from it. Easier to picture, but it is a second way to read a document, one
+that skips the reader's own access: somebody with no access to a contract could ask the agent that holds
+it. It would need a new permission design and breaks the rule that an agent is a lens and never a
+principal.
+
+**My recommendation:** A. It is what the code is built for (adding an item is not the same as the agent
+reaching it), and the section exists to say which it is. I am building it as A; "176: B" changes that.
+
+**What I need from you:** nothing, or reply "176: B".
+
+**Decided 2026-10-12: "176: A".** A document added from an agent's own page is the company's document, reached by the agent's rule or with one press to widen it. Built, and proved by the Knowledge section's install check.
+
+## 175. Which tools may the part of a model request that everybody shares hold? - DECIDED 2026-10-12: A
+
+**In plain terms:** a model provider charges much less for the start of a request when it has seen the
+same start before, so the product keeps the start identical for everybody and puts what differs from
+person to person after it (M3.7.2). Your architecture says that shared start should list **every tool
+the product has**, with only the tools the person may use following it. The product's own rule says
+the opposite about one thing: a tool a person may not use is **absent** from what the model sees, never
+shown and refused, because a model that has been told about a tool it cannot use will say so ("there is
+a tool for that, but I may not use it for you"), and that sentence tells the person what exists.
+
+Today neither is done. The shared start holds the house rules and the agent's persona and **no tools
+at all**, no marker tells the provider where it may cache, and the list of tools shared by everybody
+is empty on the real question path, so no install has ever shown a cached start being reused. The two
+ways to settle it differ in what the model is told:
+
+**Option A: the shared start holds only the tools every person in the company already holds.** The tools
+only some people hold follow it, different per person, as now. The model never hears of a tool the
+person lacks, so there is nothing for it to repeat. The saving is smaller than the architecture's,
+because the shared part is only what everybody holds.
+
+**Option B: the shared start holds every tool, as the architecture says.** The biggest saving, and the
+same bytes for everybody. The model is then told about tools a person may not use, and the
+product's rule that a missing tool and a forbidden tool look the same to a person is gone for tools.
+
+**My recommendation:** A. A cost saving is not worth a sentence that tells a person what exists, and
+the architecture's reason for the union ("the cached bytes contain no per-user data") is met by A too:
+what is shared is what everybody holds.
+
+I will build it behind a switch that ships off, in either case, and prove it on your install with two
+real questions that reach the model, showing the second reuse the first's start. It needs your model
+provider to report cached tokens, which I read from its answer.
+
+**What I need from you:** reply "175: A" or "175: B".
+
+**Decided 2026-10-12: "175: A".** The shared start of a model request holds only the tools every person in the company already holds. To be built (task M3.7.2).
+
+## 174. Should a supervised agent's thirty-day review run by itself each day? - DECIDED 2026-10-12: A
+
+**In plain terms:** an agent you pin to Shadow (the receivables and renewal chaser is the first) is held
+at its bottom rung and is reviewed at thirty days against how often a person accepted its proposed
+actions unchanged. Today the review happens only when a person presses **Review** on the agent's page,
+so a pin whose thirty days are up simply waits, held, until somebody remembers. That is the safe
+direction, but it is not "reviewed at thirty days".
+
+I have built a daily check that does what **Review** does, for every pin whose thirty days are up,
+using the same decision (so it can never find an agent ready that **Review** would not). Below ninety
+percent of at least ten reviewed actions, or with nobody having reviewed enough, it holds the agent for
+another thirty days. At or over ninety it only marks the agent as **eligible**: raising its rung is still
+two people's decision, and nothing is ever released because a date passed. It writes the answer under the
+name `supervision-review`, so the history shows it as the system and not as a person.
+
+It ships **switched off** (Settings, Features, "Review supervised agents at thirty days on a schedule").
+While off it still looks each day and records only how many pins it would have extended or marked
+eligible, and writes nothing about any agent.
+
+Two smaller things you may want to change, both true of the Review button today as well:
+
+- **A review is not written to the audit log.** The pin's own row says who decided and when, but unlike
+  a move of an agent's rung it adds no entry to the tamper-evident ledger. Adding one is a small change
+  to the database that would also cover the button.
+- **An agent whose reviews contradict each other is skipped, not guessed at.** Two people giving
+  different verdicts on one action is left as it is and counted, and the pin stays held until somebody
+  settles it.
+
+**Option A: switch it on (what I recommend once you have seen a day of what it would do).** Pins are
+reviewed at thirty days without anybody pressing anything.
+
+**Option B: leave it off.** Nothing changes: a person presses **Review**, as now.
+
+**My recommendation:** A, after one day with the switch off, so the count it reports (how many it would
+extend, how many it would mark eligible) is what you switch it on against. The audit-log entry is worth
+adding in the same step if you want every review attributable on the ledger as a rung move is.
+
+**What I need from you:** nothing yet, or reply "174: A" to switch it on, or "174: B", or "174: A, and
+add the audit-log entry".
+
+**Decided 2026-10-12: "174: A".** The thirty-day review of a supervised agent runs by itself each day. It ships switched off like every new behaviour and you switch it on from Features on your own install; the first day it only counts what it would do, as recommended.
+
+## 172. When an automation keeps failing and is paused, should its agent's questions stop too? - DECIDED 2026-10-12: A
+
+**In plain terms:** you can now stop one agent on its own (the stop screen's agent scope), and a stop on
+an agent refuses that agent's questions and its automations. Separately, when an automation fails
+repeatedly the Brain pauses it, so it stops running on its schedule until a person looks. The pause
+builds the same kind of stop, but today only the automation's schedule is held: the agent keeps
+answering people's questions.
+
+**Option A: a pause holds the schedule only (what is built).** A failing automation is a fault in one
+job. People can still ask the agent things, and the steward is told the automation was paused.
+
+**Option B: a pause also stops the agent's questions.** Safer if a failing automation might mean the
+agent itself is misbehaving, but it takes the agent away from everybody for a fault in one job, which is
+wider than a failing automation asked for, and it would stay stopped until somebody lifts it.
+
+**My recommendation:** A. A person who wants the whole agent stopped has the stop screen for that, with
+a written reason.
+
+**What I need from you:** nothing, or reply "172: B".
+
+**Decided 2026-10-12: "172: A".** A pause holds the schedule only, as built. A person who wants the whole agent stopped uses the Stop screen.
+
+## 171. Does a test that drives a real browser count as proof that a task works? - DECIDED 2026-10-12: A
+
+**In plain terms:** a task is only closed when a test names it, and until now the check that enforces
+that read only the Python tests and the console's own tests. Four tasks about the console proving itself
+in a browser (two tabs refreshing, a page leaking nothing internal) were proved by the browser tests
+under `e2e/`, which the check never read, so it called them unproved and the build turned red. The
+browser tests are real: they open the product in a browser and press things, which is closer to your
+install than a test over stand-ins.
+
+I have made the check read the browser tests under `e2e/specs` and `e2e/lib` (not the page stubs under
+`e2e/pages`, which assert nothing), the same way it already reads the console's tests. Three deliberate
+breakages of that rule were each caught by a test.
+
+**Option A: browser tests count (what is built).** A task can be closed by a browser test that names it,
+as it can by a Python test or a console test.
+
+**Option B: they do not.** Those four tasks would need a Python test naming them, which would claim a
+Python test proves something that only a browser can show.
+
+**My recommendation:** A. A browser test is stronger evidence than a unit test, and the check still
+refuses a task that no test names.
+
+**What I need from you:** nothing, or reply "171: B".
+
+**Decided 2026-10-12: "171: A".** A browser test counts as proof when it names the task, as built.
+
+## 170. Which parts of an agent does the builder list as sections of its own? - DECIDED 2026-10-12: A
+
+**In plain terms:** your plan lists eleven sections in the agent builder. Seven were built from the
+start, and "Connected sources" has now been added as the eighth. Three are not built, for a reason the
+builder's own rule gives: a section has to be a part of the agent's saved definition (its "manifest"),
+and these are not.
+
+- **Workflows (automations).** Automations are installed on each agent from the gallery, one at a
+  time, and that already works. A "workflows" part of the definition would be a second description of
+  the same thing.
+- **Memory.** What an agent remembers and learns comes from its own runs, which a template cannot
+  know in advance. It is already set on the agent's own Memory tab (including pausing learning).
+- **Channels (where it answers).** Decided per install when the agent is published, and changed later
+  from the agent's page (item 162). It is not a property of the template.
+
+**Option A: leave them out of the builder's sections** and let the builder link to where each is
+already set (the Automations gallery, the Memory tab, the publish step's channel choice). No change to
+what the product stores.
+
+**Option B: add them as parts of the definition.** A template could then carry default workflows,
+memory settings and channels. It needs a change to the stored definition (a database change), and a
+decision on which defaults, and it makes two places hold the same setting.
+
+**My recommendation:** A. Each of the three is already set in exactly one place; B would add a second.
+
+**What I need from you:** nothing, or reply "170: B".
+
+**Decided 2026-10-12: "170: A".** The three parts (workflows, knowledge and channels) are not sections of the builder's definition: the builder links to the one place each is set. The leaves that waited on this are narrowed to that link.
+
+## 169. When should spending limits start to really stop requests? - DECIDED 2026-10-12: A
+
+**In plain terms:** you chose how a spending limit should behave: warn first, then stop until the next
+period. Departments and agents have limits stored and versioned, and your screens show allowances. But
+**nothing enforces them today**: a department can spend past its limit with nothing stopping it, because
+the part that decides "this request is over the limit" is built and tested and not yet called by any
+request. That is the opposite of the risk you might expect, and it means no agent has ever been held at
+a limit.
+
+I am building enforcement **switched off**, as every new feature ships. While it is off, each request
+that *would have been stopped* is noted (the limit and the department, never the question), and the
+Spend screen shows those, so you can see what switching it on would do before it does it. When it is on,
+the first request over a limit opens a stop, warns the limit's owner, and every request in that
+department gets a plain sentence that a spending limit has been reached, until the next period starts.
+If the Brain cannot read the limits or the spend, requests are answered as they are today: a fault in
+the budget records never stops people working.
+
+**Option A: switch it on after you have seen a week of "would have stopped" figures.** I bring you
+the figures and you say when.
+
+**Option B: switch it on as soon as it ships.** Every limit already set starts to bite at once.
+
+**Option C: keep it off.** Limits stay warnings on the screens.
+
+**My recommendation:** A. Switching it on blind could start refusing requests on the day it ships.
+
+**What I need from you:** nothing yet. I will bring the figures after the first week, or reply "169: B"
+or "169: C".
+
+**Decided 2026-10-12: "169: A".** Spending limits that really stop requests are built and ship switched off. I bring you a week of "would have stopped" figures after you switch the first limits on, and you say when to enforce.
+
+## 166. May an agent's own run send something without a person approving it? - DECIDED 2026-10-12: B
+
+**In plain terms:** agents now run with tools they can call while they answer (the agent runtime).
+When an agent proposes an action that changes something outside the Brain, such as replying to a
+ticket, the Brain holds it for a person to approve, and only an approved action is sent. That is how it
+is built today, at every autonomy level. Your plan has agents earning higher levels through evidence,
+and at the higher levels an action could be sent with no person asked each time. **No agent has earned a
+higher level yet**, and a model's own words sending a real message or changing a real record with nobody
+asked is a bigger step than anything else in the runtime.
+
+**Option A: always held, for now.** A run's actions always wait for a person. Higher levels are
+reconsidered once agents have a track record on your install.
+
+**Option B: sent without approval at the higher levels.** Above the assisted level, an action the agent
+proposes is sent at once, through the same record of every operation and the same checks of who may do
+what. Each send is on the ledger, and you can stop any agent from the Stop screen.
+
+**My recommendation:** A. Nothing is lost by waiting, and if you want B later it is a small change.
+
+**What I need from you:** nothing, or reply "166: B".
+
+**Decided 2026-10-12: "166: B".** Above the assisted level an action an agent's own run proposes is sent at once, through the same record of every operation and the same checks of who may do what; each send is on the ledger and any agent can be stopped from the Stop screen. Built behind a switch that ships off, so a company chooses it, and no agent has a level above assisted until it earns one.
+
+## 165. May an administrator choose how a connected source's own permissions are followed? - DECIDED 2026-10-12: A
+
+**In plain terms:** some sources keep their own rules about who may see what (a shared folder, a
+private channel). For each connected source the Brain follows those rules in one of two ways: it asks
+the source about the person on every question, or it keeps a copy of the source's rule and checks it
+itself. Today which way is fixed by the connector as it was written, and the screen shows it. Your plan
+says an administrator *sets* it per connector (M33.5.1.3), and that choice was narrowed in the code
+without asking you. The Brain's own grants always apply as well, whichever way is used.
+
+**Option A: settable, but only towards stricter.** The screen offers the ways the connector supports,
+and an administrator may switch a source to a stricter one or off the source's rules altogether
+(leaving only the Brain's own grants); a way the connector cannot do is never offered. Each change is
+on the ledger.
+
+**Option B: keep it fixed by the connector.** The screen keeps saying which way it is, and changing it
+means a new version of the connector.
+
+**My recommendation:** A. It is what you asked for, and it can only ever make a source more careful.
+I will not build it until you answer.
+
+**What I need from you:** reply "165: A" or "165: B".
+
+**Decided 2026-10-12: "165: A".** An administrator may set how a connected source's own permissions are followed, only towards stricter.
+
+## 164. Should your install scan uploaded files with an antivirus? - DECIDED 2026-10-12: A
+
+**In plain terms:** every uploaded file is already checked for the shapes that attack a file reader
+(macros, scripts, broken archives), on every install. What no install has yet is an antivirus that
+recognises known malware. The Brain can use one (ClamAV, a free antivirus): set it on and every upload
+is scanned, and if the scanner is down an upload is refused rather than read unscanned. **But nothing
+in the product installs ClamAV yet**, so today the setting would point at nothing. One task waits on
+this (M7.1.3, a known test virus is refused).
+
+ClamAV holds its virus database in memory, commonly 1 to 1.5 GB; I would measure it on your server before you switch it on. Your server has roughly
+**376 MB** of its memory budget unclaimed after the sign-in service fix, so it does not fit today
+without taking memory from something else.
+
+**Option A: add ClamAV as an optional service, switched on later.** I build it the same way as the
+privacy detector (one word on Settings starts it, nothing changes until then), and you switch it on when
+item 120's memory work or a larger server makes room.
+
+**Option B: no antivirus.** Uploads keep the structural check only; the three checks are marked as not
+applying to your install, and the page says what that means: a known virus inside an ordinary document
+is not recognised.
+
+**My recommendation:** A. The build costs nothing on your server until it is switched on, and every
+other company that installs the Brain gets the choice too.
+
+**What I need from you:** reply "164: A" or "164: B".
+
+**Decided 2026-10-12: "164: A".** ClamAV is added as an optional service, switched on later; the structural check on every upload stays.
+
+## 162. May a new agent be put on your website's chat widget? - DECIDED 2026-10-12: A
+
+**In plain terms:** an agent now answers only on the channels switched on for it, and the switch offers
+a channel only where the agent is allowed to work on it (M13.7.4 and M39.2.4.2). The console and the
+API answer the person asking, in their own signed-in session, so they are offered by name. Your
+website's chat widget is different: it answers visitors who are not signed in, and you decided it gives
+public knowledge only and never asks anybody to log in (item 26). Nothing yet says which agents are
+safe to face the public, so **the switch does not offer the widget at all**. An agent already on it
+keeps it and can be switched off it; no agent can be newly put on it.
+
+**Option A: allow it for an agent that can read only public knowledge.** The widget is offered on an
+agent whose ceiling holds nothing but the knowledge you marked public, checked by the same rule that
+decides what any channel may carry. An agent that can read anything more is never offered it.
+
+**Option B: keep it as built.** The widget keeps whichever agents answer on it today, and a new one is
+put there only by a change to the product.
+
+**My recommendation:** A. It keeps item 26's promise by construction, and lets you replace the website's
+agent without a release. I will not build it until you answer.
+
+**What I need from you:** reply "162: A" or "162: B".
+
+**Decided 2026-10-12: "162: A".** The website chat widget is offered on an agent whose ceiling holds nothing but the knowledge marked public, and never on an agent that can read anything more.
+
+## 161. Before a skill is approved, its examples are rehearsed: what "rehearsed" means for now - DECIDED 2026-10-12: A
+
+**In plain terms:** your plan says a skill's examples are rehearsed before anyone may approve it
+(M12.3.4). A skill will carry its examples inside its own file, each a task and the tools it should
+need, so a new version brings its own. Approving a version will be refused until its examples have
+been rehearsed against that exact version.
+
+Today a rehearsal asks no AI model anything. It checks that an agent holding the skill can reach every
+tool each example needs, for the person approving it, and records that. It does not yet judge whether
+the answer an example would get is a good one.
+
+**That is the narrowing.** Agents can now run with tools through one path (the agent runtime, being
+landed now), so the next step is a rehearsal that actually runs each example and shows the approver
+what it did, with nothing sent or changed. The record is built so that result can be added to it
+later.
+
+**Option A: build the reach check now, and add the real run once the agent runtime is live.**
+Approval is checked for what it can be today, and the screen says what was and was not checked.
+
+**Option B: hold approval-by-rehearsal until examples can be run for real.** Skills are approved as
+today until then.
+
+One more choice inside A: **a skill version with no examples at all is not held**, so the skills
+already in the library can still be reviewed. That also means somebody could leave examples out to
+skip the rehearsal. The alternative is to require at least one example on every new version.
+
+**My recommendation:** A, and versions without examples not held for now. I am building it that way.
+
+**What I need from you:** nothing, or reply "161: B", or "161: A, but require examples".
+
+**Decided 2026-10-12: "161: A".** Rehearsal checks reach now and adds the real run once the agent runtime is live. A skill version with no examples is not held, so the library can still be reviewed.
+
+## 160. May a department's administrator stop one of that department's agents? - DECIDED 2026-10-12: A
+
+**In plain terms:** the Stop control can now stop one agent on its own (M13.7.3), as well as a
+connector, a department, a person or everything. Today only an administrator for the whole company can
+stop a single agent, because a stopped agent is recorded without a department, and a department's
+administrator may only stop things inside their department.
+
+**Option A: allow it.** When a department's administrator presses Stop on an agent, the Brain looks up
+the agent's department at that moment and records it, so the stop is theirs to make and theirs to lift.
+An agent with no department, or one shared across departments, stays a company-wide administrator's to
+stop.
+
+**Option B: keep it as built.** A department's administrator who wants an agent stopped stops their
+whole department, or asks a company-wide administrator.
+
+**My recommendation:** A. A department's administrator is the person nearest to an agent misbehaving
+in their department, and stopping is the safe direction. I will not build it until you answer.
+
+**What I need from you:** reply "160: A" or "160: B".
+
+**Decided 2026-10-12: "160: A".** A department's administrator may stop one agent of their own department; the Brain looks up the agent's department before allowing it.
+
+## 159. When a client's name matches two records you can both see, the Brain says so - DECIDED 2026-10-12: yes, and list each
+
+**In plain terms:** ask "what does Acme owe us?" when two client records answer to "Acme" (one in
+Xero, one in HubSpot, say) and the Brain has not decided whether they are the same client. Today it
+gives the same sentence it gives when there is no such client at all. Your plan asks for the opposite
+(M14.6.5): say that the name matches more than one client, and never add their figures together.
+
+The rule it changes is one of the Brain's strictest: a person is never told *which kind* of nothing
+happened, because "two records matched" and "nothing exists" must not be told apart when one of the
+records is hidden from them. **That still holds.** The new sentence is given only when every matching
+record is one the person may already read, so it tells them nothing they could not look up. If one of
+the two is hidden from them, they are answered from the one they can see, exactly as if the hidden one
+did not exist, and a test checks the two replies are identical.
+
+Whoever may confirm a merge also gets a link to the "Possible duplicates" review; everybody else gets
+the plain sentence.
+
+**My recommendation:** allow it, as described. I am building it that way.
+
+**What I need from you:** nothing, or reply "159: no" to keep the old single sentence.
+
+**Decided 2026-10-12: "159: yes, and list each".** When every matching record is one the person may already read, the Brain says the name matches more than one client and then lists the result for each matched client separately, never adding their figures together. With one record hidden from the person, they are answered from the visible one alone, and a test checks the two replies are identical.
+
+## 158. May an automation's canvas have a step where an agent thinks? (optional) - DECIDED 2026-10-12: A
+
+**In plain terms:** every agent now runs through one path, with tools it may call while it answers
+(M13.7.1). The plan says an automation "enters the same agent runtime". The automation canvas you
+have today is deliberately step by step: every step does one fixed thing, and no step asks a model
+anything, so a flow does the same thing every time it runs. That was decided when the canvas was
+built (item 30 and item 124).
+
+So an automation reaches an agent this way instead: **a schedule or a trigger starts an agent**, at
+the reach of the person the automation runs for, and the agent's answer is what the flow produces.
+Nothing changes on the canvas.
+
+**Option A, as built: the canvas stays fixed steps, and an agent is started by a schedule or a
+trigger.** A flow is predictable, and its steps can be read and checked.
+
+**Option B: add an "ask an agent" step inside a canvas.** A flow can then decide things midway, which
+also means it can do something different each time it runs, and its runs are harder to check.
+
+**My recommendation:** A. Nothing waits on this; I am building A.
+
+**Two things I decided for you while building, as you asked me to decide routine items** (tell me if
+either is wrong):
+
+- **Which channels an agent answers on.** An agent now answers only on the channels an administrator
+  switched on for it (M13.7.4). Agents that already exist keep every channel they reach today, so
+  nobody loses anything. A new agent starts with none, and the agent builder asks which channels to
+  switch on, so a new agent is never silent without anybody noticing. Asking for an agent on a channel
+  it is not on gets exactly the same reply as asking for an agent that does not exist.
+- **Where the client-matching weights are kept.** Your decision (f) put them in the exports volume. On
+  an install whose compose file Coolify stores, a release cannot add that volume to the application,
+  so the weights would never be written. They are kept in the Brain's own settings instead, readable
+  only by the worker and by whoever may confirm a merge. The offline matcher still writes its export to
+  the volume where the full install has one.
+
+**What I need from you:** nothing, or reply "158: B" if you want the canvas step.
+
+**Decided 2026-10-12: "158: A".** An automation's canvas stays fixed steps; an agent is started by a schedule or a trigger, and there is no ask-an-agent step inside a canvas.
+
+## 157. One line for your install's database pooler - DECIDED 2026-10-12: A
+
+**In plain terms:** the Brain reaches your database through a pooler that lends out a fixed number of
+connections. The pooler counted its limit per login, and the application uses two logins, so on a busy
+day it could open twice the 20 connections the Brain plans for. The product now caps it at 20 across
+logins (#378). **Your install does not have that cap yet, because a release never edits the copy of
+the compose file Coolify keeps.** Nothing is broken today; this keeps it that way under load.
+
+**Option A: I do it.** Over SSH, through the tunnel to Coolify, I add the one line below to the
+`pgbouncer` service's `environment` in Coolify's copy, beside `DEFAULT_POOL_SIZE`, and redeploy once.
+Requests wait at the pooler for a moment while it restarts.
+
+```yaml
+      MAX_DB_CONNECTIONS: "20"
+```
+
+**Option B: you do it.**
+
+1. Open Coolify and choose the Brain application.
+2. Open the compose file editor.
+3. Find the `pgbouncer` service, then the line `DEFAULT_POOL_SIZE: "20"` under `environment`.
+4. Below it, add the line above with the same indentation.
+5. Press Save, then Redeploy.
+
+**My recommendation:** A.
+
+**What I need from you:** reply "157: A" or "157: B, done".
+
+**Decided 2026-10-12: "157: A".** I add the one line to the pgbouncer service in Coolify's copy and redeploy once. Not yet done: it is a server change, so I do it in one step with you told first, and without reading any secret.
+
+## 156. What is your "maintenance portal"? - DECIDED 2026-10-12: A
+
+**In plain terms:** the Maintenance Agent you asked for (Wave 3, M38.5.3 and M39.8.7) answers a
+maintenance question from your uploaded maintenance knowledge and the ticket desk, and the plan names
+a third source: "the maintenance portal" (M11.9.9). Nothing the Brain reads today is one, and I will
+not guess what it is. It is closely tied to item 137 (where client projects live).
+
+**Option A: maintenance records in your Laravel application.** If each website's maintenance plan,
+its scheduled work and its history sit in the Laravel database, whoever looks after it adds one more
+read-only view for maintenance beside the clients and staff views (and the project view, if you
+choose B in item 137). I write the view for them; the Brain reads only what it shows.
+
+**Option B: a separate system with its own web address and API.** If the portal is another product
+(a maintenance or hosting dashboard with an API), it connects through the new "Add an API" screen:
+you give its API description, a second person approves it, and it is read like any other source.
+
+**Option C: there is no separate portal.** If maintenance lives in Freshdesk tickets and your uploaded
+maintenance documents, the Maintenance Agent uses those two and nothing more, and I drop the third.
+
+**My recommendation:** tell me which is true today; if it is A, choose it together with item 137's B,
+so one change in Laravel adds both views.
+
+**What I need from you:** reply "156: A", "156: B (the portal's name)" or "156: C".
+
+**Decided 2026-10-12: "156: A".** The maintenance portal is the Laravel portal: it holds the clients that have a maintenance plan with you, some expired and some still active, so the Brain reads one more read-only view beside the clients and staff views to say which websites are still under maintenance. Freshdesk is the ticket system, and every ticket and piece of work comes from there. Your question on matching the same client across systems is answered under item 155.
 
 ## 120. Memory on your server - DECIDED 2026-10-05: A, take down Dify, the old Langfuse and the old v1 worker
 

@@ -7991,7 +7991,14 @@
     "M39.9.2.3",
     "M39.9.2.4",
     "M39.9.2.5",
-    "M39.9.2.6"
+    "M39.9.2.6",
+    "M39.10.1",
+    "M39.10.2",
+    "M39.10.3",
+    "M39.10.4",
+    "M39.10.5",
+    "M39.10.6",
+    "M39.10.7"
    ],
    "leaf_texts": [
     "An agent record composes persona, knowledge scope, connectors, skills, tools, workflows, channels, availability, leash, model policy, memory and automations",
@@ -8091,7 +8098,14 @@
     "What a new automation does is an instruction to this agent within its ceiling and leash, with the skills and tools it may use named on its card, and anything it would write waits for a person as every agent write does",
     "A new automation is rehearsed before it is switched on, showing what it would have done at its owner's reach for the last few triggers while writing and sending nothing",
     "Proved on the install: a reserved person creates an automation from a template with a changed trigger and condition, rehearses it, switches it on, and a run starts as that person and is held to their reach",
-    "Proved in the browser: New automation creates, rehearses and switches on an automation from the agent's Automations section, and a paused or suspended one says why, at desktop and phone widths"
+    "Proved in the browser: New automation creates, rehearses and switches on an automation from the agent's Automations section, and a paused or suspended one says why, at desktop and phone widths",
+    "Every agent is either a team agent, which belongs to a department and is used by that department's people through the rule it carries, or a personal agent, which belongs to one person and is used only by them; the kind is chosen when the agent is created and shown on the agent's page",
+    "Any person may create a personal agent for themselves from the builder, within what their own reach allows and without anybody's approval to create it; a department administrator or a super administrator may create both kinds, and only they may create a team agent",
+    "A personal agent is listed, usable and visible only to its owner and, for oversight, to a reader who holds the audit capability for it, and what its owner connects to it is the owner's own and is never shared",
+    "A person connects their own Google account (mail, calendar, documents) to their personal agent and what it reads is that person's own, and no colleague, administrator or other agent can ask for it",
+    "A team agent never reads one person's mailbox for the team: team mail comes only from a shared mailbox an administrator connects, and a person's own mail reaches a team agent only inside that person's private conversation, never in a room, a memory or a knowledge item, as the owner decides in needs item 189",
+    "Proved on the install: a reserved person creates a personal agent that a colleague cannot see or ask, a department administrator creates a team agent, and a person without that capability is refused when trying to create one",
+    "Proved in the browser: the create flow offers the kind, shows a person who may only make their own the personal choice alone, and the agent's page names its kind, at desktop and phone widths"
    ],
    "leaf_waves": {
     "M39.9.2.2": 4,
@@ -8384,6 +8398,41 @@
     "M39.9.2.6": {
      "status": "BLOCKED",
      "why": "P3. WAITS ON M39.9.2.1 to M39.9.2.4 and M39.9.2.2; the browser proof of the whole of New automation.",
+     "updated": "2026-10-12"
+    },
+    "M39.10.1": {
+     "status": "OPEN",
+     "why": "P1. Partly built: agents/model.py has Visibility (GLOBAL, DEPARTMENT, PERSONAL) with an owner_id, and the agent page shows its audience. What is missing is the kind named as a choice at creation and on the page. REUSE agents.model.AgentAudience, agents.creation, agent_routes.",
+     "updated": "2026-10-12"
+    },
+    "M39.10.2": {
+     "status": "OPEN",
+     "why": "P1. Partly built: agents/creation.py makes a personal agent for its maker (AgentAudience PERSONAL, owner_id) and brain.member_activity.build_personal_agent materialises one. What is missing is the builder's own flow for a person to make one and the capability rule that only an administrator may make a team agent. REUSE agents.creation, agents.authoring, member_activity.",
+     "updated": "2026-10-12"
+    },
+    "M39.10.3": {
+     "status": "OPEN",
+     "why": "P1. DEPENDS on M39.10.1. Audience scope for PERSONAL is the owner (agents/model.py scope_for); check that every list, the gallery and the oversight view follow it, with no count of hidden agents.",
+     "updated": "2026-10-12"
+    },
+    "M39.10.4": {
+     "status": "OPEN",
+     "why": "P1. DEPENDS on M11.7.6 and needs item 173's steps done by the owner. Google Workspace is read per person with that person's own token (brain.connectors, My workspace); what is missing is attaching that connection to a personal agent and refusing anyone else.",
+     "updated": "2026-10-12"
+    },
+    "M39.10.5": {
+     "status": "OPEN",
+     "why": "P2. DEPENDS on the owner's answer to needs item 189 (recommended C, built as A first). A team agent has no personal Google connection; a shared mailbox is a connection an administrator makes; a person's own mail in a private conversation only, never a room, memory or knowledge item.",
+     "updated": "2026-10-12"
+    },
+    "M39.10.6": {
+     "status": "OPEN",
+     "why": "P1. Install check for the first, second and third leaves, with reserved people; held if it uses a made-up mailbox.",
+     "updated": "2026-10-12"
+    },
+    "M39.10.7": {
+     "status": "OPEN",
+     "why": "P2. Browser proof of the create flow's kind choice.",
      "updated": "2026-10-12"
     }
    }
