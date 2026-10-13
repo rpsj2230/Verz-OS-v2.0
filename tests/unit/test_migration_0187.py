@@ -49,6 +49,7 @@ def _agent(url: str, agent_id: str, connectors: tuple[str, ...]) -> None:
     from brain.core.entitlement import Capability
     from brain.knowledge.visibility import Visibility
     from brain.tables.agent import AgentRow
+    from tests.fixtures.scratch_postgres import row_the_database_can_hold
 
     record = AgentRecord(
         agent_id=agent_id,
@@ -60,10 +61,9 @@ def _agent(url: str, agent_id: str, connectors: tuple[str, ...]) -> None:
         ),
         created_by="u_one",
     )
-    row = agent_values(record)
-    # The database is at 0186 here, before 0189 added these three.
-    for later in ("channels", "max_turns", "max_tool_calls"):
-        del row[later]
+    # The database is at 0186 here, before every column the agent table has gained since
+    # (0189's three, 0225's memory kinds and whatever follows): a row of that revision.
+    row = row_the_database_can_hold(url, "agent.agent", agent_values(record))
     engine = create_engine(url.replace("postgresql://", "postgresql+psycopg://", 1))
     try:
         with engine.begin() as conn:
