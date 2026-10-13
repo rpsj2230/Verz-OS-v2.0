@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-13T12:08:22.887381+00:00",
-  "commit": "eedba39c",
-  "commit_subject": "My workspace counts the answers a person marked wrong and gains an Undo all control (#561)",
+  "generated_at": "2026-10-13T12:21:16.807635+00:00",
+  "commit": "16eb1014",
+  "commit_subject": "The burst and fan-out acceptance checks count reads, not seconds, so a loaded server cannot fail them (#575)",
   "total": 1622,
   "done": 864,
   "percent": 53.3,
