@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-13T15:22:14.802119+00:00",
-  "commit": "9a927953",
-  "commit_subject": "Install checks for the first-run wizard, the variables command, release notes and a leaver's personal document (#564)",
+  "generated_at": "2026-10-13T15:36:07.092498+00:00",
+  "commit": "ac543c40",
+  "commit_subject": "The worker's half of a browser run: driver, approval wiring and two install checks (M19), behind a switch that ships off (#574)",
   "total": 1625,
   "done": 864,
   "percent": 53.2,
