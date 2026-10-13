@@ -146,8 +146,13 @@ def test_each_overlay_s_files_describe_exactly_the_containers_it_is_costed_for(
         else:
             assert limit.endswith("M") and int(limit[:-1]) > 0, svc
     for network, services in overlay.joins:
-        assert networks[network].get("internal") is True, network
+        # Every compose project has a `default` network without its file declaring it, and the
+        # object store's overlay joins the application to that one: the store is reached by name
+        # and calls nothing, so there is no route to close.
+        if network != "default":
+            assert networks[network].get("internal") is True, network
         assert services
+    assert set(overlay.joined_as_service) <= {network for network, _ in overlay.joins}
 
 
 def test_the_image_carries_the_step_and_every_file_an_overlay_starts() -> None:
@@ -173,7 +178,11 @@ def test_the_image_carries_the_step_and_every_file_an_overlay_starts() -> None:
             else:
                 assert copies[f"{target}/{name}"] == name
     assert "!ops/deploy/overlays/apply.sh" in ignored
-    for mounted in ("ops/langfuse/clickhouse-memory.xml", "ops/seaweedfs/provision.sh"):
+    for mounted in (
+        "ops/langfuse/clickhouse-memory.xml",
+        "ops/seaweedfs/provision.sh",
+        "ops/automation/egress.conf",
+    ):
         assert f"!{mounted}" in ignored
         settled = mounted.removeprefix("ops/")
         assert copies[f"{target}/settings/{settled}"] == mounted
@@ -277,15 +286,23 @@ def test_an_overlay_that_fits_is_started_and_one_that_does_not_is_refused_in_wor
 
 def test_room_is_given_in_declaration_order_and_spent_as_it_is_given() -> None:
     """Item 120 gave the room in an order, and a second overlay is costed against what the first
-    left. Asserted with the same overlay twice so it holds whatever is declared after it.
+    left. Asserted with two overlays that share no container, so it holds whatever is declared
+    after them.
 
     Delete this and two services that each fit alone can both be started on a server with room for
     one."""
+    second = Overlay(
+        name="second",
+        what="a second service",
+        components=("langfuse-cache",),
+        files=("second.yml",),
+    )
     cost = PRESIDIO.cost_mib
-    planned = plan((PRESIDIO, PRESIDIO), _host(cost + cost // 2))
+    assert second.cost_mib > 64
+    planned = plan((PRESIDIO, second), _host(cost + 64))
     assert planned.start == (PRESIDIO,)
     assert len(planned.refused) == 1
-    assert f"has {cost // 2} MiB left" in planned.refused[0][1]
+    assert f"needs {second.cost_mib} MiB and this server has 64 MiB left" in planned.refused[0][1]
 
 
 def test_the_plan_tells_the_script_the_files_the_joins_and_what_to_say() -> None:
@@ -296,7 +313,10 @@ def test_the_plan_tells_the_script_the_files_the_joins_and_what_to_say() -> None
 
     assert "FILE docker-compose.presidio.yml" in lines
     assert "JOIN pii app brain-worker" in lines
-    assert all(re.match(r"^(START|SAY|PREPARE|FILE|JOIN|WAIT) ", one) for one in lines)
+    assert all(
+        re.match(r"^(START|SAY|PREPARE|FILE|JOIN|JOIN_AS_SERVICE|WAIT|AFTER) ", one)
+        for one in lines
+    )
     assert "START presidio" in lines
     assert "WAIT presidio-analyzer" in lines
     assert lines[0].startswith("SAY this server has ")
@@ -397,7 +417,26 @@ case "$1" in
     esac
     exit "$(cat "$S/start_exit")" ;;
   network)
-    echo "$3 $4" >> "$S/connected"
+    case "$2" in
+      ls)
+        # the networks compose made, `name project key` a line, asked for by label
+        key=""; proj=""
+        for a in "$@"; do
+          case "$a" in
+            label=com.docker.compose.network=*) key="${a#label=com.docker.compose.network=}" ;;
+            label=com.docker.compose.project=*) proj="${a#label=com.docker.compose.project=}" ;;
+          esac
+        done
+        [ -f "$S/networks" ] &&
+          awk -v p="$proj" -v k="$key" '$2 == p && $3 == k { print $1 }' "$S/networks"
+        exit 0 ;;
+      connect)
+        shift 2; alias=""
+        if [ "$1" = --alias ]; then alias="$2"; shift 2; fi
+        if [ -n "$alias" ]; then echo "$1 $2 alias=$alias" >> "$S/connected"
+        else echo "$1 $2" >> "$S/connected"; fi
+        exit 0 ;;
+    esac
     exit 0 ;;
 esac
 exit 0
@@ -435,13 +474,15 @@ def apply(
     containers: tuple[str, ...] = INSTALL,
     prepare_exit: int | None = None,
     env_file: bool = False,
+    networks: tuple[str, ...] = (),
 ) -> Applied:
     """Run the real script once against the stub, with the planner answering `planned`.
 
     `start_exit` is what starting the services exits with and `compose_exit` what waiting for
     them to report healthy exits with. `prepare_exit` runs the step from a copy of its directory
     holding a `langfuse.prepare.sh` stand-in that records its environment and exits with it, and
-    `env_file` puts an environment file where the step looks for one.
+    `env_file` puts an environment file where the step looks for one, and `networks` are the
+    networks compose made, as `name project key` lines, for the step to ask docker about by label.
     """
     state = tmp_path / "state"
     bin_dir = tmp_path / "bin"
@@ -458,6 +499,7 @@ def apply(
         ("start_exit", f"{start_exit}\n"),
         ("calls", ""),
         ("connected", ""),
+        ("networks", "".join(f"{one}\n" for one in networks)),
         ("meminfo", "MemTotal:        8388608 kB\nMemFree:          100000 kB\n"),
     ):
         (state / name).write_text(text, encoding="utf-8", newline="\n")
@@ -859,13 +901,19 @@ class Prepared:
 
 
 def prepare(
-    tmp_path: Path, *, db: bool = True, access_file: str | None = None, store: bool = False
+    tmp_path: Path,
+    *,
+    db: bool = True,
+    access_file: str | None = None,
+    store: bool = False,
+    script: str = "langfuse.prepare.sh",
 ) -> Prepared:
     """Run the real `langfuse.prepare.sh` from a copy of the step with the image's settings beside
     it, against a stub docker whose database records the SQL it was handed.
 
-    `access_file` is what the object store's access file holds before the run, and `store` says a
-    store container is running. The stub's `exec` of the merge runs the real
+    `script` is the preparation to run, the ledger's unless another is named, `access_file` is what
+    the object store's access file holds before the run, and `store` says a store container is
+    running. The stub's `exec` of the merge runs the real
     `brain.ops.s3_identities` in this interpreter, so what the script writes is what the
     application would have written."""
     state = tmp_path / "state"
@@ -876,7 +924,11 @@ def prepare(
         one.mkdir(parents=True, exist_ok=True)
     if not step.exists():
         shutil.copytree(SCRIPT.parent, step)
-        for mounted in ("langfuse/clickhouse-memory.xml", "seaweedfs/provision.sh"):
+        for mounted in (
+            "langfuse/clickhouse-memory.xml",
+            "seaweedfs/provision.sh",
+            "automation/egress.conf",
+        ):
             (step / "settings" / mounted).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(REPO / "ops" / mounted, step / "settings" / mounted)
     fake = bin_dir / "docker"
@@ -901,7 +953,7 @@ def prepare(
     }
     assert SH is not None
     done = subprocess.run(
-        [SH, (step / "langfuse.prepare.sh").as_posix()],
+        [SH, (step / script).as_posix()],
         env=env,
         capture_output=True,
         text=True,
@@ -1374,3 +1426,301 @@ def test_the_sandbox_s_compose_file_is_the_contract_s_service_under_gvisor_with_
         assert body["command"][:3] == ["python", "-m", "brain.ops.sandbox_runner"]
     assert front["command"][3:] == ["front", "/jobs"]
     assert executor["command"][3:] == ["executor", "/jobs", "/work"]
+
+
+# --------------------------------------------------- the object store and the automation canvas
+OBJECTSTORE = BY_NAME["objectstore"]
+AUTOMATION = BY_NAME["automation"]
+LANGFUSE = BY_NAME["langfuse"]
+
+
+def test_the_object_store_and_the_canvas_are_services_an_install_can_name() -> None:
+    """Until 2026-10-13 neither had a release mechanism, so an install that wanted either started it
+    by hand and lost its network join at the next deploy. Both are named in the setting now, the
+    settings screen accepts them and lists them in its refusal, and they are costed in the order
+    after the services item 120 gave the room to.
+
+    Delete this and the two services go back to being something only a person on the server can
+    start."""
+    assert switched_on("objectstore,automation") == (OBJECTSTORE, AUTOMATION)
+    assert services_problem("presidio,objectstore,automation") == ""
+    assert "objectstore" in services_problem("nonsense")
+    assert "automation" in services_problem("nonsense")
+    names = [one.name for one in OVERLAYS]
+    assert names[:4] == ["class-pools", "presidio", "langfuse", "sandbox"]
+    assert OBJECTSTORE.prepare and OBJECTSTORE.after and AUTOMATION.prepare
+
+
+def test_the_canvas_is_costed_as_the_three_containers_its_file_starts_which_is_896_not_512() -> (
+    None
+):
+    """The canvas's compose file runs the editor at 512, its egress proxy at 128 and its own
+    database at 256, and only the editor was a budgeted component, so the owner was told 512. The
+    plan costs all three, and the figure is held against the limits the file declares rather than
+    against a constant in the module.
+
+    Delete this and the planner and the question asked of an administrator both understate the
+    canvas by 384 MiB."""
+    declared = yaml.safe_load((REPO / "docker-compose.automation.yml").read_text(encoding="utf-8"))[
+        "services"
+    ]
+    limits = {
+        name: int(str(body["deploy"]["resources"]["limits"]["memory"]).removesuffix("M"))
+        for name, body in declared.items()
+    }
+
+    assert limits == {"activepieces": 512, "automation-egress": 128, "automation-db": 256}
+    assert AUTOMATION.cost_mib == sum(limits.values()) == 896
+    assert sorted(AUTOMATION.components) == sorted(limits)
+    assert component("activepieces").memory_mib == 512
+
+
+def test_a_container_two_overlays_both_start_is_paid_for_once_in_either_order() -> None:
+    """The ledger's file store and the object store are one container, described once in
+    `docker-compose.objectstore.yml`. An install naming both runs one store, so the plan charges the
+    second overlay only for what the first did not already start, and does not refuse a server
+    that has room for the real total.
+
+    Delete this and an install with room for the ledger and the store together is refused the
+    second one on memory the first never spent."""
+    store = component("seaweedfs").memory_mib
+    together = LANGFUSE.cost_mib
+    host = _host(together)
+
+    ledger_first = plan((LANGFUSE, OBJECTSTORE), host)
+    store_first = plan((OBJECTSTORE, LANGFUSE), host)
+
+    assert ledger_first.start == (LANGFUSE, OBJECTSTORE)
+    assert ledger_first.costs == {"langfuse": together, "objectstore": 0}
+    assert store_first.start == (OBJECTSTORE, LANGFUSE)
+    assert store_first.costs == {"objectstore": store, "langfuse": together - store}
+    assert not ledger_first.refused and not store_first.refused
+    alone = plan((OBJECTSTORE,), _host(store - 1))
+    assert alone.start == () and alone.refused[0][0] is OBJECTSTORE
+
+
+def test_the_canvas_is_joined_by_service_name_and_the_store_by_a_plain_join() -> None:
+    """`docker network connect` names a container by its own name only, and the canvas calls the
+    application as `app`, so its join says to add the service name, and nothing else's does.
+    Delete this and the canvas is on the network and cannot find the application it was joined to,
+    or every join starts passing an alias nobody asked for."""
+    host = _host(AUTOMATION.cost_mib + OBJECTSTORE.cost_mib)
+    lines = render(plan((OBJECTSTORE, AUTOMATION), host), host).splitlines()
+
+    assert "JOIN_AS_SERVICE tool-api app" in lines
+    assert "JOIN default app brain-worker" in lines
+    assert not [one for one in lines if one.startswith("JOIN pii")]
+    assert "PREPARE objectstore.prepare.sh" in lines
+    assert "AFTER objectstore.hand.sh" in lines
+    assert "PREPARE automation.prepare.sh" in lines
+    assert "FILE docker-compose.automation.yml" in lines
+    starting = [one for one in lines if one.startswith("SAY starting the automation canvas")]
+    assert starting and starting[0].endswith("(automation) at 896 MiB")
+
+
+@pytestmark_sh
+def test_a_container_is_joined_to_a_network_the_file_named_itself_under_its_service_name(
+    tmp_path: Path,
+) -> None:
+    """The canvas's tool network is `brain-tool-api` whatever the project is called, so the step
+    asks docker which network compose made for that key, and joins the application there with the
+    alias, and the worker, which the plan does not name for it, is left alone. Delete this and the
+    step looks for `<project>_tool-api`, finds nothing and reports the join as impossible, after
+    every deploy, for ever.
+
+    The same line for a network compose named by convention is the existing joins' test above."""
+    planned = (
+        "SAY the plan\nSTART automation\nFILE docker-compose.automation.yml\n"
+        "JOIN_AS_SERVICE tool-api app\nWAIT activepieces\n"
+    )
+    ran = apply(
+        tmp_path,
+        planned=planned,
+        networks=("brain-tool-api u-overlays tool-api",),
+    )
+
+    assert ran.code == 0, ran.output
+    assert ran.connected == ["brain-tool-api app-u alias=app"]
+
+
+@pytestmark_sh
+def test_a_file_two_overlays_name_is_given_to_compose_once(tmp_path: Path) -> None:
+    """The ledger's files and the object store's both name `docker-compose.objectstore.yml`, and
+    handed twice it would merge its lists into themselves. Delete this and an install that names
+    both starts a store with every mount and every command argument doubled."""
+    planned = (
+        "START langfuse\nFILE docker-compose.objectstore.yml\nFILE docker-compose.langfuse.yml\n"
+        "WAIT seaweedfs\nSTART objectstore\nFILE docker-compose.objectstore.yml\nWAIT seaweedfs\n"
+    )
+    ran = apply(tmp_path, planned=planned)
+
+    started = [
+        one for one in ran.calls if one.startswith("compose -p u-overlays") and "up -d" in one
+    ]
+    assert started, ran.calls
+    for call in started:
+        assert call.count("docker-compose.objectstore.yml") == 1, call
+        assert call.count("docker-compose.langfuse.yml") == 1, call
+
+
+@pytestmark_sh
+def test_the_object_store_is_prepared_with_the_application_s_key_pair_and_its_identity(
+    tmp_path: Path,
+) -> None:
+    """The key pair is minted on the server once, at the length the store and the client need, and
+    the identity is merged into the access file beside whatever it already holds, so the ledger's
+    identity, added first, survives and a second deploy changes nothing. The identity may read,
+    write and list and not administer.
+
+    Delete this and the store starts with no key for the application, or the application's key
+    replaces the ledger's."""
+    ledger = prepare(tmp_path / "ledger")
+    assert ledger.code == 0, ledger.output
+    ledger_file = (ledger.settings / "seaweedfs" / "s3.json").read_text(encoding="utf-8")
+
+    first = prepare(tmp_path / "ledger", script="objectstore.prepare.sh")
+    assert first.code == 0, first.output
+    assert re.fullmatch("[0-9a-f]{32}", first.env["OBJECT_STORE_ACCESS_KEY_ID"])
+    assert re.fullmatch("[0-9a-f]{64}", first.env["OBJECT_STORE_SECRET_ACCESS_KEY"])
+    identities = _access(first.settings)["identities"]
+    assert isinstance(identities, list)
+    by_name = {one["name"]: one for one in identities}
+    assert sorted(by_name) == ["brain-application", "langfuse"]
+    assert by_name["brain-application"]["credentials"] == [
+        {
+            "accessKey": first.env["OBJECT_STORE_ACCESS_KEY_ID"],
+            "secretKey": first.env["OBJECT_STORE_SECRET_ACCESS_KEY"],
+        }
+    ]
+    assert by_name["brain-application"]["actions"] == ["Read", "Write", "List"]
+    assert by_name["langfuse"] == _langfuse_identity(ledger_file)
+    assert (first.settings / "seaweedfs" / "provision.sh").exists()
+
+    kept = (first.settings / "seaweedfs" / "s3.json").read_bytes()
+    second = prepare(tmp_path / "ledger", script="objectstore.prepare.sh")
+    assert second.code == 0, second.output
+    assert second.env == first.env
+    assert (second.settings / "seaweedfs" / "s3.json").read_bytes() == kept
+
+
+def _langfuse_identity(text: str) -> object:
+    import json
+
+    [one] = json.loads(text)["identities"]
+    return one
+
+
+@pytestmark_sh
+def test_the_application_s_key_pair_is_handed_over_on_standard_input_and_a_missing_one_is_said(
+    tmp_path: Path,
+) -> None:
+    """The pair goes to `brain.ops.object_store keep` in the application on standard input, access
+    key then secret, and in no argument; an environment file with no pair exits non-zero and says
+    so. Delete this and a key appears in a process listing, or a deploy whose preparation lost the
+    pair reads in the journal as one that handed it over."""
+    state = tmp_path / "state"
+    bin_dir = tmp_path / "bin"
+    for one in (state, bin_dir):
+        one.mkdir()
+    fake = bin_dir / "docker"
+    fake.write_text(
+        '#!/bin/sh\necho "$*" >> "$STUB_STATE/calls"\ncat > "$STUB_STATE/stdin"\n'
+        'echo "SAY the object store\'s key is kept in the vault"\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    fake.chmod(0o755)
+
+    def hand_over(env: str) -> subprocess.CompletedProcess[str]:
+        envfile = tmp_path / "overlays.env"
+        envfile.write_text(env, encoding="utf-8", newline="\n")
+        assert SH is not None
+        return subprocess.run(
+            [SH, (SCRIPT.parent / "objectstore.hand.sh").as_posix()],
+            env={
+                **os.environ,
+                "PATH": f"{bin_dir.as_posix()}{os.pathsep}{os.environ.get('PATH', '')}",
+                "STUB_STATE": state.as_posix(),
+                "BRAIN_OVERLAYS_ENV": envfile.as_posix(),
+                "BRAIN_APP_CONTAINER": "app-u",
+            },
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+
+    good = hand_over("A=1\nOBJECT_STORE_ACCESS_KEY_ID=ak-1\nOBJECT_STORE_SECRET_ACCESS_KEY=sk-2\n")
+    assert good.returncode == 0, good.stdout + good.stderr
+    assert (state / "stdin").read_text(encoding="utf-8") == "ak-1\nsk-2\n"
+    assert (state / "calls").read_text(encoding="utf-8").splitlines() == [
+        "exec -i app-u python -m brain.ops.object_store keep"
+    ]
+    assert "overlays: objectstore: the object store's key is kept in the vault" in good.stdout
+    assert "sk-2" not in good.stdout + good.stderr
+
+    bad = hand_over("A=1\n")
+    assert bad.returncode == 1
+    assert "not in the environment file" in bad.stdout
+
+
+@pytestmark_sh
+def test_the_canvas_is_prepared_with_its_allowlist_its_three_secrets_and_an_address(
+    tmp_path: Path,
+) -> None:
+    """The allowlist is copied from the image where missing and never overwritten; the database
+    password, the encryption key (32 hexadecimal characters, the length the canvas requires) and the
+    session secret are minted once; and an address an install has set is kept. A second run changes
+    nothing. Delete this and the proxy starts with no allowlist, the canvas refuses a key of the
+    wrong length, or a deploy rotates a secret under a running canvas.
+
+    Nothing here is the application's: the environment file the secrets land in holds no database
+    URL, and none of the three is derived from one."""
+    first = prepare(tmp_path, script="automation.prepare.sh")
+    assert first.code == 0, first.output
+    assert re.fullmatch("[0-9a-f]{48}", first.env["AUTOMATION_DB_PASSWORD"])
+    assert re.fullmatch("[0-9a-f]{32}", first.env["AUTOMATION_ENCRYPTION_KEY"])
+    assert re.fullmatch("[0-9a-f]{64}", first.env["AUTOMATION_JWT_SECRET"])
+    assert first.env["AUTOMATION_PUBLIC_URL"] == "http://activepieces"
+    assert not [name for name in first.env if "DATABASE" in name or "VAULT" in name]
+    allowlist = first.settings / "automation" / "egress.conf"
+    assert allowlist.read_bytes() == (REPO / "ops" / "automation" / "egress.conf").read_bytes()
+
+    allowlist.write_text("# tuned\n", encoding="utf-8")
+    env_path = first.settings / "overlays.env"
+    env_path.write_text(
+        env_path.read_text(encoding="utf-8").replace(
+            "AUTOMATION_PUBLIC_URL=http://activepieces",
+            "AUTOMATION_PUBLIC_URL=https://flows.example.test",
+        ),
+        encoding="utf-8",
+    )
+    second = prepare(tmp_path, script="automation.prepare.sh")
+    assert second.code == 0, second.output
+    assert allowlist.read_text(encoding="utf-8") == "# tuned\n"
+    assert second.env["AUTOMATION_PUBLIC_URL"] == "https://flows.example.test"
+    for name in ("AUTOMATION_DB_PASSWORD", "AUTOMATION_ENCRYPTION_KEY", "AUTOMATION_JWT_SECRET"):
+        assert second.env[name] == first.env[name]
+
+
+def test_the_image_carries_the_canvas_file_and_its_allowlist_where_the_step_looks_for_them() -> (
+    None
+):
+    """The deploy hook copies `/app/ops/deploy/overlays/` out of the image and the canvas's
+    preparation copies its allowlist from `settings/automation` beside the step, so both have to
+    be COPY lines and the allowlist has to be let through the ignore file. Read from the files.
+    Delete this and the release that adds the canvas ships an image with no file to start."""
+    copies = {
+        parts[-1]: parts[-2]
+        for line in (REPO / "Dockerfile").read_text(encoding="utf-8").splitlines()
+        if line.startswith("COPY ") and (parts := line.split())
+    }
+    ignored = (REPO / ".dockerignore").read_text(encoding="utf-8").splitlines()
+
+    assert copies["/app/ops/deploy/overlays/docker-compose.automation.yml"] == (
+        "docker-compose.automation.yml"
+    )
+    assert copies["/app/ops/deploy/overlays/settings/automation/egress.conf"] == (
+        "ops/automation/egress.conf"
+    )
+    assert "!ops/automation/egress.conf" in ignored

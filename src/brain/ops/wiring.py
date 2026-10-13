@@ -441,6 +441,8 @@ COMPONENTS: Final[tuple[Component, ...]] = (
         ready_when="PING answers",
     ),
     Component(
+        # The editor alone: 512 MiB. The canvas as an install runs it is 896 with the two
+        # components after this one, which is the figure an administrator is told.
         name="activepieces",
         memory_mib=512,
         profiles=frozenset({"full"}),
@@ -449,6 +451,30 @@ COMPONENTS: Final[tuple[Component, ...]] = (
         # contents are written by somebody outside this repository.
         wiring=Wiring.NONE,
         ready_when="the flow runner reports a worker and the egress proxy answers",
+    ),
+    Component(
+        # **The canvas is three containers, and the 512 above is only the first of them.**
+        # `docker-compose.automation.yml` runs the editor (512), this proxy (128) and the canvas's
+        # own database (256), 896 MiB of limits in all. Until 2026-10-13 only the editor was a
+        # component, so an install that was asked whether it could spare 512 MiB for the canvas
+        # was asked about a little over half of what it would start. These two are `full`
+        # components like the editor, so the profile budgets what it starts (they were two of the
+        # five sidecars `brain.ops.compose.unbudgeted_services` named), and the `automation`
+        # overlay (`brain.ops.overlays`) costs all three, so the plan says 896.
+        name="automation-egress",
+        memory_mib=128,
+        profiles=frozenset({"full"}),
+        wiring=Wiring.NONE,
+        ready_when="squid -k check passes with the allowlist in the compose file's mount",
+    ),
+    Component(
+        # The canvas's own PostgreSQL, on its internal network and never the application's. See
+        # the comment on `automation-egress` for why it is a component.
+        name="automation-db",
+        memory_mib=256,
+        profiles=frozenset({"full"}),
+        wiring=Wiring.NONE,
+        ready_when="pg_isready answers on the canvas's internal network",
     ),
     Component(
         # The script sandbox's front: it answers the application on an internal network, checks

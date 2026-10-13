@@ -17,15 +17,15 @@ so a mistyped one cannot be mistaken for a tag that exists.
 
 ## How to check a tag
 
-For an image on Docker Hub, which most of these are, the status is 200 when the tag exists and 404
-when it does not (put `library/` before the name for an official image such as `postgres`):
+Ask the registry the image's own name says, with the tool a server already has. The command exits
+zero when the tag exists and non-zero, saying `no such manifest`, when it does not:
 
 ```
-curl -s -o /dev/null -w "%{http_code}\n" https://hub.docker.com/v2/repositories/ubuntu/squid/tags/6.6-24.04_edge
+docker manifest inspect ubuntu/squid:6.6-24.04_edge > /dev/null && echo exists
 ```
 
-For the others, ask the registry named in the first part of the image's name for the tag's
-manifest. The rows below were read on the day written beside each one.
+It needs no account for a public image and works for every registry the image names, which is
+why the rows below say how each was read and not where.
 
 ## The register
 

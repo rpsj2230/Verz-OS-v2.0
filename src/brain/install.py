@@ -512,8 +512,10 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
             "Comma-separated optional services this server runs beside its profile, started by "
             "the next release only where the server's measured memory has room for them: "
             "presidio for the personal data detector, langfuse for the trace ledger and its file "
-            "store, sandbox for the script sandbox, which needs gVisor on the server. `none` runs "
-            "none of them. Changed on Install, Settings."
+            "store, sandbox for the script sandbox, which needs gVisor on the server, objectstore "
+            "for the file store that holds uploaded documents and exports, and automation for the "
+            "automation canvas, which takes 896 MiB. `none` runs none of them. Changed on "
+            "Install, Settings."
         ),
         default="none",
     ),

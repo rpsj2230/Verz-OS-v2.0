@@ -137,10 +137,14 @@ COPY --chown=brain:brain docker-compose.presidio.yml /app/ops/deploy/overlays/do
 COPY --chown=brain:brain docker-compose.objectstore.yml /app/ops/deploy/overlays/docker-compose.objectstore.yml
 COPY --chown=brain:brain docker-compose.langfuse.yml /app/ops/deploy/overlays/docker-compose.langfuse.yml
 COPY --chown=brain:brain docker-compose.sandbox.yml /app/ops/deploy/overlays/docker-compose.sandbox.yml
-# The settings files those compose files mount, which the trace ledger's preparation puts on the
-# server where they are missing (ops/deploy/overlays/langfuse.prepare.sh).
+COPY --chown=brain:brain docker-compose.automation.yml /app/ops/deploy/overlays/docker-compose.automation.yml
+# The settings files those compose files mount, which each overlay's preparation puts on the
+# server where they are missing (ops/deploy/overlays/langfuse.prepare.sh, objectstore.prepare.sh and
+# automation.prepare.sh): the ledger's memory ceiling, the object store's provisioning script and
+# the automation canvas's egress allowlist.
 COPY --chown=brain:brain ops/langfuse/clickhouse-memory.xml /app/ops/deploy/overlays/settings/langfuse/clickhouse-memory.xml
 COPY --chown=brain:brain ops/seaweedfs/provision.sh /app/ops/deploy/overlays/settings/seaweedfs/provision.sh
+COPY --chown=brain:brain ops/automation/egress.conf /app/ops/deploy/overlays/settings/automation/egress.conf
 # The built console, which this application serves at the root of the install's web address.
 # `brain.console_static` looks for it here and serves nothing at all when it is absent, so a
 # local `docker build` that dropped this line would produce an image whose only symptom is a

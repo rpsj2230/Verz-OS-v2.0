@@ -416,7 +416,7 @@ def test_the_deployment_and_the_budget_describe_the_same_host_once_both_gaps_are
 
     `brain.ops.wiring` sums components; the compose files reserve containers. They disagreed in
     both directions until 2026-09-21, when the one component with no service got one; what is
-    left is 1472 MiB deployed by five containers no component budgets. Add each gap to the side
+    left is 1088 MiB deployed by three containers no component budgets. Add each gap to the side
     that is missing it and the totals are equal, which is the only way to see that the budget
     and the deployment are describing one machine rather than two.
 
@@ -428,13 +428,13 @@ def test_the_deployment_and_the_budget_describe_the_same_host_once_both_gaps_are
     here unless the other side moves with it.
 
     Delete this and the profile's memory figure can be quoted from either side, and the two
-    answers differ by 1472 MiB with nothing saying which is right."""
+    answers differ by 1088 MiB with nothing saying which is right."""
     files = profile_files()
 
     assert summed_mib(files) == 15872
     assert deployment_mib(files) == 14848
     assert undeployed_mib("full", files) == 0
-    assert unbudgeted_mib("full", files) == 1472
+    assert unbudgeted_mib("full", files) == 1088
 
     assert summed_mib(files) + undeployed_mib("full", files) == (
         PRODUCTION_BASELINE_MIB + wave_two_mib("full") + unbudgeted_mib("full", files)
@@ -442,22 +442,21 @@ def test_the_deployment_and_the_budget_describe_the_same_host_once_both_gaps_are
 
 
 def test_the_containers_no_budget_accounts_for_are_named_rather_than_only_counted() -> None:
-    """Five containers are real memory on the host and are in no figure `brain.ops.wiring`
-    produces: a realm importer, Keycloak's server build, an object-store provisioner, the
-    automation sandbox's own database and its egress proxy. Every one arrived beside a component
-    and none is one.
+    """Three containers are real memory on the host and are in no figure `brain.ops.wiring`
+    produces: a realm importer, Keycloak's server build and an object-store provisioner. Every one
+    arrived beside a component and none is one. The automation canvas's egress proxy and its
+    database were on this list until 2026-10-13, when they became components so that the canvas
+    could be costed as the 896 MiB it starts and not the 512 of its editor alone.
 
     The baseline four are excluded because `PRODUCTION_BASELINE_MIB` already counts them, and
     that exclusion is asserted below rather than assumed: a check that reported `db` would be
     reporting the most carefully budgeted container in the repository.
 
-    Delete this and a fifth sidecar joins the deployment with nothing naming it."""
+    Delete this and a fourth sidecar joins the deployment with nothing naming it."""
     files = profile_files()
     found = unbudgeted_services("full", files)
 
     assert {line.split("'")[1] for line in found} == {
-        "automation-db",
-        "automation-egress",
         "keycloak-build",
         "keycloak-realm",
         "seaweedfs-init",
