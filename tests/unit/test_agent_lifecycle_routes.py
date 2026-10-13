@@ -87,6 +87,7 @@ from brain.gate.context import Channel
 from brain.gate.injection import AutonomyTier
 from brain.knowledge.visibility import Visibility
 from brain.ops.learning_signal_store import StoredLearningPauses
+from brain.role_refusals import CHANGING_CHANNELS_NEEDS_THE_DEPARTMENT_ADMINISTRATOR
 from brain.tools.registry import ToolRegistry
 from tests.fixtures.console_http import gate_wiring, headers
 from tests.unit.test_agent_routes import KEY, agent_row, an_invoice, person
@@ -531,6 +532,8 @@ def test_every_reason_a_caller_may_not_act_is_the_one_404_a_missing_agent_gets(
     assert missing["lifecycle"][0] == 404
     assert len(set(missing.values())) == 1
 
+    #: The readers among these whose audience covers the agent.
+    sees_the_agent = {("u_wide", COMPANY), ("u_none", COMPANY), ("u_narrow", COMPANY)}
     cases = (
         ("u_wide", COMPANY, True),  # no authority at all
         ("u_none", COMPANY, True),  # nothing
@@ -579,7 +582,14 @@ def test_every_reason_a_caller_may_not_act_is_the_one_404_a_missing_agent_gets(
                 )
             ),
         }
-        assert seen == missing, (pid, agent_id, strong)
+        if (pid, agent_id) in sees_the_agent:
+            # Somebody who can see the agent is told which role switches its channels (needs-rupash
+            # 178 A) and every other route is still the missing agent's refusal.
+            told = seen.pop("channels")
+            assert told == (403, CHANGING_CHANNELS_NEEDS_THE_DEPARTMENT_ADMINISTRATOR), pid
+            assert seen == {k: v for k, v in missing.items() if k != "channels"}, pid
+        else:
+            assert seen == missing, (pid, agent_id, strong)
     # Without a second factor the answer is still a 404, in the sentence every administrative
     # route gives a weak sign-in since W0.2, and nothing is written.
     weak = console.post(
@@ -1129,13 +1139,14 @@ def test_a_publication_by_somebody_without_the_visibility_authority_is_the_one_4
 
 
 # ------------------------------------------------------------------ channels (M13.7.4)
-def test_an_agent_s_steward_switches_its_channels_and_the_store_is_told_who_did_it(
+def test_an_agent_s_steward_is_told_which_role_switches_its_channels_and_nothing_is_written(
     console: Console,
 ) -> None:
-    """**A_STEWARD_OR_AN_ADMINISTRATOR_SWITCHES_AN_AGENT_S_CHANNELS, the steward's half.** The
-    steward holds no lifecycle authority and still switches the agent's channels; the view says
-    so and the store is told who. Delete this and an existing agent can only be made answerable by
-    an administrator, which leaves every steward's new agent mute until somebody else acts."""
+    """**A_DEPARTMENT_ADMINISTRATOR_SWITCHES_AN_AGENT_S_CHANNELS, the steward's half (needs-rupash
+    178 A).** The steward holds no lifecycle authority, sees the agent, and is refused in the
+    sentence naming the department administrator; the view does not offer them the control, and
+    the store is never told. Delete this and the steward can again decide where an agent is asked
+    without the department's administrator, which the owner decided against."""
     view = console.get("u_wide", path(LIFECYCLE_PATH, agent_id=SALES))
     switched = console.post(
         "u_wide",
@@ -1143,14 +1154,10 @@ def test_an_agent_s_steward_switches_its_channels_and_the_store_is_told_who_did_
         {"channels": ["lark", "console", "lark"], "expected": []},
     )
 
-    assert view.status_code == 200
-    assert view.json()["may_change_channels"] is True
-    assert view.json()["channels"] == []
-    assert switched.status_code == 200, switched.text
-    assert switched.json()["channels"] == ["console", "lark"]
-    [change] = console.memory.changes
-    assert (change.before.channels, change.after.channels) == ((), ("console", "lark"))
-    assert change.actor_id == "u_wide"
+    assert view.status_code == 404
+    assert switched.status_code == 403, switched.text
+    assert switched.json()["message"] == CHANGING_CHANNELS_NEEDS_THE_DEPARTMENT_ADMINISTRATOR
+    assert console.memory.changes == []
 
 
 def test_an_administrator_over_the_row_switches_an_agent_s_channels(console: Console) -> None:
@@ -1164,19 +1171,28 @@ def test_an_administrator_over_the_row_switches_an_agent_s_channels(console: Con
     assert console.memory.agents[COMPANY].record.channels == ("email",)
 
 
-def test_anybody_else_is_answered_as_if_the_agent_did_not_exist(console: Console) -> None:
-    """A reader who sees the agent and is neither its steward nor an administrator over it gets the
-    one 404 a missing agent gets, and nothing is written. Delete this and the route tells a reader
-    which agents exist by answering them differently."""
-    refused = console.post(
+def test_a_reader_who_sees_the_agent_is_told_the_role_and_one_who_cannot_is_told_nothing(
+    console: Console,
+) -> None:
+    """A reader who sees the agent and is not an administrator over it is told which role changes
+    its channels, a 403 with nothing written; a reader who cannot see an agent is answered as for
+    a missing one, so the sentence never says an agent exists to somebody who could not have seen
+    it. Delete this and the route either answers a stranger differently from a missing agent, or
+    leaves a reader who can see the agent not knowing whom to ask."""
+    told = console.post(
         "u_wide", path(CHANNELS_PATH, agent_id=COMPANY), {"channels": ["email"], "expected": []}
     )
+    private = console.post(
+        "u_prefix", path(CHANNELS_PATH, agent_id=PRIVATE), {"channels": ["email"], "expected": []}
+    )
     missing = console.post(
-        "u_wide", path(CHANNELS_PATH, agent_id=MISSING), {"channels": ["email"], "expected": []}
+        "u_prefix", path(CHANNELS_PATH, agent_id=MISSING), {"channels": ["email"], "expected": []}
     )
 
-    assert refusal(refused) == refusal(missing)
-    assert refused.status_code == 404
+    assert told.status_code == 403
+    assert told.json()["message"] == CHANGING_CHANNELS_NEEDS_THE_DEPARTMENT_ADMINISTRATOR
+    assert refusal(private) == refusal(missing)
+    assert private.status_code == 404
     assert console.memory.changes == []
 
 

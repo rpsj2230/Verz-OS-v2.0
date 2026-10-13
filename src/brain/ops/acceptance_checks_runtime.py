@@ -326,13 +326,14 @@ def _without_the_mark_reference(reply: str) -> str:
     sentence=(
         "An agent switched on for the web alone, with a ceiling narrower than its asker's, "
         "answers there at its ceiling and is, in Lark, answered for as an agent nobody made, at "
-        "the asker's own reach and in the same words; once its steward switches Lark on through "
-        "the lifecycle route it answers there as it does on the web."
+        "the asker's own reach and in the same words; once its department's administrator "
+        "switches Lark on through the lifecycle route it answers there as it does on the web."
     ),
 )
 async def an_agent_answers_only_where_it_was_switched_on(h: Harness) -> None:
     from brain.agent_lifecycle_routes import ChannelsAsked, change_agent_channels
     from brain.gate.context import Channel
+    from brain.ops.acceptance_agent_console import a_department_administrator
     from brain.ops.acceptance_checks_agent_reach import (
         _agent,
         _in_lark,
@@ -371,15 +372,18 @@ async def an_agent_answers_only_where_it_was_switched_on(h: Harness) -> None:
             "an agent switched off for Lark was answered for differently from an agent nobody made"
         )
 
+    admin = await a_department_administrator(h)
     switched = await change_agent_channels(
         chat.request(),
         agent,
         ChannelsAsked(
             channels=[Channel.CONSOLE.value, Channel.LARK.value], expected=[Channel.CONSOLE.value]
         ),
-        await _asking(h, steward),
+        await _asking(h, admin),
     )
     if switched.status_code != 200:
-        raise CheckFailedError("an agent's steward could not switch it on for Lark")
+        raise CheckFailedError(
+            "an agent's department administrator could not switch it on for Lark"
+        )
     if not narrowed.is_what(await _in_lark(chat, ids[asker], question, agent)):
         raise CheckFailedError("an agent switched on for Lark did not answer there as on the web")

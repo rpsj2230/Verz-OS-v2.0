@@ -23,13 +23,19 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.sql.selectable import Select
 
+from brain import agent_leash_routes
 from brain.agent_leash_routes import (
     LEASH_AUTHORITY,
     MOVING_A_RUNG_NEEDS_THE_LEASH_ROLE,
     NOT_DUE_YET,
     router,
 )
-from brain.agents.leash_moves import BREAKER_METRIC, TAKEN_OVER, THE_PROPOSER_CANNOT_CONFIRM
+from brain.agents.leash_moves import (
+    BREAKER_METRIC,
+    RAISING_BEYOND_THE_PUBLISHED_RUNG,
+    TAKEN_OVER,
+    THE_PROPOSER_CANNOT_CONFIRM,
+)
 from brain.agents.supervision import SHADOW_REVIEW_PERIOD, ShadowPin
 from brain.api import API_PREFIX
 from brain.app import Settings, create_app
@@ -173,6 +179,59 @@ def action(n: int, *, at: datetime, route: Route = Route.SIMULATE) -> ActionReco
 
 def move(to: str) -> dict[str, Any]:
     return {"target": TARGET, "to": to}
+
+
+@pytest.fixture(autouse=True)
+def published_at_assisted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The agent under test is read as published at Assisted and lowered to Shadow since, which is
+    how a rung comes to be raised at all (needs-rupash 179 A). The two tests below that need a
+    different published rung set their own."""
+    monkeypatch.setattr(
+        agent_leash_routes, "published_rung", lambda *_arguments: AutonomyTier.ASSISTED
+    )
+
+
+def test_a_rung_cannot_be_pressed_above_the_rung_the_agent_was_published_at(
+    database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**Needs-rupash 179 A (M33.2.2.4) on PostgreSQL.** With the evidence in, a press to
+    Autonomous on an agent published at Assisted is refused in the sentence that says to publish
+    again, and writes no move and no ledger entry; a press to Assisted, the published rung, is
+    the proposal it always was. And the same agent with no install, whose entries were never
+    published above Shadow, cannot be raised to Assisted at all. Delete this and a department
+    administrator can walk a rung past the one two approvers signed for.
+
+    The sibling that proves the ceiling is the published rung and not a refusal of every raise is
+    the second press below."""
+    earlier = datetime.now(UTC) - timedelta(hours=1)
+
+    async def act(client: httpx.AsyncClient, store: StoredLeash) -> Any:
+        for n in range(10):
+            await store.record_action(action(n, at=earlier + timedelta(seconds=n)))
+            await client.post(
+                f"{PATH}/supervision/verdicts",
+                json={"action_digest": action(n, at=earlier).action_digest, "verdict": "approved"},
+                headers=headers("u_admin"),
+            )
+        return {
+            "above": await client.post(
+                f"{PATH}/leash/moves", json=move("autonomous"), headers=headers("u_admin")
+            ),
+            "at": await client.post(
+                f"{PATH}/leash/moves", json=move("assisted"), headers=headers("u_admin")
+            ),
+        }
+
+    said = pressed(database, act)
+    assert said["above"].status_code == 409
+    assert said["above"].json()["message"] == RAISING_BEYOND_THE_PUBLISHED_RUNG
+    assert said["at"].json()["kind"] == "proposed"
+    assert [one.actor_id for one in entries(database, "leash_change")] == []
+
+    monkeypatch.undo()
+    never = pressed(database, act)
+    assert never["above"].json()["message"] == RAISING_BEYOND_THE_PUBLISHED_RUNG
+    assert never["at"].json()["message"] == RAISING_BEYOND_THE_PUBLISHED_RUNG
 
 
 def test_a_rung_rises_on_counted_evidence_by_two_people_falls_at_once_and_trips_on_a_verdict(

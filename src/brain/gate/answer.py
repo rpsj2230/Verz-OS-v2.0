@@ -326,6 +326,13 @@ class ToolCalls:
         self.sources: set[str] = set()
         #: The skills the model step offered to a model, by digest. Empty until it offers any.
         self.skills: tuple[SkillUse, ...] = ()
+        #: How many fields and records the redactor took out of this request's answer, or None
+        #: when it walked nothing (needs-rupash 181 A). A number for the ledger, never shown.
+        self.redactions: int | None = None
+
+    def redacted(self, replaced: int) -> None:
+        """The redactor walked an answer for this request and took this many out of it."""
+        self.redactions = (self.redactions or 0) + replaced
 
     def read_live(self, calls: int) -> None:
         """Count the live reads of one refresh, as calls started and as live reads."""
@@ -584,6 +591,7 @@ async def answer_lane(
                 # The skills the model step offered (M27.15.9) and the one source read (M27.1.5).
                 skills=calls.skills,
                 connector=calls.connector,
+                redaction_count=calls.redactions,
             ),
         )
 
@@ -741,6 +749,9 @@ async def _outcome(
     # The redactor's own pair, so the trace the sink records is the one that did the work.
     _enter(recorder, GateStep.REDACT)
     redacted = redact(found.result, entitlement=entitlement, policy=policy, now=now)
+    # What the redactor took out of this answer, a field or a whole record, as a number the metadata
+    # ledger keeps (needs-rupash 181 A); a record dropped for having nothing visible counts too.
+    calls.redacted(redacted.trace.redaction_count + redacted.trace.dropped_count)
     payload = redacted.payload
 
     sentence = served_from(found, payload)
@@ -911,6 +922,7 @@ async def _answered_by_model(
             entering=None if recorder is None else recorder.enter,
             horizons=horizons,
             using=calls.use,
+            redacting=calls.redacted,
         )
     frames.append(stream.step(Progress.READING))
     if drafted.asked:

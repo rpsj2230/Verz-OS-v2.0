@@ -1853,6 +1853,9 @@ async def an_agents_leash_moves_on_evidence_and_its_pin_extends(h: Harness) -> N
                 ),
                 pending=newest,
                 supervision=None,
+                # This check's agent has no installed leash to be held to; the published rung is
+                # proved by `acceptance_checks_decided_governance`.
+                published=AutonomyTier.AUTONOMOUS,
             )
         await store.move(
             move, reason_code="acceptance_check", ent_hash=SET_UP_REACH, trace_id=h.trace_id
@@ -2050,6 +2053,7 @@ async def an_agents_leash_moves_on_evidence_and_its_pin_extends(h: Harness) -> N
             record=Record(clean_runs=10, agreement_rate=1.0, reviewed=10),
             pending=None,
             supervision=state.pin.outcome,
+            published=AutonomyTier.AUTONOMOUS,
         )
     except LeashMoveError:
         pass

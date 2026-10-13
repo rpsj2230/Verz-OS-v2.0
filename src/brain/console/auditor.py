@@ -77,7 +77,13 @@ from datetime import datetime
 from typing import Final
 
 from brain.audit.ledger import REDACTED, AuditAction
-from brain.audit.view import MAX_PAGE_SIZE, AuditFilter, AuditRow, AuditView
+from brain.audit.view import (
+    CAPABILITY_BY_KIND,
+    MAX_PAGE_SIZE,
+    AuditFilter,
+    AuditRow,
+    AuditView,
+)
 from brain.core.entitlement import EntitlementSet
 from brain.ops.denial_alerts import ALERT_TEXT, DenialPattern, reach
 from brain.ops.limits import DenialShape
@@ -132,6 +138,30 @@ PERSON_KIND: Final = "principal"
 
 #: An assessed shape, by the person refused and the capability they were refused.
 ShapeKey = tuple[str, str]
+
+
+#: Why a count of redacted requests is told only to a reader whose audit grant covers everybody.
+A_COUNT_OF_REDACTED_REQUESTS_IS_TOLD_ONLY_TO_WHO_MAY_SEE_THEM_ALL: Final = (
+    "The request ledger knows nothing about who may see it, so a count over it would tell a "
+    "reader with a narrower audit grant how much happened that they cannot see. It is shown "
+    "only to a reader whose grant for every kind of audit entry is unrestricted, as the "
+    "company's consumption is shown only to a reader whose budget grant covers everybody "
+    "(needs-rupash 181 A). Anybody else is sent no figure rather than a zero."
+)
+
+
+def covers_everybody(reader: EntitlementSet, now: datetime) -> bool:
+    """Whether this reader's audit grant is unrestricted for every kind of ledger entry.
+
+    Asked of the same capabilities `brain.audit.view.AuditView` reads an entry through, one per
+    subject kind, so a kind added to the ledger is covered here because it is covered there. A
+    scope that names anything narrows the reader and answers no.
+    """
+    for capability in CAPABILITY_BY_KIND.values():
+        where = reader.scope_for(capability, now)
+        if where is None or not where.is_unrestricted():
+            return False
+    return True
 
 
 def someone_elses(row: AuditRow, reader_id: str) -> bool:

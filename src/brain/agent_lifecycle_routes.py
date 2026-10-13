@@ -133,6 +133,7 @@ from brain.agents.model import (
     EnabledChannels,
     answering_on,
     enabled_channels,
+    entitlement_ceiling,
 )
 from brain.agents.model import visible_agent_ids as _visible_agent_ids
 from brain.agents.template import SignedManifest, TemplateError, TemplateInstance
@@ -162,6 +163,10 @@ from brain.ops.connector_store import Connection, StoredConnections
 from brain.ops.lark_base_index import switched_on
 from brain.ops.learning_signal_store import StoredLearningPauses
 from brain.prompt_routes import agent_scope_row, every_agent_with_install, installed, signed_of
+from brain.role_refusals import (
+    CHANGING_CHANNELS_NEEDS_THE_DEPARTMENT_ADMINISTRATOR,
+    role_refusal,
+)
 from brain.routing_routes import sessions_of
 from brain.tables.agent import AgentRow
 from brain.tables.audit import attributed_to
@@ -344,7 +349,7 @@ class LifecycleView(BaseModel):
     #: `NO_CHANNEL_ANSWERS_NOWHERE`.
     channels_note: str = NO_CHANNEL_ANSWERS_NOWHERE
     #: Its steward, or a holder of the lifecycle authority over its row. Presentation only: the
-    #: route asks again. See `A_STEWARD_OR_AN_ADMINISTRATOR_SWITCHES_AN_AGENT_S_CHANNELS`.
+    #: route asks again. See `A_DEPARTMENT_ADMINISTRATOR_SWITCHES_AN_AGENT_S_CHANNELS`.
     may_change_channels: bool = False
 
 
@@ -817,13 +822,15 @@ def holds(capability: Capability, record: AgentRecord, asked: Asking) -> bool:
     return _in_reach(asked.reach, capability, agent_scope_row(record), asked.now)
 
 
-#: Who may switch an agent's channels, and why the steward is enough.
-A_STEWARD_OR_AN_ADMINISTRATOR_SWITCHES_AN_AGENT_S_CHANNELS: Final = (
-    "An agent's channels are changed by its steward or by a holder of the lifecycle authority "
-    "over its row, and by nobody else. The steward is enough because a channel moves where people "
-    "who may already ask the agent can ask it, never who may find it or what it may reach: its "
-    "audience and its ceiling are untouched. Anybody else is answered as an agent that does not "
-    "exist, and the change reaches the ledger from the row as channels_changed."
+#: Who may switch an agent's channels, and why the steward is not enough (needs-rupash 178 A).
+A_DEPARTMENT_ADMINISTRATOR_SWITCHES_AN_AGENT_S_CHANNELS: Final = (
+    "An agent's channels are changed by a holder of the lifecycle authority over its row, which is "
+    "its department's administrator, and by nobody else: not its steward, who answers for the "
+    "agent but does not decide where it may be asked. Until 2026-10-13 the steward could, on the "
+    "argument that a channel only moves where people who may already ask can ask; the owner "
+    "decided otherwise (needs-rupash 178 A). A reader who can see the agent and may not change it "
+    "is told which role does, and a reader who cannot see it is answered as an agent that does "
+    "not exist. The change reaches the ledger from the row as channels_changed."
 )
 
 
@@ -847,8 +854,12 @@ A_CHANNEL_IS_SWITCHED_ON_ONLY_WHERE_ITS_RUN_COULD_BE_CARRIED: Final = (
 
 def switchable_channels(record: AgentRecord, asked: Asking) -> frozenset[str]:
     """The channels this reader may switch this agent on for. See the reason constant above."""
+    # Judged at the agent's own ceiling and not at the switcher's reach (needs-rupash 178 A): the
+    # person who switches a channel is now a department administrator, who may hold no data
+    # reach at all, and a channel is for whoever asks the agent. A reach-less switcher judged at
+    # their own reach would find every surface able to carry anything.
     rows = channel_rows(
-        asked.reach,
+        entitlement_ceiling(record),
         record,
         declared_channels(),
         product_field_policy(),
@@ -867,6 +878,17 @@ CANNOT_CARRY_IT: Final = (
 
 def may_change_channels(record: AgentRecord, asked: Asking) -> bool:
     """Whether this caller may switch this agent's channels. See the reason constant."""
+    return holds(AGENT_LIFECYCLE_CAPABILITY, record, asked)
+
+
+def may_install_in_groups(record: AgentRecord, asked: Asking) -> bool:
+    """Whether this caller may put this agent into a group chat, or take it out.
+
+    The agent's steward or a holder of the lifecycle authority over its row, as switching its
+    channels was until needs-rupash 178 A. Which rooms the agent answers in is not which surfaces
+    it answers on, and the owner's decision named channels, connectors and the leash; so the room
+    install keeps the rule it had and says so, rather than narrowing with the channel switch.
+    """
     return record.audience.owner_id == asked.caller.principal.id or holds(
         AGENT_LIFECYCLE_CAPABILITY, record, asked
     )
@@ -951,8 +973,7 @@ _TOLD: Final[dict[int | str, dict[str, object]]] = {
 async def agent_lifecycle(request: Request, agent_id: str, asked: Asked) -> LifecycleView:
     """One agent's state, steward and channels, for a reader who may change any of them.
 
-    Either authority over the agent's row opens it, and so does being its steward, who may switch
-    its channels; anybody else is the one 404.
+    Either authority over the agent's row opens it; anybody else is the one 404.
     """
     found = await lifecycles_of(request).agent(agent_id)
     if found is None or not visible(found.record, asked):
@@ -1095,17 +1116,18 @@ async def transfer_agent(
 async def change_agent_channels(
     request: Request, agent_id: str, body: ChannelsAsked, asked: Asked
 ) -> JSONResponse:
-    """Switch the channels an agent answers on (M13.7.4), for its steward or an administrator.
+    """Switch the channels an agent answers on (M13.7.4), for its department's administrator.
 
-    See `A_STEWARD_OR_AN_ADMINISTRATOR_SWITCHES_AN_AGENT_S_CHANNELS`. The page sends the channels
-    it drew; a row that moved since is a 409 and nothing is written.
+    See `A_DEPARTMENT_ADMINISTRATOR_SWITCHES_AN_AGENT_S_CHANNELS`. The page sends the channels
+    it drew; a row that moved since is a 409 and nothing is written. A reader who can see the agent
+    and may not change it is told the role that may.
     """
     store = lifecycles_of(request)
     found = await store.agent(agent_id)
     if found is None or not visible(found.record, asked):
         raise _no_agent_here(asked, "agent")
     if not may_change_channels(found.record, asked):
-        raise _no_agent_here(asked, "scope")
+        return role_refusal(CHANGING_CHANNELS_NEEDS_THE_DEPARTMENT_ADMINISTRATOR)
     before = found.record
     if tuple(body.expected) != before.channels:
         return _not_changed(MOVED, IT_MOVED)

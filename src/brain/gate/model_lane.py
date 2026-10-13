@@ -1195,6 +1195,7 @@ async def draft(
     entering: Callable[[GateStep], None] | None = None,
     horizons: Horizons = SEED_HORIZONS,
     using: Callable[[tuple[SkillUse, ...]], None] | None = None,
+    redacting: Callable[[int], None] | None = None,
 ) -> Drafted:
     """Find the passages, redact them, and ask a model only when something survived.
 
@@ -1203,6 +1204,9 @@ async def draft(
     lane counts the tool call the way it counts a row read: when it starts, whatever comes back.
     `using` is told the skills whose cards the prompt carries, just before the model is asked, so
     a call that then fails still used them: the model was sent their descriptions (M27.15.9).
+    `redacting` is told how many fields and records the redactor took out, once, as the metadata
+    ledger's `redaction_count` (needs-rupash 181 A); it is a number for an auditor and the payload
+    alone reaches the prompt.
 
     The order is the argument of the module docstring, top to bottom: the search at this reach,
     the redactor at this reach, the abstention from the payload, the prompt from the payload, the
@@ -1229,6 +1233,8 @@ async def draft(
     # recorded in names and counts (M4.4.4). The payload alone reaches the prompt.
     step(GateStep.REDACT)
     redacted = redact_passages(found, entitlement=entitlement, now=now)
+    if redacting is not None:
+        redacting(redacted.trace.redaction_count + redacted.trace.dropped_count)
     payload = shown(redacted.payload)
     # `found` is not read again below this line. See
     # A_MODEL_IS_SHOWN_THE_REDACTED_PAYLOAD_AND_NOTHING_ELSE.

@@ -78,11 +78,12 @@ the row, so a second instant would be a duration every reader subtracts for them
 duration is a kind this record already partitions its fields into.
 
 `redaction_count` is the one worth naming separately, because a plausible value exists and it
-would be wrong. Since 2026-09-21 the answer lane hands the redactor's own `RedactionTrace` to the
-trace sink, which records its counts and withheld field names (M4.4.4). That trace still misses
-every column `brain.knowledge.rows.compile_projection` never fetched, because a column the caller
-may not read is left out of the query and never reaches the redactor. A count on this row would
-be false on exactly the requests where a column was withheld at the query.
+means less than it seems. Since 2026-10-13 (needs-rupash 181 A, M33.4.1.3) the answer lane notes
+how many fields and records the redactor took out of an answer and the row carries it, None when
+the redactor walked nothing. It is a lower bound: a column
+`brain.knowledge.rows.compile_projection` never fetched, because the caller may not read it,
+never reaches the redactor and is not counted. The audit screen therefore reads it as "this
+answer was redacted", counted over requests, and never as a number of values withheld.
 
 **Traffic class has no default, and there is no value a default could be.** `TrafficClass`
 has four members and none of them means "unknown", so `open_request` cannot be given a
@@ -646,12 +647,6 @@ UNFILLABLE_TODAY: Final[Mapping[str, str]] = MappingProxyType(
             "nothing times the row read. brain.gate.answer takes now as a parameter and reads "
             "no clock, deliberately, so the lane cannot time itself"
         ),
-        "redaction_count": (
-            "a count would be wrong rather than merely unknown. The redactor's trace reaches the "
-            "trace sink, but a column compile_projection left out of the query never reaches the "
-            "redactor, so its count is zero on exactly the requests where a column was withheld "
-            "at the query"
-        ),
     }
 )
 
@@ -698,6 +693,23 @@ FILLED_BY_A_SOURCE_READ: Final[Mapping[str, str]] = MappingProxyType(
 )
 
 
+#: The field a request fills only when the redactor walked an answer for it, and why it is None
+#: otherwise (needs-rupash 181 A, M33.4.1.3). A request kept off the redactor, such as a refusal
+#: before any read, a cache hit or an automation's tool call, was never redacted and carries None
+#: rather than a zero that would say it was. What it holds is how many fields and records the
+#: redactor took out, which is a lower bound on what was withheld: a column `compile_projection`
+#: left out of the query never reached the redactor, so it is not counted. The audit screen reads
+#: it only as "was this answer redacted at all" and never sums it into a figure of hidden values.
+FILLED_BY_THE_REDACTOR: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "redaction_count": (
+            "this request's answer was never walked by the redactor, such as a refusal before "
+            "any read, a cache hit or an automation's tool call"
+        ),
+    }
+)
+
+
 #: The fields only a request that passed through the gate's front half fills, and why each is
 #: None otherwise. A third mapping for `FILLED_BY_A_MODEL_CALL`'s reason: None here means the
 #: front half did not run for this request, which is neither unmeasurable nor a model's absence.
@@ -735,8 +747,9 @@ class RequestTelemetry:
     and the route's, and `TELEMETRY_FIELDS` is that order written once. The seven with no
     default are the seven a caller can fill on every request; every field defaulting to None is
     named by exactly one of `UNFILLABLE_TODAY`, `FILLED_BY_A_MODEL_CALL`,
-    `FILLED_BY_THE_FRONT_HALF`, `FILLED_BY_A_ROUTED_CALL` and `FILLED_BY_A_SOURCE_READ`, and a test
-    pins the optional fields against the five so none can describe a record that no longer
+    `FILLED_BY_THE_FRONT_HALF`, `FILLED_BY_A_ROUTED_CALL`, `FILLED_BY_A_SOURCE_READ` and
+    `FILLED_BY_THE_REDACTOR`, and a test
+    pins the optional fields against the six so none can describe a record that no longer
     matches it.
 
     Every string field is checked against `tracing.mask` at construction, so a record
@@ -971,6 +984,8 @@ def request_telemetry_of(finished: Finished) -> RequestTelemetry:
         tier_basis=None if route is None else route.basis,
         # The one source the lane's readers read (M27.1.5), folded as a vendor's name is.
         connector=ledger_name(finished.connector),
+        # How many values the redactor replaced in the answer, or None when it walked none.
+        redaction_count=finished.redaction_count,
     )
 
 
