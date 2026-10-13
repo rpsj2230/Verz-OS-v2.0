@@ -67,6 +67,9 @@ export const LATENCY_LABEL = "Median time";
 export const COST_LABEL = "Cost";
 export const LAST_ACTIVE_LABEL = "Last active";
 
+/** Every period ends now, so its newest day is not over, and a person comparing days should know. */
+export const TODAY_IS_NOT_OVER = "Today is not over, so the newest day in every period is only part of a day.";
+
 /** Under the nothing-returned figure: what it counts, and that it is one figure on purpose. */
 export const NOTHING_RETURNED_SUB = "refused or no answer, as one figure";
 
@@ -168,6 +171,9 @@ export function AgentDashboard({
         <h2 className="m-0 text-sm font-semibold text-ink">{HEADLINE_LABEL}</h2>
         <PeriodSwitch period={period} onChange={onPeriod} />
       </div>
+      <p data-slot="partial-day" className="m-0 text-[12.5px] text-ink-3">
+        {TODAY_IS_NOT_OVER}
+      </p>
       <StatsStrip label={HEADLINE_LABEL} busy={stats.busy} failure={stats.failure} count={3}>
         <StatCard label={SPEND_LABEL} value={costWords(figures?.costMinor, read?.currency)} sub={basisWords(read?.costBasis)} unrecordedWhy={costWhy} />
         <StatCard label={RUNS_LABEL} value={countWords(figures?.runs)} sub={sub} />

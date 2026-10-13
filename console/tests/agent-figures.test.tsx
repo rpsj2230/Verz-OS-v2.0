@@ -17,7 +17,7 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import { CONVERSATIONS_SECTION, CONVERSATIONS_TAB, SECTIONS_LABEL, viewAddress } from "../src/pages/agents/AgentDetailPage";
-import { HEADLINE_LABEL, MESSAGES_LABEL } from "../src/pages/agents/AgentDashboard";
+import { HEADLINE_LABEL, MESSAGES_LABEL, TODAY_IS_NOT_OVER } from "../src/pages/agents/AgentDashboard";
 import {
   BUDGET_FORMAT,
   COST_BY_PERSON,
@@ -325,6 +325,9 @@ describe("the headline figures", () => {
     const labels = [...mounted.container.querySelectorAll('[data-slot="agent-dashboard"] [role="group"] button')].map((one) => one.textContent);
     expect(labels).toEqual(AGENT_PERIODS.map((one) => rangeWords(one)));
     expect(labels).toContain("Month to date");
+    // M21.4.4: all time beside the others, and the newest day said to be unfinished.
+    expect(labels).toContain("All time");
+    expect(mounted.container.querySelector("[data-slot='partial-day']")?.textContent).toBe(TODAY_IS_NOT_OVER);
     await choose(mounted.container, "90d");
     expect(strip(mounted.container, HEADLINE_LABEL).textContent).toContain("121");
     await choose(mounted.container, "mtd");

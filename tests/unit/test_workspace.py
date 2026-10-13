@@ -906,7 +906,7 @@ def test_no_type_on_this_surface_can_say_how_much_it_left_out() -> None:
     assert any("Helpful.hidden" in one for one in gaps), gaps
 
 
-def test_the_four_ranges_are_seven_thirty_and_ninety_days_and_the_month_so_far() -> None:
+def test_the_five_ranges_are_seven_thirty_and_ninety_days_all_time_and_the_month_so_far() -> None:
     """The windows the front page selects between. Month to date is the odd one and has no
     length: it shortens to nothing on the first of the month, and a figure that resets while a
     budget does not is read as a fall in spend.
@@ -930,8 +930,11 @@ def test_the_four_ranges_are_seven_thirty_and_ninety_days_and_the_month_so_far()
         assert until == MIDMONTH
         assert (until - since).days == days, one
 
-    assert set(RANGE_DAYS) == set(Range) - {Range.MONTH_TO_DATE}
+    assert set(RANGE_DAYS) == set(Range) - {Range.MONTH_TO_DATE, Range.ALL_TIME}
     assert window(Range.MONTH_TO_DATE, MIDMONTH) == (MONTH_START, MIDMONTH)
+    # All time starts before this product existed and ends now, whatever the date.
+    since, until = window(Range.ALL_TIME, MIDMONTH)
+    assert (since.year, until) == (2000, MIDMONTH)
 
     with pytest.raises(WorkspaceError, match="naive instant"):
         window(Range.SEVEN_DAYS, MIDMONTH.replace(tzinfo=None))
