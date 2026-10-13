@@ -70,7 +70,7 @@ tool that does not exist and is not claimed below however well the menu behaves.
 than a console surface and is not claimed here either; `brain.identity.staff_source` argues
 the same decision one layer earlier and declines it for the mirror reason.
 
-Task ids: M33.2.1.1, M33.4.1.4, M33.5.1.4, M33.6.1.1, M33.6.1.4
+Task ids: M33.2.1.1, M33.4.1.4, M33.5.1.4, M33.6.1.1, M33.6.1.4, M13.7.7
 """
 
 from __future__ import annotations
@@ -331,6 +331,13 @@ def _may_approve(
     if not suspension.is_open(now):
         return False
     if asked_by(suspension, entitlement.principal_id):
+        return False
+    if suspension.two_person and entitlement.principal_id in {
+        suspension.principal_id,
+        suspension.endorsed_by,
+    }:
+        # The person it runs as never gives either approval of a two-person action, and the one
+        # who gave the first is not offered it again for the second (M13.7.7).
         return False
     required = Capability(value=suspension.action.tool.required_capability)
     scope = entitlement.scope_for(required, now)

@@ -20,6 +20,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import TextClause
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.sql.selectable import Select
 
 from brain.api_routes import GateWiring
 from brain.app import Settings, create_app
@@ -30,6 +31,7 @@ from brain.identity.bearer import TokenAuthority
 from brain.jobs_routes import router as jobs_router
 from brain.log_routes import router as log_router
 from brain.prompt_routes import router as prompt_router
+from brain.tables.audience_extra import AudienceExtraRow
 from tests.fixtures.http_client import Response
 from tests.fixtures.setting_rows import Result
 from tests.unit.test_agent_routes import Directory
@@ -73,6 +75,22 @@ def attribution_of(statement: Any) -> tuple[str, str] | None:
         return None
     params = statement.compile().params
     return str(params["name"]), str(params["value"])
+
+
+def no_audience_extras(statement: Any) -> Result | None:
+    """Nobody is offered an agent beyond its level: the answer to the one read every agent
+    route makes of `agent.audience_extra` (`brain.agents.audience_store.extras_of`).
+
+    A route that finds an agent for a reader reads these before it answers, so a test that is
+    not about who is offered what appends this and sees the audience as the level alone, as
+    `tests/unit/test_agent_routes.py` answers it. Anything else is passed on, so a statement
+    nobody answers still fails the test.
+    """
+    if not isinstance(statement, Select):
+        return None
+    if statement.column_descriptions[0].get("entity") is AudienceExtraRow:
+        return Result([])
+    return None
 
 
 _STUB = Stub()

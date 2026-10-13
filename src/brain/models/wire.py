@@ -440,12 +440,16 @@ def completion_from(wire: ProviderWire, payload: object) -> Completion:
     content = message.get("content") if isinstance(message, dict) else None
     finish = first.get("finish_reason")
     details = usage.get("prompt_tokens_details")
+    produced = usage.get("completion_tokens_details")
     return Completion(
         text=content if isinstance(content, str) else "",
         finish_reason=finish if isinstance(finish, str) else "",
         input_tokens=_int(usage.get("prompt_tokens")),
         output_tokens=_int(usage.get("completion_tokens")),
         cached_input_tokens=_int(details.get("cached_tokens") if isinstance(details, dict) else 0),
+        reasoning_tokens=_int(
+            produced.get("reasoning_tokens") if isinstance(produced, dict) else 0
+        ),
         served_model=served_model,
     )
 

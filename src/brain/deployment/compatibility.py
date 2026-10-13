@@ -45,6 +45,35 @@ that the new schema accepts everything the old code writes while the old schema 
 the new code writes. Their upgrades come back `SAFE` and the same function called the other
 way round comes back `BREAKING`, which is the shape of every widening ever written.
 
+**A partial unique index that replaces a unique constraint over the same columns is read
+against the chain, and the downgrade is not asked.** `0219` drops `0055`'s unique constraint over
+agent, template and person and writes a unique index over the same three columns for every row
+whose template is not `authored`. That refuses a subset of what the constraint refused, so every
+insert the previous release makes still succeeds, and an index with a WHERE clause on a table
+that was already there used to be read as a narrowing all the same. It is `SAFE` now when four
+things hold and `BREAKING` when any one does not: the statement is a `CREATE UNIQUE INDEX` over
+plain columns with a WHERE clause and nothing else after the column list; this body drops a
+unique constraint or index by name (an `op.drop_constraint`, an `ALTER TABLE ... DROP
+CONSTRAINT`, a `DROP INDEX`, or the one `DO` block that drops a named unique constraint when it
+is there); an earlier migration reached by `down_revision` created that name as a plain unique
+over the same table; and its columns are exactly the new index's. See
+`A_PARTIAL_UNIQUE_INDEX_OVER_THE_COLUMNS_OF_THE_ONE_IT_REPLACES_ONLY_WIDENS`.
+
+Rejected: reading the old columns from this file's own downgrade, which is where a replaced
+check constraint's predicate comes from. A downgrade says what its author intends to put back
+and proves nothing about what was there. The `DO` block `0219` uses drops the constraint only
+`IF` it exists, so a migration that dropped a name that never existed and put a different
+constraint back in its downgrade would be read as having replaced something, and a narrowing
+would pass. The chain is the record of what the previous release's schema held, so the old
+constraint is found in it by name, newest migration first, and the first one that mentions the
+name decides.
+
+Rejected: passing any partial unique index over a column set that some constraint on the table
+already covers, with no drop in the body. Without the drop the old constraint is still there and
+the new index narrows nothing, but this check would then be reading the rest of the chain to
+prove that a constraint survives it, which is a different and larger claim than the one that
+was needed.
+
 Rejected: comparing the migration against `brain.tables` to find out whether anything still
 reads the dropped column. It answers a different question and reads as if it answered this
 one. A column dropped by a migration and removed from the model in the same commit passes
@@ -68,6 +97,7 @@ import ast
 import enum
 import re
 import sys
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
@@ -123,6 +153,15 @@ A_RESTRICTION_ON_A_COLUMN_THE_PREVIOUS_RELEASE_NEVER_WRITES_IS_NOT_A_NARROWING: 
     "column from not null, since the previous release could write nothing else."
 )
 
+#: Why a restriction that binds only rows whose added flag is true is not a narrowing.
+A_RESTRICTION_ON_A_FLAG_THE_PREVIOUS_RELEASE_NEVER_SETS_IS_NOT_A_NARROWING: Final = (
+    "A check reading `NOT <flag> OR ...` over a boolean column this migration added with a default "
+    "of false is true for every row whose flag is false. The previous release never names the "
+    "column, so every row it writes holds false there and the new check binds none of them; it "
+    "binds only the rows the new release marks, which is how a rule is given to a state the old "
+    "release cannot produce. 0221 is the first to need it."
+)
+
 #: Why a restriction that binds only a word the previous release could not write is not a narrowing.
 A_RESTRICTION_ON_A_WORD_THE_PREVIOUS_RELEASE_NEVER_WRITES_IS_NOT_A_NARROWING: Final = (
     "A check reading `<column> <> 'word' OR ...` is true for every row whose column is not that "
@@ -130,6 +169,18 @@ A_RESTRICTION_ON_A_WORD_THE_PREVIOUS_RELEASE_NEVER_WRITES_IS_NOT_A_NARROWING: Fi
     "for the same column that does not contain the word, the previous release's own constraint "
     "refused it, so it never wrote one and the new check binds nothing it can write. This is "
     "how a new state is given its own invariant, and 0210 is the first to need it."
+)
+
+#: Why a partial unique index that replaces a unique constraint over the same columns is not one.
+A_PARTIAL_UNIQUE_INDEX_OVER_THE_COLUMNS_OF_THE_ONE_IT_REPLACES_ONLY_WIDENS: Final = (
+    "A unique index with a WHERE clause compares only the rows the clause selects, so over the "
+    "same table and the same columns as a unique constraint the same body drops, it refuses a "
+    "subset of what the constraint refused and nothing more: every INSERT the previous release "
+    "could make under the constraint still succeeds under the index. It is a narrowing when the "
+    "columns differ, when the table differs, when nothing is dropped that it replaces, or when "
+    "the dropped constraint cannot be found by name in an earlier migration, because only then "
+    "is there no proof that the old one was the stricter. 0219 replaced its automation "
+    "constraint this way and was refused until this was read."
 )
 
 #: Why a policy dropped and written again is unreadable rather than breaking.
@@ -185,7 +236,17 @@ WHAT_THIS_CHECK_CANNOT_SEE: Final[tuple[str, ...]] = (
     "runs; whether it still runs in time is a question about load.",
     "A dropped unique or primary key constraint. It widens what the table accepts and it "
     "removes the target an `ON CONFLICT` names, and which statements name one is a fact "
-    "about the previous release's code rather than about this file.",
+    "about the previous release's code rather than about this file. That includes the "
+    "partial unique index that replaces one: `ON CONFLICT (columns)` with no predicate, or "
+    "`ON CONFLICT ON CONSTRAINT name`, finds no arbiter among a partial index and is an error "
+    "in the previous release's code, and this check does not read that code.",
+    "Which constraint a partial unique index replaced, when the old one was built another way "
+    "than a literal. The old constraint is found by its literal name in an earlier migration's "
+    "`upgrade`, as a plain unique over plain columns, created once and touched nowhere else in "
+    "that body. A name built at run time, a chain with a gap, an expression, a deferrable "
+    "constraint or an index with an INCLUDE list is not found, and the new index is then a "
+    "finding. Only the `CREATE UNIQUE INDEX` statement is read, not `op.create_index` with a "
+    "`postgresql_where`.",
 )
 
 
@@ -766,6 +827,7 @@ def _from_statement(
     made: frozenset[str],
     replaced: frozenset[str] = frozenset(),
     functions: frozenset[str] = frozenset(),
+    replacing: _Replacing | None = None,
 ) -> Change:
     """One SQL statement, read against the tables and functions this body creates."""
     upper = statement.upper()
@@ -797,6 +859,10 @@ def _from_statement(
                 )
             if table in made:
                 return Change(Verdict.SAFE, "restriction on a table created here", statement)
+            if head == "CREATE UNIQUE INDEX" and replacing is not None:
+                narrowing_that_widens = _replaces_a_unique(statement, replacing)
+                if narrowing_that_widens is not None:
+                    return narrowing_that_widens
             if head == "CREATE POLICY" and table in replaced:
                 return Change(
                     Verdict.UNREADABLE,
@@ -880,8 +946,42 @@ def _columns(calls: tuple[_Call, ...], name: str, flag: str, value: object) -> f
     return frozenset(found)
 
 
+def _false_flags(calls: tuple[_Call, ...]) -> frozenset[str]:
+    """`schema.table.column` for every boolean column added not null with a default of false.
+
+    Read off the column's own call: a `sa.Boolean()` type, `nullable=False` and a
+    `server_default` that unparses as `sa.false()` or `sa.text("false")`. A column with any other
+    default is not one, because the previous release's rows would hold something else.
+    """
+    found: set[str] = set()
+    for call in calls:
+        if call.name != "add_column" or len(call.node.args) < 2:
+            continue
+        column = call.node.args[1]
+        if not (isinstance(column, ast.Call) and len(column.args) >= 2):
+            continue
+        kind = ast.unparse(column.args[1]).replace(" ", "")
+        default = _keyword(column, "server_default")
+        said = "" if default is None else ast.unparse(default).replace(" ", "").replace("'", '"')
+        if (
+            kind in {"sa.Boolean()", "sa.Boolean"}
+            and _one(_keyword(column, "nullable"), call.names) is False
+            and said in {"sa.false()", 'sa.text("false")'}
+        ):
+            table = _one(call.node.args[0], call.names)
+            schema = _one(_keyword(call.node, "schema"), call.names)
+            named = _one(column.args[0], call.names)
+            if isinstance(table, str) and isinstance(schema, str) and isinstance(named, str):
+                found.add(f"{schema}.{table}.{named}".lower())
+    return frozenset(found)
+
+
 def _never_written(
-    node: ast.Call, names: _Names, added: frozenset[str], widened: frozenset[str]
+    node: ast.Call,
+    names: _Names,
+    added: frozenset[str],
+    widened: frozenset[str],
+    flags: frozenset[str] = frozenset(),
 ) -> bool:
     """Whether a unique index or check binds only rows the previous release cannot write.
 
@@ -899,6 +999,13 @@ def _never_written(
     condition = _strings_of(node.args[2], names) if len(node.args) > 2 else None
     if not condition or len(condition) != 1:
         return False
+    flag = re.match(r"^\s*NOT (\w+) OR ", condition[0])
+    if flag is not None:
+        # `NOT <added flag> OR ...`: true for every row whose flag is false, and the previous
+        # release writes none other, since it never names the column and a flag added with a
+        # default of false holds false.
+        # See `A_RESTRICTION_ON_A_FLAG_THE_PREVIOUS_RELEASE_NEVER_SETS_IS_NOT_A_NARROWING`.
+        return f"{prefix}{flag.group(1)}".lower() in flags
     head = re.match(r"^\s*(\w+) IS (NOT )?NULL OR ", condition[0])
     if head is None:
         return False
@@ -912,11 +1019,12 @@ def _from_call(
     reversed_by: dict[tuple[str, str, str], str],
     added: frozenset[str] = frozenset(),
     widened: frozenset[str] = frozenset(),
+    flags: frozenset[str] = frozenset(),
 ) -> Change:
     """One `op.<something>` call that is not `execute`."""
     node = call.node
     if call.name in {"create_index", "create_check_constraint"} and _never_written(
-        node, call.names, added, widened
+        node, call.names, added, widened, flags
     ):
         return Change(
             Verdict.SAFE,
@@ -1071,17 +1179,344 @@ def _from_check_constraint(
     )
 
 
+# ------------------------------------------------------------------ a partial index for a unique
+
+#: `CREATE UNIQUE INDEX name ON schema.table (columns) [WHERE predicate]` and nothing after the
+#: column list but the predicate. An INCLUDE list, NULLS NOT DISTINCT or a storage option does not
+#: match, so a statement carrying one is left to the ordinary reading and stays a finding.
+_UNIQUE_INDEX = re.compile(
+    r"^CREATE\s+UNIQUE\s+INDEX\s+(?:CONCURRENTLY\s+)?(?:IF\s+NOT\s+EXISTS\s+)?(?P<name>\w+)\s+ON\s+"
+    rf"(?:ONLY\s+)?(?P<table>{_QUALIFIED})\s*(?:USING\s+btree\s*)?\((?P<columns>[^()]*)\)"
+    r"(?:\s+WHERE\s+(?P<where>.+))?$",
+    re.IGNORECASE,
+)
+_ADD_UNIQUE = re.compile(
+    rf"^ALTER\s+TABLE\s+(?:ONLY\s+)?(?P<table>{_QUALIFIED})\s+ADD\s+CONSTRAINT\s+(?P<name>\w+)\s+"
+    r"UNIQUE\s*\((?P<columns>[^()]*)\)$",
+    re.IGNORECASE,
+)
+_DROP_CONSTRAINT = re.compile(
+    rf"^ALTER\s+TABLE\s+(?:ONLY\s+)?(?P<table>{_QUALIFIED})\s+DROP\s+CONSTRAINT\s+"
+    r"(?:IF\s+EXISTS\s+)?(?P<name>\w+)$",
+    re.IGNORECASE,
+)
+_DROP_INDEX = re.compile(
+    r"^DROP\s+INDEX\s+(?:CONCURRENTLY\s+)?(?:IF\s+EXISTS\s+)?(?P<schema>\w+)\.(?P<name>\w+)$",
+    re.IGNORECASE,
+)
+
+#: The one `DO` block that drops a unique constraint by name when it is there, whole and in the
+#: form `0219` writes it. A block with anything else in it does not match, which is the point:
+#: this reads what the block says and gives no opinion on a block that says more.
+_DROP_IN_A_DO_BLOCK = re.compile(
+    r"^DO \$\$ DECLARE (?P<var>\w+) text; BEGIN "  # noqa: S608
+    r"SELECT c\.conname INTO (?P=var) FROM pg_constraint c "
+    rf"WHERE c\.conrelid = '(?P<table>{_QUALIFIED})'::regclass AND c\.contype = 'u' "
+    r"AND c\.conname = '(?P<name>\w+)'; "
+    r"IF (?P=var) IS NOT NULL THEN "
+    r"EXECUTE format\('ALTER TABLE (?P=table) DROP CONSTRAINT %I', (?P=var)\); "
+    r"END IF; END \$\$$",
+    re.IGNORECASE,
+)
+
+#: A column this reader can compare by name. An expression, a direction or a quoted name is not
+#: one, so an index over it is never read as covering the same columns as anything.
+_IDENTIFIER = re.compile(r"^[a-z_]\w*$")
+
+
+@dataclass(frozen=True)
+class _Gone:
+    """A unique constraint or index this body drops, by the name it drops."""
+
+    schema: str
+    name: str
+    #: None for an index, whose name is unique in its schema and is not tied to a table.
+    table: str | None
+
+
+@dataclass(frozen=True)
+class _Defined:
+    """A unique constraint or index an earlier migration created."""
+
+    schema: str
+    table: str
+    name: str
+    #: None when it is partial or carries anything else this does not compare.
+    columns: frozenset[str] | None
+
+
+#: Schema, name and table (None for any) to the table and columns the migration chain gave it.
+_Lookup = Callable[[str, str, str | None], tuple[str, frozenset[str]] | None]
+
+
+@dataclass(frozen=True)
+class _Replacing:
+    """What this body drops, and how to find out what each dropped thing used to cover."""
+
+    dropped: tuple[_Gone, ...]
+    lookup: _Lookup
+
+
+def _plain_columns(names: Iterable[str]) -> frozenset[str] | None:
+    """The columns of an index as a set of names, or None when any of them is not a plain name."""
+    found = [one.strip().lower() for one in names]
+    if not found or not all(_IDENTIFIER.match(one) for one in found):
+        return None
+    return frozenset(found)
+
+
+def _listed(node: ast.expr | None, names: _Names) -> frozenset[str] | None:
+    """A literal list of column names as a set, or None when it is anything else."""
+    if not isinstance(node, ast.List | ast.Tuple):
+        return None
+    values = [_one(one, names) for one in node.elts]
+    strings = [one for one in values if isinstance(one, str)]
+    return _plain_columns(strings) if len(strings) == len(values) else None
+
+
+def _callee(node: ast.Call) -> str | None:
+    callee = node.func
+    if isinstance(callee, ast.Attribute):
+        return callee.attr
+    return callee.id if isinstance(callee, ast.Name) else None
+
+
+def _uniques_dropped(calls: tuple[_Call, ...]) -> tuple[_Gone, ...]:
+    """Every constraint or index these calls drop by a name this can read, whatever its kind.
+
+    The kind is not asked, because the answer decides nothing here: what a dropped name was is
+    decided by the migration that created it, in `_unique_from_chain`, and a dropped check
+    constraint or plain index is never found there as a unique one.
+    """
+    out: list[_Gone] = []
+    for call in calls:
+        node, names = call.node, call.names
+        schema = _one(_keyword(node, "schema"), names)
+        name = _at(node, 0, names)
+        if call.name == "drop_constraint" and isinstance(schema, str) and isinstance(name, str):
+            table = _at(node, 1, names)
+            if isinstance(table, str):
+                out.append(_Gone(schema.lower(), name.lower(), table.lower()))
+        elif call.name == "drop_index" and isinstance(schema, str) and isinstance(name, str):
+            held = _one(_keyword(node, "table_name"), names) or _at(node, 1, names)
+            out.append(
+                _Gone(schema.lower(), name.lower(), held.lower() if isinstance(held, str) else None)
+            )
+        for statement in call.sql:
+            block = _DROP_IN_A_DO_BLOCK.match(statement)
+            if block is not None:
+                found = block.group("table").lower().partition(".")
+                out.append(_Gone(found[0], block.group("name").lower(), found[2]))
+            constraint = _DROP_CONSTRAINT.match(statement)
+            if constraint is not None:
+                found = constraint.group("table").lower().partition(".")
+                out.append(_Gone(found[0], constraint.group("name").lower(), found[2]))
+            index = _DROP_INDEX.match(statement)
+            if index is not None:
+                out.append(_Gone(index.group("schema").lower(), index.group("name").lower(), None))
+    return tuple(out)
+
+
+def _unique_definitions(calls: tuple[_Call, ...]) -> tuple[_Defined, ...]:
+    """Every unique constraint or unique index these calls create under a name this can read.
+
+    The four spellings this repository uses. A definition with a predicate, an INCLUDE list or
+    any option this does not compare comes back with no columns, which makes it something that
+    exists and cannot be compared, and that is a different answer from not being there.
+    """
+    out: list[_Defined] = []
+    for call in calls:
+        node, names = call.node, call.names
+        schema = _one(_keyword(node, "schema"), names)
+        if call.name == "create_table":
+            table = _at(node, 0, names)
+            for inner in ast.walk(node):
+                if not (isinstance(inner, ast.Call) and _callee(inner) == "UniqueConstraint"):
+                    continue
+                name = _one(_keyword(inner, "name"), names)
+                if isinstance(name, str) and isinstance(table, str) and isinstance(schema, str):
+                    listed = [_one(one, names) for one in inner.args]
+                    strings = [one for one in listed if isinstance(one, str)]
+                    plain = {one.arg for one in inner.keywords} == {"name"}
+                    columns = (
+                        _plain_columns(strings) if plain and len(strings) == len(listed) else None
+                    )
+                    out.append(_Defined(schema.lower(), table.lower(), name.lower(), columns))
+        elif call.name in {"create_unique_constraint", "create_index"}:
+            name = _at(node, 0, names)
+            table = _at(node, 1, names)
+            if call.name == "create_index" and _one(_keyword(node, "unique"), names) is not True:
+                continue
+            allowed = (
+                {"schema"} if call.name == "create_unique_constraint" else {"schema", "unique"}
+            )
+            plain = {one.arg for one in node.keywords} <= allowed
+            if isinstance(name, str) and isinstance(table, str) and isinstance(schema, str):
+                columns = _listed(node.args[2] if len(node.args) > 2 else None, names)
+                out.append(
+                    _Defined(
+                        schema.lower(), table.lower(), name.lower(), columns if plain else None
+                    )
+                )
+        for statement in call.sql:
+            added = _ADD_UNIQUE.match(statement)
+            if added is not None:
+                found = added.group("table").lower().partition(".")
+                columns = _plain_columns(added.group("columns").split(","))
+                out.append(_Defined(found[0], found[2], added.group("name").lower(), columns))
+            created = _UNIQUE_INDEX.match(statement)
+            if created is not None:
+                found = created.group("table").lower().partition(".")
+                columns = _plain_columns(created.group("columns").split(","))
+                whole = created.group("where") is None
+                out.append(
+                    _Defined(
+                        found[0],
+                        found[2],
+                        created.group("name").lower(),
+                        columns if whole else None,
+                    )
+                )
+    return tuple(out)
+
+
+def _text_of(call: _Call) -> str:
+    """What a call says, as lower case text, for asking whether it mentions a name."""
+    if call.name == "execute" and call.readable:
+        return " ".join(call.sql).lower()
+    return ast.unparse(call.node).lower()
+
+
+def _settle(
+    calls: tuple[_Call, ...], schema: str, name: str, table: str | None
+) -> tuple[bool, tuple[str, frozenset[str]] | None]:
+    """Whether one migration's `upgrade` mentions a name, and what it made of it.
+
+    The first element is whether it was mentioned at all, which decides whether the walk
+    through the chain stops here. The second is the answer, and it is given only for the one
+    clean shape: the name created once, as a plain unique constraint or index, and never
+    dropped or touched by any other statement in the same body. Anything else that names it
+    ends the walk with no answer, because a name that was touched somewhere this does not
+    understand is a name whose columns this cannot vouch for.
+    """
+    named = [one for one in _unique_definitions(calls) if one.name == name and one.schema == schema]
+    dropped = any(one.name == name and one.schema == schema for one in _uniques_dropped(calls))
+    touching = [one for one in calls if name in _text_of(one)]
+    if not (named or dropped or touching):
+        return False, None
+    if dropped or len(touching) != 1 or len(named) != 1:
+        return True, None
+    one = named[0]
+    if one.columns is None or (table is not None and one.table != table):
+        return True, None
+    return True, (one.table, one.columns)
+
+
+def _revisions(versions: Path) -> dict[str, tuple[str | None, str]]:
+    """Every migration in a directory by its revision: what it revises, and its source."""
+    found: dict[str, tuple[str | None, str]] = {}
+    for path in sorted(versions.glob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
+            continue
+        revision = _declared(tree, "revision")
+        if isinstance(revision, str):
+            before = _declared(tree, "down_revision")
+            found[revision] = (before if isinstance(before, str) else None, text)
+    return found
+
+
+def _declared(tree: ast.Module, name: str) -> object:
+    """The constant a module assigns to `name` at the top level, or None."""
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if name in [one.id for one in node.targets if isinstance(one, ast.Name)]:
+            return node.value.value if isinstance(node.value, ast.Constant) else None
+    return None
+
+
+def _unique_from_chain(
+    versions: Path, down: object, schema: str, name: str, table: str | None
+) -> tuple[str, frozenset[str]] | None:
+    """The table and columns a unique constraint or index was given, found by its name.
+
+    Walks back from the migration before this one, newest first, and the first migration whose
+    `upgrade` mentions the name is the one that decides, so a constraint created, dropped and
+    created again is judged by the last of those. A chain with a gap, a name built at run time
+    and a migration the reading cannot place all end in None, which the caller reads as
+    "cannot be shown to have been there".
+    """
+    revisions = _revisions(versions)
+    seen: set[str] = set()
+    current = down
+    while isinstance(current, str) and current in revisions and current not in seen:
+        seen.add(current)
+        before, text = revisions[current]
+        current = before
+        if name not in text.lower():
+            continue
+        calls, _ = _calls(ast.parse(text), "upgrade")
+        mentioned, answer = _settle(calls, schema, name, table)
+        if mentioned:
+            return answer
+    return None
+
+
+_PARTIAL_UNIQUE_REASON: Final = (
+    A_PARTIAL_UNIQUE_INDEX_OVER_THE_COLUMNS_OF_THE_ONE_IT_REPLACES_ONLY_WIDENS
+)
+
+
+def _replaces_a_unique(statement: str, replacing: _Replacing) -> Change | None:
+    """Whether a statement is a partial unique index that replaces a unique constraint.
+
+    See `A_PARTIAL_UNIQUE_INDEX_OVER_THE_COLUMNS_OF_THE_ONE_IT_REPLACES_ONLY_WIDENS`. All four
+    must hold or this answers None and the statement is read as it was before: it has a WHERE
+    clause over plain columns, this body drops something by name, the chain says what that name
+    was a unique constraint or index over, and that is this table and exactly these columns.
+    """
+    parsed = _UNIQUE_INDEX.match(statement)
+    if parsed is None or parsed.group("where") is None:
+        return None
+    columns = _plain_columns(parsed.group("columns").split(","))
+    if columns is None:
+        return None
+    schema, _, table = parsed.group("table").lower().partition(".")
+    for gone in replacing.dropped:
+        if gone.schema == schema and replacing.lookup(gone.schema, gone.name, gone.table) == (
+            table,
+            columns,
+        ):
+            return Change(
+                Verdict.SAFE,
+                "partial unique index replacing a unique constraint over the same columns",
+                f"{statement}. {_PARTIAL_UNIQUE_REASON}",
+            )
+    return None
+
+
 # ------------------------------------------------------------------ the two entry points
 
 
 def changes_in(
-    text: str, *, applying: str = "upgrade", reversing: str = "downgrade"
+    text: str,
+    *,
+    applying: str = "upgrade",
+    reversing: str = "downgrade",
+    versions: Path = VERSIONS,
 ) -> tuple[Change, ...]:
     """Every operation `applying` performs, judged against the release before it.
 
     `reversing` is read for one thing only: the predicate a replaced check constraint used to
     hold, which lives nowhere else inside a single file. Swapping the two names asks the
     other direction, and that is the whole of how `0022` is tested from both sides.
+
+    `versions` is the directory the earlier migrations are read from, and it is asked only
+    when a body drops a unique constraint or index and writes a partial unique index: that is
+    the one reading that needs a migration other than this one.
     """
     try:
         tree = ast.parse(text)
@@ -1103,6 +1538,13 @@ def changes_in(
     reversed_by = _check_predicates(counterpart)
     added = _columns(calls, "add_column", "nullable", True)
     widened = _columns(calls, "alter_column", "nullable", True)
+    flags = _false_flags(calls)
+    before = _declared(tree, "down_revision")
+
+    def lookup(schema: str, name: str, table: str | None) -> tuple[str, frozenset[str]] | None:
+        return _unique_from_chain(versions, before, schema, name, table)
+
+    replacing = _Replacing(_uniques_dropped(calls), lookup)
     out: list[Change] = []
     if not complete:
         out.append(
@@ -1115,7 +1557,7 @@ def changes_in(
         )
     for call in calls:
         if call.name != "execute":
-            out.append(_from_call(call, made, reversed_by, added, widened))
+            out.append(_from_call(call, made, reversed_by, added, widened, flags))
             continue
         if not call.readable:
             out.append(
@@ -1126,7 +1568,7 @@ def changes_in(
                 )
             )
             continue
-        out.extend(_from_statement(one, made, replaced, functions) for one in call.sql)
+        out.extend(_from_statement(one, made, replaced, functions, replacing) for one in call.sql)
     return tuple(out)
 
 
@@ -1154,7 +1596,7 @@ def unreadable_changes(text: str) -> tuple[Change, ...]:
 def check_all(versions: Path = VERSIONS) -> dict[str, tuple[Change, ...]]:
     """Every migration in a directory, keyed by file name."""
     return {
-        path.name: changes_in(path.read_text(encoding="utf-8"))
+        path.name: changes_in(path.read_text(encoding="utf-8"), versions=versions)
         for path in sorted(versions.glob("*.py"))
     }
 

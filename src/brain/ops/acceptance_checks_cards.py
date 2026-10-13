@@ -472,7 +472,7 @@ async def _webhook_says(made: _Desk, text: str) -> list[str]:
 
 # ------------------------------------------------------------------ 2. pressed, and closed
 @check(
-    leaves=("M10.2.3", "M10.2.4"),
+    leaves=("M10.2.3", "M10.2.4", "M40.6.1.4"),
     sentence=(
         "Signed Lark card presses on three waiting promotions: the approver's decides nothing "
         "while approving from Lark is off; once on, a bystander's decides nothing, the approver's "

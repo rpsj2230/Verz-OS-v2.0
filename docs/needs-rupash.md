@@ -2,11 +2,123 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**39 items are open: 202,** three disclosure decisions on screens I built (who the sign-in page names, what the landing figures show a reader without the spend screens, and whether every file download is written down), **201,** who an agent is shared with and whether its page has a browsing switch, **200,** what happens to a person's agents when the person is switched off, **196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **193,** which formats an agent's generated documents start with and which libraries may be added, **192,** whether sensitive actions that cannot be undone need a second person, **191,** whether an agent may ever answer with nothing behind it, **189,** how a team agent may use mail without one person's mail reaching anybody else, **188,** whether five console tasks that ask for what the design does not do are narrowed, **187,** whether the chat tools show progress while an answer is made, **186,** whether answers keep using the old search index while a new embedding model is built, **185,** which person approves the eight starter skills, **184,** which outside AI services are offered first and what they count as, **183,** whether a skill is refused when its agent lacks one of its tools, **182,** what a skill names when it needs knowledge, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **167,** whether a chat room or channel belongs to exactly one agent, **163,** the short list of what stops tasks being proved on your install, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **134,** connecting the Slack channel, **132,** connecting the email channel, **131,** making staff accounts work on your install, **127 and 128,** things for you to do (switch on the Lark chat channel, and connect Xero, HubSpot and Freshdesk), **and 91,** the
+**44 items are open: 220,** which speech service turns dictation into text, **219,** whether an approver may amend an action before approving it, **218,** whether the product may count how often each knowledge item is read, **210,** whether an automation a person wrote in words may call a model with nobody present, **209,** what starts an automation that waits for a change in a source or a call from outside, **202,** three disclosure decisions on screens I built (who the sign-in page names, what the landing figures show a reader without the spend screens, and whether every file download is written down), **201,** who an agent is shared with and whether its page has a browsing switch, **200,** what happens to a person's agents when the person is switched off, **196,** whether the React Flow task is closed by what it is for, **195,** whether deduplication across a record and a passage is closed by what it is for, **194,** running the peak load test on your install, **193,** which formats an agent's generated documents start with and which libraries may be added, **192,** whether sensitive actions that cannot be undone need a second person, **191,** whether an agent may ever answer with nothing behind it, **189,** how a team agent may use mail without one person's mail reaching anybody else, **188,** whether five console tasks that ask for what the design does not do are narrowed, **187,** whether the chat tools show progress while an answer is made, **186,** whether answers keep using the old search index while a new embedding model is built, **185,** which person approves the eight starter skills, **184,** which outside AI services are offered first and what they count as, **183,** whether a skill is refused when its agent lacks one of its tools, **182,** what a skill names when it needs knowledge, **173,** connecting Google Workspace so each person's own mail, calendar and documents can be asked about, **167,** whether a chat room or channel belongs to exactly one agent, **163,** the short list of what stops tasks being proved on your install, **155,** recognising the same client across your systems, **151,** connecting Slack as a source of answers, **150,** connecting Google Drive, **148 and 149,** connecting your Laravel database and your developer's part of it, **152,** Lark Base and Wiki through Connect Lark, **143 to 146,** connecting Google Analytics, Search Console, Cloudflare and your domains, **142,** connecting WhatsApp, **141,** connecting Telegram, **140,** connecting Microsoft Teams, **134,** connecting the Slack channel, **132,** connecting the email channel, **131,** making staff accounts work on your install, **127 and 128,** things for you to do (switch on the Lark chat channel, and connect Xero, HubSpot and Freshdesk), **and 91,** the
 checks only you can do on your install; it waits for the Knowledge upload grants (item 105) to land.
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 220. Which speech service turns a person's dictation into text on the Ask page?
+
+**In plain terms:** task M40.7.3 says a person can attach a file to a question, which works today, and
+speak a question, which does not: no speech-to-text tool is registered on the install, so there is nothing
+to send the recording to. A recording is a person's voice, so choosing the service decides who hears it.
+
+**Option A: a speech service you name, called through the tool catalogue like any other tool.** Dictation
+is switched off until you name one and set its key in the vault. The text it returns is read at the
+person's own reach and kept nowhere but in the question they send.
+
+**Option B: speech built into the person's browser.** Nothing leaves the person's computer for our side
+to see, and quality and language support depend on their browser. There is no key and no vendor, and the
+task is closed by what it is for.
+
+**Option C: no dictation.** The task is closed as not wanted and the Ask page keeps typing and files.
+
+**My recommendation:** B first, because it needs no vendor, no key and no decision about who hears a
+voice; A can be added later behind the same button if the browsers prove too patchy.
+
+**What I need from you:** reply "220: A" (and say which service), "220: B" or "220: C".
+
+## 219. May an approver amend an action before approving it, or only approve or reject?
+
+**In plain terms:** task M40.6.1.2 says an approver can approve, reject or amend, each written down.
+Approve and reject are built and recorded. Amend is deliberately not offered: amending would mean the
+approver edits what an agent prepared, and the product has no way to raise the edited version through
+the same gate that checks the original, so a recorded amendment would describe something that never
+happened.
+
+**Option A: amend is a rejection plus a replacement.** The approver rejects the original with the reason
+"amended", and the replacement is raised through the gate as a new approval, which is checked at the
+approver's reach like any other and waits for a second person where the action needs one. The ledger
+shows both. It is the safe shape and it costs the approver one more press.
+
+**Option B: closed by what it is for.** Take over (already built) hands the approver the work to do
+themselves, which covers the need. Amend is dropped from the task.
+
+**My recommendation:** B. Take over already lets an approver fix an action and run it as themselves, and
+A adds a second approval for a case the owner has not yet met.
+
+**What I need from you:** reply "219: A" or "219: B".
+
+## 218. May the product count how often each knowledge item is read, so an author can see whether anyone uses it?
+
+**In plain terms:** task M40.3.1.3 says an author can see how many times what they wrote has been used.
+Today the search log records that a question was answered and never which item it drew on, on purpose:
+a record of who read which item is also a record of what each person was curious about, and the log was
+built so it cannot say.
+
+**Option A: count per item, not per person.** A counter on each item goes up when an answer draws on it.
+It holds no person, no question and no time of day, only a number and the month. An author sees "used 14
+times this month" and nothing else. It is a small new table, and the number itself can still hint at one
+person when a department of two uses the item.
+
+**Option B: count only above a floor.** As A, but an author is told nothing until an item has been used by
+at least five different people, then "used by several people". This keeps the hint away at the cost of
+saying nothing about a quiet department's items.
+
+**Option C: closed by what it is for.** The knowledge card already shows when an item was verified and
+when it is due, which is what an author needs to keep it true. No use count.
+
+**My recommendation:** B. It answers "does anyone read this" without ever telling an author who.
+
+**What I need from you:** reply "218: A", "218: B" or "218: C".
+
+## 210. May an automation a person wrote in words call a model with nobody present?
+
+**In plain terms:** the agent page's New automation lets a person write an instruction in plain words, such
+as "each morning, look at the tickets and tell me which are overdue", choose when it runs, and save it. It
+is saved paused, runs as the person who wrote it, and can only ever reach what that person may reach
+through the agent. What does not exist yet is the part that carries it out: today the product's only
+unattended run is a fixed report of the questions nobody could answer. Running an instruction means asking
+a model, with nobody watching, every time it fires. So the saved automation says on its card that it
+cannot be started yet. This question is whether, and on what terms, it may.
+
+**Option A: yes, inside the agent's own limits.** Each run is the agent working as the person at that
+moment (their access now, narrowed by the agent), within the agent's usual bounds on turns and tool calls
+and the budget it already has. Anything it would change is held for a person to decide, as every agent
+write is, and a run that has nothing to decide still costs one model call. The Stop screen and the budget
+stop already apply to it.
+
+**Option B: reports only.** An instruction may only be answered from what the agent can read, and its run
+produces a written result for the person and never a held action. Cheaper to reason about, and it covers
+"tell me which are overdue", but not "and draft the reminders".
+
+**My recommendation:** A, built as B first. The read-only half is the safe part and covers most of what
+people write; the held-action half follows once a held action from an unattended run has been shown to
+reach the right person on your install.
+
+**What I need from you:** reply "210: A" or "210: B". (Tasks M39.9.2.3 and M39.9.2.5.)
+
+## 209. What starts an automation that waits for a change in a connected source, or for another system to call it?
+
+**In plain terms:** New automation offers three ways to start one: on a schedule, when something changes in
+a connected source, or when another system calls it. The schedule works. The other two can be chosen,
+saved, shown on the card and rehearsed, and nothing on this install starts them yet, so the card says so
+and they cannot be switched on. This question is how they should start.
+
+**Option A: both, built one at a time.** A change in a connected source starts it through that source's own
+inbound door, matched by source and kind of change, and checked at the owner's access at the moment. A call
+from another system arrives at an address that belongs to that one automation, with a secret shown once and
+kept only as a fingerprint, so a leaked address can be replaced without touching anything else.
+
+**Option B: schedule only for now.** The other two stay choosable and unstartable until you ask for them.
+Nothing unattended starts from outside the Brain until you have decided it should.
+
+**My recommendation:** B now and A later, in the order change in a source and then outside call. Both open
+a way for something outside to start work with nobody present, and the schedule is the one that has been
+proved on your install.
+
+**What I need from you:** reply "209: A" or "209: B". (Tasks M17.4.1 and M39.9.2.2.)
 
 ## 202. Three things I built tell a reader a little more than you may want: who administers, what the figures show, and which downloads are written down
 

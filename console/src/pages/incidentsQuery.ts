@@ -10,7 +10,7 @@
  * `unread`, and the page says that sentence instead of "Nothing is degraded", which would be the
  * reassuring answer from a process that looked at nothing.
  *
- * Task ids: M27.2.7
+ * Task ids: M27.2.7, M27.15.45
  */
 
 import type { components } from "../api/schema";
@@ -20,6 +20,9 @@ export type IncidentRow = components["schemas"]["IncidentView"];
 
 /** Where the API keeps the screen. */
 export const INCIDENTS_API_PATH = "/console/incidents";
+
+/** Where an incident is acknowledged. */
+export const ACKNOWLEDGE_API_PATH = "/console/incidents/acknowledgement";
 
 /** The console address and the menu's label. */
 export const INCIDENTS_PATH = "/incidents";
@@ -51,4 +54,11 @@ export function stateWords(state: string): string {
 /** What stops working, in words: the tools by name, or the API's sentence when they cannot be named. */
 export function blocksWords(row: IncidentRow): string {
   return row.blocks.length === 0 ? (row.blocks_unknown ?? "") : row.blocks.join(", ");
+}
+
+/** Who acknowledged an incident and when, in words, or empty for one nobody has. */
+export function acknowledgedWords(row: IncidentRow): string {
+  const by = row.acknowledged_by ?? "";
+  const when = row.acknowledged_at ?? "";
+  return by === "" || when === "" ? "" : `${by}, ${new Date(when).toLocaleString("en-GB")}`;
 }
