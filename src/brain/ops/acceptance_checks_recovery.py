@@ -32,7 +32,7 @@ is rolled back with the check.
 wrote, so a real interrupted operation on the install is neither read back by a stand-in nor
 listed in the check's comparison.
 
-Task ids: M23.3.1
+Task ids: M23.3.1, M17.2.2, M17.2.4
 """
 
 from __future__ import annotations
@@ -147,7 +147,7 @@ class OnlyThese:
 
 # ------------------------------------------------------------------- 1. the queue
 @check(
-    leaves=("M23.3.1",),
+    leaves=("M23.3.1", "M17.2.2"),
     sentence=(
         "The worker's schedule last ran the job redrive recently and it acted; and the sweep, "
         "handed jobs carrying the install's own task names, puts back an orphaned and a failed "
@@ -197,7 +197,7 @@ async def a_stopped_worker_s_job_is_put_back_only_when_its_task_is_safe(h: Harne
 
 # -------------------------------------------------------------- 2. the side effects
 @check(
-    leaves=("M23.3.1",),
+    leaves=("M23.3.1", "M17.2.4"),
     sentence=(
         "The worker's schedule last ran the side-effect read-back recently and it acted; and of "
         "three actions a stopped worker left sent, the one its connector finds is settled "

@@ -44,8 +44,8 @@ def mine() -> dict[str, Check]:
 def test_both_checks_are_registered_with_the_leaf_they_prove() -> None:
     """Delete this and a check can close a leaf it does not exercise, or name an id no task has."""
     assert {name: one.leaves for name, one in mine().items()} == {
-        QUEUE: ("M23.3.1",),
-        EFFECTS: ("M23.3.1",),
+        QUEUE: ("M23.3.1", "M17.2.2"),
+        EFFECTS: ("M23.3.1", "M17.2.4"),
     }
     wbs = json.loads((ROOT / "docs" / "wbs.json").read_text(encoding="utf-8"))
     leaves = {one for module in wbs["modules"] for one in module["leaf_ids"]}
