@@ -879,6 +879,8 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     for server_check in (
         "the_model_server_runs_under_the_limit_this_install_costed",
         "the_model_server_reports_ready_for_exactly_the_parts_chosen",
+        "each_document_part_chosen_reads_a_printed_line",
+        "no_recorded_model_server_peak_exceeds_its_costed_limit",
     ):
         assert outcomes.pop(server_check) == (
             NOT_RUN,

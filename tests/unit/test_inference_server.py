@@ -977,4 +977,8 @@ def test_the_table_says_which_sources_are_unpinned_and_none_is_called_pinned_by_
     assert fetch.sources_for(["embedding"]) == tuple(
         one for one in fetch.SOURCES if one.part == "embedding"
     )
-    assert fetch.sources_for(["tika"]) == ()
+    assert fetch.sources_for(["layout"]) == ()  # a directory, fetched by the library's own tool
+    assert [one.name for one in fetch.sources_for(["tika", "ocr"])] == [
+        "tessdata/eng.traineddata",
+        "tika/tika-server.jar",
+    ]

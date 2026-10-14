@@ -85,6 +85,7 @@ from brain.core.entitlement import EntitlementSet
 from brain.gate.context import TrafficClass
 from brain.gate.entitlement_store import RESOLVE, entitlements_from
 from brain.knowledge.chunk_store import ChunkStoreError, ingest_document
+from brain.knowledge.document_services import document_services
 from brain.knowledge.document_tools import departments_query
 from brain.knowledge.ingest import (
     AdmittedUpload,
@@ -94,6 +95,7 @@ from brain.knowledge.ingest import (
     admit_upload,
 )
 from brain.knowledge.kinds import KindError, KnowledgeKind
+from brain.knowledge.model_server_parsers import Caller, DocumentServices
 from brain.knowledge.parse_budget import MIB, fits_parse_budget
 from brain.knowledge.scanning import Scanner
 from brain.knowledge.search import KNOWLEDGE_READ, KNOWLEDGE_UPLOAD, Reach, SearchError, reach_for
@@ -191,6 +193,19 @@ TICKET_TYPE: Final = "application/json"
 
 class IngestJobError(Exception):
     """A queued job that cannot report its own outcome: no ticket, or no store to write one to."""
+
+
+class ReaderNotAvailableError(IngestJobError):
+    """The reader this file needs did not answer, so the file has not been read and is not refused.
+
+    **The ticket is left queued and the job fails**, because `Redrive.SAFE` is what lets the
+    recovery sweep put a failed job back (`brain.ops.recovery_run`), up to `MAX_REDRIVES` times.
+    Writing a final refusal instead would end a document because a model was loading or the host
+    had no room for it that minute, and the cause's own wording (`PARSER_UNAVAILABLE`) says the file
+    has not been read yet and nothing is wrong with it. What this costs is stated rather than
+    hidden: a server down for longer than the re-drives last leaves the job in the dead letters,
+    where an operator sees it, with the ticket still saying it is queued.
+    """
 
 
 class TicketState(enum.StrEnum):
@@ -429,6 +444,9 @@ class IngestRun:
     now: datetime
     scanner: Scanner | None = None
     env: Mapping[str, str] | None = None
+    #: The readers the model server gives this install, or None when it gives none. A file is read
+    #: by the route for its type when there are any, and by the reader in this process when not.
+    services: DocumentServices | None = None
 
 
 #: What the uploader is told when the original in the store is not the file that was queued.
@@ -489,17 +507,26 @@ async def _decide(ticket: Ticket, run: IngestRun) -> Ticket:
         return ticket.outcome(TicketState.NOT_ADDED, code="not_offered", reason=NO_LONGER_OFFERED)
 
     try:
-        read = read_for_text_path(
+        # Off the event loop: a reader of the model server can take minutes, and a loop that is
+        # blocked that long is a worker whose heartbeat stops, which the recovery sweep reads as a
+        # dead worker and re-drives a job that is still running. The in-process reader is CPU work
+        # of the same shape and gains the same.
+        read = await asyncio.to_thread(
+            read_for_text_path,
             ReceivedUpload(upload=upload, body=body),
             kind=ticket.kind,
             placement=placement,
             owner_id=ticket.owner_id,
             scanner=run.scanner,
             budget_bytes=STANDARD_PARSE_BUDGET,
+            services=run.services,
         )
     except (IngestRefused, KindError) as exc:
         return ticket.outcome(TicketState.NOT_ADDED, code="not_added", reason=str(exc))
     if isinstance(read, ParseFailure):
+        if read.is_retryable:
+            msg = "the reader this file needs did not answer, so it was not read and not refused"
+            raise ReaderNotAvailableError(msg)
         return ticket.outcome(TicketState.NOT_ADDED, code=read.cause.value, reason=read.message())
 
     try:
@@ -589,6 +616,26 @@ def _store_from_settings(env: Mapping[str, str] | None) -> StoreMaker:
     return make
 
 
+async def _services_now(
+    sessions: async_sessionmaker[AsyncSession], servers: list[Caller], env: Mapping[str, str] | None
+) -> DocumentServices | None:
+    """The readers this install has right now, over a client built once, or None when it has none.
+
+    Asked per job, because the switch is a setting a person changes while the worker runs, and the
+    answer for the next file is what the install says then. The client is built only when there is
+    a reader to send to, so an install that runs no document part builds nothing.
+    """
+
+    def server() -> Caller:
+        if not servers:
+            from brain.ops.model_server_client import make_model_server_client
+
+            servers.append(make_model_server_client(env))
+        return servers[0]
+
+    return await document_services(sessions, server, env)
+
+
 def register_ingest_tasks(
     app: Any,
     *,
@@ -614,6 +661,9 @@ def register_ingest_tasks(
 
     held: list[tuple[StorageBackend | None, str, str]] = []
     build = make_store or _store_from_settings(env)
+    #: The client of the model server, built on the first job that needs one and kept: its breaker
+    #: is state, and a breaker made afresh for every file would never remember the server was down.
+    servers: list[Caller] = []
     ledgers: list[CapacityLedger | None] = []
     count = make_ledger_for or _ledger_from_settings(env)
 
@@ -638,15 +688,17 @@ def register_ingest_tasks(
             routed_url(database_url, queued_class(INGEST_TRAFFIC_CLASS), running=running)
         )
         try:
+            sessions = make_application_sessions(engine)
             outcome = await run_ingest_job(
                 ticket,
                 IngestRun(
                     backend=backend,
                     prefix=prefix,
-                    sessions=make_application_sessions(engine),
+                    sessions=sessions,
                     enqueue=enqueue,
                     now=now,
                     env=env,
+                    services=await _services_now(sessions, servers, env),
                 ),
             )
         finally:
