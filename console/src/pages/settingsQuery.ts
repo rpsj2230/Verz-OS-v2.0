@@ -116,6 +116,8 @@ export const FORMATS: Readonly<Record<string, string>> = Object.freeze({
   INSTALL_TIME_ZONE: "A time zone name, such as Asia/Singapore.",
   INSTALL_MODEL_PROFILE: "Where questions may be answered: on this server only, or by online providers.",
   INSTALL_DIGEST_TIME: "A time on the 24-hour clock in the install's time zone, such as 18:00.",
+  INSTALL_ALERT_EMAIL:
+    "One email address, such as operations@example.com, told when a safety mechanism has not run and nobody who holds the operations alert has used a chat tool in the last seven days.",
   INSTALL_SERVICES:
     "none, or any of presidio, langfuse, sandbox, objectstore and automation separated by commas: the personal data detector, the trace ledger, the script sandbox (which needs gVisor on the server), the file store for uploaded documents and the automation canvas (896 MiB). The next update starts each one this server has the memory for.",
   INSTALL_LARK_CARD_APPROVALS:

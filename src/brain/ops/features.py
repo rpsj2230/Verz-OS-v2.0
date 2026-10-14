@@ -500,6 +500,31 @@ BROWSER_RUNS: Final = Feature(
     read_by=("brain.browsing.driver:browser_runs_are_on",),
 )
 
+#: Telling the people who hold the operations alert that a safety mechanism has not run. Off until
+#: the owner has seen it on his install (decision 221, option C): it is a new message sent to people
+#: unasked, in the chat tool each last used and, when nobody who holds the alert has used one for a
+#: week, by email to the address the install names. The notice itself has no switch, by
+#: `brain.ops.notices.A_NOTICE_THAT_EXISTS_TO_CATCH_MISUSE_HAS_NO_SWITCH`; this is the switch on the
+#: new way of sending it, and is there to be removed once it is proved.
+CONTROL_NOT_RUN_ALERTS: Final = Feature(
+    name="control_not_run_alerts",
+    title="Tell the people who hold the operations alert when a safety mechanism has not run",
+    what=(
+        "When a scheduled safety mechanism has not run in the window it is expected to, whoever "
+        "holds the operations alert and may open Incidents is told once, in the chat tool they "
+        "last used, naming the mechanism and how long it has been. Those who hold the incident "
+        "alert are told too when the mechanism is one a person is woken for. When none of them "
+        "has used a chat tool in the last seven days, the address on Install, Settings is sent "
+        "the same sentence by email."
+    ),
+    while_off=(
+        "Nobody is sent a message about a mechanism that has not run. The Incidents screen and the "
+        "System health check still say which guarantees are held, and a message already sent "
+        "stays sent."
+    ),
+    read_by=("brain.control_not_run_told:control_alerts_are_on",),
+)
+
 #: Every feature this product can switch on, in the order the screen lists them.
 FEATURES: Final[tuple[Feature, ...]] = (
     PROMPT_EDITING,
@@ -519,6 +544,7 @@ FEATURES: Final[tuple[Feature, ...]] = (
     STARTER_SKILLS_SWITCH,
     PLUGIN_REGISTRY,
     BROWSER_RUNS,
+    CONTROL_NOT_RUN_ALERTS,
 )
 
 

@@ -541,6 +541,18 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         ),
         default="18:00",
     ),
+    # --- a safety mechanism that has not run, M17.7.2 (brain.control_not_run_told)
+    Setting(
+        name="INSTALL_ALERT_EMAIL",
+        belongs=Belongs.CONNECTORS,
+        meaning=(
+            "One email address told that a safety mechanism has not run when nobody who holds the "
+            "operations alert has used a chat tool in the last seven days. Changed on Install, "
+            "Settings. `unset` tells nobody by email, and the people who hold the alert are told "
+            "in the chat tool each last used."
+        ),
+        default="unset",
+    ),
     Setting(
         name="INSTALL_ACCEPTANCE_SKILL_SOURCE",
         belongs=Belongs.CONNECTORS,

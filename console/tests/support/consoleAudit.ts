@@ -739,7 +739,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     screens: ["/subscribers", "/notifications"],
     routes: ["/api/v1/govern/subscribers", "/api/v1/notifications*"],
     tables: ["ops.outbox_event", "ops.outbox_delivery"],
-    installation: ["INSTALL_SENDER_ADDRESS"],
+    installation: ["INSTALL_SENDER_ADDRESS", "INSTALL_ALERT_EMAIL"],
     gaps: [
       {
         what: "No notice is sent to a person yet.",
