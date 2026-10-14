@@ -28,7 +28,10 @@
  * tools an agent carries are the block under its reach, and a Workflows card says what a workflow is
  * and that none is stored yet, rather than leaving the part off the page until one is.
  *
- * Task ids: M27.10.2, M5.7.3, M27.11.6, M13.7.4, M39.1.1.1
+ * **A personal agent's owner also sees their own Google account** (`AgentOwnWorkspace.tsx`, M39.10.4), to
+ * attach or take off with a confirmation; the card is absent for everybody else and for a team agent.
+ *
+ * Task ids: M27.10.2, M5.7.3, M27.11.6, M13.7.4, M39.1.1.1, M39.10.4
  */
 
 import { Brain, Globe, MonitorX, Plug, Radio, ShieldCheck, Sparkles } from "lucide-react";
@@ -59,6 +62,7 @@ import { AgentLeash } from "./AgentLeash";
 import { AgentTools } from "./AgentTools";
 import { AgentChannels } from "./AgentChannels";
 import { AgentGroups } from "./AgentGroups";
+import { AgentOwnWorkspace } from "./AgentOwnWorkspace";
 import { WHERE_IT_ANSWERS } from "./ChannelChoices";
 import { LeashPill } from "./pills";
 
@@ -564,6 +568,7 @@ export function AgentProfile({
           <WorkflowsCard />
           <AgentChannels agentId={agent.agentId} />
           <AgentGroups agentId={agent.agentId} />
+          <AgentOwnWorkspace agentId={agent.agentId} name={agent.displayName} />
           {details?.knowledge === undefined ? null : <KnowledgeCard knowledge={details.knowledge} onWiden={onEditDraft} />}
           <Availability facts={facts} profile={profile} details={details} onTransfer={onTransfer} />
           <Learning />

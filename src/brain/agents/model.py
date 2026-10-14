@@ -91,14 +91,16 @@ and not on `AgentAuthority` because switching a channel on reaches nothing a run
 are decided nowhere in this module.
 
 Task ids: M13.1.1, M13.1.2, M13.1.3, M13.8.1, M13.7.4, M13.7.2, M13.8.19
+Task ids: M39.10.3, M39.10.4, M39.10.5
 """
 
 from __future__ import annotations
 
 import enum
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
+from types import MappingProxyType
 from typing import Annotated, Final
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_validator
@@ -516,6 +518,16 @@ AN_ADDED_AUDIENCE_GAINS_DISCOVERY_AND_NEVER_REACH: Final = (
 )
 
 
+#: Why a department or a person named beside a personal audience finds nothing.
+A_PERSONAL_AGENT_IS_OFFERED_TO_ITS_OWNER_AND_NOBODY_BESIDE: Final = (
+    "A personal agent is found by its owner and by nobody else, for oversight aside, which is its "
+    "own view and offers the agent to nobody. A department or a person named beside a personal "
+    "audience would make the agent findable by somebody who is not its owner, so `visible_to` "
+    "reads them at the department and person levels only, and the narrowest level cannot be "
+    "widened by a row beside it (M39.10.3)."
+)
+
+
 def audience_scope(audience: AgentAudience) -> Scope:
     """The predicate a level means, built by `brain.knowledge.visibility.scope_for` (M13.1.2).
 
@@ -549,6 +561,9 @@ def visible_to(audience: AgentAudience, viewer: AgentViewer) -> bool:
     scope = audience_scope(audience)
     if any(scope.matches(row) for row in _viewer_rows(viewer)):
         return True
+    if audience.level is Visibility.PERSONAL:
+        # See `A_PERSONAL_AGENT_IS_OFFERED_TO_ITS_OWNER_AND_NOBODY_BESIDE`.
+        return False
     # Beside the level: found, and nothing more. `audience_scope` above is untouched by these.
     return viewer.principal_id in audience.extra_people or bool(
         viewer.departments & set(audience.extra_departments)
@@ -665,8 +680,24 @@ A_TEAM_AGENT_NEVER_CARRIES_A_PERSONS_OWN_WORKSPACE: Final = (
     "none."
 )
 
-#: The connectors that read a person's own accounts, and so belong to a personal agent alone.
-PERSONS_OWN_CONNECTORS: Final[frozenset[str]] = frozenset({"google_workspace"})
+#: Each connector that reads a person's own accounts, with the capability that reads it, and so
+#: the connectors that belong to a personal agent alone. The capability is spelled here and not
+#: imported, because `brain.connectors` imports the agents it binds (the cycle `records_implied_by`
+#: records for the row reads); `test_the_own_reads_are_the_connectors_own_reader_capabilities` holds
+#: each spelling equal to the connector's.
+PERSONS_OWN_READS: Final[Mapping[str, str]] = MappingProxyType(
+    {"google_workspace": "read:google_workspace"}
+)
+PERSONS_OWN_CONNECTORS: Final[frozenset[str]] = frozenset(PERSONS_OWN_READS)
+
+#: Why naming the connector on a personal agent is the whole of attaching it.
+NAMING_A_PERSONS_OWN_CONNECTOR_ON_A_PERSONAL_AGENT_CARRIES_ITS_READ: Final = (
+    "A personal agent that names a connector reading a person's own accounts carries that "
+    "connector's reader capability in its ceiling, derived from the one list the connector is "
+    "named in. The capability is not also written into the agent's capabilities: a second record "
+    "of the same attachment would be a second way for the two to disagree, and the day they did "
+    "an agent would read a mailbox its page did not show or show a mailbox it could not read."
+)
 
 
 def bound_connectors(record: AgentRecord) -> tuple[str, ...]:
@@ -677,6 +708,21 @@ def bound_connectors(record: AgentRecord) -> tuple[str, ...]:
     if record.audience.level is Visibility.PERSONAL:
         return named
     return tuple(one for one in named if one not in PERSONS_OWN_CONNECTORS)
+
+
+def own_reads(record: AgentRecord) -> tuple[Capability, ...]:
+    """The reads a personal agent carries because it names a connector of its owner's own accounts.
+
+    Empty for a team agent, whose `bound_connectors` leaves those connectors out, and for a
+    personal agent naming none. Sorted by connector so two records of one list are one ceiling.
+    See `NAMING_A_PERSONS_OWN_CONNECTOR_ON_A_PERSONAL_AGENT_CARRIES_ITS_READ`.
+    """
+    named = bound_connectors(record)
+    return tuple(
+        Capability(value=PERSONS_OWN_READS[one])
+        for one in sorted(PERSONS_OWN_READS)
+        if one in named
+    )
 
 
 def entitlement_ceiling(record: AgentRecord) -> EntitlementSet:
@@ -712,10 +758,12 @@ def entitlement_ceiling(record: AgentRecord) -> EntitlementSet:
     from brain.agents.binding import bound_capabilities
 
     declared = bound_capabilities(record.authority.capabilities, bound_connectors(record))
+    # A personal agent that names a connector of its owner's own accounts carries its read, once.
+    own = tuple(one for one in own_reads(record) if one not in declared)
     return EntitlementSet(
         principal_id=f"{CEILING_PRINCIPAL_PREFIX}{record.agent_id}",
         grants=tuple(
             Grant(capability=capability, scope=record.authority.scope)
-            for capability in (*declared, *records_implied_by(declared))
+            for capability in (*declared, *own, *records_implied_by(declared))
         ),
     )

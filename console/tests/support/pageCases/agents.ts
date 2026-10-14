@@ -162,6 +162,12 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       },
       // Each row's figures, from the shared stats route, `brain.console_stats_routes`.
       "/api/v1/console/agents/quote-helper/stats": AGENT_STATS,
+      // Oversight, for a reader who holds the audit capability: a personal agent named, whose
+      // widest values are the name, its owner's name and the state, each with nowhere to break.
+      "/api/v1/agent-oversight": {
+        items: [{ agent_id: "amy-helper", display_name: UNBROKEN, owner_id: UNBROKEN, owner_name: UNBROKEN, state: "enabled" }],
+        truncated: false,
+      },
     },
   },
   // The Dashboard, which the bare address opens: the workspace for the header, the figures from the
@@ -301,6 +307,14 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         awaiting: [{ action_digest: "d".repeat(64), target: UNBROKEN, route: "simulate", at: "2019-03-06T09:00:00Z" }],
         may_move: true,
         may_judge: true,
+      },
+      // The owner's own Google account on a personal agent: attach or take off, and the words.
+      "/api/v1/agents/quote-helper/own-workspace": {
+        agent_id: "quote-helper",
+        attached: false,
+        may_attach: true,
+        account_connected: false,
+        note: UNBROKEN,
       },
       // The tools block: what it carries and what may be attached, each value a token.
       "/api/v1/agents/quote-helper/attachments": {
