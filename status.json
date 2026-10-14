@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-14T02:20:02.766085+00:00",
-  "commit": "32c52f89",
-  "commit_subject": "The control registry install check reports not run when the repository's workflow files are not on the install (#585)",
+  "generated_at": "2026-10-14T05:46:37.817914+00:00",
+  "commit": "8f6dad40",
+  "commit_subject": "Shared files stop conflicting: derived counts, one file per new feature, one file per new proof hold (#596)",
   "total": 1625,
   "done": 864,
   "percent": 53.2,
