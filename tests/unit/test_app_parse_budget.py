@@ -35,6 +35,10 @@ from brain.runtime import MEASURED_SUPERVISOR_MB, MEASURED_WORKER_PEAK_MB, most_
 
 REPO = Path(__file__).resolve().parents[2]
 
+#: The limit of the container whose peak `APP_RESIDENT_MIB` was read from, on 2026-09-29. A fact
+#: about that install, written here so that changing the deployed limit cannot rewrite it.
+MEASURED_AT_MIB = 1024
+
 
 def _upload(media_type: MediaType, size_bytes: int) -> AdmittedUpload:
     """An admission record of a type and size, without the bytes, as test_parse_budget does."""
@@ -76,7 +80,10 @@ def test_the_per_process_measurements_add_up_to_the_whole_container_s() -> None:
     process's own share, have to agree to within a MiB per process of rounding. Delete this and
     either measured figure can be edited to suit a worker count, since every other test takes
     the measurements as given."""
-    processes = most_workers(APP_MEMORY_MIB)
+    # The container both figures were measured in was the 1024 MiB one, which is a fact about
+    # the 2026-09-29 measurement and not the figure the application is deployed at now (1536 since
+    # 2026-10-14, which starts six processes and whose resident figure is modelled, not measured).
+    processes = most_workers(MEASURED_AT_MIB)
     summed = MEASURED_SUPERVISOR_MB + processes * MEASURED_WORKER_PEAK_MB
     assert abs(summed - APP_RESIDENT_MIB) <= processes
 
