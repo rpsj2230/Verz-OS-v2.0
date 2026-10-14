@@ -31,7 +31,10 @@ Task ids: M7.2.1, M7.3.3
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
+import signal
 import subprocess
 import sys
 import threading
@@ -114,8 +117,15 @@ class SubprocessPart:
     def start(self) -> str:
         argv = self._argv or [sys.executable, "-m", "inference_server.worker", self._part]
         # A fixed argv built from a part name this program validated against its own list.
+        # In a session of its own, so that everything the part starts (the general reader's JVM,
+        # a recogniser's child) is in the process group this program ends, and ending the part
+        # leaves nothing of it holding memory.
         self._process = subprocess.Popen(  # noqa: S603
-            argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=self._env
+            argv,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            env=self._env,
+            start_new_session=True,
         )
         timer = self._kill_after(LOAD_SECONDS)
         try:
@@ -171,12 +181,21 @@ class SubprocessPart:
             except OSError:
                 pass
         if process.poll() is None:
-            process.terminate()
+            self._signal_group(process, signal.SIGTERM)
             try:
                 process.wait(timeout=10)
             except subprocess.TimeoutExpired:
-                process.kill()
+                self._signal_group(process, signal.SIGKILL)
                 process.wait()
+        # Whatever the part started and did not wait for: a part that ended by itself leaves its
+        # children in the group, and they are the memory this call exists to give back.
+        self._signal_group(process, signal.SIGKILL)
+
+    @staticmethod
+    def _signal_group(process: subprocess.Popen[bytes], sent: int) -> None:
+        """Send a signal to the part's whole process group, which `start` made its own."""
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(process.pid, sent)
 
 
 class Supervisor:
