@@ -64,8 +64,9 @@ A_PERSON_WAS_NOT_COUNTED: Final = "adoption did not count a question that a pers
 A_JOB_WAS_NOT_LISTED: Final = "the Jobs screen did not list every control the scheduler runs"
 A_CONTROL_HAS_NO_CALLER: Final = "a safety control the registry says is called is not called"
 NO_TREE_HERE: Final = (
-    "this install carries the product as a package without its source tree, which the registry "
-    "check reads, so it cannot be asked here"
+    "this install carries the product as a package without its repository files (the source tree "
+    "or the workflow files that schedule a control), which the registry check reads, so it "
+    "cannot be asked here"
 )
 
 
@@ -262,7 +263,12 @@ async def every_scheduled_control_is_listed_and_has_a_caller(
     listed = await jobs(console_for(h).request(), await asking_as(h, reader))
     if {one.control for one in listed.jobs} != {one.name for one in schedulable()}:
         raise CheckFailedError(A_JOB_WAS_NOT_LISTED)
-    if not controls.SRC.is_dir():
+    if not controls.SRC.is_dir() or any(
+        one.schedule_file and not (controls.REPO / one.schedule_file).is_file()
+        for one in controls.CONTROLS
+    ):
+        # The schedule files are workflow files of the repository, which an install does not carry
+        # even when the package's source is there, so their absence is the tree and not a control.
         raise CheckNotRunError(NO_TREE_HERE)
     if controls.registry_gaps():
         raise CheckFailedError(A_CONTROL_HAS_NO_CALLER)
