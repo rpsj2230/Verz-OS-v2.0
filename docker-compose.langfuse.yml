@@ -123,7 +123,7 @@
 # `brain.ops.wiring.set_breaches` against what wave 2 could spend beside the other project's
 # containers it answered 2304 MiB against 1720, over by 584. Item 120 of
 # `docs/needs-rupash.md` took those containers down and the same call now answers 2304 against
-# 6200, so the set is started by a release where `INSTALL_SERVICES` names `langfuse` and the
+# 5688 since the application limit went to 1536M (6200 before), so the set is started by a release where `INSTALL_SERVICES` names `langfuse` and the
 # server has the room (`brain.ops.overlays`), and never otherwise. See
 # `A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING`. What this file claims is the
 # sizing, which `tests/unit/test_wiring.py` checks against `brain.ops.wiring.COMPONENTS` on
