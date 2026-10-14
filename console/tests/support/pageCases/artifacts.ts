@@ -17,7 +17,7 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: {
       "/api/v1/govern/artifacts": {
-        artifacts: [
+        items: [
           {
             artifact_id: UNBROKEN,
             kind: "report",

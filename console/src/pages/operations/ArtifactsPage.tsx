@@ -104,7 +104,7 @@ function MoreRows({ listing }: { readonly listing: ReturnType<typeof useListing<
 }
 
 export function ArtifactsPage() {
-  const listing = useListing<ArtifactRow>(ARTIFACTS_API_PATH, { listKey: "artifacts", choices: ARTIFACT_FILTERS });
+  const listing = useListing<ArtifactRow>(ARTIFACTS_API_PATH, { choices: ARTIFACT_FILTERS });
   const page = listing.body as ArtifactsView | null;
   const read = readArtifacts(page);
   // The answer to the first question is in, and it says nothing records an artifact.

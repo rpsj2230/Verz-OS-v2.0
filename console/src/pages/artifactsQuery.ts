@@ -31,11 +31,11 @@ export const ARTIFACTS_API_PATH = "/govern/artifacts";
 
 /** The rows, or the sentence saying nothing records any. */
 export function readArtifacts(payload: ArtifactsView | null): Read<readonly ArtifactRow[]> {
-  const rows = payload?.artifacts;
-  if (rows === null || rows === undefined) {
-    return { unread: payload?.unread ?? "" };
+  const unread = payload?.unread ?? "";
+  if (payload === null || unread !== "") {
+    return { unread };
   }
-  return { panel: rows };
+  return { panel: payload.items ?? [] };
 }
 
 export { wasRead };

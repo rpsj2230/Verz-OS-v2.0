@@ -228,7 +228,7 @@ def test_an_install_recording_nothing_is_told_so_rather_than_shown_an_empty_list
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["artifacts"] is None
+    assert body["items"] == []
     assert body["unread"] == NOTHING_HERE_RECORDS_WHAT_AN_AGENT_PRODUCED
     assert body["kept_rule"] == AN_ARTIFACT_MAY_NOT_OUTLIVE_THE_THING_IT_WAS_BUILT_FROM
 
@@ -247,7 +247,7 @@ def test_an_attached_source_lists_what_the_reader_may_see_with_provenance_and_re
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["unread"] == ""
-    [row] = body["artifacts"]
+    [row] = body["items"]
     assert row["artifact_id"] == "art_1"
     assert row["produced_for"] == "u_caller"
     assert row["run_id"] == "run_art_1"
@@ -267,7 +267,7 @@ def test_an_artifact_past_its_window_is_absent_rather_than_listed_as_expired() -
     for c in attached(old, fresh, agents=[agent_row("quoting")]):
         body = get(c, "u_admin").json()
 
-    assert [one["artifact_id"] for one in body["artifacts"]] == ["art_new"]
+    assert [one["artifact_id"] for one in body["items"]] == ["art_new"]
 
 
 def test_a_class_with_no_clock_says_why_there_is_no_date() -> None:
@@ -297,8 +297,8 @@ def test_a_scoped_reader_sees_only_the_artifacts_their_grant_admits_and_no_count
         narrow = get(c, "u_narrow").json()
         wide = get(c, "u_admin").json()
 
-    assert [one["artifact_id"] for one in narrow["artifacts"]] == ["art_quote"]
-    assert sorted(one["artifact_id"] for one in wide["artifacts"]) == ["art_hr", "art_quote"]
+    assert [one["artifact_id"] for one in narrow["items"]] == ["art_quote"]
+    assert sorted(one["artifact_id"] for one in wide["items"]) == ["art_hr", "art_quote"]
     assert set(narrow) == set(ArtifactsView.model_fields)
     assert {"total", "count", "hidden", "withheld"}.isdisjoint(narrow)
 
@@ -314,12 +314,12 @@ def test_an_artifact_of_an_agent_outside_the_readers_audience_is_absent() -> Non
     for c in attached(*rows, agents=agents):
         body = get(c, "u_admin").json()
 
-    assert body["artifacts"] == []
+    assert body["items"] == []
 
 
 # ------------------------------------------------------------------------ the pages
 def _ids(body: dict[str, Any]) -> list[str]:
-    return [one["artifact_id"] for one in body["artifacts"]]
+    return [one["artifact_id"] for one in body["items"]]
 
 
 def test_a_page_is_bounded_and_the_cursor_walks_every_row_once() -> None:
@@ -337,7 +337,7 @@ def test_a_page_is_bounded_and_the_cursor_walks_every_row_once() -> None:
         query = "?limit=3"
         while True:
             body = get(c, "u_admin", query).json()
-            assert len(body["artifacts"]) <= 3
+            assert len(body["items"]) <= 3
             seen.extend(_ids(body))
             cursors.append(body["next_cursor"])
             if body["next_cursor"] is None:
@@ -447,7 +447,7 @@ def test_a_garbage_cursor_is_the_same_refusal_with_no_store_attached(client: Tes
     Delete this and a malformed cursor could be answered with the sentence about the missing store
     on one install and a 422 on another."""
     assert get(client, "u_admin", "?cursor=not-a-cursor").status_code == 422
-    assert get(client, "u_admin", "?limit=3").json()["artifacts"] is None
+    assert get(client, "u_admin", "?limit=3").json()["items"] == []
 
 
 def test_a_cursor_says_more_only_when_a_row_the_reader_may_see_follows() -> None:
@@ -483,7 +483,7 @@ def test_a_search_for_what_the_reader_may_not_see_answers_as_a_search_for_nothin
         nothing = get(c, "u_narrow", "?q=zzzzzz").json()
 
     assert withheld == nothing
-    assert withheld["artifacts"] == []
+    assert withheld["items"] == []
 
 
 # ------------------------------------------------------------------------ the refusals

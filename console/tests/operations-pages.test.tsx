@@ -1010,11 +1010,11 @@ describe("Artifacts and Import and export", () => {
     // What breaks if this is deleted: an estate nothing records drawn as one that produced
     // nothing, or principal ids and slugs back as the rows' text.
     expect(Object.keys(artifact()).sort()).toEqual(backendModelFields("src/brain/artifact_routes.py", "ArtifactView").sort());
-    const unread = await open("/artifacts", { "GET /api/v1/govern/artifacts": () => ({ body: { artifacts: null, unread: "UNREAD", kept_rule: "RULE" } }) });
+    const unread = await open("/artifacts", { "GET /api/v1/govern/artifacts": () => ({ body: { items: [], unread: "UNREAD", kept_rule: "RULE" } }) });
     expect(mainText(unread.container)).toContain(NOTHING_RECORDED);
     expect(unread.container.querySelector("main table")).toBeNull();
 
-    const listed = await open("/artifacts", { "GET /api/v1/govern/artifacts": () => ({ body: { artifacts: [artifact()], unread: "", kept_rule: "RULE" } }) });
+    const listed = await open("/artifacts", { "GET /api/v1/govern/artifacts": () => ({ body: { items: [artifact()], unread: "", kept_rule: "RULE" } }) });
     const text = mainText(listed.container);
     expect(text).toContain("Report");
     expect(text).toContain("kept 30 days");

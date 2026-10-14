@@ -50,6 +50,30 @@ it. A server whose `brain-autodeploy` is older than that needs the two scripts c
 image once, which [server-steps.md](server-steps.md) gives, with the check for whether yours is
 current.
 
+## Two ways to update, and which one an install is on
+
+`INSTALL_UPDATE_MODE` says how this install updates, and it has two values. It is changed on
+Install, Settings, under How this install updates, and it is recorded with who changed it.
+
+| Value | What the install does | What the checks say |
+| --- | --- | --- |
+| `release`, the default | Stays on a release tag somebody chose. `update.sh` moves it to another tag and refuses `latest`. | The install check for a named release passes on a tag, and **fails** on `latest` or on no tag, because that is an install that changes what it runs with nobody having decided. |
+| `continuous` | Follows every release as it is published, by choice. A server that deploys itself with the pull timer, as a staging server does, is this. | The same check is recorded as **not run**, with the reason that the install follows every release by choice. It is never a pass: there is no pin to confirm. The Updates screen names the built commit, which is what is running, and says the install names no release of its own. |
+
+**A client's production install should stay on `release`.** A production install that runs
+`latest` by accident is the fault the check exists to find, and `continuous` would hide it. Choose
+`continuous` only for a server whose job is to take each release the moment it is published, and
+say so by setting it: the install never infers it from the tag, because an install that is on
+`latest` by mistake looks the same as one that chose it, and the setting is the only difference.
+
+Anything else written in the environment file is read as `release`, so a typo can never make an
+install follow every release. The Settings screen refuses any other word before it is saved.
+
+Changing the mode changes what is reported and nothing else. It does not move the install to
+another image: `release` on a server still running `latest` is reported as a fault until
+`update.sh` pins a tag, and `continuous` on a server pinned to a tag keeps that tag until its
+own timer pulls a newer one.
+
 ## What a rollback is, and the thing that does not roll back
 
 Images are tagged by the release they were built for, so going back is re-pinning the previous
@@ -180,6 +204,7 @@ What the screen says instead of a release, and what to do:
 | --- | --- | --- |
 | a release, such as `v1.4.0` | `APP_IMAGE` ends in a release tag | nothing |
 | this install pins no release | `APP_IMAGE` ends in `latest` or in no tag | run `update.sh` with the release you mean to run |
+| this install follows every release | `APP_IMAGE` ends in `latest` or in no tag, and how this install updates is `continuous` | nothing: it is a choice. Read the built commit for what is running, or set `release` to pin one |
 | nothing handed this application the image reference | the compose file your deployment ran predates this, or a deployment tool keeps its own stored copy of it | an install made by `install.sh` gets the line with its next update; a stored copy needs the `APP_IMAGE` line added to the application's `environment` block by hand |
 
 `/opt/brain/RELEASE` is not read by the screen, on purpose. An update writes it before it

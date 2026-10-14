@@ -54,7 +54,7 @@ function artifact(id: string, overrides: Partial<ArtifactRow> = {}): ArtifactRow
 }
 
 function page(rows: ArtifactRow[], next_cursor: string | null = null): unknown {
-  return { artifacts: rows, next_cursor, unread: "", kept_rule: RULE };
+  return { items: rows, next_cursor, unread: "", kept_rule: RULE };
 }
 
 function json(body: unknown, status = 200): Response {
@@ -221,7 +221,7 @@ describe("what the artifacts page draws", () => {
     // What breaks if this is deleted: an install whose store is not attached drawn as an estate
     // that produced nothing, or a search box over a list that is not there.
     const { container } = await mount((url) =>
-      url.pathname === ARTIFACTS_OPERATION ? json({ artifacts: null, next_cursor: null, unread: "UNREAD-SENTINEL", kept_rule: RULE }) : null,
+      url.pathname === ARTIFACTS_OPERATION ? json({ items: [], next_cursor: null, unread: "UNREAD-SENTINEL", kept_rule: RULE }) : null,
     );
 
     expect(container.textContent).toContain(NOTHING_RECORDED);

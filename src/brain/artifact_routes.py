@@ -168,14 +168,17 @@ class ArtifactView(BaseModel):
 class ArtifactsView(BaseModel):
     """The estate a reader may see, or the admission that nothing here records one.
 
-    Exactly one of `artifacts` and `unread` is set, refused here rather than left to whatever
-    draws it, for `brain.install_routes.RecoveryView`'s reason. No total and no count of what
-    `artifact_estate` withheld: the list is the answer.
+    An answer that carries an `unread` reason carries no items, refused here rather than left to
+    whatever draws it, for `brain.install_routes.RecoveryView`'s reason. No total and no count of
+    what `artifact_estate` withheld: the list is the answer.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    artifacts: list[ArtifactView] | None = None
+    #: Always a list, as the paged-answer convention requires (`tests/unit/test_api_paging.py`).
+    #: Empty with `unread` set means nothing here could look; empty with `unread` blank is a true
+    #: empty estate. The two are told apart by `unread`, never by the list.
+    items: list[ArtifactView] = []
     #: A cursor for the page after this one, present exactly when a further row this reader may see
     #: matches the question. Never a count. See `brain.listing`.
     next_cursor: str | None = None
@@ -185,10 +188,10 @@ class ArtifactsView(BaseModel):
 
     @model_validator(mode="after")
     def _exactly_one(self) -> ArtifactsView:
-        if (self.artifacts is None) == (not self.unread):
+        if self.unread and (self.items or self.next_cursor is not None):
             msg = (
-                "an artifacts answer must carry a list or a reason for having none, and never "
-                "both: an empty list reads as an estate that produced nothing"
+                "an artifacts answer that says nothing could look must carry no items and no "
+                "cursor: a list beside that sentence reads as an estate that produced something"
             )
             raise ValueError(msg)
         return self
@@ -285,7 +288,7 @@ async def artifacts(request: Request, asked: Asked, listed: ArtifactsQuery) -> A
     )
     page = plan.page([artifact_view(one) for one in shown])
     return ArtifactsView(
-        artifacts=list(page.items),
+        items=list(page.items),
         next_cursor=page.next_cursor,
         kept_rule=AN_ARTIFACT_MAY_NOT_OUTLIVE_THE_THING_IT_WAS_BUILT_FROM,
     )

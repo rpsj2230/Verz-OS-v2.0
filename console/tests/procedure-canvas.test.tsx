@@ -391,6 +391,29 @@ describe("what comes out", () => {
   });
 });
 
+describe("the drawing for a keyboard and a screen reader", () => {
+  test("each step takes a tab stop and says its words, and a skip link jumps to the steps and their controls", () => {
+    // What breaks if this is deleted: a canvas a keyboard cannot enter and a screen reader cannot
+    // read. The drawing's steps are focusable and named (M32.5.2.3), which costs one tab stop per
+    // step, so the skip link ahead of the drawing is what keeps the cost bounded; it is only worth
+    // anything if it points at the list of steps and controls, which is the text alternative here
+    // (every control of a step, in document order, is the drawing in words and then some).
+    const container = render(
+      <ProcedureCanvas caption={CAPTION} tools={TOOLS} initial={addStep(NEW_DRAWING, "finish")} />,
+    ).container;
+    const nodes = [...container.querySelectorAll<HTMLElement>(".react-flow__node")];
+
+    expect(nodes.map((node) => node.getAttribute("tabindex"))).toEqual(["0", "0"]);
+    expect(nodes.every((node) => (node.getAttribute("aria-label") ?? "") !== "")).toBe(true);
+
+    const skip = container.querySelector<HTMLAnchorElement>("a.skip-link");
+    const steps = container.querySelector<HTMLElement>("ol.procedure__steps");
+    expect(skip?.getAttribute("href")).toBe(`#${steps?.id ?? "missing"}`);
+    expect(steps?.getAttribute("tabindex")).toBe("-1");
+    expect(steps?.querySelectorAll("li").length).toBe(nodes.length);
+  });
+});
+
 describe("one mount of React Flow", () => {
   test("React Flow is imported in one file, handed no change handler anywhere, and the procedure draws through it", () => {
     // What breaks if this is deleted: M32.5.2.3's safety. The obvious way to build an authoring

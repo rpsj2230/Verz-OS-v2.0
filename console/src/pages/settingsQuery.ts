@@ -120,6 +120,8 @@ export const FORMATS: Readonly<Record<string, string>> = Object.freeze({
     "One email address, such as operations@example.com, told when a safety mechanism has not run and nobody who holds the operations alert has used a chat tool in the last seven days.",
   INSTALL_SERVICES:
     "none, or any of presidio, langfuse, sandbox, objectstore and automation separated by commas: the personal data detector, the trace ledger, the script sandbox (which needs gVisor on the server), the file store for uploaded documents and the automation canvas (896 MiB). The next update starts each one this server has the memory for.",
+  INSTALL_UPDATE_MODE:
+    "How this install updates: stay on a release you choose, which is what a production install wants, or follow every release as it is published, as a staging server does. Following every release is never inferred from the image's tag: it is only what you set here.",
   INSTALL_LARK_CARD_APPROVALS:
     "Whether a Lark card's buttons may approve. A press relies on Lark's own sign-in and carries no second factor from the Brain, so switch it on only if your Lark requires two-step verification.",
 });
@@ -177,6 +179,10 @@ export const CHOICES: Readonly<Record<string, readonly { readonly value: string;
     INSTALL_LARK_CARD_APPROVALS: [
       { value: "off", label: "Off: decide approvals in the console" },
       { value: "on", label: "On: approve from Lark cards" },
+    ],
+    INSTALL_UPDATE_MODE: [
+      { value: "release", label: "Stay on a release I choose" },
+      { value: "continuous", label: "Follow every release" },
     ],
   });
 
