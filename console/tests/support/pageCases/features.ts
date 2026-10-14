@@ -30,7 +30,7 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         plugins_have_no_loader: true,
         every_change_is_in_the_audit_trail: true,
       },
-      "/api/v1/orchestration/rehearsals": {
+      "/api/v1/orchestration/weighed-plans": {
         decisions: [
           {
             run_id: "rehearsal-1",

@@ -14,7 +14,7 @@ import { at, type Proof, type Proofs, SETTINGS_PRESSED, t, type WriteRoute } fro
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/install/FeaturesPage.tsx switchPath(row.name)": [at("POST /api/v1/install/features/{name}", "switchPath", switchPath("schedule_control"))],
-  "src/pages/install/OrchestrationPanel.tsx REHEARSALS_API_PATH": [at("POST /api/v1/orchestration/rehearsals", "REHEARSALS_API_PATH", REHEARSALS_API_PATH)],
+  "src/pages/install/OrchestrationPanel.tsx REHEARSALS_API_PATH": [at("POST /api/v1/orchestration/weighed-plans", "REHEARSALS_API_PATH", REHEARSALS_API_PATH)],
   "src/pages/install/PluginsPanel.tsx PLUGINS_API_PATH": [at("POST /api/v1/install/plugins", "PLUGINS_API_PATH", PLUGINS_API_PATH)],
   "src/pages/install/PluginsPanel.tsx verbPath(row.plugin_id, verb)": [
     at("POST /api/v1/install/plugins/{plugin_id}/enable", "verbPath", verbPath("stand-in", "enable")),
@@ -69,7 +69,7 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     audit: NO_PLUGIN_LEDGER_ENTRY,
     behaviour: A_PLUGIN_ROW_IS_FOLLOWED_BY_THE_INSTALL_CHECK,
   },
-  "POST /api/v1/orchestration/rehearsals": {
+  "POST /api/v1/orchestration/weighed-plans": {
     row: A_WEIGHED_PLAN_IS_FOLLOWED_BY_THE_INSTALL_CHECK,
     audit: NO_LEDGER_ENTRY_FOR_A_WEIGHED_PLAN,
     behaviour: A_WEIGHED_PLAN_IS_FOLLOWED_BY_THE_INSTALL_CHECK,

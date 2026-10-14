@@ -719,7 +719,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "Feature and module enablement": {
     screens: ["/features"],
-    routes: ["/api/v1/install/features*", "/api/v1/install/plugins*", "/api/v1/orchestration/rehearsals"],
+    routes: ["/api/v1/install/features*", "/api/v1/install/plugins*", "/api/v1/orchestration/weighed-plans"],
     tables: ["ops.fanout_gate", "ops.plugin_install", "ops.plugin_version"],
     installation: [],
     gaps: [

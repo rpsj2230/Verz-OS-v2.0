@@ -150,6 +150,7 @@ describe("weighing a plan", () => {
         { subtask_id: "part_d", minor: 7, seconds: 2 },
       ],
       total_minor: 11,
+      currency: "USD",
       complete: false,
       notice: "This answer is missing what these would have added: GAP-OBJECTIVE.",
     };
@@ -164,8 +165,8 @@ describe("weighing a plan", () => {
     await waitFor(() => {
       expect(container.textContent).toContain("GAP-OBJECTIVE");
     });
-    expect(container.textContent).toContain("part_d: 7 minor units");
-    expect(container.textContent).toContain("Total cost: 11 minor units");
+    expect(container.textContent).toContain("part_d: USD 0.07");
+    expect(container.textContent).toContain("Total cost: USD 0.11");
   });
 
   test("a refusal is the API's sentence", async () => {

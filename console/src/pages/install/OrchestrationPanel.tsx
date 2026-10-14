@@ -16,6 +16,7 @@ import { useResource } from "../../api/useResource";
 import { Chip, EmptyState, FailureState, LoadingState, Note, SectionCard } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Textarea } from "../../components/ui/textarea";
+import { moneyWords } from "../spendQuery";
 import {
   NO_DECISIONS,
   NO_DECISIONS_TITLE,
@@ -39,22 +40,23 @@ import {
 } from "../orchestrationQuery";
 
 function Answer({ one }: { readonly one: RehearsalBody }) {
+  const merged = one.merged;
   return (
     <SectionCard title={verdictWords(one.gate.verdict)} headingLevel="h3" action={<Chip>{one.gate.verdict}</Chip>}>
       <p className="m-0 text-[13px] text-body">{summary(one.gate)}</p>
-      {one.merged === null || one.merged === undefined ? null : (
+      {merged === null || merged === undefined ? null : (
         <>
           <p className="m-0 mt-2 text-[12.5px] text-dim">
-            {one.merged.complete ? "Every subtask returned what it promised." : one.merged.notice}
+            {merged.complete ? "Every subtask returned what it promised." : merged.notice}
           </p>
           <ul className="m-0 mt-1 list-none p-0 text-[12.5px] text-dim">
-            {one.merged.reports.map((row) => (
+            {merged.reports.map((row) => (
               <li key={row.subtask_id}>
-                {row.subtask_id}: {row.minor} minor units, {row.seconds} seconds
+                {row.subtask_id}: {moneyWords(row.minor, merged.currency)}, {row.seconds} seconds
               </li>
             ))}
           </ul>
-          <p className="m-0 mt-1 text-[12.5px] text-body">Total cost: {one.merged.total_minor} minor units.</p>
+          <p className="m-0 mt-1 text-[12.5px] text-body">Total cost: {moneyWords(merged.total_minor, merged.currency)}.</p>
         </>
       )}
     </SectionCard>
