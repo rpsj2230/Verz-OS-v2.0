@@ -473,3 +473,34 @@ def test_a_photograph_on_an_install_without_the_reader_is_refused_as_it_always_w
 
     assert (outcome.state, outcome.code) == (TicketState.NOT_ADDED, ParseCause.UNSUPPORTED.value)
     assert written.items == []
+
+
+def test_a_scan_added_with_unclear_pages_left_out_says_which_on_the_ticket_and_in_the_sentence(
+    monkeypatch: pytest.MonkeyPatch, written: Written
+) -> None:
+    """The added ticket carries the pages that were not clear enough, in the words the item holds,
+    and the sentence the console shows adds them to "was added".
+
+    Delete this and an uploader is told their scan was added and never that a page of it was not."""
+    from brain.knowledge.ingest_queue import outcome_sentence
+
+    store = MemoryStore()
+    mixed = a_pdf("Quarterly report", "")
+    ticket = queued(store, mixed, media_type=MediaType.PDF, filename="mixed.pdf")
+    grants(monkeypatch, MAY_ADD_IN_WEB)
+    layout = {"blocks": [{"kind": "prose", "text": "Quarterly report", "start": 0, "page": 1}]}
+    scan = {
+        "blocks": [{"kind": "prose", "text": "noise", "start": 0, "page": 2, "section": ""}],
+        "pages": [{"page": 2, "confidence": 0.2}],
+    }
+    parts = _Parts(layout=Reply(CallOutcome.OK, layout), ocr=Reply(CallOutcome.OK, scan))
+
+    outcome = asyncio.run(
+        run_ingest_job(ticket.ticket, _with(store, services_for((Part.LAYOUT, Part.OCR), parts)))
+    )
+
+    assert outcome.state is TicketState.ADDED
+    assert outcome.reason.startswith("Page 2 was not clear enough")
+    assert outcome_sentence(outcome) == f"mixed.pdf was added. {outcome.reason}"
+    [(item, _blocks)] = written.items
+    assert item.parse_notice == outcome.reason

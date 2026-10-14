@@ -107,7 +107,14 @@ from brain.knowledge.ingest import (
 )
 from brain.knowledge.item import ARRIVED_AS_FILE, ARRIVED_AS_LINK, KnowledgeItem, KnowledgeState
 from brain.knowledge.kinds import KnowledgeKind, assert_kind_holds, assert_uploadable
-from brain.knowledge.model_server_parsers import DocumentServices, readable_types, route_for
+from brain.knowledge.model_server_parsers import (
+    DocumentServices,
+    fill_in_scanned_pages,
+    readable_types,
+    route_for,
+    stamped,
+)
+from brain.knowledge.parse_ocr import left_out_notice
 from brain.knowledge.parse_paths import ParsePath, ParseProvenance, RoutedParser, parse_by_route
 from brain.knowledge.scanners import configured_scanner
 from brain.knowledge.scanning import (
@@ -1023,6 +1030,7 @@ def read_for_text_path(
         tables_visible=TABLES_ARE_VISIBLE,
         arrived_as=ARRIVED_AS_FILE,
         route=route,
+        services=services,
     )
 
 
@@ -1072,6 +1080,7 @@ def _read(
     arrived_as: str = "",
     source_url: str = "",
     route: Sequence[RoutedParser] = (),
+    services: DocumentServices | None = None,
 ) -> ReadUpload | ParseFailure:
     """The one read both paths take. A type the reader has no table answer for is unsupported.
 
@@ -1092,12 +1101,23 @@ def _read(
         received.upload, received.body, scanner=scanner or configured_scanner()
     )
     provenance: ParseProvenance | None = None
+    left_out: tuple[int, ...] = ()
     if route:
         attributed = parse_by_route(scanned, route=route, budget_bytes=budget_bytes)
         if isinstance(attributed, ParseFailure):
             return attributed
         parsed = attributed.document
         provenance = attributed.provenance
+        left_out = parsed.left_out_pages
+        blocks = stamped(parsed.blocks, provenance)
+        if services is not None and provenance.path is ParsePath.LAYOUT:
+            # A layout read of a PDF leaves a photographed page blank: read those by the
+            # scanned-page reader, each block saying how it was read.
+            filled = fill_in_scanned_pages(scanned, blocks, services)
+            if isinstance(filled, ParseFailure):
+                return filled
+            blocks = filled.blocks
+            left_out = tuple(sorted({*left_out, *filled.left_out_pages}))
         # A layout read sees a table as a table whatever the file is; every other path sees one as
         # the in-process reader does, which for a type it does not read is not at all.
         sees_tables = provenance.path is ParsePath.LAYOUT or tables_visible.get(media_type, False)
@@ -1106,16 +1126,17 @@ def _read(
         if isinstance(parsed_or_failed, ParseFailure):
             return parsed_or_failed
         parsed = parsed_or_failed
+        blocks = parsed.blocks
         sees_tables = tables_visible[media_type]
     assert_kind_holds(
         kind,
-        holds_a_table=any(block.kind is BlockKind.TABLE for block in parsed.blocks),
+        holds_a_table=any(block.kind is BlockKind.TABLE for block in blocks),
         tables_are_visible=sees_tables,
     )
     titled = title_of(scanned) if title_of is not None else ""
     item = KnowledgeItem(
         item_id=upload_item_id(received.upload, placement, owner_id),
-        content=joined(parsed.blocks),
+        content=joined(blocks),
         title=titled or upload_title(received.upload.filename),
         visibility=placement,
         owner_id=owner_id,
@@ -1123,10 +1144,11 @@ def _read(
         kind=kind,
         arrived_as=arrived_as,
         source_url=source_url,
+        parse_notice=left_out_notice(left_out),
     )
     return ReadUpload(
         item=item,
-        blocks=parsed.blocks,
+        blocks=tuple(blocks),
         provenance=provenance,
-        left_out_pages=parsed.left_out_pages,
+        left_out_pages=left_out,
     )

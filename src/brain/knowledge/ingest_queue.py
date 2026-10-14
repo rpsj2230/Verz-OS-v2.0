@@ -548,7 +548,9 @@ async def _decide(ticket: Ticket, run: IngestRun) -> Ticket:
         item_id=read.item.item_id,
         passages=len(read.blocks),
         code="",
-        reason="",
+        # An added scan whose unclear pages were left out says which, in the words the item itself
+        # carries; every other added file has nothing to add to "was added".
+        reason=read.item.parse_notice,
     )
 
 
@@ -734,6 +736,8 @@ def outcome_sentence(ticket: Ticket, *, place: QueuePlacement | None = None) -> 
             )
         case TicketState.QUEUED:
             return f"{ticket.filename} is queued to be read."
+        case TicketState.ADDED if ticket.reason:
+            return f"{ticket.filename} was added. {ticket.reason}"
         case TicketState.ADDED:
             return f"{ticket.filename} was added."
         case TicketState.NOT_ADDED:

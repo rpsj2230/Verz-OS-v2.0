@@ -302,6 +302,10 @@ class Drafted:
     kind: BlockKind = BlockKind.PROSE
     page: int | None = None
     section: str = ""
+    #: How it was read, when the reader that drafted it is not the one that will be recorded for
+    #: the rest of the document (a scanned page filled in beside a layout read). Empty otherwise.
+    path: str = ""
+    engine: str = ""
 
 
 def _clean(text: str) -> str:
@@ -329,6 +333,8 @@ def laid_out(drafts: Iterable[Drafted]) -> tuple[Block, ...]:
                 start=start,
                 page=draft.page,
                 section=draft.section[:SECTION_CHARS],
+                path=draft.path,
+                engine=draft.engine,
             )
         )
         start += len(text) + len(BLOCK_SEPARATOR)
@@ -462,6 +468,27 @@ def _word(body: bytes) -> tuple[Drafted, ...] | ParseRefusal:
             drafts.append(Drafted(text=chr(10).join(rows), kind=BlockKind.TABLE, section=section))
     flush()
     return tuple(drafts)
+
+
+def pages_without_text(body: bytes) -> tuple[int, ...]:
+    """The pages of a PDF whose text layer holds nothing, from 1, or none where that cannot be said.
+
+    Asked of the text layer and not of a model, so it is the same statement whichever reader read
+    the rest: a page of a photograph has a picture and no text, and a scanned document read by the
+    layout part comes back with its text pages and none of these. An unreadable file says nothing
+    (an empty tuple), because "I could not open it" is not "every page is blank".
+    """
+    try:
+        reader = PdfReader(io.BytesIO(body))
+        if reader.is_encrypted and reader.decrypt("") is PasswordType.NOT_DECRYPTED:
+            return ()
+        return tuple(
+            number
+            for number, page in enumerate(reader.pages, start=1)
+            if not page.extract_text().strip()
+        )
+    except (PyPdfError, NotImplementedError, *_LIBRARY_FAULTS):
+        return ()
 
 
 @dataclass(frozen=True)

@@ -39,12 +39,12 @@ Task ids: M7.2.1, M7.2.3, M7.2.4, M7.7.10
 from __future__ import annotations
 
 from collections.abc import Collection, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final, Protocol
 
 from brain.connectors.throttle import CallOutcome
 from brain.knowledge.chunking import Block
-from brain.knowledge.ingest import MediaType, ParseCause
+from brain.knowledge.ingest import MediaType, ParseCause, ParseFailure
 from brain.knowledge.parse_layout import (
     LayoutParser,
     LayoutResponse,
@@ -70,7 +70,7 @@ from brain.knowledge.scanning import (
     ReadWithGaps,
     ScannedContent,
 )
-from brain.knowledge.text_path import TextPathParser
+from brain.knowledge.text_path import Drafted, TextPathParser, laid_out, pages_without_text
 from brain.ops.inference import parse_cause_for
 from brain.ops.model_server import Part
 from brain.ops.model_server_client import Reply
@@ -135,10 +135,13 @@ class ServerOcr:
     server: Caller
     ceiling_bytes: int | None = None
 
-    def read(self, content: ScannedContent) -> OcrReading | ParseRefusal:
+    def read(
+        self, content: ScannedContent, only: Sequence[int] | None = None
+    ) -> OcrReading | ParseRefusal:
+        """The document's pages, or only those in `only`, recognised and held to the floor."""
         if not fits_request_ceiling(content, ceiling_bytes=self.ceiling_bytes):
             return _too_large()
-        reply = self.server.ask(Part.OCR, layout_request(content, model=OCR_MODEL))
+        reply = self.server.ask(Part.OCR, layout_request(content, model=OCR_MODEL, pages=only))
         if reply.outcome is not CallOutcome.OK:
             return _outage(ParseStage.OCR, reply.outcome)
         decoded = decode_layout(reply.payload)
@@ -243,3 +246,80 @@ def route_for(media_type: MediaType, services: DocumentServices) -> tuple[Routed
 def readable_types(services: DocumentServices) -> frozenset[MediaType]:
     """The types some chosen reader opens: what a door lets through beyond the text path's four."""
     return frozenset(media for media in MediaType if route_for(media, services))
+
+
+# ------------------------------------------------------------------ how each block was read
+def stamped(blocks: Sequence[Block], provenance: ParseProvenance) -> tuple[Block, ...]:
+    """These blocks, each saying it was read by this path and engine unless it already says so.
+
+    **The route says how a block was read, never the reader's answer.** `decode_layout` builds a
+    block from a closed list of keys that does not include these two, so a block arrives here
+    saying nothing and takes the provenance the route declared beside the parser that read it
+    (`RoutedParser`). A block that already says (a scanned page filled in beside a layout read)
+    keeps what it says.
+    """
+    path, engine = provenance.path.value, provenance.engine
+    return tuple(
+        block if block.path else replace(block, path=path, engine=engine) for block in blocks
+    )
+
+
+@dataclass(frozen=True)
+class FilledIn:
+    """A document's blocks after its blank pages were read, and the pages that stayed unread."""
+
+    blocks: tuple[Block, ...]
+    left_out_pages: tuple[int, ...] = ()
+
+
+def fill_in_scanned_pages(
+    content: ScannedContent, read: Sequence[Block], services: DocumentServices
+) -> FilledIn | ParseFailure:
+    """Read the pages a layout read of a PDF left blank, by the scanned-page reader, and join them.
+
+    **A document read two ways says so page by page** (the owner's requirement, GAP3-04). A PDF
+    with text on some pages and photographs of others reads, by the layout part, as the text pages
+    and nothing for the photographs, and without this the photographs are silently missing from a
+    document that reads as indexed. So the pages whose text layer is empty (`pages_without_text`)
+    and which the layout read produced no block on are sent to the scanned-page reader, which reads
+    only those, and its blocks are laid in among the layout's by page, each saying it was read by
+    OCR. The pages it was not sure enough of are left out and returned for the notice.
+
+    Nothing to do, and so nothing changed, when no scanned-page reader is chosen, the file is not a
+    PDF, or no page is blank. **An outage is not a reason to leave a page out**: the reader not
+    answering returns a retryable failure for the whole document, so it is read again rather than
+    indexed without the pages it could not read yet. A refusal of any other kind (more pages than
+    one request reads, say) leaves those pages out and names them, because the rest was read.
+    """
+    media = content.upload.media_type
+    reader = services.ocr
+    if media is not MediaType.PDF or not isinstance(reader, ServerOcr):
+        return FilledIn(tuple(read))
+    had = {block.page for block in read}
+    blank = tuple(page for page in pages_without_text(content.body) if page not in had)
+    if not blank:
+        return FilledIn(tuple(read))
+    outcome = reader.read(content, blank)
+    if isinstance(outcome, ParseRefusal):
+        if outcome.cause in (ParseCause.PARSER_UNAVAILABLE, ParseCause.TIMED_OUT):
+            return ParseFailure(
+                cause=outcome.cause,
+                media_type=media,
+                filename=content.upload.filename,
+                detail=f"stage:{outcome.stage.value}",
+            )
+        return FilledIn(tuple(read), blank)
+    scanned = stamped(outcome.blocks, ocr_provenance())
+    ordered = sorted(enumerate([*read, *scanned]), key=lambda pair: (pair[1].page or 0, pair[0]))
+    laid = laid_out(
+        Drafted(
+            text=block.text,
+            kind=block.kind,
+            page=block.page,
+            section=block.section,
+            path=block.path,
+            engine=block.engine,
+        )
+        for _, block in ordered
+    )
+    return FilledIn(laid, outcome.left_out_pages)
