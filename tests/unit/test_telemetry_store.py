@@ -57,6 +57,7 @@ from brain.ops.telemetry_store import (
     metered_between,
     observed_between,
     record,
+    redacted_requests_between,
     service_levels_between,
 )
 from brain.tables.telemetry import RequestTelemetryRow
@@ -232,7 +233,11 @@ def test_a_withheld_record_and_an_absent_one_are_one_row_and_no_rule_means_no_ca
     assert isinstance(withheld.outcome, Answered) and withheld.outcome.abstention is not None
     rows = [dict(request_telemetry_of(one).ledger_row()) for one in (withheld, absent, unmatched)]
     assert rows[0] == rows[1]
-    read = {"tool_count": rows[0]["tool_count"], "connector": rows[0]["connector"]}
+    read = {
+        "tool_count": rows[0]["tool_count"],
+        "connector": rows[0]["connector"],
+        "redaction_count": rows[0]["redaction_count"],
+    }
     assert {**rows[2], **read} == rows[0]
     assert (rows[0]["tool_count"], rows[2]["tool_count"]) == (1, 0)
     assert (rows[0]["connector"], rows[2]["connector"]) == ("laravel", None)
@@ -720,6 +725,45 @@ def test_a_window_holds_its_start_and_not_its_end_and_reads_back_as_observations
     )
 
 
+def redacted_between_as_app(database: str, start: datetime, end: datetime, excluding: str) -> int:
+    async def go() -> int:
+        bound = engine(database)
+        try:
+            async with async_sessionmaker(bound)() as session:
+                await session.execute(text("SET ROLE brain_app"))
+                return await redacted_requests_between(
+                    session, start=start, end=end, excluding_principal=excluding
+                )
+        finally:
+            await bound.dispose()
+
+    return run(go)
+
+
+def test_only_other_peoples_redacted_requests_in_the_window_are_counted(
+    empty: str,
+) -> None:
+    """Needs-rupash 181 A, against a real PostgreSQL as the application role. Of five requests in
+    one window, two by somebody else carry a redaction and are counted; one by somebody else with
+    nought and one with none recorded are not; and one by the reader with a redaction is left out,
+    so a reader is never told how much was kept from them. A request on the window's closing
+    instant is another day's. Delete this and the audit screen's figure is a count of every
+    request, or of the reader's own."""
+    other = replace(a_row("t-x"), principal="u_two")
+    write_as_app(
+        empty,
+        replace(other, redaction_count=2),
+        replace(a_row("t-y", at=LATER + timedelta(hours=1)), principal="u_two", redaction_count=1),
+        replace(a_row("t-z", at=LATER + timedelta(hours=2)), principal="u_two", redaction_count=0),
+        replace(a_row("t-n", at=LATER + timedelta(hours=3)), principal="u_two"),
+        replace(a_row("t-m", at=LATER + timedelta(hours=4)), redaction_count=3),
+        replace(a_row("t-e", at=LATER + timedelta(days=1)), principal="u_two", redaction_count=1),
+    )
+
+    assert redacted_between_as_app(empty, LATER, LATER + timedelta(days=1), "u_one") == 2
+    assert redacted_between_as_app(empty, LATER, LATER + timedelta(days=1), "u_two") == 1
+
+
 # --- the path -------------------------------------------------------------------------------
 
 
@@ -793,9 +837,13 @@ def test_requests_through_the_route_are_rows_and_a_service_level_reading_is_read
     assert len(rows) == 3
     answered, withheld, absent = rows
     assert answered[0] == "u_wide" and answered[4] == "answered"
-    assert withheld == absent
+    # Equal in every column but the redaction count, which says the redactor walked the first and
+    # nothing matched the second (needs-rupash 181 A): a fact about the installation having a rule
+    # for the question's form, as `tool_count` is, and told only as "redacted at all" in aggregate.
+    assert withheld[:9] == absent[:9] and withheld[10:] == absent[10:]
+    assert (withheld[9], absent[9]) == (0, None)
     assert withheld[0] == "u_narrow" and withheld[4] == "nothing_returned"
-    assert withheld[6:10] == (None, None, None, None)
+    assert withheld[6:9] == (None, None, None)
     assert withheld[10] is True
 
     now = datetime.now(UTC)

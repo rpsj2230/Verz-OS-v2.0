@@ -148,6 +148,20 @@ class Patterns:
         return self.found
 
 
+@dataclass
+class Redacted:
+    """A `RedactedRequests` counting a fixed number per principal, and what it was asked."""
+
+    by_principal: Mapping[str, int] = field(
+        default_factory=lambda: {"u_1": 4, "u_wide": 3, "u_admin": 2}
+    )
+    asked: list[tuple[datetime, datetime, str]] = field(default_factory=list)
+
+    async def between(self, since: datetime, until: datetime, *, excluding: str) -> int:
+        self.asked.append((since, until, excluding))
+        return sum(n for who, n in self.by_principal.items() if who != excluding)
+
+
 class Store:
     async def load(self, principal_id: str, now: datetime) -> EntitlementSet:
         return EntitlementSet(principal_id=principal_id, grants=GRANTS[principal_id])
@@ -165,7 +179,9 @@ def wiring() -> GateWiring:
 
 
 @contextmanager
-def serving(ledger: Ledger, patterns: Patterns) -> Iterator[TestClient]:
+def serving(
+    ledger: Ledger, patterns: Patterns, redacted: Redacted | None = None
+) -> Iterator[TestClient]:
     from brain import audit_routes
 
     app: FastAPI = create_app(Settings(env="development"))
@@ -175,6 +191,7 @@ def serving(ledger: Ledger, patterns: Patterns) -> Iterator[TestClient]:
         app.state.gate = wiring()
         app.state.audit_ledger = ledger
         app.state.denial_patterns = patterns
+        app.state.redacted_requests = redacted if redacted is not None else Redacted()
         yield client
 
 
@@ -213,6 +230,41 @@ def by_shape(body: AuditStatisticsView) -> dict[str, int]:
 
 
 # ------------------------------------------------------------------------------- the counts
+
+
+def test_the_count_of_redacted_requests_is_told_only_to_a_reader_whose_audit_grant_covers_everybody(
+    ledger: Ledger, patterns: Patterns
+) -> None:
+    """Needs-rupash 181 A. `u_prefix` holds the audit grant unrestricted for every kind of entry
+    and is told how many requests had an answer the redactor changed, the other people's, asked
+    of the window they gave and excluding themselves. `u_admin_only` reads only entries about
+    people, so the figure is null for them rather than zero or a smaller number, and the ledger
+    of requests is not even asked. Delete this and the request ledger, which has no idea who may
+    see it, becomes a count of what happened that a narrower auditor cannot see."""
+    redacted = Redacted()
+    with serving(ledger, patterns, redacted) as client:
+        everybody = statistics_of(client, "u_prefix")
+        narrower = statistics_of(client, "u_admin_only")
+
+    assert everybody.redacted_requests == 9
+    assert redacted.asked == [
+        (datetime(2019, 3, 4, tzinfo=UTC), datetime(2019, 3, 5, tzinfo=UTC), "u_prefix")
+    ]
+    assert narrower.redacted_requests is None
+
+
+def test_the_readers_own_redacted_requests_are_not_counted(
+    ledger: Ledger, patterns: Patterns
+) -> None:
+    """`u_admin` is counted nothing of their own, while `u_prefix` is counted all of `u_admin`'s,
+    because a count of the answers redacted for somebody tells them how much was kept from them.
+    Delete this and an auditor is told how often their own answers were withheld from."""
+    with serving(ledger, patterns, Redacted()) as client:
+        mine = statistics_of(client, "u_admin")
+        theirs = statistics_of(client, "u_prefix")
+
+    assert mine.redacted_requests == 7
+    assert theirs.redacted_requests == 9
 
 
 def test_an_auditor_is_told_refusals_by_shape_and_redacted_entries_over_other_peoples_entries(
@@ -313,6 +365,7 @@ def test_the_answer_names_no_capability_field_or_person_and_carries_no_total(
         "until",
         "refusals",
         "redacted_entries",
+        "redacted_requests",
         "read_at_most",
     }
     assert set(AuditStatisticsView.model_fields).isdisjoint(NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT)

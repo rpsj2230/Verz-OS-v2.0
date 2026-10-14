@@ -201,7 +201,9 @@ secret, engine and token stays exactly as it is, so nothing that hands the appli
 (a hosting panel's stored settings, `/opt/brain/.env`) changes. It needs three of the vault's
 unseal pieces, in a file shaped as `bao operator init` printed them (`Unseal Key 1: ...` lines).
 
-As root on the server, from this release's `ops/openbao` directory:
+As root on the server, from this release's `ops/openbao` directory (a server that deploys from the
+image and has no checkout copies that directory out of the image: `docs/install/server-steps.md`,
+section 2):
 
     sudo bash switch-to-auto-unseal.sh --pieces-file <the file holding the pieces>
 

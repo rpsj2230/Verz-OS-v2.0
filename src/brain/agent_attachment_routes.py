@@ -7,11 +7,11 @@ page and them, and it decides only who may press.
 **Tools are the tool administrator's over the agent's department**, or over everything for an agent
 no department owns (`agent_workspace_routes.place_of`), because what an agent may call is part of
 its ceiling and a department's ceiling is its administrator's (`docs/requirements/register.json`
-ARC-B-064). **Connectors are the agent's steward's or the connector administrator's over its
-department**: which sources an agent reads is the question its steward answers for, and the
-person's own reach is still asked of everything a connector would open, so a steward cannot hand
-the agent a source they could not read. Anybody else is told which role would let them, and never
-whether the press would have been allowed. See
+ARC-B-064). **Connectors are the connector administrator's over its department, and no longer
+its steward's** (needs-rupash 178 A, 2026-10-13): the person's own reach is still asked of
+everything a connector would open, so nobody can hand the agent a source they could not read, and
+the steward answers for the agent without deciding what it is connected to. Anybody else is told
+which role would let them, and never whether the press would have been allowed. See
 `ATTACHING_IS_THE_DEPARTMENT_S_TOOL_OR_CONNECTOR_ROLE`.
 
 **A connector press writes the agent's own connector list and nothing else**, which is what
@@ -69,7 +69,8 @@ log = structlog.get_logger()
 ATTACHING_IS_THE_DEPARTMENT_S_TOOL_OR_CONNECTOR_ROLE: Final = (
     "What an agent may call is part of its ceiling, and a department's ceiling is its "
     "administrator's: a tool is attached or detached by whoever holds the tool authority over the "
-    "agent's department, a connector by the agent's steward or the connector authority over it. "
+    "agent's department, a connector by whoever holds the connector authority over it, which the "
+    "agent's steward does not (needs-rupash 178 A). "
     "Anybody else is told which role, and never whether the press would have been allowed."
 )
 
@@ -77,8 +78,8 @@ CHANGING_TOOLS_NEEDS_THE_TOOL_ROLE: Final = (
     "Attaching or detaching this agent's tools needs the tool role for its department."
 )
 CHANGING_CONNECTORS_NEEDS_THE_CONNECTOR_ROLE: Final = (
-    "Attaching or detaching this agent's connectors needs its steward or the connector role for "
-    "its department."
+    "Attaching or detaching this agent's connectors needs the connector role for its department, "
+    "which a department administrator holds."
 )
 THE_AGENT_MOVED: Final = (
     "This agent changed a moment ago, or has been archived, so nothing was changed. Look again "
@@ -100,9 +101,7 @@ def may_press(
     """Whether this reach may attach or detach this kind of thing on this agent."""
     if part is AttachmentPart.TOOL:
         return within_reach(reach, TOOL_AUTHORITY, place_of(record), now)
-    return reach.principal_id == record.audience.owner_id or within_reach(
-        reach, CONNECTOR_AUTHORITY, place_of(record), now
-    )
+    return within_reach(reach, CONNECTOR_AUTHORITY, place_of(record), now)
 
 
 def shipped_connectors() -> frozenset[str]:

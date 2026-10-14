@@ -128,6 +128,17 @@ COPY --chown=brain:brain ops/keycloak/accounts-client.sh /app/ops/keycloak/accou
 # release's policies arrive with the release on a server that has no checkout (needs-rupash 114).
 COPY --chown=brain:brain ops/openbao/apply-release.sh /app/ops/openbao/apply-release.sh
 COPY --chown=brain:brain ops/openbao/policies /app/ops/openbao/policies
+# The vault's own compose file and the one command that moves an older install onto the seal that
+# opens itself. An install with no checkout has nothing else to run it from: it copies this directory
+# out of the image (docs/install/server-steps.md). Nothing in the image runs either.
+COPY --chown=brain:brain ops/openbao/compose.yml /app/ops/openbao/compose.yml
+COPY --chown=brain:brain ops/openbao/switch-to-auto-unseal.sh /app/ops/openbao/switch-to-auto-unseal.sh
+# The server's own deploy hook and the timer's script that runs it. The timer's script copies the
+# hook out of the image it is about to deploy (ops/deploy/brain-autodeploy, refresh_hook), so a
+# release that adds a step to the hook reaches a server that deploys itself without anybody
+# copying a file from a checkout. Nothing in the image runs them.
+COPY --chown=brain:brain ops/deploy/brain-deploy /app/ops/deploy/brain-deploy
+COPY --chown=brain:brain ops/deploy/brain-autodeploy /app/ops/deploy/brain-autodeploy
 # The optional services step and the product's compose files it starts (brain.ops.overlays):
 # copied out of the image by the server's deploy hook and run there, so a release reaches a
 # Coolify install, whose own copy of the compose file no release can change, without anybody
@@ -137,10 +148,14 @@ COPY --chown=brain:brain docker-compose.presidio.yml /app/ops/deploy/overlays/do
 COPY --chown=brain:brain docker-compose.objectstore.yml /app/ops/deploy/overlays/docker-compose.objectstore.yml
 COPY --chown=brain:brain docker-compose.langfuse.yml /app/ops/deploy/overlays/docker-compose.langfuse.yml
 COPY --chown=brain:brain docker-compose.sandbox.yml /app/ops/deploy/overlays/docker-compose.sandbox.yml
-# The settings files those compose files mount, which the trace ledger's preparation puts on the
-# server where they are missing (ops/deploy/overlays/langfuse.prepare.sh).
+COPY --chown=brain:brain docker-compose.automation.yml /app/ops/deploy/overlays/docker-compose.automation.yml
+# The settings files those compose files mount, which each overlay's preparation puts on the
+# server where they are missing (ops/deploy/overlays/langfuse.prepare.sh, objectstore.prepare.sh and
+# automation.prepare.sh): the ledger's memory ceiling, the object store's provisioning script and
+# the automation canvas's egress allowlist.
 COPY --chown=brain:brain ops/langfuse/clickhouse-memory.xml /app/ops/deploy/overlays/settings/langfuse/clickhouse-memory.xml
 COPY --chown=brain:brain ops/seaweedfs/provision.sh /app/ops/deploy/overlays/settings/seaweedfs/provision.sh
+COPY --chown=brain:brain ops/automation/egress.conf /app/ops/deploy/overlays/settings/automation/egress.conf
 # The built console, which this application serves at the root of the install's web address.
 # `brain.console_static` looks for it here and serves nothing at all when it is absent, so a
 # local `docker build` that dropped this line would produce an image whose only symptom is a

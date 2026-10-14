@@ -92,6 +92,7 @@ __all__ = [
     "metered_between",
     "observed_between",
     "record",
+    "redacted_requests_between",
     "service_levels_between",
     "shapes_for",
     "unplaced_between",
@@ -137,6 +138,32 @@ async def observed_between(
         )
         for lane, status, duration_ms, received_at in found.all()
     )
+
+
+async def redacted_requests_between(
+    session: AsyncSession, *, start: datetime, end: datetime, excluding_principal: str
+) -> int:
+    """How many requests in `[start, end)` had an answer the redactor changed (needs-rupash 181 A).
+
+    One figure over everybody's requests but the caller's own, and nothing beside it: no
+    principal, field or entity is selected, so what this can say is bounded by its return type.
+    **It is told to nobody whose audit grant does not cover everybody**, which is decided by
+    `brain.console.auditor.covers_everybody` at the route and not here: telemetry has no idea
+    who may see it, and a count over rows a reader may not read is a count of hidden things.
+    The caller's own requests are left out for `A_READER_IS_NEVER_COUNTED_WHAT_WAS_KEPT_FROM_THEM`.
+    A request nothing redacted carries a zero or None and is not counted.
+    """
+    found = await session.execute(
+        select(func.count())
+        .select_from(RequestTelemetryRow)
+        .where(
+            RequestTelemetryRow.received_at >= start,
+            RequestTelemetryRow.received_at < end,
+            RequestTelemetryRow.redaction_count > 0,
+            RequestTelemetryRow.principal != excluding_principal,
+        )
+    )
+    return int(found.scalar_one())
 
 
 async def service_levels_between(

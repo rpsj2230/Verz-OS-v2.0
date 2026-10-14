@@ -528,7 +528,7 @@ CONTROLS: Final[tuple[Control, ...]] = (
         ),
         every=_DAILY,
         severity=Severity.WOKEN,
-        invoked_by=Invocation.NOTHING,
+        invoked_by=Invocation.IN_PROCESS,
     ),
     Control(
         name="denial_digest",

@@ -6,7 +6,8 @@ stand-in only for the registry, which `StoredAmbiguity` is on an install and the
 runs against a real database.
 
 **Three properties carry the weight.** Two in-reach records that are two clients are answered
-with the unresolved sentence and no figure from either. One record the asker reads is answered
+with the unresolved sentence and then each client's figure on its own (needs-rupash 159), never
+summed. One record the asker reads is answered
 exactly as it was before this existed, and the registry is not even asked, so a second record
 the asker may not read cannot change a byte of the reply. And the review reference reaches only
 a reader holding the reviewer's capability over everything, so whether a review item is open is
@@ -31,6 +32,7 @@ from brain.core.redaction import ChannelPayload, RedactionTrace
 from brain.core.scope import Scope
 from brain.gate.abstain import AbstentionReason
 from brain.gate.answer import (
+    SEVERAL_CLIENTS_ANSWERED_ON_THEIR_OWN,
     THE_ASKER_IS_NEVER_TOLD_WHICH_KIND_OF_NOTHING_HAPPENED,
     Answered,
     answer_lane,
@@ -198,7 +200,12 @@ def test_two_records_the_registry_calls_two_clients_are_named_as_unresolved() ->
 
     found = lane(ACME, OTHER, reach=ents(*SEES), ambiguity=registry)
 
-    assert found == FastLaneUnresolved(review_ref="rev_1")
+    assert isinstance(found, FastLaneUnresolved)
+    assert found.review_ref == "rev_1"
+    assert [[record.id for record in one.result.records] for one in found.clients] == [
+        ["c_447"],
+        ["c_448"],
+    ]
     assert registry.asked == [(KEY_ACME, KEY_OTHER), ("ent_a", "ent_b")]
 
 
@@ -251,16 +258,22 @@ def test_one_record_the_asker_reads_is_answered_and_the_registry_is_not_asked() 
 # ----------------------------------------------------------------- what the asker is told
 
 
-def test_two_in_reach_clients_are_told_the_unresolved_sentence_and_no_figure() -> None:
-    """The asker reading both records is told the one sentence, and neither client's figure,
-    and the outcome is recorded as records retrieved and not answering.
+def test_two_in_reach_clients_are_each_answered_on_their_own_and_never_added_together() -> None:
+    """Needs-rupash 159. The asker reading both records is told the name matches more than one
+    client and given each client's figure on its own line, in the order the registry names them,
+    and no sum, total or average of the two; the outcome is still recorded as records retrieved
+    and not answering. Delete this and the lane either says nothing of either client, which is
+    what it did, or hands the asker the two figures added together.
 
-    Delete this and the lane can name the ambiguity in the trace and still hand the asker a
-    figure, or both."""
+    The sibling that proves it does not say it of one client is the next test."""
     answered = asked(ACME, OTHER, reach=ents(*SEES), ambiguity=two_clients())
+    text = said(answered)
 
-    assert said(answered) == UNRESOLVED_TEXT
-    assert "37" not in frames(answered.frames) and "40" not in frames(answered.frames)
+    assert text.startswith(UNRESOLVED_TEXT)
+    assert SEVERAL_CLIENTS_ANSWERED_ON_THEIR_OWN in text
+    assert "laravel, record c_447: 37" in text and "laravel, record c_448: 40" in text
+    assert text.index("37") < text.index("40")
+    assert "77" not in text and "38.5" not in text and "total" not in text.lower()
     assert answered.abstention is not None
     assert answered.abstention.reason is AbstentionReason.RETRIEVED_BUT_NOT_ANSWERING
 
@@ -277,6 +290,20 @@ def test_a_withheld_second_record_leaves_the_reply_byte_identical() -> None:
 
     assert withheld.frames == absent.frames
     assert "37" in said(withheld)
+    assert SEVERAL_CLIENTS_ANSWERED_ON_THEIR_OWN not in said(withheld)
+    assert "40" not in said(withheld)
+
+
+def test_a_client_whose_answer_field_is_withheld_makes_the_reply_the_plain_sentence() -> None:
+    """Needs-rupash 159. Two clients the asker reads, but the answer field is one they may not
+    read: the reply is the plain unresolved sentence, with no list and no gap in one, because a list
+    with a line missing says something was kept back. Delete this and the list is built from what
+    survived redaction for one client and not the other."""
+    reader = ents("read:client", "read:client.name")
+
+    text = said(asked(ACME, OTHER, reach=reader, ambiguity=two_clients()))
+
+    assert text == UNRESOLVED_TEXT
 
 
 def test_only_a_reviewer_over_everything_is_handed_the_review_reference() -> None:
@@ -293,11 +320,13 @@ def test_only_a_reviewer_over_everything_is_handed_the_review_reference() -> Non
         ),
     )
 
-    assert said(asked(ACME, OTHER, reach=reviewer, ambiguity=two_clients())) == (
-        UnresolvedNotice(review_ref="rev_1").render()
+    notice = UnresolvedNotice(review_ref="rev_1").render()
+    assert said(asked(ACME, OTHER, reach=reviewer, ambiguity=two_clients())).startswith(notice)
+    assert "rev_1" not in said(asked(ACME, OTHER, reach=narrow, ambiguity=two_clients()))
+    assert said(asked(ACME, OTHER, reach=narrow, ambiguity=two_clients())).startswith(
+        UNRESOLVED_TEXT
     )
-    assert said(asked(ACME, OTHER, reach=narrow, ambiguity=two_clients())) == UNRESOLVED_TEXT
-    assert said(asked(ACME, OTHER, reach=ents(*SEES), ambiguity=two_clients())) == (UNRESOLVED_TEXT)
+    assert "rev_1" not in said(asked(ACME, OTHER, reach=ents(*SEES), ambiguity=two_clients()))
 
 
 def test_a_non_reviewer_cannot_tell_whether_a_review_item_is_open() -> None:

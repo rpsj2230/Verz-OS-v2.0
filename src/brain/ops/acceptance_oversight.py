@@ -19,7 +19,7 @@ and keeps what it raised in memory rather than in the cache the Notifications sc
 alert key outlives the check and nobody real is told about a reserved principal. The head check
 asks the rewrite about its own head only (`head_audit_store.ONLY_THE_HEADS_NAMED_ARE_REWRITTEN`).
 
-Task ids: M38.5.1
+Task ids: M38.5.1, M17.7.9
 """
 
 from __future__ import annotations
@@ -171,7 +171,7 @@ class _HeldAlerts:
 
 
 @check(
-    leaves=("M23.2.2",),
+    leaves=("M23.2.2", "M17.7.9"),
     sentence=(
         "A person refused the same records again and again is written to the install's audit "
         "ledger as refused each time, read back as a pattern by the hourly digest's own "

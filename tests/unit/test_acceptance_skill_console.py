@@ -39,7 +39,7 @@ WIDENED = "a_widened_publish_waits_for_a_second_person_who_publishes_it"
 
 #: Each check and the leaves it proves.
 LEAVES = {
-    LIBRARY: ("M27.11.8", "M27.15.55", "M27.15.56"),
+    LIBRARY: ("M27.11.8", "M27.15.55", "M27.15.56", "M42.6.4"),
     WIDENED: ("M27.15.31",),
 }
 

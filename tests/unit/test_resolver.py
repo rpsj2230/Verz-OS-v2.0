@@ -583,8 +583,12 @@ def test_a_trigger_written_audit_entry_verifies_as_a_chain(loaded: Any) -> None:
         )
         rows = cur.fetchall()
 
-    expected = sum(len(p.grants) for p in build_company().values())
-    assert len(rows) == expected, "a grant was written without an audit entry"
+    company = build_company().values()
+    # A grant is one entry, and since a person's own insert writes a `principal_state` entry, so is
+    # each person: counting only grants made this test fail on every branch.
+    expected = sum(len(p.grants) for p in company) + len(company)
+    assert len(rows) == expected, "a grant or a person was written without an audit entry"
+    assert sum(1 for one in rows if one[3] == "grant") == sum(len(p.grants) for p in company)
 
     entries = [
         AuditEntry(
@@ -603,7 +607,7 @@ def test_a_trigger_written_audit_entry_verifies_as_a_chain(loaded: Any) -> None:
     ]
     assert entries[0].prev_hash == GENESIS_HASH
     assert AuditChain(entries).verify() is None
-    assert {e.action.value for e in entries} == {"grant"}
+    assert {e.action.value for e in entries} == {"grant", "principal_state"}
     assert all(e.ent_hash == UNSUPPLIED_ENT_HASH for e in entries)
 
 

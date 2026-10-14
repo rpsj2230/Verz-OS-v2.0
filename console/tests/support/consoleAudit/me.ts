@@ -10,7 +10,14 @@
 import { myCodeApiPath, myUnbindApiPath } from "../../../src/pages/channelsQuery";
 import { myConsentPath } from "../../../src/pages/connectors/consentAtVendor";
 import { LEARNING_UNDO_API_PATH } from "../../../src/pages/learningUndoQuery";
-import { EDIT_API_PATH, FORGET_API_PATH } from "../../../src/pages/myWorkspaceQuery";
+import {
+  END_MY_DEVICE_API_PATH,
+  askForAgentApiPath,
+  shareApiPath,
+  unshareApiPath,
+} from "../../../src/pages/myAccountQuery";
+import { EDIT_API_PATH, FORGET_ALL_API_PATH, FORGET_API_PATH } from "../../../src/pages/myWorkspaceQuery";
+import { LEARNING_API_PATH, QUIET_API_PATH, REACH_API_PATH } from "../../../src/pages/myPreferencesQuery";
 import { A_BINDING_CHANGE_IS_AUDITED, at, type Proofs, t, type WriteRoute } from "../auditClaims";
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
@@ -23,8 +30,32 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/components/MyAccounts.tsx myConsentPath(row.connector)": [
     at("POST /api/v1/me/accounts/{connector}/consent", "myConsentPath", myConsentPath("xero")),
   ],
+  "src/components/MyPreferences.tsx LEARNING_API_PATH": [
+    at("POST /api/v1/me/preferences/learning", "LEARNING_API_PATH", LEARNING_API_PATH),
+  ],
+  "src/components/MyPreferences.tsx REACH_API_PATH": [
+    at("POST /api/v1/me/preferences/reach", "REACH_API_PATH", REACH_API_PATH),
+  ],
+  "src/components/MyPreferences.tsx QUIET_API_PATH": [
+    at("POST /api/v1/me/preferences/quiet-hours", "QUIET_API_PATH", QUIET_API_PATH),
+  ],
+  "src/components/MyAccountCards.tsx shareApiPath(artifactId)": [
+    at("POST /api/v1/me/artifacts/{artifact_id}/share", "shareApiPath", shareApiPath("art_1")),
+  ],
+  "src/components/MyAccountCards.tsx unshareApiPath(artifactId)": [
+    at("POST /api/v1/me/artifacts/{artifact_id}/unshare", "unshareApiPath", unshareApiPath("art_1")),
+  ],
+  "src/components/MyAccountCards.tsx askForAgentApiPath(agentId)": [
+    at("POST /api/v1/me/agents/{agent_id}/request", "askForAgentApiPath", askForAgentApiPath("a_1")),
+  ],
+  "src/components/MyAccountCards.tsx END_MY_DEVICE_API_PATH": [
+    at("POST /api/v1/me/devices/end", "END_MY_DEVICE_API_PATH", END_MY_DEVICE_API_PATH),
+  ],
   "src/pages/MyWorkspace.tsx FORGET_API_PATH": [
     at("POST /api/v1/me/memory/forget", "FORGET_API_PATH", FORGET_API_PATH),
+  ],
+  "src/pages/MyWorkspace.tsx FORGET_ALL_API_PATH": [
+    at("POST /api/v1/me/memory/forget-all", "FORGET_ALL_API_PATH", FORGET_ALL_API_PATH),
   ],
   "src/pages/MyWorkspace.tsx EDIT_API_PATH": [at("POST /api/v1/me/memory/edit", "EDIT_API_PATH", EDIT_API_PATH)],
   "src/pages/LearningUndo.tsx LEARNING_UNDO_API_PATH": [
@@ -69,12 +100,73 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     audit: A_BINDING_CHANGE_IS_AUDITED,
     behaviour: t("test_channel_binding", "test_a_person_unbinds_their_own_chat_and_it_is_recorded_as_theirs"),
   },
+  // A person's own setting is a row in `auth.member_preference` that the person alone may write,
+  // and what it changes is read where a memory is formed, a message is sent and a card is planned,
+  // so the install check follows each to that place. It writes no ledger entry: a setting about how
+  // the person is reached is not a change to what anybody may see or do.
+  "POST /api/v1/me/preferences/learning": {
+    row: t("test_acceptance_checks_member_preferences", "test_every_member_preference_check_passes_on_an_install_and_leaves_nothing", true),
+    audit: { notApplicable: "A person's own setting about being reached changes nobody's access and is not written to the ledger." },
+    behaviour: t("test_acceptance_checks_member_preferences", "test_a_person_learnt_from_after_switching_it_off_fails_the_learning_check", true),
+  },
+  "POST /api/v1/me/preferences/reach": {
+    row: t("test_acceptance_checks_member_preferences", "test_every_member_preference_check_passes_on_an_install_and_leaves_nothing", true),
+    audit: { notApplicable: "A person's own setting about being reached changes nobody's access and is not written to the ledger." },
+    behaviour: t("test_acceptance_checks_member_preferences", "test_a_card_sent_to_an_approver_who_chose_the_console_fails_the_approval_check", true),
+  },
+  "POST /api/v1/me/preferences/quiet-hours": {
+    row: t("test_acceptance_checks_member_preferences", "test_every_member_preference_check_passes_on_an_install_and_leaves_nothing", true),
+    audit: { notApplicable: "A person's own setting about being reached changes nobody's access and is not written to the ledger." },
+    behaviour: t("test_acceptance_checks_member_preferences", "test_a_digest_sent_inside_quiet_hours_fails_the_held_digest_check", true),
+  },
+  // A member ending their own sign-in is the Sessions screen's ending through the same store, with
+  // the ownership question asked under the row's lock, so its database proof follows the row and the
+  // ledger entry; the install check follows the route itself.
+  // A share is a row the sharer writes and may withdraw, admitting nobody: what it changes is read at
+  // the colleague's own read, so the install check follows it from the row to the file. It writes no
+  // ledger entry; the read it leads to does.
+  "POST /api/v1/me/artifacts/{artifact_id}/share": {
+    row: t("test_acceptance_checks_member_share", "test_the_share_check_passes_on_an_install_and_leaves_nothing", true),
+    audit: { notApplicable: "A share changes nobody's access; opening what was shared is written down as the read it is." },
+    behaviour: t("test_acceptance_checks_member_share", "test_a_share_with_somebody_who_cannot_open_it_fails_the_check", true),
+  },
+  "POST /api/v1/me/artifacts/{artifact_id}/unshare": {
+    row: t("test_acceptance_checks_member_share", "test_the_share_check_passes_on_an_install_and_leaves_nothing", true),
+    audit: { notApplicable: "Taking a share back changes nobody's access; it only removes a row that admitted nobody." },
+    behaviour: t("test_acceptance_checks_member_share", "test_the_share_check_passes_on_an_install_and_leaves_nothing", true),
+  },
+  // A request is a row the asker writes once and nobody updates, and what it does is tell the
+  // department's lead, so the install check follows it from the row to the message.
+  "POST /api/v1/me/agents/{agent_id}/request": {
+    row: t("test_acceptance_checks_member_agent_request", "test_the_request_check_passes_on_an_install_and_leaves_nothing", true),
+    audit: { notApplicable: "A request changes nobody's access; what a department decides is written where audiences are changed." },
+    behaviour: t("test_acceptance_checks_member_agent_request", "test_a_lead_told_every_time_fails_the_check", true),
+  },
+  "POST /api/v1/me/devices/end": {
+    row: t("test_session_store", "test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request", true),
+    audit: t("test_session_store", "test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request", true),
+    behaviour: t(
+      "test_acceptance_checks_member_account",
+      "test_every_member_account_check_passes_on_an_install_and_leaves_nothing",
+      true,
+    ),
+  },
   // A forget is the Learning screen's undo written for the person the memory is about, through the
   // same store, so the same database test follows it to the row, the ledger and the next recall.
   "POST /api/v1/me/memory/forget": {
     row: t("test_memory_store", "test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next", true),
     audit: t("test_memory_store", "test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next", true),
     behaviour: t("test_mine_routes", "test_a_member_forgets_a_memory_formed_from_their_own_words"),
+  },
+  // Undo all is that same forget once per memory the page lists, so the same database test follows
+  // it to the row, the ledger and the next recall.
+  "POST /api/v1/me/memory/forget-all": {
+    row: t("test_memory_store", "test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next", true),
+    audit: t("test_memory_store", "test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next", true),
+    behaviour: t(
+      "test_mine_routes",
+      "test_undo_all_forgets_what_the_page_shows_about_the_person_and_nothing_of_anybody_elses",
+    ),
   },
   // The digest's undo is the same forget on the person's sign-in alone, through the same store, so
   // the same database test follows it to the row, the ledger and the next recall.

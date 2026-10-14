@@ -73,7 +73,30 @@ It is still costed, first, because it is the floor the optional services are cho
 server with no room for it the plan refuses it in words like any other, and every process stays on
 the pooler it already had. See `AN_OVERLAY_THE_PRODUCT_ALWAYS_RUNS_IS_STILL_COSTED`.
 
-Task ids: M32.2.1.1, M32.1.1.1, M32.1.1.2, M32.1.2.6, M22.2.2
+**The object store and the automation canvas are overlays too, because a service nothing
+releases is a service a hand repair holds up.** Until 2026-10-13 neither had a release
+mechanism: the store (`objectstore`) was something a person started by hand from a compose file,
+and the canvas (`automation`) said in `brain.ops.automation` that an install runs it "when its
+owner adds that file". The first server asked to run either found the cost of that at once: a
+service started by hand is joined to the application's network by hand, and the join is lost the
+next time the application is recreated, which is every deploy. Both are now named in
+`INSTALL_SERVICES` and started by the release like the others, with the join made again after
+every deploy. Rejected: a profile for each, which is a decision about what a kind of install is
+for when the question was one server's memory; and a note in the install guide, which is the hand
+repair written down.
+
+**The canvas is costed as what it starts: 896 MiB, not 512.** Its compose file runs the editor
+(512), its egress proxy (128) and its own database (256), and `activepieces` alone was the only
+one of the three `brain.ops.wiring` costed, so the planner and the administrator who was asked
+whether to switch it on both read a little over half of the truth. See
+`THE_CANVAS_IS_THREE_CONTAINERS`.
+
+**A container two overlays both start is costed once.** The trace ledger's file store and the
+object store are one container (`docker-compose.objectstore.yml` describes it and the ledger's
+file only refers to it), so an install that names both runs one store and the plan pays for one.
+See `A_SHARED_CONTAINER_IS_PAID_FOR_ONCE`.
+
+Task ids: M32.2.1.1, M32.1.1.1, M32.1.1.2, M32.1.2.6, M22.2.2, M32.3.1.1, M32.6.1.1
 """
 
 from __future__ import annotations
@@ -82,7 +105,7 @@ import math
 import re
 import sys
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Final
 
 from brain.install import value_of
@@ -129,6 +152,23 @@ AN_ISOLATION_RUNTIME_IS_NEVER_SUBSTITUTED: Final = (
 )
 
 
+#: Why the canvas is costed as three containers.
+THE_CANVAS_IS_THREE_CONTAINERS: Final = (
+    "The automation canvas is the editor, the egress proxy that is its only route out and the "
+    "database it keeps its flows in, and each holds its own memory limit. A cost that named the "
+    "editor alone told an administrator 512 MiB for a service that takes 896, and left the other "
+    "384 to be found when the host ran short."
+)
+
+#: Why a container named by two overlays is paid for once.
+A_SHARED_CONTAINER_IS_PAID_FOR_ONCE: Final = (
+    "Two overlays whose files describe the same service run one container, because compose merges "
+    "them into one project. Costing it for each would refuse the second overlay on memory the "
+    "first has not spent, and would have an install that wants both pay for a container that "
+    "does not exist."
+)
+
+
 class OverlayError(Exception):
     """A setting names a service nobody declared, or the server's facts cannot be read."""
 
@@ -165,6 +205,12 @@ class Overlay:
     #: that needs one the server's docker does not have is refused by the plan and at save, and
     #: never started on a weaker runtime. See `AN_ISOLATION_RUNTIME_IS_NEVER_SUBSTITUTED`.
     needs_runtime: str = ""
+    #: The networks, among `joins`, on which the application's containers are also reachable by
+    #: their compose service name. `docker network connect` gives a container its own name and
+    #: id only, where compose gives it its service name too, and a service that calls the
+    #: application by the name its compose file gives it (the canvas calls `app`) finds nothing
+    #: without the alias.
+    joined_as_service: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"[a-z][a-z0-9-]*", self.name):
@@ -172,6 +218,12 @@ class Overlay:
             raise OverlayError(msg)
         if not self.components or not self.files:
             msg = f"overlay {self.name!r} starts nothing, so switching it on would change nothing"
+            raise OverlayError(msg)
+        networks = {network for network, _ in self.joins}
+        if not set(self.joined_as_service) <= networks:
+            msg = (
+                f"overlay {self.name!r} names a network to join by service name that it never joins"
+            )
             raise OverlayError(msg)
         for one in self.components:
             try:
@@ -244,6 +296,30 @@ OVERLAYS: Final[tuple[Overlay, ...]] = (
         files=("docker-compose.sandbox.yml",),
         joins=(("sandbox", ("app", "brain-worker")),),
         needs_runtime="runsc",
+    ),
+    Overlay(
+        name="objectstore",
+        what="the file store for uploaded documents and exports",
+        components=("seaweedfs",),
+        files=("docker-compose.objectstore.yml",),
+        # The store's own project network, which every compose project has: the application finds
+        # it as `seaweedfs`, the address `INSTALL_OBJECT_STORE_URL` defaults to. The worker builds
+        # its own client at start, so it is joined as well.
+        joins=(("default", ("app", "brain-worker")),),
+        prepare=("objectstore.prepare.sh",),
+        after=("objectstore.hand.sh",),
+    ),
+    Overlay(
+        name="automation",
+        what="the automation canvas, its egress proxy and its database",
+        # See `THE_CANVAS_IS_THREE_CONTAINERS`: 512 + 128 + 256.
+        components=("activepieces", "automation-egress", "automation-db"),
+        files=("docker-compose.automation.yml",),
+        # The canvas calls the application's tool API on an internal network the two share and
+        # nothing else is on, as `app`, which is what its file's NO_PROXY and the piece expect.
+        joins=(("tool-api", ("app",)),),
+        joined_as_service=("tool-api",),
+        prepare=("automation.prepare.sh",),
     ),
 )
 
@@ -428,11 +504,16 @@ def read_host(facts: Iterable[str], *, project: str) -> Host:
 # ---------------------------------------------------------------- the plan
 @dataclass(frozen=True)
 class Plan:
-    """What the script starts, what it refuses and why, and the room it was decided against."""
+    """What the script starts, what it refuses and why, and the room it was decided against.
+
+    `costs` is what each started overlay was charged, which is less than its own cost when
+    another overlay started before it already runs one of its containers.
+    """
 
     start: tuple[Overlay, ...]
     refused: tuple[tuple[Overlay, str], ...]
     available_mib: int
+    costs: Mapping[str, int] = field(default_factory=dict)
 
 
 def runtime_refusal(one: Overlay) -> str:
@@ -445,34 +526,49 @@ def runtime_refusal(one: Overlay) -> str:
 
 
 def plan(switched: Sequence[Overlay], host: Host) -> Plan:
-    """Each switched-on overlay started while it fits, in declaration order, or refused in words."""
+    """Each switched-on overlay started while it fits, in declaration order, or refused in words.
+
+    A container an overlay shares with one already started is not charged again. See
+    `A_SHARED_CONTAINER_IS_PAID_FOR_ONCE`.
+    """
     remaining = host.available_mib
     start: list[Overlay] = []
     refused: list[tuple[Overlay, str]] = []
+    costs: dict[str, int] = {}
+    running: set[str] = set()
     for one in switched:
         if one.needs_runtime and one.needs_runtime not in host.runtimes:
             refused.append((one, runtime_refusal(one)))
             continue
-        if one.cost_mib <= remaining:
+        cost = set_cost_mib(name for name in one.components if name not in running)
+        if cost <= remaining:
             start.append(one)
-            remaining -= one.cost_mib
+            costs[one.name] = cost
+            running.update(one.components)
+            remaining -= cost
             continue
         refused.append(
             (
                 one,
-                f"{one.what} ({one.name}) needs {one.cost_mib} MiB and this server has "
+                f"{one.what} ({one.name}) needs {cost} MiB and this server has "
                 f"{max(remaining, 0)} MiB left for it, so it is not started",
             )
         )
-    return Plan(start=tuple(start), refused=tuple(refused), available_mib=host.available_mib)
+    return Plan(
+        start=tuple(start),
+        refused=tuple(refused),
+        available_mib=host.available_mib,
+        costs=costs,
+    )
 
 
 def render(planned: Plan, host: Host) -> str:
     """The plan as the script reads it, one fact per line.
 
-    `START` opens an overlay and the `PREPARE`, `FILE`, `JOIN`, `WAIT` and `AFTER` lines after it
-    are that overlay's, so the script can leave out one whose preparation failed and start the
-    rest.
+    `START` opens an overlay and the `PREPARE`, `FILE`, `JOIN`, `JOIN_AS_SERVICE`, `WAIT` and
+    `AFTER` lines after it are that overlay's, so the script can leave out one whose preparation
+    failed and start the rest. `JOIN_AS_SERVICE` is a `JOIN` that also gives each container its
+    compose service name on that network.
     `SAY` lines go to the deploy's journal as they are.
     """
     lines = [
@@ -483,10 +579,15 @@ def render(planned: Plan, host: Host) -> str:
     ]
     for one in planned.start:
         lines.append(f"START {one.name}")
-        lines.append(f"SAY starting {one.what} ({one.name}) at {one.cost_mib} MiB")
+        charged = planned.costs.get(one.name, one.cost_mib)
+        lines.append(f"SAY starting {one.what} ({one.name}) at {charged} MiB")
         lines.extend(f"PREPARE {name}" for name in one.prepare)
         lines.extend(f"FILE {name}" for name in one.files)
-        lines.extend(f"JOIN {network} {' '.join(services)}" for network, services in one.joins)
+        lines.extend(
+            f"{'JOIN_AS_SERVICE' if network in one.joined_as_service else 'JOIN'} "
+            f"{network} {' '.join(services)}"
+            for network, services in one.joins
+        )
         lines.extend(f"WAIT {name}" for name in one.components)
         lines.extend(f"AFTER {name}" for name in one.after)
     lines.extend(f"SAY {reason}" for _, reason in planned.refused)

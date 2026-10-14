@@ -1,13 +1,14 @@
 ### Scheduled jobs and background work
 
 - **Screens:** `/jobs`, `/jobs/:name`, `/jobs/:name/:view`, `/runs`
-- **Tables:** `ops.control_run`, `ops.operation`, `ops.acceptance_result`
+- **Tables:** `ops.control_run`, `ops.operation`, `ops.acceptance_result`, `ops.acceptance_run`, `ops.dead_letter`
 - **Installation values:** none
-- **Measured here:** 8 routes, 1 called by no screen; 3 write routes, 3 with all three proofs; 2 gaps.
+- **Measured here:** 9 routes, 1 called by no screen; 3 write routes, 3 with all three proofs; 2 gaps.
 
 | Route | Called by |
 | --- | --- |
 | `GET /api/v1/jobs` | `/jobs` |
+| `GET /api/v1/jobs/dead` | `/jobs` |
 | `GET /api/v1/jobs/{name}` | `/jobs/:name`, `/jobs/:name/:view` |
 | `GET /api/v1/jobs/{name}/runs` | `/jobs/:name` |
 | `GET /api/v1/operate/runs` | `/runs` |

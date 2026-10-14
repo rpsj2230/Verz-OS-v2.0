@@ -8,9 +8,11 @@
 #    install may have tuned them). `docs/install/coolify.md` step 3 is this, done by hand.
 # 2. The ledger's secrets and its project keys, minted on this server from /dev/urandom the first
 #    time and kept in an environment file only root can read. They never leave the server and are never printed.
-# 3. The object store's access file, written from those secrets every time, with one identity
-#    that may read, write and list the ledger's bucket and nothing else. Never the repository's
-#    placeholder identity: a placeholder key in a running store is a key anybody can read.
+# 3. The ledger's identity in the object store's access file, merged in from those secrets every
+#    time (ops/deploy/overlays/s3-identity.sh), replacing only its own and leaving every other
+#    identity as it is. It may read, write and list the ledger's bucket and nothing else. Never the
+#    repository's placeholder identity: a placeholder key in a running store is a key anybody can
+#    read, and the merge removes one.
 # 4. The ledger's database and its role in the application's PostgreSQL, the password set from
 #    the environment file every time so the two cannot drift. The password goes to psql on
 #    standard input, never on a command line another process can read.
@@ -23,6 +25,8 @@ SETTINGS="${BRAIN_OVERLAYS_SETTINGS:?the step names the settings directory}"
 ENV_FILE="${BRAIN_OVERLAYS_ENV:?the step names the environment file}"
 PROJECT="${BRAIN_APP_PROJECT:?the step names the compose project of the application}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=s3-identity.sh
+. "$HERE/s3-identity.sh"
 
 say() { printf 'overlays: langfuse: %s\n' "$*"; }
 fail() { say "$1"; exit 1; }
@@ -68,22 +72,16 @@ grep -q "^LANGFUSE_PUBLIC_URL=." "$ENV_FILE" ||
 
 value() { sed -n "s/^$1=//p" "$ENV_FILE" | tail -n 1; }
 
-# 3. the object store's access file, from the secrets
+# 3. the ledger's identity in the object store's access file, from the secrets. Merged, never
+#    written whole: the file also holds the application's identity when the object store is
+#    switched on, and a ledger that rewrote it would take that key away at the next restart.
+#    The identity may read, write and list the ledger's bucket and nothing else, and a placeholder
+#    identity the installer may have copied in is dropped by the merge (brain.ops.s3_identities).
 access="$(value LANGFUSE_S3_ACCESS_KEY_ID)"
 secret="$(value LANGFUSE_S3_SECRET_ACCESS_KEY)"
-cat > "$SETTINGS/seaweedfs/s3.json.new" <<JSON
-{
-  "identities": [
-    {
-      "name": "langfuse",
-      "credentials": [{ "accessKey": "$access", "secretKey": "$secret" }],
-      "actions": ["Read:langfuse-events", "Write:langfuse-events", "List:langfuse-events"]
-    }
-  ]
-}
-JSON
-chmod 0644 "$SETTINGS/seaweedfs/s3.json.new"
-mv "$SETTINGS/seaweedfs/s3.json.new" "$SETTINGS/seaweedfs/s3.json"
+merge_s3_identity langfuse "$access" "$secret" \
+  '["Read:langfuse-events","Write:langfuse-events","List:langfuse-events"]' ||
+  fail "the object store's access file could not be merged, so it is left as it is"
 
 # 4. the database and its role
 db="$(docker ps --filter "label=com.docker.compose.project=$PROJECT" \

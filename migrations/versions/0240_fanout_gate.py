@@ -23,7 +23,7 @@ The downgrade drops the table. The decisions it held are lost, which is the stat
 Task ids: M18.2.4
 
 Revision ID: 0240
-Revises: 0225
+Revises: 0231
 """
 
 from __future__ import annotations
@@ -33,9 +33,9 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "0240"
-# The plan's number after 0225. The coordinator re-points it at whichever migration is the head
-# when the train is assembled.
-down_revision = "0225"
+# The head of main when this was landed (0231). The number leaves a gap after it, so a migration
+# that lands first does not take this one.
+down_revision = "0231"
 branch_labels = None
 depends_on = None
 
