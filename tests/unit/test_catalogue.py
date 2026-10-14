@@ -452,8 +452,8 @@ def test_the_presales_agent_reads_a_deals_stage_and_never_what_it_is_worth() -> 
     triage."""
     held = {c.value for c in pre_sales().authority.capabilities}
 
-    assert "read:deal.stage" in held
-    for forbidden in ("value", "amount", "revenue", "margin", "worth"):
+    assert "read:hubspot_deal.stage" in held
+    for forbidden in ("value", "amount", "revenue", "margin", "worth", "cost"):
         assert not any(forbidden in one for one in held), (
             f"the pre-sales agent can read a deal's {forbidden}"
         )
@@ -479,10 +479,12 @@ def test_every_leaf_this_module_claims_has_a_template_behind_it() -> None:
     from brain.agents import catalogue as module
 
     claimed = set(re.findall(r"M13[.]5[.]\d+", module.__doc__ or ""))
+    beyond = module.TEMPLATES_BEYOND_THE_FIRST_TWENTY_THREE
 
-    assert len(claimed) == len(CATALOGUE), (
+    assert beyond <= set(IDS), "a template named as beyond the first twenty-three is not shipped"
+    assert len(claimed) == len(CATALOGUE) - len(beyond), (
         f"the docstring claims {len(claimed)} leaves and the catalogue holds "
-        f"{len(CATALOGUE)} templates"
+        f"{len(CATALOGUE)} templates, {len(beyond)} of them written for a leaf of their own"
     )
     import json
     from pathlib import Path
@@ -578,7 +580,10 @@ def test_the_ledger_templates_read_only_fields_xero_maps(template_id: str) -> No
     mapped = {rule.required_capability.value for rule in xero.XERO_FIELD_RULES}
 
     assert manifest.connectors == (xero.CONNECTOR_NAME,)
-    assert manifest.identity.version == 2
+    assert (
+        manifest.identity.version
+        == {"accountant_agent": 3, "ar_and_renewal_chaser": 2}[template_id]
+    )
     assert {one.value for one in manifest.authority.capabilities} <= mapped
 
 
@@ -799,16 +804,19 @@ def test_an_installed_template_is_ready_only_when_the_gate_starts_it_for_its_cei
 
 
 @pytest.mark.parametrize("source", SOURCES)
-def test_the_templates_that_read_only_documents_are_the_ones_every_install_can_start(
+def test_the_templates_every_install_can_start_are_named_and_the_rest_wait_for_a_tool(
     source: str,
 ) -> None:
     """**The positive half, written out.** The property above holds vacuously for a catalogue
     in which nothing is ever READY, so the set that is READY is named: the three templates whose
-    every tool is on the document plane, which every install with rows registers, and since
-    2026-09-30 the WordPress developer, whose ticket read is the Freshdesk row tool every install
-    with rows now registers (`brain.knowledge.connector_rows`). Every other template declares a
-    row tool, a search or a draft that no source registers today, and stays incomplete on both
-    sources until one does.
+    every tool is on the document plane, which every install with rows registers, the WordPress
+    developer, whose ticket read is the Freshdesk row tool every install with rows registers
+    (`brain.knowledge.connector_rows`, 2026-09-30), and since 2026-10-14 four of the six role
+    templates, whose every tool is a read a connected source registers: the support, sales,
+    finance and project management agents. The maintenance and SEO agents also check a website,
+    a tool this registry is built without (`tests/unit/test_role_templates.py` builds it with
+    one and holds both READY). Every other template declares a row tool, a search or a draft
+    that no source registers today, and stays incomplete on both sources until one does.
 
     Delete this and a change that made every install incomplete passes the whole catalogue."""
     tools = build_registry(source=source, records=_NoRows())
@@ -820,8 +828,12 @@ def test_the_templates_that_read_only_documents_are_the_ones_every_install_can_s
     }
 
     assert ready == {
+        "accountant_agent",
         "html_developer",
         "internal_helpdesk",
         "knowledge_gap_curator",
+        "pre_sales",
+        "project_manager",
+        "support_ticket_agent",
         "wordpress_developer",
     }
