@@ -244,8 +244,14 @@ NOTICES: Final[tuple[Notice, ...]] = (
         title="A safety mechanism has not run",
         told="Whoever holds the operations alert, and for the worst, the incident capability.",
         about="Which mechanism has not run and for how long, never what it covers.",
-        how="No channel is chosen for it yet, so nothing sends it.",
+        how=(
+            "Once for each time a mechanism goes quiet, in the chat tool each person last used, to "
+            "whoever holds the operations alert and may open Incidents. When none of them has "
+            "used a chat tool in the last seven days, the email address on Install, Settings is "
+            "sent it instead. Sending is off until the Features screen switches it on."
+        ),
         composed_by="brain.ops.controls:overdue",
+        sent_by="brain.control_not_run_told:tell_overdue_controls",
         fixed_because=A_NOTICE_THAT_EXISTS_TO_CATCH_MISUSE_HAS_NO_SWITCH,
     ),
     Notice(

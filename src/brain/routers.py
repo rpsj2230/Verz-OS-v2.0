@@ -350,6 +350,12 @@ from brain.member_self_routes import router as member_self_router
 # See `brain.member_share_routes`.
 from brain.member_share_routes import router as member_share_router
 
+# Running a migration from another system, kept and checked: what the old system holds and what
+# happens to each of it, the comparison period and the cutover, behind `admin:install_setting` over
+# everything and the `migration_workspace` switch. Reaches nothing of the old system. See
+# `brain.migration_routes`.
+from brain.migration_routes import router as migration_router
+
 # My workspace, the member screen `home`: what the person asking has asked, kept and been
 # given, gated on the member grant and on nothing administrative. See `brain.mine_routes`.
 from brain.mine_routes import router as mine_router

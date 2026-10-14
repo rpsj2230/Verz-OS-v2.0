@@ -16,7 +16,7 @@ import json
 import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from functools import partial
 
 import pytest
@@ -370,3 +370,69 @@ def test_the_channel_a_person_last_wrote_on_is_the_one_they_are_told_on(migrated
     assert inside_the_hour is False
     assert lark_again is True
     assert after_lark == (Channel.LARK, lark)
+
+
+@pytest.mark.needs_db
+def test_when_somebody_last_wrote_is_read_for_the_people_asked_and_nobody_else(
+    migrated: str,
+) -> None:
+    """**`last_used_at`, against a server.** A person who wrote on a chat tool is answered with the
+    instant their newest live binding was written, one who has only a webhook, one who is asked
+    about and never bound, and one nobody asked about are all absent, and asking for nobody asks
+    nobody. Delete this and the control alert reads somebody as having used chat lately who has
+    not, or who was never asked about, and the email that is for the day nobody is in chat never
+    goes."""
+    erin, frank = "u_tell_erin", "u_tell_frank"
+    for who in (erin, frank):
+        sql(
+            migrated,
+            "INSERT INTO auth.principal (id, kind, employment, display_name) "
+            "VALUES (%s, 'human', 'staff', %s) ON CONFLICT (id) DO NOTHING",
+            who,
+            who,
+        )
+    on_slack, on_lark, hook = (
+        "U" + uuid.uuid4().hex[:10].upper(),
+        "ou_erin_" + uuid.uuid4().hex,
+        "hook-frank-" + uuid.uuid4().hex,
+    )
+    long_ago = timedelta(days=9)
+
+    async def through() -> tuple[dict[str, datetime], dict[str, datetime], dict[str, datetime]]:
+        db = app_engine(migrated)
+        sessions = async_sessionmaker(db, expire_on_commit=False)
+        bindings, book = StoredBindings(sessions), StoredAddresses(sessions)
+        for who, channel, identity in (
+            (erin, Channel.SLACK, on_slack),
+            (erin, Channel.LARK, on_lark),
+            (frank, Channel.WEBHOOK, hook),
+        ):
+            fresh = Binding(
+                channel=channel,
+                identity_hash=identity_hash(channel, identity),
+                principal_id=who,
+                bound_at=datetime(2999, 1, 1, tzinfo=UTC),
+            )
+            await bindings.bind(fresh, decide=partial(settle, fresh), trace_id="t1")
+        await book.remember(Channel.SLACK, on_slack)
+        await book.remember(Channel.LARK, on_lark)
+        await book.remember(Channel.WEBHOOK, hook)
+        sql(
+            migrated,
+            "UPDATE auth.principal_identity SET updated_at = now() - %s "
+            "WHERE principal_id = %s AND channel = 'slack' AND deleted_at IS NULL",
+            long_ago,
+            erin,
+        )
+        both = await book.last_used_at([erin, frank, "u_tell_nobody"])
+        only_frank = await book.last_used_at([frank])
+        nobody_asked = await book.last_used_at([])
+        await db.dispose()
+        return both, only_frank, nobody_asked
+
+    both, only_frank, nobody_asked = run(through)
+
+    # Erin's newest binding is the Lark one, written just now, and not the nine-day-old Slack one.
+    assert set(both) == {erin}
+    assert datetime.now(UTC) - both[erin] < timedelta(minutes=5)
+    assert only_frank == {} and nobody_asked == {}
