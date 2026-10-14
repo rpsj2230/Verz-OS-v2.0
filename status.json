@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-14T12:12:23.213851+00:00",
-  "commit": "5fae091c",
-  "commit_subject": "Two install checks no longer fail a correct install: vault tokens keep the vault's length, and an install can say it follows every release (#602)",
+  "generated_at": "2026-10-14T13:11:27.788742+00:00",
+  "commit": "9cd6302e",
+  "commit_subject": "20 more tasks are proved on the install by the newest complete acceptance run",
   "total": 1626,
-  "done": 1113,
-  "percent": 68.5,
-  "built": 1272,
-  "built_percent": 78.2,
-  "built_unproven": 159,
+  "done": 1133,
+  "percent": 69.7,
+  "built": 1277,
+  "built_percent": 78.5,
+  "built_unproven": 144,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -68,11 +68,6 @@
     "M17.5.1",
     "M17.5.2",
     "M17.7.2",
-    "M18.2.1",
-    "M18.2.2",
-    "M18.2.3",
-    "M18.2.4",
-    "M18.4.3",
     "M2.3.2",
     "M24.3.6",
     "M25.4.1",
@@ -110,14 +105,6 @@
     "M35.2.2.4",
     "M35.3.1.1",
     "M36.2.4.1",
-    "M37.1.1.1",
-    "M37.1.1.2",
-    "M37.1.1.3",
-    "M37.1.3.2",
-    "M37.1.3.3",
-    "M37.1.4.1",
-    "M37.1.4.2",
-    "M37.1.4.3",
     "M37.5.1.2",
     "M37.5.1.4",
     "M38.2.2.3",
@@ -145,7 +132,6 @@
     "M40.1.2.3",
     "M40.7.1",
     "M40.7.3",
-    "M42.1.2",
     "M42.1.3",
     "M42.1.4",
     "M42.3.8",
@@ -153,7 +139,6 @@
     "M42.5.12",
     "M42.5.13",
     "M42.5.14",
-    "M42.5.2",
     "M42.5.3",
     "M42.5.4",
     "M42.5.7",
@@ -237,31 +222,31 @@
       "wave": 4,
       "name": "Doing, lifecycle, extensions",
       "total": 232,
-      "done": 96,
-      "percent": 41.4,
-      "in_progress": 74,
+      "done": 104,
+      "percent": 44.8,
+      "in_progress": 66,
       "ready_for_testing": 29,
       "blocked": 16,
       "open": 17,
       "acts": 0,
       "decided": 23,
-      "built": 129,
-      "built_percent": 55.6
+      "built": 132,
+      "built_percent": 56.9
     },
     {
       "wave": 5,
       "name": "Hands, delivery, go-live",
       "total": 217,
-      "done": 64,
-      "percent": 29.5,
-      "in_progress": 99,
-      "ready_for_testing": 23,
+      "done": 76,
+      "percent": 35.0,
+      "in_progress": 89,
+      "ready_for_testing": 21,
       "blocked": 19,
       "open": 12,
       "acts": 42,
       "decided": 18,
-      "built": 95,
-      "built_percent": 43.8
+      "built": 97,
+      "built_percent": 44.7
     },
     {
       "wave": 6,
@@ -465,10 +450,10 @@
       "name": "Multi-agent execution",
       "wave": 4,
       "total": 21,
-      "done": 3,
+      "done": 11,
       "acts": 0,
       "decided": 1,
-      "built": 8
+      "built": 11
     },
     {
       "module": "M19",
@@ -655,10 +640,10 @@
       "name": "Migration, launch and handover",
       "wave": 5,
       "total": 45,
-      "done": 10,
+      "done": 20,
       "acts": 41,
       "decided": 4,
-      "built": 20
+      "built": 22
     },
     {
       "module": "M38",
@@ -705,7 +690,7 @@
       "name": "Client deployment template",
       "wave": 5,
       "total": 64,
-      "done": 26,
+      "done": 28,
       "acts": 0,
       "decided": 0,
       "built": 42
@@ -1077,9 +1062,17 @@
     "M17.4.4",
     "M17.5.3",
     "M17.7.9",
+    "M18.1.3",
+    "M18.2.1",
+    "M18.2.2",
+    "M18.2.3",
+    "M18.2.4",
     "M18.3.1",
     "M18.3.2",
     "M18.3.3",
+    "M18.4.1",
+    "M18.4.2",
+    "M18.4.3",
     "M19.2.1",
     "M19.2.2",
     "M19.2.3",
@@ -1526,6 +1519,15 @@
     "M36.2.1.2",
     "M36.2.2.1",
     "M36.2.4.2",
+    "M37.1.1.1",
+    "M37.1.1.2",
+    "M37.1.1.3",
+    "M37.1.3.2",
+    "M37.1.3.3",
+    "M37.1.4.1",
+    "M37.1.4.2",
+    "M37.1.4.3",
+    "M37.1.4.4",
     "M37.2.2.3",
     "M37.2.3.1",
     "M37.2.3.2",
@@ -1536,6 +1538,7 @@
     "M37.4.3.4",
     "M37.5.1.1",
     "M37.6.1.3",
+    "M37.7.5",
     "M38.1.1.1",
     "M38.1.1.2",
     "M38.1.1.3",
@@ -1719,6 +1722,7 @@
     "M41.3.4",
     "M41.4.1",
     "M42.1.1",
+    "M42.1.2",
     "M42.2.1",
     "M42.2.2",
     "M42.2.3",
@@ -1738,6 +1742,7 @@
     "M42.5.1",
     "M42.5.11",
     "M42.5.15",
+    "M42.5.2",
     "M42.5.6",
     "M42.6.1",
     "M42.6.2",
@@ -2385,34 +2390,9 @@
       "why": "TRIAGE 2026-10-13 class 3 (built, not wired): orchestration/contract.py SubtaskContract (objective, output schema as FieldSpec, tool hints, scope predicate) and subtask_ceiling() are tested in test_orchestration_contract.py. No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package. NEXT: build the orchestrator runtime that calls it: a coordinating-agent step in the run path (gate/runtime or a new orchestration runner) fed by the M18.5.3 planner and the M18.5.1 callee links",
       "updated": "2026-10-13"
     },
-    "M18.1.3": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): contract.validated()/validated_or_none() refuse a result that does not match its schema (tested); merge.merge only takes ValidatedResult. No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package. NEXT: call contract.validated on each child's reply in the orchestrator before it is handed to merge; a failure becomes a gap, not an input",
-      "updated": "2026-10-13"
-    },
     "M18.1.4": {
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 3 (built, not wired): contract.py has no prose field kind and contract_gaps() refuses a contract that would let free prose be the output (tested). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package. NEXT: build the orchestrator runtime that calls it: a coordinating-agent step in the run path (gate/runtime or a new orchestration runner) fed by the M18.5.3 planner and the M18.5.1 callee links",
-      "updated": "2026-10-13"
-    },
-    "M18.2.1": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): orchestration/plan.py DependencyGraph with Node cost and Edge coupling weights, read_proposal(), plan_refusals() (tested in test_orchestration_plan.py). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package. NEXT: feed it the planner proposal (M18.5.3) and pass the graph to fanout.decide",
-      "updated": "2026-10-13"
-    },
-    "M18.2.2": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): orchestration/fanout.py six Conditions evaluated by gate_inputs(), holds(), failures(), decide() before any child starts (tested in test_orchestration_fanout.py). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package. NEXT: call fanout.decide(graph, depth) in the orchestrator before dispatching children",
-      "updated": "2026-10-13"
-    },
-    "M18.2.3": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): fanout.decide returns Verdict.SINGLE_LOOP when any condition fails, the default (tested). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package. NEXT: honour the verdict in the orchestrator: run the plan as one loop when SINGLE_LOOP",
-      "updated": "2026-10-13"
-    },
-    "M18.2.4": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): fanout.GateRecord holds inputs, failures and verdict with AUDIT_SURFACE and gate_record_gaps (tested). Nothing persists a record: no table, no trace field, no caller. NEXT: persist the GateRecord on the run's trace (tables or ledger) when decide() runs, then show it on the run's page",
       "updated": "2026-10-13"
     },
     "M18.3.4": {
@@ -2423,21 +2403,6 @@
     "M18.3.5": {
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 3 (built, not wired): delegation.fan_out_request() builds an ops.admission request per run and global_ceiling() reads the central budget (tested). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package. NEXT: submit fan_out_request to ops.admission before children start; refuse or queue when the global budget is spent",
-      "updated": "2026-10-13"
-    },
-    "M18.4.1": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): orchestration/merge.py merge() builds a MergedAnswer only from ValidatedResult inputs (tested in test_orchestration_merge.py). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package. NEXT: call merge from the orchestrator and return MergedAnswer to the asker as the run's answer",
-      "updated": "2026-10-13"
-    },
-    "M18.4.2": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): merge.SubtaskReport carries cost and duration per subtask into MergedAnswer (tested). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package. No route or page shows it. NEXT: expose per-subtask cost and duration on the run's answer payload and in the console run view",
-      "updated": "2026-10-13"
-    },
-    "M18.4.3": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): merge.Gap, GapCause, GapTrace state the gap when a subtask failed, and merge_refusals refuses a silent hole (tested). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package. NEXT: carry the stated gap into the user-visible answer from the orchestrator",
       "updated": "2026-10-13"
     },
     "M18.5.1": {
@@ -3400,21 +3365,6 @@
       "why": "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): ops/load_peak.py (python -m brain.ops.load_peak) runs the peak at a live install and judges per lane; it spends real model calls so it is the owner's command, needs-rupash item 194 asks whether to run it. It does not measure memory headroom under load.",
       "updated": "2026-10-13"
     },
-    "M37.1.1.1": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): inventory.py: Catalogue/Holding cover knowledge, prompts, tool definitions and conversation history, tested in test_migration_inventory.py; but nothing imports brain.migration.inventory outside the package; no table, route or page. NEXT: add a migration store (table) plus a console route and page that record the catalogue and decisions through inventory.agree(), then write a check naming the leaf that reads that route",
-      "updated": "2026-10-13"
-    },
-    "M37.1.1.2": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): inventory.py: Disposition (migrate, rebuild, retire), Decision, undecided(), contradicted(), cannot_be_carried(), tested; no caller outside the package, no store or screen. NEXT: add a migration store (table) plus a console route and page that record the catalogue and decisions through inventory.agree(), then write a check naming the leaf that reads that route",
-      "updated": "2026-10-13"
-    },
-    "M37.1.1.3": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): inventory.py: PermissionMapping, unmapped(), mapped_twice() make a mapping explicit and refuse an unmapped permission; tested; no caller outside the package, no store or screen. NEXT: add a migration store (table) plus a console route and page that record the catalogue and decisions through inventory.agree(), then write a check naming the leaf that reads that route",
-      "updated": "2026-10-13"
-    },
     "M37.1.2.1": {
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 2 (partly built): carry.py: Export record and export_gaps(agreed, exports) check what arrived against the agreed catalogue (tested). The exporter itself is a plugin that does not exist (src/brain/plugins has contract/points only); nothing calls carry. NEXT: define the exporter plugin point in brain.plugins, then route carry.export_gaps from a migration page; check names the leaf once an export can be handed over",
@@ -3438,36 +3388,6 @@
     "M37.1.3.1": {
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 2 (partly built): parallel.py: Period and Comparison hold an agreed window and per-question answers of both systems (tested). Nothing sends a question to both systems or records comparisons; no caller outside the package. NEXT: needs a runner that asks the old system via a plugin and records Comparison rows, plus a route; first build the store and recorder",
-      "updated": "2026-10-13"
-    },
-    "M37.1.3.2": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): parallel.py: disagreements(), unanswered(), unreviewed() build the comparison log views (tested). No table, route or page holds or shows the log; nothing imports parallel. NEXT: add a comparison-log table and a console page reading parallel.disagreements; then check",
-      "updated": "2026-10-13"
-    },
-    "M37.1.3.3": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): parallel.py: Criterion and Period require cutover criteria before the window opens; cutover_gaps(), may_cut_over() refuse otherwise (tested; DEC-35 row names it). No store or route; nothing imports parallel. NEXT: persist Period and Criterion with a created-at before the first Comparison, route may_cut_over to the cutover screen; then check",
-      "updated": "2026-10-13"
-    },
-    "M37.1.4.1": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): decommission.py: Decommission refuses read-only before cutover and archived before read-only (tested). Nothing reaches the old system and nothing outside the package imports decommission; no table, route or page. NEXT: add decommission record store and route that records timestamps through Decommission; then check",
-      "updated": "2026-10-13"
-    },
-    "M37.1.4.2": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): decommission.py: Revocation and credentials_outstanding() keep requested and confirmed apart (tested). Nothing revokes or probes a grant and nothing imports it; register row GAP2-25 names the leaf. NEXT: wire Revocation records to a console route fed by a person or a connector probe; then check",
-      "updated": "2026-10-13"
-    },
-    "M37.1.4.3": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): decommission.py: ScheduledJob and jobs_outstanding() require an observed silence window after disabling (tested). No store, route, caller outside the package. NEXT: record ScheduledJob observations through a route and show jobs_outstanding on the cutover page; then check",
-      "updated": "2026-10-13"
-    },
-    "M37.1.4.4": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): decommission.py: FinalBackup.may_delete_after derives retention from ops.retention.BACKUP_RETENTION_DAYS (tested). No store or route records a final backup; nothing imports the module. NEXT: wire FinalBackup record into the cutover route reading the real backup manifest (ops.backup_manifest); then check",
       "updated": "2026-10-13"
     },
     "M37.2.2.2": {
@@ -3558,11 +3478,6 @@
     "M37.5.3.3": {
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 3 (built, not wired): ops/retune.py post_launch_correction() recomputes the estimator from observed distribution, returning the prior while the window is short (tested). Called only by spend_view.cost_review, which no route serves; the spend_correction control has no runner (schedule_runner.py Runner has needs=). NEXT: give spend_correction a runner assembling estimate vs actual per period and call retune.post_launch_correction; surface via cost review route",
-      "updated": "2026-10-13"
-    },
-    "M37.7.5": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): migration/decommission.py CompletedCutover cannot be built while CUTOVER_GATED_ACTS are unrecorded and decommission_gaps names which (tested; DEC-35). Nothing records a cutover: no table, route or page, and nothing imports it. NEXT: build the cutover record store and route that constructs CompletedCutover and returns the refusal text naming the unrecorded act; then check reads the refusal",
       "updated": "2026-10-13"
     },
     "M37.7.6": {
@@ -3850,11 +3765,6 @@
       "why": "TRIAGE 2026-10-13 class 4 (unbuilt): No starter prompts: searched src and console for starter/suggested question, only Ask page exists. Inputs exist: agent skills (skill pins) and the knowledge reach.",
       "updated": "2026-10-13"
     },
-    "M42.1.2": {
-      "status": "READY FOR TESTING",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): install.sh step 12 mints POSTGRES_PASSWORD, APP_ROLE_PASSWORD and BRAIN_SETUP_SECRET with openssl on the client server (wired). variables.py:shared_secrets and unminted_secrets refuse shared or weak values but nothing calls them outside tests. NEXT: Run unminted_secrets over the install's own environment in an install check and expose shared_secrets as a command for the variables repository.",
-      "updated": "2026-10-13"
-    },
     "M42.1.3": {
       "status": "READY FOR TESTING",
       "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): install.sh steps 7 and 10 fetch one archive and write APP_IMAGE=<repo>:<release tag>; release.yml verifies the signed CI digest and tags it (no rebuild); installer.rebuild_gaps and release_pinning_gaps hold compose files to it in test_deployment_installer.py. NEXT: Check that reads /opt/brain/.env APP_IMAGE is a tag of the product image and equals the running container's image reference.",
@@ -3918,11 +3828,6 @@
     "M42.4.8": {
       "status": "BLOCKED",
       "why": "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Turning questions asked during the two installs into documentation lines is a follow-up to M42.4.4 and M42.4.7 and has no input until they happen.",
-      "updated": "2026-10-13"
-    },
-    "M42.5.2": {
-      "status": "READY FOR TESTING",
-      "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): install.sh step 12 mints POSTGRES_PASSWORD, APP_ROLE_PASSWORD and BRAIN_SETUP_SECRET with openssl rand on the server and the vault steps mint tokens; variables.is_secret_name feeds installer.value_leaks_in; test_deployment_variables.py. release.archive_gaps checks the archive for client values. NEXT: Check running variables.unminted_secrets over the install's own .env (needs wiring, see M42.1.2).",
       "updated": "2026-10-13"
     },
     "M42.5.3": {
@@ -4048,11 +3953,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 249,
+  "closed_today": 269,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "9cd6302",
+      "at": "2026-10-14T13:10:11+00:00",
+      "subject": "20 more tasks are proved on the install by the newest complete acceptance run",
+      "closed": "M18.1.3,M18.2.1,M18.2.2,M18.2.3,M18.2.4,M18.4.1,M18.4.2,M18.4.3,M37.1.1.1,M37.1.1.2,M37.1.1.3,M37.1.3.2,M37.1.3.3,M37.1.4.1,M37.1.4.2,M37.1.4.3,M37.1.4.4,M37.7.5,M42.1.2,M42.5.2"
+    },
     {
       "sha": "b8d05b9",
       "at": "2026-10-14T09:08:07+00:00",
@@ -4166,12 +4077,6 @@
       "at": "2026-09-29T10:33:07+00:00",
       "subject": "Wave 0 is recorded at the commit the owner accepted, and the first release is cut from it (#229)",
       "closed": "M38.2.1.1,M41.3.1"
-    },
-    {
-      "sha": "785d112",
-      "at": "2026-09-29T10:01:55+00:00",
-      "subject": "The Lark staff list places people in their departments on the owner's install (#227)",
-      "closed": "M1.6.5"
     }
   ]
 }
