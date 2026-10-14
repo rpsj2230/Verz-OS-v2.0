@@ -62,12 +62,16 @@ server and no models pulled, so there is nothing on this host to measure. `Serve
 refuses to be constructed without prose saying where its figure came from, which is the
 shape `brain.ops.pii.BuiltIn` uses for `why_not_local`.
 
-**What this does to the budget, reported rather than resolved.** The component is 3072 MiB
-and it takes `standard` from 256 MiB over to 3328 MiB over. That is a finding, not a reason
-to shrink a component: `brain.ops.wiring` opens by saying that sizing to the remainder
-produces numbers that add up and containers that are OOM-killed under the first real load.
-Three ways out exist and all three are Rupash's: a second host, smaller weights on the
-embedding model, or int8 quantisation, which trades answer quality for memory.
+**The budget is no longer a sum, since 2026-10-14, and this module no longer does the sizing.**
+It declared the three models resident at once in 3,072 MiB, which `docs/needs-rupash.md` item 120
+found would not fit the owner's server beside the detector and the trace ledger, and which the
+owner then answered with a constraint rather than a number: the system should not need more memory
+than the server has, with the kernel's cache counted. The server now loads one part at a time and
+an install chooses which parts it runs, so the container's limit is the base plus the largest part
+and is worked out from the install's settings. **That arithmetic is `brain.ops.model_server`'s,
+and the functions here that answer "how large may a request be" and "what is wrong with this
+deployment" ask it.** The 8-bit quantisation of the embedding model below is part of the same
+change: 640 MiB mapped, against 1,152 resident at 16 bits.
 
 **Why presidio-analyzer does not move here.** It is already a container, already sized from
 measurement, and it loads a spaCy pipeline rather than a transformer. The model item 31 named
@@ -108,7 +112,7 @@ from __future__ import annotations
 
 import enum
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Final
@@ -122,6 +126,15 @@ from brain.knowledge.embed_queue import (
 )
 from brain.knowledge.embedding import EmbeddedVector, EmbeddingError, EmbeddingModel
 from brain.knowledge.ingest import ParseCause
+from brain.ops.model_server import (
+    TORCH_RUNTIME_MIB,
+    ModelServerConfig,
+    Part,
+    effective_limit_mib,
+    read_config,
+    requirement,
+)
+from brain.ops.model_server import request_ceiling_bytes as model_server_ceiling
 from brain.ops.wiring import (
     Wiring,
     WiringError,
@@ -309,12 +322,17 @@ SERVED_MODELS: Final[tuple[ServedModel, ...]] = (
     ServedModel(
         task=InferenceTask.EMBEDDING,
         name="qwen3-embedding-0.6b",
-        weights_mib=1152,
+        weights_mib=640,
         sizing_basis=(
-            "0.6e9 parameters at 2 bytes each, which is the fp16 precision the published "
-            "weights are in, is 1.2e9 bytes and so 1145 MiB; rounded up to the next 128. "
-            "Arithmetic from a parameter count is a floor: it excludes the tokeniser, the "
-            "vocabulary tables and every activation the model needs to answer with"
+            "0.6e9 parameters at the 8.5 bits a Q8_0 block costs (eight bits for each weight "
+            "and a 16-bit scale for every 32 of them, which is 1.0625 bytes) is 0.64e9 bytes "
+            "and so 608 MiB; rounded up to the next 128. 8-bit and not the 16-bit the model "
+            "is published in, which would be 1145 MiB, because the file is memory-mapped and "
+            "the kernel can give its pages back, and because the loss from 8-bit weights is "
+            "small for an embedding model where 4-bit loses more. Arithmetic from a "
+            "parameter count is a floor: it excludes the tokeniser, the vocabulary tables and "
+            "every activation the model needs to answer with, which `brain.ops.model_server` "
+            "adds"
         ),
     ),
     ServedModel(
@@ -343,30 +361,46 @@ SERVED_MODELS: Final[tuple[ServedModel, ...]] = (
     ),
 )
 
-#: What the cgroup counts and the weights do not: the interpreter, torch or the ONNX runtime,
-#: the tokenisers, the HTTP server, and the allocator arenas a threaded process never returns.
+#: What the cgroup counts and the weights do not, for a part that runs on torch: the interpreter,
+#: torch, the tokenisers and the allocator arenas a threaded process never returns. One figure with
+#: one owner, `brain.ops.model_server.TORCH_RUNTIME_MIB`, kept here under the name other modules
+#: already import.
 #:
 #: **A judgement with no measurement behind it**, in the same register as
 #: `brain.knowledge.parse_budget.PARSE_EXPANSION`. It is the figure most likely to be wrong,
-#: and it is wrong in the safe direction only while it is generous: too small and the request
-#: ceiling below is computed from memory the runtime has already taken.
-INFERENCE_RUNTIME_RESERVE_MIB: Final = 512
+#: and it is wrong in the safe direction only while it is generous.
+INFERENCE_RUNTIME_RESERVE_MIB: Final = TORCH_RUNTIME_MIB
 
-#: How many requests the service answers at once. One, and derived rather than chosen, exactly
-#: as `brain.knowledge.parse_budget.PARSES_AT_ONCE` is: the ceiling below is the whole of what
-#: is left after the weights and the reserve, so a second concurrent request would be allowed
-#: the same whole remainder and the container has no second copy of it. It is also what a
+#: How many requests the service answers at once. One, because a part is loaded for the request
+#: that wants it and a second concurrent request would need a second part, which the supervisor
+#: does not load: `brain.ops.model_server.ONE_PART_IS_RESIDENT_AT_A_TIME`. It is also what a
 #: CPU-bound model server wants anyway, because two requests on one set of threads interleave
 #: rather than overlap and cost two activation working sets to do it.
 REQUESTS_AT_ONCE: Final = 1
 
+#: Which task on this service each part of the model server answers. The entity part and the
+#: embedding part are one each; the layout part and the scanned-page part both read documents and
+#: so are both the parsing task, as `brain.knowledge.parse_ocr.OCR_TASK` already says; the general
+#: reader has no model and is no task.
+TASK_OF_PART: Final[Mapping[Part, InferenceTask | None]] = MappingProxyType(
+    {
+        Part.EMBEDDING: InferenceTask.EMBEDDING,
+        Part.ENTITIES: InferenceTask.ENTITY_RECOGNITION,
+        Part.LAYOUT: InferenceTask.PARSING,
+        Part.OCR: InferenceTask.PARSING,
+        Part.TIKA: None,
+    }
+)
+
 
 def weights_mib(models: Sequence[ServedModel] = SERVED_MODELS) -> int:
-    """What this service holds resident before it is asked anything.
+    """What the declared models would hold if every one were resident at once.
 
-    A parameter with a default for the reason `brain.ops.queue.concurrency_gaps` gives about
-    itself: a check that can only ever be run against the constant beside it cannot be shown
-    to fail, and a check nobody has seen fail is a check nobody knows works.
+    **Not what the server holds, and no longer a figure anything is sized from.** The server
+    loads one part at a time (`brain.ops.model_server.ONE_PART_IS_RESIDENT_AT_A_TIME`), so the
+    sum is the cost of the design that was rejected, kept because it is the number an owner
+    compares the new one against. A parameter with a default for the reason
+    `brain.ops.queue.concurrency_gaps` gives about itself.
     """
     return sum(model.weights_mib for model in models)
 
@@ -385,36 +419,20 @@ def served_model(task: InferenceTask) -> ServedModel:
     raise WiringError(msg)
 
 
-def request_ceiling_bytes(
-    *,
-    server_component: str = INFERENCE_COMPONENT,
-    reserve_mib: int = INFERENCE_RUNTIME_RESERVE_MIB,
-    requests_at_once: int = REQUESTS_AT_ONCE,
-    models: Sequence[ServedModel] = SERVED_MODELS,
-) -> int:
-    """The most one request may be allowed to cost, inside the container that serves it.
+def request_ceiling_bytes(config: ModelServerConfig | None = None) -> int:
+    """The most one request body may be, which is what the server is started refusing past.
 
-    The second cap, in the only units this runtime has. Derived from the component's own limit
-    rather than set beside it, which is the rule `brain.knowledge.parse_budget.parse_budget_bytes`
-    states and the reason is the same one squared here: two numbers governing one resource
-    drift, and here the pair of them is the entire mechanism by which the second cap means
-    anything at all.
+    The second cap, in the only units this runtime has. **Derived from the install's choice**
+    (`brain.ops.model_server.request_ceiling_bytes`): the larger of the largest document the
+    install is sized for, base64 encoded, and the most an embedding batch may cost. The container
+    is sized from the same two things, so the cap and the limit cannot be moved apart by editing
+    one of them, which is the rule `brain.knowledge.parse_budget.parse_budget_bytes` states about
+    its own pair of numbers.
 
-    Can go negative, and deliberately is not clamped. A negative ceiling is the honest
-    arithmetic for a container that cannot hold its own weights, and `inference_gaps` reports
-    it in those words; clamping it to zero would turn a container that cannot start into one
-    that refuses every request, which looks like a configuration problem rather than a sizing
-    one.
+    With no configuration this reads the install's own settings, so a caller asking "what does
+    the server I will send this to accept" cannot be answered with the default of a different one.
     """
-    limit_mib = component(server_component).memory_mib
-    remainder_mib = limit_mib - weights_mib(models) - reserve_mib
-    if requests_at_once < 1:
-        # Guarded rather than divided by, because the caller's mistake is worth reporting as
-        # itself. `inference_gaps` turns this into a sentence; returning the remainder here
-        # keeps the arithmetic total so that the caller sees one finding rather than a
-        # ZeroDivisionError standing in for one.
-        return remainder_mib * MIB
-    return (remainder_mib // requests_at_once) * MIB
+    return model_server_ceiling(read_config() if config is None else config)
 
 
 # --------------------------------------------------- the profile flag, refusing (M32.1.1.4)
@@ -427,18 +445,25 @@ def request_ceiling_bytes(
 INFERENCE_DESTINATION_SETTINGS: Final = ("inference_url",)
 
 
-def runs_inference_server(profile: str) -> bool:
-    """Whether this profile deploys somewhere for text to be sent.
+def runs_inference_server(profile: str, switched: Collection[str] = frozenset()) -> bool:
+    """Whether this install deploys somewhere for text to be sent: its profile, or its services.
 
     Derived from `COMPONENTS` rather than declared a second time, matching
     `brain.ops.wiring.runs_trace_ledger`. A profile gains an inference server by a component
-    naming it, which is the same edit that puts it in the budget, so the two cannot disagree.
+    naming it, which is the same edit that puts it in the budget, so the two cannot disagree. **No
+    profile names it since 2026-10-14**: the server is an optional service, and `switched` is the
+    containers the install's optional services run
+    (`brain.ops.overlays.components_switched_on`), which is how an install runs it at all.
     """
     assert_known_profile(profile)
-    return any(c.name == INFERENCE_COMPONENT for c in components_for(profile))
+    return INFERENCE_COMPONENT in switched or any(
+        c.name == INFERENCE_COMPONENT for c in components_for(profile)
+    )
 
 
-def inference_config_conflicts(profile: str, values: Mapping[str, str]) -> tuple[str, ...]:
+def inference_config_conflicts(
+    profile: str, values: Mapping[str, str], switched: Collection[str] = frozenset()
+) -> tuple[str, ...]:
     """Inference destinations configured on an install that deploys no inference server.
 
     **The profile flag doing something rather than describing something**, in the shape
@@ -454,7 +479,7 @@ def inference_config_conflicts(profile: str, values: Mapping[str, str]) -> tuple
     time is a sequence of restarts.
     """
     assert_known_profile(profile)
-    if runs_inference_server(profile):
+    if runs_inference_server(profile, switched):
         return ()
     return tuple(
         f"{setting} is set and profile {profile!r} deploys no inference server, so the text "
@@ -690,19 +715,37 @@ def parse_cause_for(outcome: CallOutcome) -> ParseCause | None:
 # ------------------------------------------------------------------ the deployment checks
 
 
+def is_switched_on() -> bool:
+    """Whether this install's optional services name the model server, read as settings are.
+
+    False for a value that cannot be read, because this is asked by the worker's start-up check
+    and a worker that refused to start over a setting is a queue that stops: the setting is
+    refused where it is saved and in the release's plan.
+    """
+    from brain.ops.overlays import OverlayError, components_switched_on, switched_on_here
+
+    try:
+        return INFERENCE_COMPONENT in components_switched_on(switched_on_here())
+    except OverlayError:
+        return False
+
+
 def inference_gaps(
     *,
     server_component: str = INFERENCE_COMPONENT,
-    reserve_mib: int = INFERENCE_RUNTIME_RESERVE_MIB,
     requests_at_once: int = REQUESTS_AT_ONCE,
     models: Sequence[ServedModel] = SERVED_MODELS,
+    config: ModelServerConfig | None = None,
+    switched: bool | None = None,
 ) -> tuple[str, ...]:
     """Every reason this deployment cannot serve what this repository will ask it, in words.
 
     Called by `brain.ops.worker.preflight`, unconditionally rather than on a component name,
     for the reason `embed_batch_gaps` is called there: a slot is a slot, embedding work is
     `TrafficClass.SYSTEM`, and any container draining that queue may be handed a batch to
-    send.
+    send. **Nothing at all on an install that has not switched the server on**, which is the
+    install the first sentence of this module's change describes: a finding about a server that
+    is not there would be printed at every worker start and read past by everyone.
 
     Five checks, and each catches a different way the two caps stop being two.
 
@@ -710,14 +753,14 @@ def inference_gaps(
     failure has no error in it: the caller waits, the timeout fires, the outcome is
     `UNAVAILABLE`, and a deployment that is missing a model is indistinguishable from one
     that is merely down. `brain.ops.pii.configuration_gaps` makes the same check about a
-    detection kind with no recogniser.
+    detection kind with no recogniser. Asked of the parts the install chose and no others.
 
-    Then whether the container holds its own weights at all, which is the check that fires
-    when somebody adds a fourth model or moves one to fp32.
+    Then whether the container holds the largest part it was asked to, which is the check that
+    fires when a limit is set by hand under what the parts need.
 
-    Then the concurrency, which is `PARSES_AT_ONCE`'s argument one system along: the ceiling
-    is the whole of the remainder, so more than one request at a time is that many times the
-    container's memory promised out of one container's worth.
+    Then the concurrency, which is `PARSES_AT_ONCE`'s argument one system along: the container
+    holds one part at a time, so more than one request at a time would need a second part
+    loaded beside the first.
 
     Then the ceiling against the container, which is what makes it a second cap rather than a
     restatement of the first. A ceiling at or above the cgroup limit leaves the kill as the
@@ -737,9 +780,18 @@ def inference_gaps(
     Returns all of them rather than the first, matching `brain.ops.worker.preflight`: a
     deployment wrong in two ways is one where fixing either leaves it still wrong.
     """
+    if not (is_switched_on() if switched is None else switched):
+        return ()
+    chosen = read_config() if config is None else config
     findings: list[str] = []
     served = {model.task for model in models}
-    unserved = sorted(task.value for task in InferenceTask if task not in served)
+    unserved = sorted(
+        {
+            task.value
+            for part in chosen.parts
+            if (task := TASK_OF_PART[part]) is not None and task not in served
+        }
+    )
     if unserved:
         findings.append(
             f"no model is declared for {unserved}, so a request for it can never be "
@@ -747,20 +799,15 @@ def inference_gaps(
             "model looks exactly like one that is merely down"
         )
 
-    limit_mib = component(server_component).memory_mib
-    resident_mib = weights_mib(models) + reserve_mib
-    ceiling = request_ceiling_bytes(
-        server_component=server_component,
-        reserve_mib=reserve_mib,
-        requests_at_once=requests_at_once,
-        models=models,
-    )
-    if resident_mib >= limit_mib:
+    limit_mib = effective_limit_mib(chosen)
+    needed = requirement(chosen)
+    ceiling = request_ceiling_bytes(chosen)
+    if limit_mib < needed.limit_mib:
         findings.append(
-            f"{server_component!r} is {limit_mib} MiB and holds {weights_mib(models)} MiB of "
-            f"weights plus a {reserve_mib} MiB runtime, which is {resident_mib} MiB before it "
-            "is asked anything; the container cannot load what it is meant to serve and the "
-            "kernel ends it during startup rather than under load"
+            f"{server_component!r} is {limit_mib} MiB and the {needed.largest.value} part "
+            f"alone needs {needed.limit_mib} MiB with documents up to {chosen.upload_mb} MB; "
+            "the container cannot load what it is meant to serve and the kernel ends it "
+            "during startup or on the first large request rather than under ordinary load"
         )
     if requests_at_once < 1:
         findings.append(
@@ -769,21 +816,20 @@ def inference_gaps(
         )
     elif requests_at_once > REQUESTS_AT_ONCE:
         findings.append(
-            f"{server_component!r} would serve {requests_at_once} requests at once and the "
-            f"ceiling is {ceiling // MIB} MiB each, which is {requests_at_once} times what is "
-            f"left of the container; the ceiling is the whole remainder, so only "
-            f"{REQUESTS_AT_ONCE} request(s) fit at a time"
+            f"{server_component!r} would serve {requests_at_once} requests at once and is sized "
+            f"for {REQUESTS_AT_ONCE}: the container holds one part at a time and a second "
+            "request would need a second part loaded beside it"
         )
 
     if ceiling >= limit_mib * MIB:
         findings.append(
             f"a request ceiling of {ceiling // MIB} MiB against a {limit_mib} MiB limit on "
             f"{server_component!r} is a process told it may use everything the cgroup counts; "
-            "the cgroup counts the weights and the runtime too, and it enforces by killing"
+            "the cgroup counts the model and the runtime too, and it enforces by killing"
         )
 
     batch_bytes = batch_budget_bytes()
-    if batch_bytes > ceiling:
+    if chosen.has(Part.EMBEDDING) and batch_bytes > ceiling:
         findings.append(
             f"a batch may cost {batch_bytes // MIB} MiB and {server_component!r} accepts "
             f"{ceiling // MIB} MiB per request; every full batch would be refused by the "

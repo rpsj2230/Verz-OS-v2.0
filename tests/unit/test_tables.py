@@ -181,6 +181,7 @@ MIGRATION_ACCEPTANCE_RUN = VERSIONS / "0231_acceptance_run_record.py"
 MIGRATION_SKILL_PERSONAL = VERSIONS / "0232_skill_personal.py"
 MIGRATION_PERSONAL_PROJECT = VERSIONS / "0233_personal_project.py"
 MIGRATION_FANOUT_GATE = VERSIONS / "0240_fanout_gate.py"
+MIGRATION_MODEL_SERVER = VERSIONS / "0250_model_server.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -533,6 +534,10 @@ PERSONAL_PROJECT_TABLES: tuple[str, ...] = ("agent.project", "agent.project_item
 #: And the one 0240 adds: what the fan-out gate decided for a plan.
 FANOUT_GATE_TABLES: tuple[str, ...] = ("ops.fanout_gate",)
 
+#: And the one 0250 adds: the model server's measured peaks. Its two column additions on `know` are
+#: not tables and are held by the model-versus-migration comparison below.
+MODEL_SERVER_TABLES: tuple[str, ...] = ("ops.model_server_peak",)
+
 ALL_TABLES = (
     CORE_TABLES
     + RESOLVER_TABLES
@@ -636,6 +641,7 @@ ALL_TABLES = (
     + SKILL_PERSONAL_TABLES
     + PERSONAL_PROJECT_TABLES
     + FANOUT_GATE_TABLES
+    + MODEL_SERVER_TABLES
 )
 
 
@@ -1528,6 +1534,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert personal_project.TABLES == PERSONAL_PROJECT_TABLES
     fanout_gate = migration_module(MIGRATION_FANOUT_GATE)
     assert fanout_gate.TABLES == FANOUT_GATE_TABLES
+    model_server = migration_module(MIGRATION_MODEL_SERVER)
+    assert model_server.TABLES == MODEL_SERVER_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1654,6 +1662,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(skill_personal.TABLES)
         + tuple(personal_project.TABLES)
         + tuple(fanout_gate.TABLES)
+        + tuple(model_server.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1761,6 +1770,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(skill_personal.TABLES),
         set(personal_project.TABLES),
         set(fanout_gate.TABLES),
+        set(model_server.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

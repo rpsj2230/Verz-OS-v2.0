@@ -575,6 +575,10 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # administrator who asked, an actor and not an owner. `0240` grants no way for a row to
         # leave (M18.2.4).
         "ops.fanout_gate",
+        # What the model server held at its peak for one batch: a part, a model's name, three
+        # counts and three memory figures. `0250` keeps no request, person or passage, and grants
+        # no way for a row to leave but the ring overwriting it.
+        "ops.model_server_peak",
         # What a lead flagged, what was read of answers, how golden questions scored and who agreed
         # to a change: each names an actor and a reference and is a fact about a moment, not
         # anybody's record, and `0222` grants no way for a row to leave.

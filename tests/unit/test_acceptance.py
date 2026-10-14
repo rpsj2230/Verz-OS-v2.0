@@ -36,6 +36,7 @@ from brain.ops import (
     acceptance_checks_evaluation,
     acceptance_checks_knowledge_models,
     acceptance_checks_lark_sign_in,
+    acceptance_checks_modelserver,
     acceptance_checks_people,
     acceptance_checks_proof_gaps,
     acceptance_checks_recovery,
@@ -865,6 +866,16 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         NOT_RUN,
         acceptance_checks_services.NO_SANDBOX_HERE,
     )
+    # No model server is switched on here; `tests/unit/test_acceptance_modelserver.py` switches it
+    # on and answers for it.
+    for server_check in (
+        "the_model_server_runs_under_the_limit_this_install_costed",
+        "the_model_server_reports_ready_for_exactly_the_parts_chosen",
+    ):
+        assert outcomes.pop(server_check) == (
+            NOT_RUN,
+            acceptance_checks_modelserver.NO_MODEL_SERVER_HERE,
+        )
     for ledger_check in (
         "the_trace_ledger_runs_as_its_five_services",
         "every_trace_ledger_service_runs_under_its_budgeted_limit",

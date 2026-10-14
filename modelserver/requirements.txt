@@ -1,0 +1,21 @@
+# The model server's libraries, one group per part. **Not locked, and that is stated rather than
+# hidden**: locking needs a machine with a route to the package index and the hours a torch install
+# takes, and none of the machines this was written on had either. A range is what a lock would
+# narrow. The first build on a machine that can lock should write `requirements.lock` beside this and
+# `Dockerfile` should install from it with hashes; until then a build is as reproducible as the
+# index was that day, which is the weakest thing in this directory.
+#
+# Task ids: M7.2.1, M7.3.3
+
+# The embedding part: llama.cpp through its Python binding, which reads the memory-mapped 8-bit file.
+llama-cpp-python>=0.3,<0.4
+
+# The layout part: Docling, which brings torch with it.
+docling>=2,<3
+
+# The scanned-page part: Tesseract's binding and a renderer that turns a PDF page into an image.
+pytesseract>=0.3,<0.4
+pypdfium2>=4,<5
+
+# The entity part: GLiNER, which shares the torch Docling brought.
+gliner>=0.2,<0.3

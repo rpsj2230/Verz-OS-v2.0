@@ -1,9 +1,9 @@
 ### System settings and application configuration
 
 - **Screens:** `/install`, `/settings`, `/limits`, `/connections`, `/first-run`, `/first-run/staff-list`
-- **Tables:** `ops.setting`, `ops.budget_version`, `ops.budget_stop`
-- **Installation values:** `INSTALL_LOCALES`, `INSTALL_CURRENCY`, `INSTALL_TIME_ZONE`, `INSTALL_DIGEST_DESTINATION`, `INSTALL_DIGEST_TIME`, `INSTALL_SERVICES`
-- **Measured here:** 17 routes, 1 called by no screen; 10 write routes, 8 with all three proofs; 1 gaps.
+- **Tables:** `ops.setting`, `ops.budget_version`, `ops.budget_stop`, `ops.model_server_peak`
+- **Installation values:** `INSTALL_LOCALES`, `INSTALL_CURRENCY`, `INSTALL_TIME_ZONE`, `INSTALL_DIGEST_DESTINATION`, `INSTALL_DIGEST_TIME`, `INSTALL_SERVICES`, `INSTALL_MODEL_PARTS`, `INSTALL_MODEL_IDLE_SECONDS`, `INSTALL_MODEL_MEMORY_MIB`, `INSTALL_MODEL_UPLOAD_MB`
+- **Measured here:** 18 routes, 2 called by no screen; 10 write routes, 8 with all three proofs; 1 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -11,6 +11,7 @@
 | `GET /api/v1/install` | `/install` |
 | `GET /api/v1/install/capacity` | `/connections` |
 | `GET /api/v1/install/limits` | `/limits` |
+| `GET /api/v1/install/model-server` | **no screen** |
 | `GET /api/v1/install/settings` | `/settings` |
 | `GET /api/v1/install/tuning` | `/limits` |
 | `GET /setup/staff-source/registration` | `/first-run` |

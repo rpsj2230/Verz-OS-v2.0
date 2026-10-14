@@ -134,6 +134,7 @@ from brain.tables.model_health import (
     ResidencyConstraintRow,
 )
 from brain.tables.model_registry import GoldenQuestionRow, ModelProviderRow, RoutingChangeRow
+from brain.tables.model_server import ModelServerPeakRow
 from brain.tables.oauth_consent import OAuthConsentRow
 from brain.tables.operation import OperationRow
 from brain.tables.organisation import DepartmentLeadRow, TeamMembershipRow
@@ -566,6 +567,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0240_fanout_gate. Points at nothing: a run and an administrator are values, so a decision of
     # the gate outlives both.
     "ops.fanout_gate",
+    # 0250_model_server. Points at nothing: a peak is a fact about a machine and names no request,
+    # person or passage.
+    "ops.model_server_peak",
 )
 
 __all__ = [
@@ -664,6 +668,7 @@ __all__ = [
     "MessageRow",
     "ModelAttemptRow",
     "ModelProviderRow",
+    "ModelServerPeakRow",
     "OAuthConsentRow",
     "ObservationRow",
     "OperationRow",

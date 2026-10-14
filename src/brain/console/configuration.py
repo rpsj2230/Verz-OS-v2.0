@@ -90,6 +90,8 @@ from brain.locale import (
 from brain.models.assembly import HOSTED_PROFILE, LOCAL_PROFILE, MODEL_PROFILES, local_only
 from brain.models.default_ladder import LOCAL_COMPLETION_MODEL
 from brain.ops.inference import SERVED_MODELS
+from brain.ops.model_server import SETTINGS as MODEL_SERVER_SETTINGS
+from brain.ops.model_server import setting_problem as model_server_setting_problem
 from brain.ops.realm_import import brokered
 from brain.settings import process_environment
 
@@ -247,6 +249,10 @@ SECTION_OF: Final[Mapping[str, Section]] = MappingProxyType(
         "INSTALL_DIGEST_DESTINATION": Section.MESSAGES,
         "INSTALL_DIGEST_TIME": Section.MESSAGES,
         "INSTALL_SERVICES": Section.SERVICES,
+        "INSTALL_MODEL_PARTS": Section.SERVICES,
+        "INSTALL_MODEL_IDLE_SECONDS": Section.SERVICES,
+        "INSTALL_MODEL_MEMORY_MIB": Section.SERVICES,
+        "INSTALL_MODEL_UPLOAD_MB": Section.SERVICES,
     }
 )
 
@@ -289,6 +295,10 @@ LABELS: Final[Mapping[str, str]] = MappingProxyType(
         "INSTALL_DIGEST_DESTINATION": "Send the evening digest to",
         "INSTALL_DIGEST_TIME": "Time the evening digest is sent",
         "INSTALL_SERVICES": "Optional services this server runs",
+        "INSTALL_MODEL_PARTS": "What the model server does",
+        "INSTALL_MODEL_IDLE_SECONDS": "Seconds before the model server lets go of memory",
+        "INSTALL_MODEL_MEMORY_MIB": "Most memory the model server may take (MiB)",
+        "INSTALL_MODEL_UPLOAD_MB": "Largest document the model server reads (MB)",
     }
 )
 
@@ -309,6 +319,10 @@ EDITABLE_SETTINGS: Final[frozenset[str]] = frozenset(
         "INSTALL_DIGEST_TIME",
         "INSTALL_SERVICES",
         "INSTALL_DEPARTMENTS_FROM",
+        "INSTALL_MODEL_PARTS",
+        "INSTALL_MODEL_IDLE_SECONDS",
+        "INSTALL_MODEL_MEMORY_MIB",
+        "INSTALL_MODEL_UPLOAD_MB",
     }
 )
 
@@ -437,6 +451,10 @@ READ_BY: Final[Mapping[str, tuple[str, ...]]] = {
     "INSTALL_DIGEST_DESTINATION": ("brain.ops.digest_destination",),
     "INSTALL_DIGEST_TIME": ("brain.ops.digest_destination",),
     "INSTALL_SERVICES": ("brain.ops.overlays",),
+    "INSTALL_MODEL_PARTS": ("brain.ops.model_server",),
+    "INSTALL_MODEL_IDLE_SECONDS": ("brain.ops.model_server",),
+    "INSTALL_MODEL_MEMORY_MIB": ("brain.ops.model_server",),
+    "INSTALL_MODEL_UPLOAD_MB": ("brain.ops.model_server",),
 }
 
 #: How a Keycloak issuer ends: the realm's name is its last path segment.
@@ -699,6 +717,8 @@ def setting_problem(name: str, value: str) -> str:
         from brain.ops.overlays import services_problem
 
         return services_problem(written)
+    if name in MODEL_SERVER_SETTINGS:
+        return model_server_setting_problem(name, written)
     if name == "INSTALL_DEPARTMENTS_FROM" and written.strip().casefold() not in {
         one.value for one in DepartmentsFrom
     }:

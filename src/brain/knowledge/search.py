@@ -520,6 +520,16 @@ LANGUAGE_TAG_CHARS: Final = 16
 #: compiler telling you the layering is upside down.
 EMBEDDING_MODEL_FIELD: Final = "embedding_model"
 
+#: The two columns that say how a passage was read (M7.7.9), their widths, and the paths a column
+#: may name. The paths are spelled here as `brain.knowledge.parse_paths.ParsePath`'s values and
+#: held equal to it by a test, because that module imports this one's neighbours and a cycle through
+#: the table definition is the one thing that cannot be repaired by moving an import.
+PARSE_PATH_FIELD: Final = "parse_path"
+PARSE_ENGINE_FIELD: Final = "parse_engine"
+PARSE_PATH_CHARS: Final = 16
+PARSE_ENGINE_CHARS: Final = 64
+PARSE_PATHS: Final = ("fallback", "layout", "ocr")
+
 #: The shared registry, so `know.chunk` is a table this project knows it has.
 #:
 #: It was built on a private `MetaData` first, deliberately, because registering it without
@@ -608,6 +618,12 @@ CHUNK: Final = sa.Table(
     # breaking. Conjoining the identity in `vector_query` means a query cannot reach across a
     # model change even if a caller never consults the corpus check.
     sa.Column(EMBEDDING_MODEL_FIELD, sa.String(EMBEDDING_MODEL_CHARS), nullable=True),
+    # Which reader produced this passage, as `brain.knowledge.parse_paths.ParsePath` and the
+    # engine's name (M7.7.9). Added by `0250`, both or neither, and **null for a passage the
+    # in-application text reader produced and for every passage written before it**: a column
+    # that said `layout` for rows nobody recorded would be a claim about quality nothing supports.
+    sa.Column(PARSE_PATH_FIELD, sa.String(PARSE_PATH_CHARS), nullable=True),
+    sa.Column(PARSE_ENGINE_FIELD, sa.String(PARSE_ENGINE_CHARS), nullable=True),
     # The document's permissions, copied onto every chunk of it by `chunk_document` and
     # never recomputed here. These three columns are what the reach predicate tests, and the
     # first two take their names from the constants the scope builders use, which is what
@@ -638,6 +654,12 @@ CHUNK: Final = sa.Table(
         f"document_id ~ '{REFERENCE_SQL_PATTERN}'", name="document_id_is_a_reference"
     ),
     sa.CheckConstraint("ordinal >= 0", name="ordinal_is_a_position"),
+    sa.CheckConstraint(
+        f"parse_path IS NULL OR {_one_of('parse_path', PARSE_PATHS)}", name="parse_path_is_a_path"
+    ),
+    sa.CheckConstraint(
+        "(parse_path IS NULL) = (parse_engine IS NULL)", name="parse_engine_with_its_path"
+    ),
     sa.CheckConstraint("span_end > span_start", name="span_is_not_empty"),
     sa.CheckConstraint("length(btrim(owner_id)) > 0", name="owned"),
     sa.CheckConstraint(_one_of("kind", (kind.value for kind in BlockKind)), name="kind"),

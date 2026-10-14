@@ -117,7 +117,15 @@ export const FORMATS: Readonly<Record<string, string>> = Object.freeze({
   INSTALL_MODEL_PROFILE: "Where questions may be answered: on this server only, or by online providers.",
   INSTALL_DIGEST_TIME: "A time on the 24-hour clock in the install's time zone, such as 18:00.",
   INSTALL_SERVICES:
-    "none, or any of presidio, langfuse, sandbox, objectstore and automation separated by commas: the personal data detector, the trace ledger, the script sandbox (which needs gVisor on the server), the file store for uploaded documents and the automation canvas (896 MiB). The next update starts each one this server has the memory for.",
+    "none, or any of presidio, modelserver, langfuse, sandbox, objectstore and automation separated by commas: the personal data detector, the model server that reads documents and finds passages by meaning, the trace ledger, the script sandbox (which needs gVisor on the server), the file store for uploaded documents and the automation canvas (896 MiB). The next update starts each one this server has the memory for.",
+  INSTALL_MODEL_PARTS:
+    "One or more of embedding, layout, ocr, tika and entities separated by commas. Only one part is held in memory at a time, so the server takes the memory of the largest part chosen.",
+  INSTALL_MODEL_IDLE_SECONDS:
+    "A whole number of seconds from 30 to 86400. The part is ended and its memory given back once it has had nothing to do for this long.",
+  INSTALL_MODEL_MEMORY_MIB:
+    "auto, or a whole number of MiB. Leave it on auto unless the model server's measured figure says otherwise; a number too small for the parts chosen is refused.",
+  INSTALL_MODEL_UPLOAD_MB:
+    "A whole number of MB, 25 unless you chose otherwise. The largest document the model server is sized to read; a larger one makes the server larger.",
   INSTALL_LARK_CARD_APPROVALS:
     "Whether a Lark card's buttons may approve. A press relies on Lark's own sign-in and carries no second factor from the Brain, so switch it on only if your Lark requires two-step verification.",
 });
