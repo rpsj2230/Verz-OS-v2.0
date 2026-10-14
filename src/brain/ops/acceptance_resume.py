@@ -1,4 +1,4 @@
-"""A run of the acceptance checks survives the restart that every deploy causes.
+"""A run of the acceptance checks survives a restart of the worker that serves the same commit.
 
 **Found on the owner's staging install, and the same on every install.** The worker starts a run
 after each deploy. A run takes thirty-five minutes and more (364 checks and growing), every merge
@@ -8,6 +8,27 @@ task closes only when the install's newest *complete* run passed every check nam
 (`brain.ops.proof_sweep`; two runs until the owner decided on 2026-10-14 that one complete clean
 run is the gate). No leaf could close however many checks were written. The deploy cadence
 cannot be much slower than the merge cadence, so the run has to survive the restart instead.
+
+**What that fixed and what it did not, measured on 2026-10-14.** Resuming is keyed on the commit
+the restarted worker serves, so it covers a restart that leaves the commit alone (a crash, the
+host's memory killer, a reboot, a recreate by hand) and **not a deploy of a new commit**: that
+worker serves another release, `A_RUN_OF_ANOTHER_RELEASE_IS_ABANDONED_AND_NEVER_COMPLETED` applies
+and the run starts again from nothing. That is the right answer for a deploy that changed what the
+worker runs, because the rows already written are about code that is gone, and it is why the
+runs were still killed all night after this module existed: the title above used to say a run
+survived the restart every deploy causes, and no deploy of a new commit ever resumed anything. The
+repair is not to resume across commits but to stop restarting the worker for merges that change
+nothing it runs: the server's deploy script leaves a worker alone when the fingerprint of what a
+worker runs is unchanged (`brain.ops.restart_scope`). A merge that does change it still ends a run
+in progress; narrowing that further would mean holding the worker's replacement back until the
+run ends, which needs the timer to retry a worker that lags the app and is not built.
+
+**A worker left running on the previous release still reports that release's commit.** Its runs
+are recorded under that commit and the Install page, which asks for the commit the application
+serves, shows no run for the newer one until a merge that changes what the worker runs replaces it.
+Rejected here: labelling a run with the commit that last changed what the worker runs, which would
+let both processes name one release but changes what every run's `commit` means, which is the
+owner's to decide and is not decided here.
 
 **Six rules, each with a name and a test.**
 
