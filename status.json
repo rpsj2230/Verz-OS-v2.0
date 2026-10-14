@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-14T09:20:36.439771+00:00",
-  "commit": "b8d05b9f",
-  "commit_subject": "239 tasks are proved on the install by one complete acceptance run",
+  "generated_at": "2026-10-14T10:49:08.591230+00:00",
+  "commit": "725ae499",
+  "commit_subject": "A multi-agent plan can be weighed by the fan-out gate before any agent runs, with the decision kept (M18.2.1, M18.2.2, M18.2.3, M18.2.4, M18.4.3) (#586)",
   "total": 1626,
   "done": 1113,
   "percent": 68.5,
-  "built": 1258,
-  "built_percent": 77.4,
-  "built_unproven": 145,
+  "built": 1263,
+  "built_percent": 77.7,
+  "built_unproven": 150,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -67,6 +67,11 @@
     "M17.1.5",
     "M17.5.1",
     "M17.5.2",
+    "M18.2.1",
+    "M18.2.2",
+    "M18.2.3",
+    "M18.2.4",
+    "M18.4.3",
     "M2.3.2",
     "M24.3.6",
     "M25.4.1",
@@ -231,8 +236,8 @@
       "open": 17,
       "acts": 0,
       "decided": 23,
-      "built": 123,
-      "built_percent": 53.0
+      "built": 128,
+      "built_percent": 55.2
     },
     {
       "wave": 5,
@@ -454,7 +459,7 @@
       "done": 3,
       "acts": 0,
       "decided": 1,
-      "built": 3
+      "built": 8
     },
     {
       "module": "M19",
