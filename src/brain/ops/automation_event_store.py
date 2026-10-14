@@ -65,7 +65,6 @@ from brain.ops.automation_change_store import removed_ids
 from brain.ops.automation_event import (
     REFUSED_AT_THE_DOOR,
     RUNS_WINDOW,
-    STARTABLE_KINDS,
     Change,
     Window,
     allowance,
@@ -221,8 +220,6 @@ async def _found(
         if scope is None:
             continue
         predicate = compile_where(scope, ROW_LAYOUT, param_prefix=SCOPE_PREFIX)
-        if predicate.certainly_empty:
-            continue
         rows = await session.execute(
             changed_records(source, entity, reading, predicate.where, predicate.params, limit)
         )
@@ -254,9 +251,6 @@ async def run_changes_of(
         if row is None or row.next_run_at is None or row.trigger_source is None:
             return None
         armed_at = row.next_run_at
-        authored = runs._authored_of(row)
-        if authored is None or authored.trigger.kind not in STARTABLE_KINDS:
-            return None
         now_is = await runs._folded(session, row, None)
         owner_id = now_is.owner_id
         owner = await principals.live_principal(owner_id)
@@ -307,8 +301,6 @@ async def run_changes_of(
             await session.execute(runs_started_since(row.automation_id, now - RUNS_WINDOW))
         ).scalar_one()
         may_run = allowance(ran_this_hour=ran_this_hour)
-        if may_run == 0:
-            return []
         recorded_in_window = (
             await session.execute(runs_recorded_in(row.automation_id, reading))
         ).scalar_one()
