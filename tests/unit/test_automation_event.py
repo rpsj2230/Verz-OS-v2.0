@@ -124,6 +124,7 @@ def _composed(trigger: TriggerChoice, connectors: tuple[str, ...]) -> Authored:
         tools=("search_invoices",),
         condition=None,
         fields=FIELDS,
+        listenable=connectors,
     )
 
 

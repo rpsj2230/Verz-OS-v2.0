@@ -33,7 +33,7 @@ Task ids: M39.9.2.1, M39.9.2.2, M39.9.2.3, M39.9.2.4, M17.4.1, M17.4.2
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from datetime import datetime
 from typing import Annotated, Final, Protocol, runtime_checkable
 
@@ -425,7 +425,10 @@ def _cadence_of(asked: CadenceAsked | None) -> Cadence | None:
 
 
 def _authored_from(
-    body: AuthoringAsked, agent: AgentRecord, fields: Mapping[str, ConditionField]
+    body: AuthoringAsked,
+    agent: AgentRecord,
+    fields: Mapping[str, ConditionField],
+    listenable: Collection[str],
 ) -> Authored:
     """What was written, or `AuthoringRefusedError` carrying every reason."""
     template = template_for(body.template_id)
@@ -457,6 +460,7 @@ def _authored_from(
         condition=condition,
         fields=fields,
         template=template,
+        listenable=listenable,
     )
 
 
@@ -613,8 +617,9 @@ async def authoring_preview(
     _authoring_door(agent_id, body, asked)
     agent = await _visible_agent(request, agent_id, asked)
     fields = await _fields_of(request, agent)
+    listenable = _serving_connectors(agent, set((await connectors_of(request)).serving()))
     try:
-        authored = _authored_from(body, agent, fields)
+        authored = _authored_from(body, agent, fields, listenable)
     except AuthoringRefusedError as exc:
         return _refused(exc.findings)
     shown = preview(authored, agent, author=asked.caller.principal, author_reach=asked.reach)
@@ -642,8 +647,9 @@ async def author_automation(
     _authoring_door(agent_id, body, asked)
     agent = await _visible_agent(request, agent_id, asked)
     fields = await _fields_of(request, agent)
+    listenable = _serving_connectors(agent, set((await connectors_of(request)).serving()))
     try:
-        authored = _authored_from(body, agent, fields)
+        authored = _authored_from(body, agent, fields, listenable)
     except AuthoringRefusedError as exc:
         return _refused(exc.findings)
     shown = preview(authored, agent, author=asked.caller.principal, author_reach=asked.reach)

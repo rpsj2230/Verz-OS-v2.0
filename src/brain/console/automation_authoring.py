@@ -84,7 +84,7 @@ import hashlib
 import json
 import re
 import secrets
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Final, Protocol
@@ -551,6 +551,7 @@ def compose(
     condition: Condition | None,
     fields: Mapping[str, ConditionField],
     template: AutomationTemplate | None = None,
+    listenable: Collection[str] | None = None,
 ) -> Authored:
     """What a person wrote, checked against this agent and this install, or every reason it is not.
 
@@ -558,12 +559,21 @@ def compose(
     wants all of what is wrong at once, and the three checks that depend on the agent and the
     install (the tools, the condition's field and the template's task) run beside the ones the
     value checks itself.
+
+    `listenable` is the sources a change may be listened to for this agent, which the caller works
+    out from the agent's connectors and what is serving: **this module does not read an agent's
+    connector list**, because `tests/unit/test_agent_binding.py` holds that access is decided in the
+    ceiling alone and a form that draws the list is the one place beside it that may read it. None
+    means the caller did not ask, as the install check does not.
     """
     findings: list[str] = []
     if trigger.kind is TriggerKind.WEBHOOK:
         findings.append(WEBHOOKS_ARE_NOT_OFFERED)
-    bound = agent.authority.connectors
-    if trigger.kind is TriggerKind.CONNECTOR_EVENT and trigger.source not in bound:
+    if (
+        trigger.kind is TriggerKind.CONNECTOR_EVENT
+        and listenable is not None
+        and trigger.source not in listenable
+    ):
         findings.append(
             "This agent is not bound to that source, so a change in it could never be read by a "
             "run of this automation."
