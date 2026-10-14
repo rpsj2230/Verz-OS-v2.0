@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-14T07:27:27.044421+00:00",
-  "commit": "9ff3db0b",
-  "commit_subject": "The typical approval wait: route tests, a mutation table and READY FOR TESTING (M35.4.5, M35.3.2.2) (#588)",
+  "generated_at": "2026-10-14T07:35:25.584803+00:00",
+  "commit": "60daa44e",
+  "commit_subject": "Deploy publishes one image at a time, so a burst of merges ends on main's tip; main's CI is measured and left as it is (#592)",
   "total": 1625,
   "done": 864,
   "percent": 53.2,
