@@ -388,6 +388,7 @@ def checked_elsewhere() -> tuple[tuple[Capability, str], ...]:
     from brain.ops.jobs import DEAD_LETTER_CAPABILITY
     from brain.ops.slack_messages_live import READ_MESSAGE
     from brain.quality_routes import DECIDES_CANDIDATES
+    from brain.tools.document_generation import GENERATE_CAPABILITY, GENERATED_DOCUMENT_READ
     from brain.tools.own_results import SCRIPT_OUTPUT_CAPABILITY
     from brain.tools.run_skill import SCRIPT_CAPABILITY
     from brain.tools.skill_tools import INSTRUCTIONS_CAPABILITY
@@ -409,6 +410,14 @@ def checked_elsewhere() -> tuple[tuple[Capability, str], ...]:
         (BROWSE_SURFACE, "Reads a declared browser surface."),
         (ACT_ON_SURFACE_CAPABILITY, "Acts on a declared browser surface."),
         (WEBSITE_CHECK_CAPABILITY, "Checks whether a website within reach is working, over HTTP."),
+        (
+            GENERATE_CAPABILITY,
+            "Asks an agent to fill an approved template into a Word file for the person asking.",
+        ),
+        (
+            GENERATED_DOCUMENT_READ,
+            "Reads what an agent is told of the file it made from a template.",
+        ),
         (INVOKE_AGENT, "Uses an agent: asks it questions and starts its runs."),
         (DEAD_LETTER_CAPABILITY, "Reads somebody else's dead-lettered jobs."),
         (VERIFIER_CAPABILITY, "Shows who verified a knowledge item on its badge."),
