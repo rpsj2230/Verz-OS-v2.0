@@ -108,6 +108,11 @@ from typing import Any, Final
 from brain.console.installation import Fact, Source
 from brain.deployment.installer import INSTALL_ENV_FILE, INSTALL_HOME, THE_IMAGE_VARIABLE
 from brain.deployment.release import NOT_A_RELEASE_TAG, release_marker
+from brain.deployment.update_mode import (
+    AN_INSTALL_THAT_FOLLOWS_EVERY_RELEASE_IS_NEVER_BEHIND_BY_CHOICE,
+    NOTHING_PINS_THIS_INSTALL_AND_THE_BUILT_COMMIT_SAYS_WHAT_RUNS,
+    THIS_INSTALL_FOLLOWS_EVERY_RELEASE_BY_CHOICE,
+)
 from brain.ops.compose import ComposeFiles, mounted_paths
 from brain.ops.recovery import DRILL_INTERVAL_DAYS
 
@@ -373,10 +378,20 @@ class Running:
     cannot_say: str = ""
     #: The commit the running image was built from, measured. Empty when nothing reported one.
     commit: str = ""
+    #: True when no release is named because this install is set to follow every one, so that
+    #: the screen says that and does not tell the reader to pin a release. See
+    #: `brain.deployment.update_mode`.
+    follows_every_release: bool = False
 
     def __post_init__(self) -> None:
         if not self.facts:
             msg = "a running release read from nothing is not a reading"
+            raise VersionError(msg)
+        if self.follows_every_release and self.tag:
+            msg = (
+                f"{self.tag} is named and the install is said to follow every release, which "
+                "names none: one of the two is not what was read"
+            )
             raise VersionError(msg)
         if self.tag and self.cannot_say:
             msg = (
@@ -393,12 +408,24 @@ class Running:
             raise VersionError(msg)
 
 
-def running_release(*, marker: str = "", pinned_image: str = "", built_commit: str = "") -> Running:
+def running_release(
+    *,
+    marker: str = "",
+    pinned_image: str = "",
+    built_commit: str = "",
+    follows_every_release: bool = False,
+) -> Running:
     """What this install is running, from the three places that can say (M42.3.9).
 
     Every argument is what somebody else read, for the reason
     `brain.console.installation.install_facts` takes its manifest: a function that opened them
     could not be tested for the install where one is missing.
+
+    `follows_every_release` is `brain.deployment.update_mode.follows_every_release`, handed in for
+    the reason everything else is: this function reads nothing. It changes the words and never
+    the finding. An install on `latest` still names no release, and it says so as a choice when
+    the install says it is one, and as a missing pin when it does not. A pin that names a tag is
+    read as a tag in either mode.
 
     `marker` is the content of the release marker, `pinned_image` the whole image reference the
     containers were selected by, and `built_commit` the commit the running image reports. Inside
@@ -420,7 +447,11 @@ def running_release(*, marker: str = "", pinned_image: str = "", built_commit: s
     # An image reference with no tag at all is `latest` to docker, so the two are one case
     # here: neither of them selects a release.
     pinned = image_tag(pin) or NOT_A_RELEASE_TAG
-    facts = (_marker_fact(named), _pinned_fact(pin, pinned), _commit_fact(commit))
+    unpinned = pinned == NOT_A_RELEASE_TAG
+    # Only an image reference that was handed over and names no release can be a choice: no
+    # reference at all is a deployment that told this application nothing.
+    chosen = follows_every_release and unpinned and bool(pin)
+    facts = (_marker_fact(named), _pinned_fact(pin, pinned, chosen=chosen), _commit_fact(commit))
 
     if not named and not pin:
         return Running(
@@ -435,7 +466,15 @@ def running_release(*, marker: str = "", pinned_image: str = "", built_commit: s
                 "carries the line"
             ),
         )
-    if pinned == NOT_A_RELEASE_TAG:
+    if chosen:
+        return Running(
+            tag="",
+            facts=facts,
+            commit=commit,
+            cannot_say=THIS_INSTALL_FOLLOWS_EVERY_RELEASE_BY_CHOICE,
+            follows_every_release=True,
+        )
+    if unpinned:
         return Running(
             tag="",
             facts=facts,
@@ -487,7 +526,7 @@ def _marker_fact(named: str) -> Fact:
     )
 
 
-def _pinned_fact(pin: str, pinned: str) -> Fact:
+def _pinned_fact(pin: str, pinned: str, *, chosen: bool = False) -> Fact:
     """The image the containers were told to run, declared, or the admission of no pin."""
     if not pin:
         return Fact(
@@ -498,6 +537,17 @@ def _pinned_fact(pin: str, pinned: str) -> Fact:
                 "started from, so there is no version here to read. The compose files an "
                 "install runs pass it in; a deployment tool with its own stored copy of a "
                 "compose file passes it once that copy is brought up to date"
+            ),
+        )
+    if pinned == NOT_A_RELEASE_TAG and chosen:
+        return Fact(
+            name=PINNED_FACT,
+            source=Source.DECLARED,
+            value=pin,
+            because=(
+                f"{NOT_A_RELEASE_TAG} is not a release: it names whatever was published most "
+                "recently. This install is set to follow every release, so that is what it is "
+                "meant to run and the next pull changing it is the choice that was made"
             ),
         )
     if pinned == NOT_A_RELEASE_TAG:
@@ -709,6 +759,14 @@ ANSWERS: Final[Mapping[Standing, Answer]] = MappingProxyType(
 )
 
 
+#: What an install set to follow every release reads where `UNKNOWN_RUNNING` would tell it to pin.
+#: Not a `Standing`, because it is the same finding, that no release is named, with a different
+#: instruction, and a tenth standing would be a tenth way for a screen to be drawn wrongly.
+FOLLOWS_EVERY_RELEASE: Final = Answer(
+    says=AN_INSTALL_THAT_FOLLOWS_EVERY_RELEASE_IS_NEVER_BEHIND_BY_CHOICE,
+    what_to_do=NOTHING_PINS_THIS_INSTALL_AND_THE_BUILT_COMMIT_SAYS_WHAT_RUNS,
+)
+
 #: A release tag this module will put in an order: `v` and dot-separated whole numbers.
 #:
 #: One shape rather than a best effort at every shape, and everything else is reported as
@@ -844,7 +902,13 @@ class Panel:
 
     @property
     def answer(self) -> Answer:
-        """The two sentences a client reads. Never assembled by whatever draws this."""
+        """The two sentences a client reads. Never assembled by whatever draws this.
+
+        An install set to follow every release is not told to pin one: that is the sentence for
+        an install whose pin is missing, and it would be an instruction to undo the choice.
+        """
+        if self.standing is Standing.UNKNOWN_RUNNING and self.running.follows_every_release:
+            return FOLLOWS_EVERY_RELEASE
         return ANSWERS[self.standing]
 
 

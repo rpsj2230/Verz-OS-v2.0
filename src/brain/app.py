@@ -84,6 +84,7 @@ from brain.cache import (
 )
 from brain.channels.widget import allowed_origins
 from brain.console_static import mount_console_entry, mount_console_fallback
+from brain.control_not_run_told import keep_telling_overdue_controls
 from brain.core.errors import Absent, BrainError, Outcome, to_public
 from brain.docs_routes import router as docs_router
 from brain.escalation_told import keep_telling_expired_askers
@@ -195,6 +196,7 @@ from brain.session import (
 # process that needs a setting and not the application imports that instead. See
 # `brain.settings.SETTINGS_ARE_READ_WITHOUT_BUILDING_THE_APPLICATION`.
 from brain.settings import Settings as Settings
+from brain.tools.document_generation import DocumentTools, generation_is_on, keeping
 from brain.tools.registry import ToolRegistry
 from brain.tools.skill_tools import ScriptSandbox, SkillTools
 from brain.tools.startup import build_registry
@@ -404,6 +406,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Each person's week of learning, told in their own chat. See `brain.learning_told`.
     learning: asyncio.Task[None] | None = None
     pausing: asyncio.Task[None] | None = None
+    lateness: asyncio.Task[None] | None = None
 
     if settings.run_migrations and not settings.database_url and settings.env != "development":
         # Loud on purpose. Skipping migrations because a variable was unset is exactly
@@ -481,6 +484,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # A steward whose automation was paused for failing is told in their own chat, by this
         # process for the same reason. See `brain.automation_paused_told`.
         pausing = asyncio.create_task(keep_telling_paused_stewards(app))
+        # The people who hold the operations alert are told when a safety mechanism has not run, by
+        # this process for the same reason, and only while the feature is switched on. See
+        # `brain.control_not_run_told`.
+        lateness = asyncio.create_task(keep_telling_overdue_controls(app))
         # An administrator appointed before a capability existed is granted it now, and one whose
         # capability was taken away is not given it back. After the migrations, under the
         # appointment's own lock, and never fatal: a missing capability is a screen that refuses,
@@ -602,6 +609,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.live_records = live
     # The website check over HTTPS, to the address each hop was checked at (M12.4.4).
     website = WebsiteCheckTool(resolver=SystemResolver(), prober=HttpsProber())
+    # The tool that fills an approved template and keeps a Word file for the person asking
+    # (M12.3.5): only where there is a database to read a template from and an artifact store to
+    # keep the file in, and switched off until an administrator turns it on, which every call asks.
+    documents = (
+        DocumentTools(
+            records=records,
+            keep=keeping(app.state.artifacts),
+            is_on=partial(generation_is_on, app.state.db_sessions),
+        )
+        if records is not None and app.state.artifacts is not None
+        else None
+    )
     # The document plane's retrieval and embedding caches (M6.2.3, M6.2.4), only where a cache
     # is configured and there is a database to search. Their own synchronous client, as the
     # answer store has, closed below. See `brain.knowledge.document_tools.KnowledgeCaches`.
@@ -633,6 +652,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             website=website,
             caches=knowledge_caches,
             skills=skill_tools,
+            documents=documents,
         )
 
     app.state.build_tools = tools
@@ -885,6 +905,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             pausing.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await pausing
+        if lateness is not None:
+            lateness.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await lateness
         if trying is not None:
             trying.cancel()
             with contextlib.suppress(asyncio.CancelledError):

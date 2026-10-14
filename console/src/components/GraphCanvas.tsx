@@ -18,10 +18,21 @@
  * **Read-only is a shape here, not a setting.** The nodes and the edges are passed as props
  * with no `onNodesChange` and no `onEdgesChange`, which is React Flow's controlled mode: there
  * is nowhere for a change to go. The interaction flags below are belt and braces on top of
- * that, and they are what stops a node carrying a `tabindex`, a drag handler and a
- * `selectable` class that says it can be acted on when it cannot. The distinction matters
- * because a control that looks live and does nothing is read by the person using it as a
- * permission problem.
+ * that, and they are what stops a node carrying a drag handler and a `selectable` class that says
+ * it can be acted on when it cannot. The distinction matters because a control that looks live and
+ * does nothing is read by the person using it as a permission problem.
+ *
+ * **A step can be reached by the keyboard, and that is the one place this file changed its mind
+ * (2026-10-14).** It used to refuse a tab stop on a node, on the argument above. The owner's
+ * requirement for this surface is that nodes are keyboard focusable and that there is a text
+ * alternative, and the two are not in conflict: `nodesFocusable` gives each box a tab stop and a
+ * spoken name (its words, then its kind), and `disableKeyboardA11y` is what keeps the library's
+ * select-and-move keys, and the sentence it speaks about them, off a surface that has neither. A
+ * focused step does nothing when a key is pressed, which is read as "nothing to do here" and not
+ * as a permission problem because nothing about it looks pressable (no drag, no select, no
+ * pointer). Rejected: leaving the nodes out of the tab order and relying on the list alone, which
+ * fails a keyboard user who can see the drawing and wants to follow it. The cost is one tab stop
+ * per step, which is why `skipTo` puts a skip link ahead of the drawing, to the list.
  *
  * **A node is drawn from `graph.ts` and never from a measurement.** Positions come from
  * `layout`, which packs each row of the graph it was given, so a step this caller may not see
@@ -57,7 +68,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/base.css";
 import { Chip } from "../ui/Chip";
-import { layout, type Graph } from "./graph";
+import { layout, stepWords, type Graph } from "./graph";
 
 /** What one node carries into the drawing surface. The same three names `graph.ts` reads. */
 type StepData = { readonly label: string; readonly kind: string };
@@ -118,39 +129,60 @@ export function flowEdges(graph: Graph): Edge[] {
   );
 }
 
+/** Where a keyboard user may jump to instead of tabbing across every step. */
+export interface SkipTo {
+  /** The id of the element that holds the same steps as a list. */
+  readonly anchor: string;
+  readonly words: string;
+}
+
+export const SKIP_TO_THE_LIST = "Skip the drawing, to the steps as a list";
+
 interface GraphCanvasProps {
   /** What this canvas shows, for a screen reader. */
   readonly label: string;
+  /** A skip link ahead of the drawing. Absent when the drawing is its own list. */
+  readonly skipTo?: SkipTo | undefined;
   /** The graph, already read and pruned by `readGraph`, or drawn by `procedure.ts`. */
   readonly graph: Graph;
 }
 
-export function GraphCanvas({ label, graph }: GraphCanvasProps) {
+export function GraphCanvas({ label, graph, skipTo }: GraphCanvasProps) {
   const placement = layout(graph);
   const nodes: StepNodeShape[] = graph.nodes.map((node) => ({
     id: node.id,
     type: "step",
     position: placement.get(node.id) ?? { x: 0, y: 0 },
     data: { label: node.label, kind: node.kind },
+    // What a screen reader says on arriving at the step: its words, then its kind.
+    ariaLabel: stepWords(node),
   }));
 
   return (
-    <div className="graph__canvas" role="group" aria-label={label}>
-      <ReactFlow
-        nodes={nodes}
-        edges={flowEdges(graph)}
-        nodeTypes={NODE_TYPES}
-        // Controlled with no change handlers, so nothing that happens on the surface can
-        // reach the graph. Each flag below removes a way the surface would otherwise say it
-        // could be acted on.
-        nodesDraggable={false}
-        nodesConnectable={false}
-        nodesFocusable={false}
-        edgesFocusable={false}
-        edgesReconnectable={false}
-        elementsSelectable={false}
-        fitView
-      />
-    </div>
+    <>
+      {skipTo === undefined ? null : (
+        <a className="skip-link" href={`#${skipTo.anchor}`}>
+          {skipTo.words}
+        </a>
+      )}
+      <div className="graph__canvas" role="group" aria-label={label}>
+        <ReactFlow
+          nodes={nodes}
+          edges={flowEdges(graph)}
+          nodeTypes={NODE_TYPES}
+          // Controlled with no change handlers, so nothing that happens on the surface can
+          // reach the graph. Each flag below removes a way the surface would otherwise say it
+          // could be acted on.
+          nodesDraggable={false}
+          nodesConnectable={false}
+          nodesFocusable
+          disableKeyboardA11y
+          edgesFocusable={false}
+          edgesReconnectable={false}
+          elementsSelectable={false}
+          fitView
+        />
+      </div>
+    </>
   );
 }

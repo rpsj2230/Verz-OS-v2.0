@@ -62,6 +62,21 @@ PINNED_TO_A_BUILD: Final = (
     "never produces; re-pin it to a published release with the update script"
 )
 
+#: Said when this install is set to follow every release, which is how a staging server updates.
+#: The check is not run and not passed: there is no pin to confirm, and a tick would be about
+#: something nobody asked. See `brain.deployment.update_mode`.
+FOLLOWS_EVERY_RELEASE_BY_CHOICE: Final = (
+    "this install is set to follow every release, so it is not asked to run a named release "
+    "tag; set how this install updates to release, on Install, Settings, and it is held to one"
+)
+
+#: Said by the release-notes check when the image names no release and the install follows every
+#: release by choice, so there is no release it runs whose notes could be read.
+FOLLOWING_EVERY_RELEASE_NAMES_NO_RELEASE_TO_READ_NOTES_OF: Final = (
+    "this install is set to follow every release, so it runs no named release whose notes "
+    "could be read; set how this install updates to release, on Install, Settings, and it does"
+)
+
 #: Said where no shell is installed to run the refusal in.
 NO_SHELL_HERE: Final = "this image has no shell to run the update script's first step in"
 
@@ -206,13 +221,17 @@ async def the_install_guides_are_held_to_the_installer_and_the_checklist(
     sentence=(
         "The image this install runs is named by the product's repository and a release tag, "
         "never latest and never untagged, so the install holds one published image at a version "
-        "somebody chose."
+        "somebody chose; an install set to follow every release by choice is recorded as not "
+        "run, and is never shown as passing."
     ),
 )
 async def the_install_runs_one_published_image_at_a_named_release(h: Harness) -> None:
     from brain.console.version_view import image_tag, ordinal
     from brain.deployment.installer import PRODUCT_IMAGE
+    from brain.deployment.update_mode import follows_every_release
 
+    if follows_every_release():
+        raise CheckNotRunError(FOLLOWS_EVERY_RELEASE_BY_CHOICE)
     pinned = h.settings.app_image.strip()
     if not pinned:
         raise CheckNotRunError(NOT_TOLD_ITS_IMAGE)
@@ -452,6 +471,7 @@ async def the_release_this_install_runs_says_what_changed_and_how_urgent(h: Harn
 
     from brain.console.version_view import image_tag, ordinal
     from brain.deployment.release_feed import feed_address, https_fetch
+    from brain.deployment.update_mode import follows_every_release
     from brain.ops.features import RELEASE_CHECK, switch_states, switched_on_in
 
     async with h.sessions() as session:
@@ -462,6 +482,8 @@ async def the_release_this_install_runs_says_what_changed_and_how_urgent(h: Harn
     if not address:
         raise CheckNotRunError(THE_RELEASE_CHECK_IS_OFF)
     tag = image_tag(h.settings.app_image)
+    if ordinal(tag) is None and follows_every_release():
+        raise CheckNotRunError(FOLLOWING_EVERY_RELEASE_NAMES_NO_RELEASE_TO_READ_NOTES_OF)
     if ordinal(tag) is None:
         raise CheckNotRunError(PINNED_TO_A_BUILD)
     try:

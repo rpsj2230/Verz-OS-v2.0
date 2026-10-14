@@ -126,6 +126,41 @@ def test_a_secrets_check_passes_over_generated_values_and_refuses_a_repeated_one
         ran(SECRETS)
 
 
+def test_the_secrets_check_passes_a_token_of_the_length_the_vault_issues_and_still_refuses_the_rest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Found on a staging install: the vault's own token, about twenty-six characters, failed the
+    check as short enough to be guessed, on every run, with nothing the install could do. The
+    check reads what the application reads, so this also proves the token is among those names.
+    A short password beside it and a vault token sharing its value with another setting each
+    still fail, and a failure still names no value. (A worker's token is the same name inside the
+    worker's container, so two vault tokens sharing a value is held on the function's own tests.)
+
+    Delete this and the staging fault can return with the unit tests of the function green, since
+    only this drives the check itself over the names the application reads."""
+    vault = "s." + "a1B2c3D4" * 3
+    held = {
+        "BRAIN_SETUP_SECRET": "a" * 40,
+        "APP_ROLE_PASSWORD": "b" * 40,
+        "BRAIN_VAULT_TOKEN": vault,
+    }
+    monkeypatch.setattr("brain.settings.process_environment", lambda: held)
+    ran(SECRETS)
+
+    held["APP_ROLE_PASSWORD"] = vault
+    with pytest.raises(CheckFailedError, match="shared"):
+        ran(SECRETS)
+
+    held["APP_ROLE_PASSWORD"] = "b" * 40
+    ran(SECRETS)
+
+    held["BRAIN_SETUP_SECRET"] = "zq7zq7"
+    with pytest.raises(CheckFailedError) as raised:
+        ran(SECRETS)
+    assert vault not in str(raised.value)
+    assert "zq7zq7" not in str(raised.value)
+
+
 def test_a_step_that_writes_and_cannot_say_it_is_done_fails_the_steps_check(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -182,6 +217,83 @@ def test_the_pin_check_names_what_each_image_is(
     else:
         with pytest.raises(expected):
             ran(PIN, app_image=image)
+
+
+@pytest.mark.parametrize("image", [f"{IMAGE}:latest", IMAGE, f"{IMAGE}:v1.2.3", ""])
+def test_an_install_that_follows_every_release_is_recorded_as_not_run_whatever_it_runs(
+    image: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Found on a staging install: its auto-deploy follows the newest image on purpose, and the
+    check failed it on every run. When the install says it follows every release, the check is
+    not run, with the sentence saying why, and is never passed: even a pinned tag is not a pass,
+    because the install is not being held to one.
+
+    Delete this and the staging install is red again, or the check is quietly changed to pass
+    where it is not run, which shows a tick beside a pin nobody confirmed."""
+    from brain.ops.acceptance_checks_install_template import FOLLOWS_EVERY_RELEASE_BY_CHOICE
+
+    monkeypatch.setenv("INSTALL_UPDATE_MODE", "continuous")
+    with pytest.raises(CheckNotRunError) as raised:
+        ran(PIN, app_image=image)
+    assert str(raised.value) == FOLLOWS_EVERY_RELEASE_BY_CHOICE
+    assert "follow every release" in str(raised.value)
+
+
+@pytest.mark.parametrize("mode", ["release", "", "Continuously", "latest", "follow"])
+def test_an_install_that_has_not_chosen_to_follow_every_release_is_still_held_to_a_tag(
+    mode: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The default install, one set to release, and one whose environment file holds a word that
+    is not the choice all keep the refusal: latest fails, and a release tag passes. A typo must
+    not become permission to run whatever was pushed last.
+
+    Delete this and the refusal can be switched off by anything, or by nothing, and the page goes
+    green on an install running latest by accident, which is the fault the check exists for."""
+    monkeypatch.setenv("INSTALL_UPDATE_MODE", mode)
+    with pytest.raises(CheckFailedError, match="latest or to no tag"):
+        ran(PIN, app_image=f"{IMAGE}:latest")
+    ran(PIN, app_image=f"{IMAGE}:v1.2.3")
+
+
+class _NoSessions:
+    """A session factory that opens nothing, for a check that is told the switch is on."""
+
+    async def __aenter__(self) -> None:
+        return None
+
+    async def __aexit__(self, *_: object) -> None:
+        return None
+
+
+def _notes_run(app_image: str) -> None:
+    harness = SimpleNamespace(
+        settings=SimpleNamespace(
+            app_image=app_image, release_check=True, release_feed_url="https://feed.invalid/x"
+        ),
+        sessions=_NoSessions,
+    )
+    asyncio.run(body(NOTES)(harness))
+
+
+def test_the_release_notes_check_says_an_install_that_follows_every_release_has_no_release(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Where the image names no release, an install set to follow every release is told that is
+    the reason, and one that is not is told its image is a build, as before. Neither fetches
+    anything. Delete this and a staging install's notes check says it should be re-pinned, which
+    is the instruction to undo the choice it made.
+
+    Both sentences are the check module's own literals, compared against the raised text."""
+    from brain.ops import acceptance_checks_install_template as module
+
+    with pytest.raises(CheckNotRunError) as release:
+        _notes_run(f"{IMAGE}:latest")
+    assert str(release.value) == module.PINNED_TO_A_BUILD
+
+    monkeypatch.setenv("INSTALL_UPDATE_MODE", "continuous")
+    with pytest.raises(CheckNotRunError) as continuous:
+        _notes_run(f"{IMAGE}:latest")
+    assert str(continuous.value) == module.FOLLOWING_EVERY_RELEASE_NAMES_NO_RELEASE_TO_READ_NOTES_OF
 
 
 @pytest.fixture(scope="module")

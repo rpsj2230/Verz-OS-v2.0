@@ -740,6 +740,40 @@ code {
   background: var(--surface-sunken);
 }
 
+/*
+ * The drawing in words: an ordered list under the canvas, for a person who cannot use the drawing.
+ * It is plain text in the console's own type with no tone and no per-kind rule, for the reason the
+ * node has none, and a step's kind is the same chip the node carries.
+ */
+.graph__outline-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.graph__outline-heading {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.graph__outline {
+  margin: 0;
+  padding-left: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.graph__outline-label {
+  font-weight: 600;
+}
+
+.graph__outline-then {
+  color: var(--text-muted);
+}
+
 .graph__empty,
 .graph__busy {
   margin: 0;

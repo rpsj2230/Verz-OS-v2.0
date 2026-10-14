@@ -13,7 +13,7 @@
  * last switched it (a principal id, in Advanced; the page says when), and the three-card "what this
  * screen cannot switch" panel, which is one sentence under the list.
  *
- * Task ids: M27.15.51, M27.16.1, M29.2.3, M18.2.4
+ * Task ids: M27.15.51, M27.16.1, M29.2.3, M18.2.4, M37.7.5
  */
 
 import { useState } from "react";
@@ -59,6 +59,7 @@ import {
   type FeaturesBody,
 } from "../featuresQuery";
 import { when } from "../sessionsQuery";
+import { MigrationPanel } from "./MigrationPanel";
 import { OrchestrationPanel } from "./OrchestrationPanel";
 import { PluginsPanel } from "./PluginsPanel";
 
@@ -134,6 +135,7 @@ function FeatureList({ body, onSwitched }: { readonly body: FeaturesBody; readon
       {saysBoth ? <Note>{NOT_SWITCHED_HERE}</Note> : null}
       <PluginsPanel />
       <OrchestrationPanel />
+      <MigrationPanel />
       {body.features.length === 0 ? null : (
         <Advanced>
           <FactList>

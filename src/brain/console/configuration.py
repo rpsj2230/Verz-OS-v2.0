@@ -74,6 +74,7 @@ from typing import Final
 from urllib.parse import urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
+from brain.deployment.update_mode import UPDATE_MODE_SETTING, update_mode_problem
 from brain.identity.departments_from import DepartmentsFrom
 from brain.identity.staff_accounts import NOBODY
 from brain.identity.staff_source import EmploymentType
@@ -186,6 +187,7 @@ class Section(enum.StrEnum):
     MESSAGES = "messages"
     CHECKS = "checks"
     SERVICES = "services"
+    UPDATES = "updates"
 
 
 #: The sections in the order the screen draws them: what an owner changes first, first.
@@ -205,6 +207,7 @@ SECTION_TITLES: Final[Mapping[Section, str]] = MappingProxyType(
         Section.MESSAGES: "Messages this install sends",
         Section.CHECKS: "Install checks",
         Section.SERVICES: "Services on this server",
+        Section.UPDATES: "How this install updates",
     }
 )
 
@@ -246,7 +249,9 @@ SECTION_OF: Final[Mapping[str, Section]] = MappingProxyType(
         "INSTALL_ACCEPTANCE_SKILL_SOURCE": Section.CHECKS,
         "INSTALL_DIGEST_DESTINATION": Section.MESSAGES,
         "INSTALL_DIGEST_TIME": Section.MESSAGES,
+        "INSTALL_ALERT_EMAIL": Section.MESSAGES,
         "INSTALL_SERVICES": Section.SERVICES,
+        "INSTALL_UPDATE_MODE": Section.UPDATES,
     }
 )
 
@@ -288,7 +293,9 @@ LABELS: Final[Mapping[str, str]] = MappingProxyType(
         "INSTALL_ACCEPTANCE_SKILL_SOURCE": "Public skills the install check imports",
         "INSTALL_DIGEST_DESTINATION": "Send the evening digest to",
         "INSTALL_DIGEST_TIME": "Time the evening digest is sent",
+        "INSTALL_ALERT_EMAIL": "Email address told when a safety mechanism has not run",
         "INSTALL_SERVICES": "Optional services this server runs",
+        "INSTALL_UPDATE_MODE": "How this install updates",
     }
 )
 
@@ -307,8 +314,10 @@ EDITABLE_SETTINGS: Final[frozenset[str]] = frozenset(
         "INSTALL_LARK_CARD_APPROVALS",
         "INSTALL_ACCOUNT_EMPLOYMENT_TYPES",
         "INSTALL_DIGEST_TIME",
+        "INSTALL_ALERT_EMAIL",
         "INSTALL_SERVICES",
         "INSTALL_DEPARTMENTS_FROM",
+        "INSTALL_UPDATE_MODE",
     }
 )
 
@@ -436,7 +445,9 @@ READ_BY: Final[Mapping[str, tuple[str, ...]]] = {
     "INSTALL_ACCEPTANCE_SKILL_SOURCE": ("brain.ops.acceptance_checks_skills",),
     "INSTALL_DIGEST_DESTINATION": ("brain.ops.digest_destination",),
     "INSTALL_DIGEST_TIME": ("brain.ops.digest_destination",),
+    "INSTALL_ALERT_EMAIL": ("brain.control_not_run_told",),
     "INSTALL_SERVICES": ("brain.ops.overlays",),
+    "INSTALL_UPDATE_MODE": ("brain.deployment.update_mode",),
 }
 
 #: How a Keycloak issuer ends: the realm's name is its last path segment.
@@ -683,7 +694,7 @@ def setting_problem(name: str, value: str) -> str:
         except LocaleError:
             return "Write the colour as # followed by six hexadecimal digits, like #2563eb."
         return ""
-    if name == "INSTALL_SENDER_ADDRESS":
+    if name in {"INSTALL_SENDER_ADDRESS", "INSTALL_ALERT_EMAIL"}:
         return _address_problem(written)
     if name == "INSTALL_LOCALES":
         return _locales_problem(written)
@@ -706,6 +717,8 @@ def setting_problem(name: str, value: str) -> str:
             f"Choose {DepartmentsFrom.STAFF_SOURCE.value}, for the department the staff list "
             f"names, or {DepartmentsFrom.CONSOLE.value}, to set departments on People."
         )
+    if name == UPDATE_MODE_SETTING:
+        return update_mode_problem(written)
     if name == "INSTALL_MODEL_PROFILE" and written not in MODEL_PROFILES:
         return (
             f"Choose {LOCAL_PROFILE}, to keep answers on this server, or {HOSTED_PROFILE}, to "
