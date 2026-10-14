@@ -46,7 +46,19 @@ live in `docs/wbs/progress.js`, reach `wbs.json` through `export.js`, and are re
 `progress_of`. A leaf a commit closed is DONE whatever that file says: see
 `A_CLOSED_LEAF_IS_DONE_WHATEVER_THE_PROGRESS_FILE_SAYS`.
 
-Task ids: M38.3.1.1, M38.3.1.2, M38.3.1.3, M38.3.1.4, M38.2.1.1
+**Built is a second figure beside Done, never a way of reaching it.** Owner-approved on
+2026-10-14: a task shows progress as soon as its code is merged and CI was green, without waiting
+for an install to show it working, and the page says so in as many words. `done` stays the proven
+figure and keeps its name, and `built` counts every proven leaf plus the leaves that are built and
+not yet proven (`built_unproven`). A leaf is built when it is not Done and **both** hold: a person
+has said it is READY FOR TESTING in `docs/wbs/progress.js`, or a commit on main claimed it
+without the proof the rule above requires; **and** a test in the repository names it on a
+`Task ids:` line. Merged to main is what puts a test in the tree this reads, and the status file
+is written only after a green CI. See `A_BUILT_IS_CI_CHECKED_AND_NEVER_SHOWN_WORKING`. Nothing
+here touches `PROOF_REQUIRED_FROM`, `counted_ids` or `closed_task_ids`: the Done figure is read
+by exactly the code that read it before, and the requirements page still counts `done_task_ids`.
+
+Task ids: M38.3.1.1, M38.3.1.2, M38.3.1.3, M38.3.1.4, M38.2.1.1, M38.5.4
 """
 
 from __future__ import annotations
@@ -54,6 +66,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+from collections.abc import Iterable
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, Final
@@ -135,6 +148,10 @@ class WaveProgress(BaseModel):
     acts: int = 0
     #: Leaves in this wave decided as not needed as written, left out of `total` and `acts`.
     decided: int = 0
+    #: Leaves in this wave that are built: every one that is done plus those built and not yet
+    #: proven. Never less than `done`. See `A_BUILT_IS_CI_CHECKED_AND_NEVER_SHOWN_WORKING`.
+    built: int = 0
+    built_percent: float = 0.0
 
 
 class ModuleProgress(BaseModel):
@@ -147,6 +164,8 @@ class ModuleProgress(BaseModel):
     acts: int = 0
     #: Leaves in this module decided as not needed as written, left out of `total` and `acts`.
     decided: int = 0
+    #: Done plus built and not yet proven, as for a wave.
+    built: int = 0
 
 
 class Status(BaseModel):
@@ -159,6 +178,13 @@ class Status(BaseModel):
     total: int = 0
     done: int = 0
     percent: float = 0.0
+    #: Every buildable leaf that is built: the done ones, which are proven, and the ones built and
+    #: not yet proven. A second figure beside `done`, never a replacement for it.
+    built: int = 0
+    built_percent: float = 0.0
+    #: Of `built`, how many are not yet proven, and which. `built == done + built_unproven`.
+    built_unproven: int = 0
+    built_task_ids: list[str] = []
     #: Leaves flagged in `docs/wbs/acts.js`: work a person does on the week of a migration,
     #: counted here and never in `total`, so they stay visible without holding the figure down.
     acts: int = 0
@@ -396,6 +422,94 @@ def closed_since(repo: Path, when: datetime, ref: str = "HEAD") -> set[str]:
     return found
 
 
+#: Why there are two figures, and why the second can never be called done.
+A_BUILT_IS_CI_CHECKED_AND_NEVER_SHOWN_WORKING: Final = (
+    "Built means the code is merged to main, CI was green and a test in the repository names the "
+    "leaf. It does not mean an install showed it working, and it is never called done: on "
+    "2026-09-17 an audit reopened 1046 of the 1213 tasks counted as done because the owner's "
+    "install did not show them working. Done stays the proven figure and keeps its name; Built is "
+    "reported beside it so progress is visible before the install has run its checks, and a "
+    "tester promotes a built leaf to done only by the proof the Done rule already asks for. "
+    "Approved by the owner on 2026-10-14."
+)
+
+#: A `Task ids:` line in a test, with the comment marker a TypeScript or shell test puts before
+#: it. The shape `brain.ops.sweeps` reads from sources and the traceability sweep requires of
+#: tests, which is why this reads the line and not every id a test file happens to mention: a test
+#: saying "M1.1.1 is not done yet" names the leaf and proves nothing about it.
+TASK_LINE_RE = re.compile(r"^[\s*/#]*Task ids:\s*(.+)$", re.MULTILINE)
+
+#: Where a test that can prove a leaf lives, relative to the repository root: the Python suite,
+#: the console's own suite and the browser harness's specs and libraries. The same places
+#: `brain.ops.sweeps._test_sources` reads, held equal by a test, and `e2e/pages` is left out on
+#: purpose because it only says where a module lives and asserts nothing.
+TEST_DIRECTORIES: Final[tuple[tuple[str, tuple[str, ...]], ...]] = (
+    ("tests", ("*.py",)),
+    ("console/tests", ("*.ts", "*.tsx")),
+    ("e2e/specs", ("*.ts",)),
+    ("e2e/lib", ("*.ts",)),
+)
+
+
+def test_sources(repo: Path) -> list[Path]:
+    """Every file under `repo` that can prove a leaf, in no particular order."""
+    return [
+        path
+        for directory, patterns in TEST_DIRECTORIES
+        for pattern in patterns
+        for path in (repo / directory).rglob(pattern)
+        if path.is_file()
+    ]
+
+
+def test_named_ids(repo: Path) -> set[str]:
+    """Task ids written on a `Task ids:` line of a test under `repo`."""
+    named: set[str] = set()
+    for path in test_sources(repo):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for line in TASK_LINE_RE.findall(text):
+            named.update(TASK_ID_RE.findall(line))
+    return named
+
+
+def claimed_without_proof(repo: Path, ref: str = "HEAD") -> set[str]:
+    """Task ids a commit claimed from `PROOF_REQUIRED_FROM` on without proof, not since taken back.
+
+    These are the claims `counted_ids` refuses: merged to main, and so past a green CI, but
+    carrying no `Proved-on-install:` or `Proved-in-ci:` line. They close nothing. They are
+    evidence only for `built_ids`, which also asks for a test. Read newest first, as
+    `closed_task_ids` reads, so a newer `Reopens:` takes the id back and a newer counted claim
+    leaves it to the Done figure; an older commit's statement never overrides a newer one.
+    """
+    raw = _git("log", ref, "--pretty=format:%ct%x1f%s%x1f%b%x1e", cwd=repo)
+    found: set[str] = set()
+    decided: set[str] = set()
+    for entry in raw.split("\x1e"):
+        parts = entry.lstrip("\r\n").split("\x1f", 2)
+        if len(parts) < 2:
+            continue
+        try:
+            committed_at = int(parts[0])
+        except ValueError:
+            continue
+        subject, body = parts[1], parts[2] if len(parts) > 2 else ""
+        decided |= reopened_ids(body)
+        counted = counted_ids(subject, body, committed_at)
+        found |= claimed_ids(subject, body) - counted - decided
+        decided |= counted
+    return found
+
+
+def built_ids(buildable_unclosed: Iterable[str], evidence: set[str], tested: set[str]) -> set[str]:
+    """The leaves that are built and not yet proven: not done, with evidence, with a test.
+
+    `evidence` is a person's READY FOR TESTING or a claim made without proof; `tested` is what
+    `test_named_ids` read. Either alone is not enough, and a leaf already done is never in the
+    answer, so the two figures cannot count one leaf twice.
+    """
+    return {leaf for leaf in buildable_unclosed if leaf in evidence and leaf in tested}
+
+
 def _leaf_ids(node: Any, prefix: str, out: list[str]) -> None:
     """Walk the WBS exactly as the renderer numbers it, so ids line up with the tracker."""
     children = node.get("s") or []
@@ -549,10 +663,15 @@ def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
     wave_names: dict[str, str] = wbs.get("wave_names", {})
 
     modules: list[ModuleProgress] = []
-    #: Wave to [buildable leaves, of those closed, acts, decided].
+    #: Wave to [buildable leaves, of those closed, acts, decided, built and not yet proven].
     per_wave: dict[int, list[int]] = {}
     total = done = acts = decided = 0
     matched: set[str] = set()
+    #: What the Built figure reads beyond the commits: claims made without proof, and the tests
+    #: in the tree. See `A_BUILT_IS_CI_CHECKED_AND_NEVER_SHOWN_WORKING`.
+    unproved = claimed_without_proof(repo, ref)
+    tested = test_named_ids(repo)
+    built_unproven: set[str] = set()
     #: Wave to hand-set status to how many unclosed buildable leaves hold it.
     per_wave_status: dict[int, dict[str, int]] = {}
     leaf_status: dict[str, LeafProgress] = {}
@@ -568,7 +687,18 @@ def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
         flags = acts_of(m)
         decisions = decided_of(m)
         hand_set = progress_of(m)
-        m_total = m_done = m_acts = m_decided = 0
+        m_total = m_done = m_acts = m_decided = m_built = 0
+        ready = {leaf for leaf, one in hand_set.items() if one.status == READY_FOR_TESTING}
+        module_built = built_ids(
+            (
+                leaf
+                for leaf in leaves
+                if not _is_closed(leaf, closed) and leaf not in decisions and leaf not in flags
+            ),
+            unproved | ready,
+            tested,
+        )
+        built_unproven |= module_built
         for leaf in leaves:
             leaf_done = _is_closed(leaf, closed)
             if leaf_done:
@@ -577,7 +707,7 @@ def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
             elif leaf in hand_set:
                 # Only when not closed. See A_CLOSED_LEAF_IS_DONE_WHATEVER_THE_PROGRESS_FILE_SAYS.
                 leaf_status[leaf] = hand_set[leaf]
-            bucket = per_wave.setdefault(int(leaf_waves.get(leaf, wave)), [0, 0, 0, 0])
+            bucket = per_wave.setdefault(int(leaf_waves.get(leaf, wave)), [0, 0, 0, 0, 0])
             # Before the act test, and neither in `total` nor in `acts`. See
             # A_LEAF_DECIDED_AGAINST_IS_NEITHER_BUILDABLE_NOR_A_CLIENT_TASK.
             if leaf in decisions:
@@ -592,6 +722,9 @@ def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
             m_done += int(leaf_done)
             bucket[0] += 1
             bucket[1] += int(leaf_done)
+            if leaf in module_built:
+                m_built += 1
+                bucket[4] += 1
             if not leaf_done:
                 state = hand_set[leaf].status if leaf in hand_set else OPEN
                 counts = per_wave_status.setdefault(int(leaf_waves.get(leaf, wave)), {})
@@ -605,6 +738,7 @@ def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
                 done=m_done,
                 acts=m_acts,
                 decided=m_decided,
+                built=m_done + m_built,
             )
         )
         total += m_total
@@ -621,12 +755,14 @@ def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
             percent=round(100 * d / t, 1) if t else 0.0,
             acts=a,
             decided=x,
+            built=d + b,
+            built_percent=round(100 * (d + b) / t, 1) if t else 0.0,
             in_progress=per_wave_status.get(w, {}).get(IN_PROGRESS, 0),
             ready_for_testing=per_wave_status.get(w, {}).get(READY_FOR_TESTING, 0),
             blocked=per_wave_status.get(w, {}).get(BLOCKED, 0),
             open=per_wave_status.get(w, {}).get(OPEN, 0),
         )
-        for w, (t, d, a, x) in sorted(per_wave.items())
+        for w, (t, d, a, x, b) in sorted(per_wave.items())
     ]
     # The first unfinished wave. None means every wave is complete, so there is no
     # current wave rather than a misleading "wave 5".
@@ -666,6 +802,10 @@ def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
         total=total,
         done=done,
         percent=round(100 * done / total, 1) if total else 0.0,
+        built=done + len(built_unproven),
+        built_percent=round(100 * (done + len(built_unproven)) / total, 1) if total else 0.0,
+        built_unproven=len(built_unproven),
+        built_task_ids=sorted(built_unproven),
         acts=acts,
         decided=decided,
         current_wave=current,
@@ -752,7 +892,8 @@ def main(repo: Path | None = None) -> int:
     out = repo / "docs" / "status.json"
     out.write_text(status.model_dump_json(indent=2), encoding="utf-8")
     print(
-        f"{status.done}/{status.total} tasks ({status.percent}%) - wave {status.current_wave}"
+        f"{status.done}/{status.total} tasks done ({status.percent}%), "
+        f"{status.built} built ({status.built_percent}%) - wave {status.current_wave}"
         f" - {status.acts} acts, {status.decided} decided"
     )
     return 0

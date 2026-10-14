@@ -34,6 +34,11 @@ module.exports = {
   LEAF_WAVE:{
     // The Maintenance agent needs connectors, knowledge and agents (Waves 2-3): owner, 2026-09-21, item 77.
     "M38.5.3":3,
+    // The Built and Done figures and the one-run sweep, proved on the install: owner, 2026-10-14.
+    // Wave 1 is the wave being worked, and wave 0 is closed and must not be reopened by a leaf
+    // added to it. One leaf and not three: a module's whole leaf count sizes its wave's window
+    // (render.js), and a fifty-seventh leaf of M38 moves every later wave's dates by a day.
+    "M38.5.4":1,
     // The starter pack needs the template signing key built in Wave 3: owner, 2026-09-21, item 82.
     "M41.2.7":3,
     // The template signing key itself is pulled forward so agents can be published from the

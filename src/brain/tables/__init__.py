@@ -140,6 +140,7 @@ from brain.tables.operation import OperationRow
 from brain.tables.organisation import DepartmentLeadRow, TeamMembershipRow
 from brain.tables.outbox import OutboxDeliveryRow, OutboxEventRow, WebhookSubscriberRow
 from brain.tables.plugin import PluginInstallRow, PluginVersionRow
+from brain.tables.project import ProjectItemRow, ProjectRow
 from brain.tables.projection import ProjectedRecordRow, RetiredRecordRow, SourceEpochRow
 from brain.tables.quality import (
     AnswerFlagRow,
@@ -182,6 +183,7 @@ from brain.tables.skill import (
     SkillScriptRow,
 )
 from brain.tables.skill_invocation import SkillInvocationRow
+from brain.tables.skill_personal import SkillPersonalRow
 from brain.tables.spend import ReportRefreshRow, SpendActualRow
 from brain.tables.staff import StaffMemberRow, StaffSyncRunRow
 from brain.tables.stewardship import ConnectorStewardRow, SelfGrantRow
@@ -557,6 +559,11 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "agent.agent_request",
     # 0231_acceptance_run_record. Points at nothing: its id is carried by value on the result rows.
     "ops.acceptance_run",
+    # 0232_skill_personal. Points at nothing: the digest and the person are values.
+    "agent.skill_personal",
+    # 0233_personal_project. An item points at its project; every other reference is a value.
+    "agent.project",
+    "agent.project_item",
     # 0240_fanout_gate. Points at nothing: a run and an administrator are values, so a decision of
     # the gate outlives both.
     "ops.fanout_gate",
@@ -674,6 +681,8 @@ __all__ = [
     "PositiveExampleRow",
     "PrincipalIdentityRow",
     "PrincipalRow",
+    "ProjectItemRow",
+    "ProjectRow",
     "ProjectedRecordRow",
     "ProviderHealthRow",
     "QualityAnnotationRow",
@@ -710,6 +719,7 @@ __all__ = [
     "SkillDetachmentRow",
     "SkillExportRow",
     "SkillInvocationRow",
+    "SkillPersonalRow",
     "SkillRehearsalRow",
     "SkillRetirementRow",
     "SkillReviewRow",

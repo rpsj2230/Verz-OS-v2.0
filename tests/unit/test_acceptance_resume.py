@@ -7,7 +7,7 @@ the worker makes it: a check that raises a `BaseException` stands for the proces
 `run_acceptance` stands for the restarted worker. Every instant here is the database's own clock
 moved by SQL, never a date in a fixture.
 
-Task ids: M38.5.1
+Task ids: M38.5.1, M38.5.4
 """
 
 from __future__ import annotations
@@ -471,6 +471,148 @@ def test_an_unbroken_run_is_recorded_whole_and_marked_complete() -> None:
     assert second == (None, ())
     assert len(recorded) == 3
     assert [(one[2], one[4]) for one in record] == [(COMPLETE, False)]
+
+
+# ------------------------------------- one complete run, and a repeat of what did not pass
+def failing(names: list[str], calls: Counter[str], *, fails: set[str]) -> list[Check]:
+    """Checks that count their runs, and fail while their name is in `fails`."""
+    from brain.ops.acceptance import CheckFailedError
+
+    checks = []
+    for name in names:
+
+        async def body(harness: Any, name: str = name) -> None:
+            calls[name] += 1
+            if name in fails:
+                raise CheckFailedError("it broke")
+
+        checks.append(Check(name, (LEAF,), "A check made for this test.", body))
+    return checks
+
+
+def again(url: str, checks: list[Check], *, commit: str = OLD) -> tuple[Any, tuple[Result, ...]]:
+    """`repeat_unsettled` as `run` runs a run, with the reserved-department look stubbed out."""
+    from brain.db import normalise_database_url
+
+    async def stub(*_: Any, **__: Any) -> bool:
+        return False
+
+    patch = pytest.MonkeyPatch()
+    patch.setattr(acceptance_run, "in_use", stub)
+    try:
+        return asyncio.run(
+            acceptance_run.repeat_unsettled(
+                normalise_database_url(url),
+                settings=settings_from({}),
+                commit=commit,
+                checks=checks,
+            )
+        )
+    finally:
+        patch.undo()
+
+
+@pytest.mark.needs_db
+def test_a_run_with_a_failed_check_is_repeated_for_only_that_check_into_one_complete_run() -> None:
+    """The whole path against a real database. A run of four with one failure is complete and red;
+    the repeat runs only the failed check, writes a second run of the same commit holding all four
+    results (three carried, one new), marks it complete, and leaves the first run as it was. The
+    sweep's query then reads the repeat, which is clean. Delete this and the repeat can be correct
+    in every fake and wrong in the one thing the install does: the rows."""
+    from brain.ops.proof_sweep import ROWS_QUERY, carried, run_from_rows
+    from tests.fixtures.scratch_postgres import sql
+
+    names = ["check_a", "check_b", "check_c", "check_d"]
+    with database("brain_resume_repeat") as url:
+        first: Counter[str] = Counter()
+        _, red = run(url, failing(names, first, fails={"check_c"}))
+        second: Counter[str] = Counter()
+        occasion, green = again(url, failing(names, second, fails=set()))
+        record = runs(url)
+        every = rows(url)
+        newest = run_from_rows([one[0] for one in sql(url, ROWS_QUERY)])
+
+    assert [one.outcome for one in red] == [PASSED, PASSED, FAILED, PASSED]
+    assert occasion == Occasion.REQUEST
+    assert first == Counter(dict.fromkeys(names, 1))
+    assert second == Counter({"check_c": 1})
+    assert [one.outcome for one in green] == [PASSED] * 4
+    assert [one[2] for one in record] == [COMPLETE, COMPLETE]
+    assert {one[1] for one in record} == {OLD}
+    by_run: dict[Any, dict[str, str]] = {}
+    for one in every:
+        by_run.setdefault(one[0], {})[one[2]] = one[3]
+    assert sorted(len(done) for done in by_run.values()) == [4, 4]
+    assert sorted(tuple(sorted(done.values())) for done in by_run.values()) == [
+        (FAILED, PASSED, PASSED, PASSED),
+        (PASSED, PASSED, PASSED, PASSED),
+    ]
+    assert carried(newest) == ("check_a", "check_b", "check_d")
+    assert newest.commit == OLD
+
+
+@pytest.mark.needs_db
+def test_a_run_that_recorded_every_check_is_the_one_the_sweep_reads_and_a_short_one_is_not() -> (
+    None
+):
+    """**The safeguard, against the real store.** A run whose store lacks a registered check's row
+    is not marked complete, so it stays `running` and `ROWS_QUERY` returns nothing from it, however
+    the loop ended. Delete this and a partial run is read by the sweep as the one complete run that
+    is now the whole of the gate."""
+    from brain.ops.proof_sweep import ROWS_QUERY
+    from tests.fixtures.scratch_postgres import sql
+
+    real = acceptance_resume.record_check
+
+    async def losing(engine: Any, one: Result, **kwargs: Any) -> None:
+        if one.name != "check_b":
+            await real(engine, one, **kwargs)
+
+    patch = pytest.MonkeyPatch()
+    patch.setattr(acceptance_run, "record_check", losing)
+    try:
+        with database("brain_resume_short") as url:
+            run(url, suite(["check_a", "check_b", "check_c"], Counter()))
+            record = runs(url)
+            read = sql(url, ROWS_QUERY)
+    finally:
+        patch.undo()
+
+    assert [one[2] for one in record] == [RUNNING]
+    assert read == []
+
+
+@pytest.mark.needs_db
+def test_the_newest_complete_run_of_a_commit_is_found_and_another_commits_is_not() -> None:
+    """`newest_complete_run` returns the latest run of the commit asked about that is marked
+    complete, never a running one and never another release's. Delete this and a repeat starts from
+    the wrong run, which carries passes across releases."""
+    from brain.db import normalise_database_url
+    from brain.ops.acceptance_resume import newest_complete_run
+    from brain.session import make_app_engine
+
+    async def find(url: str, commit: str) -> Any:
+        engine = make_app_engine(normalise_database_url(url))
+        try:
+            return await newest_complete_run(engine, commit)
+        finally:
+            await engine.dispose()
+
+    with database("brain_resume_newest") as url:
+        run(url, suite(["check_a"], Counter()), commit=OLD)
+        run(url, suite(["check_a"], Counter()), commit=OLD, force=True)
+        killed_run(url, commit=NEW)
+        found_old = asyncio.run(find(url, OLD))
+        found_new = asyncio.run(find(url, NEW))
+        found_none = asyncio.run(find(url, "ccccccc"))
+        record = runs(url)
+
+    assert found_old is not None and found_old.commit == OLD
+    complete_old = [one[0] for one in record if one[1] == OLD and one[2] == COMPLETE]
+    assert len(complete_old) == 2
+    assert found_old.run_id == complete_old[-1], "the earlier of two complete runs was offered"
+    assert found_new is None, "a run that is still running was offered as a complete one"
+    assert found_none is None
 
 
 # ----------------------------------------------------------------------- the migration at head

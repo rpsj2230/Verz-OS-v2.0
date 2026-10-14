@@ -34,6 +34,276 @@ const STATUSES = ["OPEN", "IN PROGRESS", "READY FOR TESTING", "BLOCKED"];
 
 //: Leaf id to where it stands. Ordered by id.
 const PROGRESS = {
+  "M39.8.1": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M39.7.1": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M39.11.2": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M39.11.1": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M33.8.3": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M32.7.2": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M32.3.1.1": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M28.5.3": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M28.5.2": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M28.5.1": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M28.4.1": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M27.15.61": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M27.15.6": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M27.15.54": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M27.15.45": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M27.15.42": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M27.15.4": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M27.15.30": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M27.15.3": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M27.15.29": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M27.15.28": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M27.13.7": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M27.13.6": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M27.13.2": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M27.12.8": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M27.12.6": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M27.10.5": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M16.7.8": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M16.7.7": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M16.7.3": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M16.7.14": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M16.6.7": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M14.8.1": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M13.9.1": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M13.8.19": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M13.8.17": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M13.8.15": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M12.4.9": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M12.4.7": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M12.4.14": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M12.4.10": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M12.3.3": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M11.9.17": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M11.9.16": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M11.9.12": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M11.8.9": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M10.7.8": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M10.7.7": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M10.7.6": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M10.7.3": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M1.6.18": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M1.10.5": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M1.1.9": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
+  "M1.1.8": {
+    status: "READY FOR TESTING",
+    why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
+    updated: "2026-10-13",
+  },
   "M0.7.1": {
     status: "BLOCKED",
     why: "owner decision: 7 licences await the allowlist (postgres/pgvector, ubuntu/squid, three @fontsource fonts, regex); recommended allow all",
@@ -105,7 +375,7 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M1.8.8": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "moved to Wave 4 (needs-rupash 112): closes when every permissions requirement row has its proof on the install. PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (requirement_check_routes, tables.requirement_check, pages/RequirementChecks.tsx +4 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-w1-8",
     updated: "2026-09-29",
   },
@@ -375,7 +645,7 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M2.3.2": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "moved to Wave 4 (needs-rupash 112): closes when every departments requirement row has its proof on the install. PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (requirement_check_routes, tables.requirement_check, pages/RequirementChecks.tsx +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-w1-8",
     updated: "2026-09-29",
   },
@@ -415,7 +685,7 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M24.3.6": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "moved to Wave 5 (needs-rupash 112): closes when every observability requirement row has its proof on the install. PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (requirement_check_routes, tables.requirement_check, pages/RequirementChecks.tsx +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-w1-8",
     updated: "2026-09-29",
   },
@@ -495,7 +765,7 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M38.2.2.3": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "the Lark channel is merged (L1, d426e3d3); the exit check also needs question-time live read (C2) and the binding route (CH2), neither on main yet. PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (api_routes, chat_answer, ops.acceptance_checks_chat); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #152's branch M38/acceptance-chat-and-skills (may be replayed already)",
     updated: "2026-09-28",
   },
@@ -520,12 +790,12 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M5.6.5": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "moved to Wave 3 (needs-rupash 112): closes when every models requirement row has its proof on the install. PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (requirement_check_routes, tables.requirement_check, pages/RequirementChecks.tsx +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-w1-8",
     updated: "2026-09-29",
   },
   "M5.7.1": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "moved to Wave 5 (needs-rupash 113): Anthropic and Moonshot answer on the install; OpenAI and DeepSeek are turned off until their accounts are funded. PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (models.default_ladder, models.wire, ops.acceptance_models +6 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #154's branch M21/record-usage-for-stats (may be replayed already); closed PR #163's branch M27/console-models-routing (may be replayed already); closed PR #167's branch M38/migration-train-0118-0138-0139 (may be replayed already); +3 more",
     updated: "2026-09-29",
   },
@@ -740,92 +1010,92 @@ const PROGRESS = {
     updated: "2026-09-30",
   },
   "M1.10.3": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_accounts); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M11.1.2": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (connectors.declaration, connectors.mcp, connectors.transports +5 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +3 more",
     updated: "2026-10-06",
   },
   "M11.1.5": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (connectors.custom_code, connectors.declaration, connectors.transports +8 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +3 more",
     updated: "2026-10-06",
   },
   "M11.4.6": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in connectors.change_signal, connectors.declaration, connectors.freshdesk +10 more; NOT wired: ops.effects. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; +4 more",
     updated: "2026-10-06",
   },
   "M11.4.8": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (connectors.backfill, ops.acceptance_checks_change_signals, ops.connector_sync +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; +4 more",
     updated: "2026-10-06",
   },
   "M11.6.1": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in connectors.declaration, connectors.laravel, knowledge.connector_rows +10 more; NOT wired: ops.effects. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +6 more",
     updated: "2026-10-06",
   },
   "M11.6.2": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (api_routes, connectors.declaration, connectors.freshdesk +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; +6 more",
     updated: "2026-10-06",
   },
   "M11.6.3": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in api_routes, connectors.lark_base, knowledge.lark_base_rows +5 more; NOT wired: ops.effects",
     updated: "2026-10-06",
   },
   "M11.6.4": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in api_routes, connectors.lark_wiki, ops.acceptance_checks_lark_wiki +5 more; NOT wired: ops.effects",
     updated: "2026-10-06",
   },
   "M11.6.5": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (api_routes, connectors.ask, connectors.xero +4 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #142's branch M11/live-read-speed-budget (may be replayed already)",
     updated: "2026-10-06",
   },
   "M11.6.6": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (connectors.hubspot); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M11.6.7": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (api_routes, connectors.google_drive, knowledge.connector_rows +2 more); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M11.7.1": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in app, connectors.date_range, connectors.declaration +12 more; NOT wired: ops.effects. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +5 more",
     updated: "2026-10-06",
   },
   "M11.7.2": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (connectors.search_console, knowledge.connector_figures, knowledge.connector_rows +2 more); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M11.7.3": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in approval_routes, connector_routes, connectors.cloudflare +16 more; NOT wired: ops.effects. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +7 more",
     updated: "2026-10-06",
   },
   "M11.7.4": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in connector_routes, connectors.declaration, connectors.domains +6 more; NOT wired: ops.effects",
     updated: "2026-10-06",
   },
   "M11.7.5": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (api_routes, connectors.slack_messages, knowledge.connector_rows +2 more); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M11.7.6": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_oauth); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: PR #387 (M11/w2-google-workspace); branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; +5 more",
     updated: "2026-10-06",
   },
@@ -840,7 +1110,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M11.8.11": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_change_signals, ops.connector_sync, ops.connector_sync_run +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; +4 more",
     updated: "2026-10-06",
   },
@@ -850,17 +1120,17 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M11.8.13": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (requirement_check_routes); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M11.8.3": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_sources); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M11.8.4": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in api_routes, ops.acceptance_checks_change_signals, ops.connector_sync +3 more; NOT wired: ops.effects. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; +4 more",
     updated: "2026-10-06",
   },
@@ -880,62 +1150,62 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M11.9.10": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_connectable); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M11.9.11": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_connectable); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M11.9.13": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_connectable); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M11.9.14": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_connectable); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M11.9.15": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in connectors.declaration, connectors.google_drive, ops.acceptance_checks_change_signals +3 more; NOT wired: ops.effects. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +3 more",
     updated: "2026-10-06",
   },
   "M11.9.3": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_connectable); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M11.9.4": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_lifecycle_routes, connectors.lark_base, connectors.lark_wiki +15 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +9 more",
     updated: "2026-10-06",
   },
   "M11.9.5": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_connectable); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M11.9.6": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (connectors.freshdesk, ops.acceptance_checks_connectable, ops.connectable); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; +8 more",
     updated: "2026-10-06",
   },
   "M11.9.7": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_connectable); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M11.9.8": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_connectable); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M11.9.9": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_connectable); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
@@ -945,12 +1215,12 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M12.2.8": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_skill_pins, ops.acceptance_checks_skill_runs, tools.skills); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; closed PR #252's branch M6/w3-fastlane-role (may be replayed already); closed PR #255's branch M16/w3-confirmed (may be replayed already); +1 more",
     updated: "2026-10-06",
   },
   "M12.2.9": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in app, ops.sandbox, ops.sandbox_runner +2 more; NOT wired: ops.sandbox_client. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; closed PR #252's branch M6/w3-fastlane-role (may be replayed already); closed PR #255's branch M16/w3-confirmed (may be replayed already); +1 more",
     updated: "2026-10-06",
   },
@@ -965,7 +1235,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M12.4.11": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in ops.sandbox, ops.skill_store, tables.skill +2 more; NOT wired: ops.sandbox_client. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; +6 more",
     updated: "2026-10-06",
   },
@@ -975,12 +1245,12 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M12.4.4": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in app, ops.website_probe, tools.startup +1 more; NOT wired: ops.effects. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +4 more",
     updated: "2026-10-06",
   },
   "M12.4.5": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_services, ops.sandbox, ops.sandbox_runner); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
@@ -1030,7 +1300,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M13.7.1": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (api_routes, gate.answer, gate.caches +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/w3-runtime-side-effects, no PR",
     updated: "2026-10-06",
   },
@@ -1060,7 +1330,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M13.7.7": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (gate.runtime, ops.runtime_effects, tools.proposed_writes); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/w3-runtime-side-effects, no PR",
     updated: "2026-10-06",
   },
@@ -1085,7 +1355,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M14.3.1": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (resolution.cascade, resolution.guardrails); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
@@ -1115,12 +1385,12 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M14.7.1": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (resolution.entities); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M14.7.2": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (resolution.entities); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
@@ -1130,12 +1400,12 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M15.3.1": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (knowledge.quality, ops.acceptance_retrieval); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M15.3.3": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (knowledge.assembly, ops.acceptance_retrieval); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
@@ -1155,7 +1425,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M16.2.2": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (memory.signals); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
@@ -1165,7 +1435,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M16.2.4": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (gate.answer, memory.signals); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M39/channel-rows, no PR; branch M39/group-install, no PR; +2 more",
     updated: "2026-10-06",
   },
@@ -1195,7 +1465,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M16.3.2": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (memory.formation, memory.tiers); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #252's branch M6/w3-fastlane-role (may be replayed already); closed PR #255's branch M16/w3-confirmed (may be replayed already)",
     updated: "2026-10-06",
   },
@@ -1215,7 +1485,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M16.6.1": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in gate.answer, gate.model_lane, gate.runtime +2 more; NOT wired: ops.effects",
     updated: "2026-10-06",
   },
@@ -1265,7 +1535,7 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M17.1.5": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops/jobs.py dead_letter_for, visible_dead_letters, DeadLetter (filtered, no count) are built; only dead_letter_summary has a consumer in console modules. No route or page lists dead letters: jobs_routes and operate_routes show scheduled controls and owed runs. NEXT: add GET /jobs/dead calling visible_dead_letters over driver rows in failed state and a Dead letters tab on the Jobs page",
     updated: "2026-10-13",
   },
@@ -1320,12 +1590,12 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M17.4.1": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Schedule trigger is built: automation_run, automation_run_store.run_automations_now started by schedule_runner, cadence from console/automation_gallery. Connector-event and webhook triggers exist only as orchestration/unattended.TriggerKind (used by adoption.channel_for_trigger); nothing starts a run on either. NEXT: build the two missing trigger paths (connector change event, inbound webhook) into automation_run and show all three kinds on the agent page's New automation PLAN 2026-10-12: also reached from the agent page's New automation (M39.9.2.2); the trigger kinds must be selectable and shown there.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built (M17/automation-start-sources) to needs-rupash 223 option B: an automation starts by a schedule or by a connector change and by nothing from outside. ops/automation_event decides what is due (per-pass and per-hour bounds, a change run once by its id), ops/automation_event_store finds changed records inside the owner's row scope and runs each as the owner through admitted_run, and the index's updated_at now moves only when a record's fields change. A webhook is refused when written and the form lists it as not offered. Behind the automation_events switch, which ships off. Proved on the install by the check a_change_starts_one_run_as_an_owner_who_may_read_it once the owner switches it on and changes a record. NOT BUILT: a condition is still not applied to a change or a schedule (needs-rupash 177); the signed inbound address is not built until a real automation needs it. PRIOR WORK: Schedule trigger built (automation_run, run_automations_now); TriggerKind existed with nothing starting a run on two of its kinds.",
+    updated: "2026-10-14",
   },
   "M17.4.2": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 2 (partly built): Named outcome templates are built and installed paused: console/automation_gallery BUILT_IN (weekly summary, unanswered questions, source freshness) and POST install route; ops/automation_run.TASKS has one performer. Workflows as stored versioned step data from the console do not exist (see M17.6.1). NEXT: build the stored versioned workflow data (reuse builder/draft_store revisions) and the console authoring page; templates stay as they are PLAN 2026-10-12: also the data model behind New automation on the agent page (M39.9.2.1); a template with changed settings needs none of it, anything else does.",
     updated: "2026-10-13",
   },
@@ -1615,7 +1885,7 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M20.1.1": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (builder.compose); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
@@ -1635,7 +1905,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M20.4.2": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (builder.agent_drafts, builder.publish); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
@@ -1665,7 +1935,7 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M21.1.4": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 2 (partly built): Agent monthly ceiling is settable: agent_workspace_routes (BudgetLevel.AGENT, MONTH; test_agent_workspace_routes). ops.budgets.agent_ceilings (per-run and per-day) has no caller, so per-run and per-day agent ceilings are never written. NEXT: Call agent_ceilings from the agent workspace route (or a second field) so run and day rows are appended; then check naming M21.1.4.",
     updated: "2026-10-13",
   },
@@ -1740,7 +2010,7 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M22.2.2": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (knowledge.ingest_queue, ops.acceptance_checks_class_pools, ops.admission +7 more); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
@@ -1760,7 +2030,7 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M25.1.3": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 2 (partly built): Payload store = obs.trace_step, horizon 30 days (PAYLOAD_RETENTION_DAYS, test_retention) and reported daily by the sweep. But migration 0150 grants brain_app INSERT only, so PostgresSweeper.removal_rule queues those rows and never deletes them. NEXT: Build the removal: a job or role that deletes (or partitions and drops) obs.trace_step past 30 days with the release gate and hold check; then write the check.",
     updated: "2026-10-13",
   },
@@ -1905,7 +2175,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.11.10": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in credential_routes, ops.acceptance_operations_console_6, ops.credential_catalogue +9 more; NOT wired: pages/Credentials.route.tsx. MORE ELSEWHERE, read before building: closed PR #171's branch M27/console-credentials (may be replayed already)",
     updated: "2026-10-06",
   },
@@ -1915,7 +2185,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.11.15": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_routes, console.agent_profile); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-agent-api",
     updated: "2026-10-06",
   },
@@ -1940,7 +2210,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.11.6": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in agent_builder_routes, agent_lifecycle_routes, agents.creation +17 more; NOT wired: pages/AgentDraft.tsx, pages/AgentDrafts.route.tsx. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M13/wire-agent-upgrade, no PR; +16 more",
     updated: "2026-10-06",
   },
@@ -1955,7 +2225,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.11.9": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in connector_routes, connectors.declaration, console.connector_detail +28 more; NOT wired: pages/Connector.route.tsx, pages/Connector.tsx, pages/Connectors.route.tsx. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +7 more",
     updated: "2026-10-06",
   },
@@ -1970,12 +2240,12 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.12.3": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in automations_routes, console.automations, ops.automation_change_store +11 more; NOT wired: pages/Automation.route.tsx, pages/Automation.tsx, pages/Automations.route.tsx. MORE ELSEWHERE, read before building: closed PR #174's branch M27/console-automations (may be replayed already)",
     updated: "2026-10-06",
   },
   "M27.12.4": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (pages/operations/StopControl.tsx, pages/operations/StopPage.tsx, pages/stopQuery.ts); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #121's branch M27/halt (may be replayed already); old backup branch recovery/from-windows-20260928-wt-halt",
     updated: "2026-10-06",
   },
@@ -1995,22 +2265,22 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.15.14": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (navigation_routes, pages/operations/StopControl.tsx, pages/stopQuery.ts); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M27.15.17": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.needs_you, console_overview_figures_routes, console_overview_routes +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #144's branch M27/console-stats-overview (may be replayed already); closed PR #148's branch M27/console-stats-overview-r2 (may be replayed already); closed PR #157's branch M27/console-stats-overview-r3 (may be replayed already); +2 more",
     updated: "2026-10-06",
   },
   "M27.15.18": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (pages/people/PersonDetailPage.tsx, pages/people/PersonHistory.tsx, pages/people/PersonOverview.tsx +1 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #169's branch M27/console-people-org (may be replayed already); closed PR #295's branch M1/departments-from (may be replayed already)",
     updated: "2026-10-06",
   },
   "M27.15.19": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit.record, console.organisation, directory_routes +5 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #169's branch M27/console-people-org (may be replayed already)",
     updated: "2026-10-06",
   },
@@ -2035,7 +2305,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.15.25": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (pages/people/PersonSessions.tsx); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #169's branch M27/console-people-org (may be replayed already)",
     updated: "2026-10-06",
   },
@@ -2045,7 +2315,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.15.27": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.entity_stats, console_stats_routes, models.pricing +1 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #144's branch M27/console-stats-overview (may be replayed already); closed PR #148's branch M27/console-stats-overview-r2 (may be replayed already); closed PR #154's branch M21/record-usage-for-stats (may be replayed already); +9 more",
     updated: "2026-10-06",
   },
@@ -2055,7 +2325,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.15.33": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.entity_stats, console_stats_routes, models.pricing); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #144's branch M27/console-stats-overview (may be replayed already); closed PR #148's branch M27/console-stats-overview-r2 (may be replayed already); closed PR #154's branch M21/record-usage-for-stats (may be replayed already); +9 more",
     updated: "2026-10-06",
   },
@@ -2065,7 +2335,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.15.37": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (automations_routes, console.automations, ops.automation_change_store +6 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #174's branch M27/console-automations (may be replayed already)",
     updated: "2026-10-06",
   },
@@ -2080,7 +2350,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.15.40": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in knowledge.lifecycle, knowledge.lifecycle_store, knowledge_lifecycle_routes +12 more; NOT wired: pages/Knowledge.route.tsx. MORE ELSEWHERE, read before building: closed PR #160's branch M27/console-knowledge (may be replayed already); closed PR #164's branch M27/console-knowledge-r2 (may be replayed already); closed PR #219's branch M7/w2-knowledge-4 (may be replayed already); +2 more",
     updated: "2026-10-06",
   },
@@ -2095,7 +2365,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.15.44": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit.record, webhook_routes, pages/webhooks/WebhookActs.tsx +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M27/webhook-switch-on-and-replay, no PR",
     updated: "2026-10-06",
   },
@@ -2115,7 +2385,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.15.50": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (credential_routes, ops.acceptance_operations_console_6, ops.credential_catalogue +8 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +6 more",
     updated: "2026-10-06",
   },
@@ -2135,7 +2405,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.15.57": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_skills); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
@@ -2200,32 +2470,32 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.2.5": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.operate); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M27.2.6": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.operate, operate_routes, pages/liveRunsQuery.ts +1 more); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M27.2.7": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in console.operate, incident_routes, pages/incidentsQuery.ts +1 more; NOT wired: pages/Incidents.route.tsx",
     updated: "2026-10-06",
   },
   "M27.2.8": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in console.operate, pages/operations/StopPage.tsx, pages/stopQuery.ts; NOT wired: pages/Stop.route.tsx",
     updated: "2026-10-06",
   },
   "M27.3.11": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.govern); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #169's branch M27/console-people-org (may be replayed already)",
     updated: "2026-10-06",
   },
   "M27.3.12": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.govern_estate); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
@@ -2255,7 +2525,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.5.5": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.reads); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
@@ -2310,7 +2580,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.7.17": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (report_routes, pages/adoptionQuery.ts, pages/reports/AdoptionPage.tsx); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
@@ -2330,17 +2600,17 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.7.20": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (estate_routes); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #245's branch M16/w3-waiting (may be replayed already); closed PR #252's branch M6/w3-fastlane-role (may be replayed already); closed PR #255's branch M16/w3-confirmed (may be replayed already); +1 more",
     updated: "2026-10-06",
   },
   "M27.7.22": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (estate_routes, ops.memory_store, tables.learning +5 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #245's branch M16/w3-waiting (may be replayed already); closed PR #252's branch M6/w3-fastlane-role (may be replayed already); closed PR #255's branch M16/w3-confirmed (may be replayed already); +2 more",
     updated: "2026-10-06",
   },
   "M27.7.23": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (artifact_routes, pages/Artifacts.tsx, pages/operations/ArtifactsPage.tsx); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
@@ -2350,12 +2620,12 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.7.25": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (install_routes, pages/Install.tsx, pages/Updates.tsx +4 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #180's branch M27/console-platform (may be replayed already); old backup branch recovery/from-windows-20260928-wt-w0b",
     updated: "2026-10-06",
   },
   "M27.7.26": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_operations_console_5, pages/Recovery.tsx); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
@@ -2475,7 +2745,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M28.2.2": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.canaries); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
@@ -2485,22 +2755,22 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M28.2.4": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.canaries, ops.canary_run, ops.schedule); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M28.3.1": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.feedback); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M28.3.2": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.feedback); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M28.3.3": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: ops.sampling name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
     updated: "2026-10-06",
   },
@@ -2565,7 +2835,7 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M3.7.2": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (gate.catalogue); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
@@ -2580,7 +2850,7 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M30.3.10": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 3 (built, not wired): recovery.alerts() raises BACKUP_AGED against the profile RPO from real manifests (tested); schedule_runner Runner backup_exposure has needs= and no run, controls.backup_exposure is invoked_by NOTHING, and ops/notices BACKUP_EXPOSURE says no channel is chosen. Nothing calls alerts(). NEXT: give Runner backup_exposure a run that lists manifests with backup_manifest.read_manifests, calls recovery.alerts and sends the notice to the operations alert holder; channel may need an owner decision",
     updated: "2026-10-13",
   },
@@ -2660,12 +2930,12 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M32.1.2.4": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_audit, ops.tracing, trace_routes); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M32.1.2.6": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (app, ops.acceptance_checks_services, ops.ledger_export +3 more); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
@@ -2675,27 +2945,27 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M32.3.1.2": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.storage); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M32.3.1.3": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.storage); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M32.3.1.4": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.object_store, ops.storage); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M32.3.2.1": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.object_store, ops.storage); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M32.3.2.2": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.object_store, ops.storage); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
@@ -2735,7 +3005,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M33.1.1.3": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in company_routes, console.department_console, console.global_surfaces +2 more; NOT wired: pages/Company.route.tsx",
     updated: "2026-10-06",
   },
@@ -2795,7 +3065,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M33.2.2.4": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.scoped_authority); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
@@ -2835,7 +3105,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M33.4.1.3": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit_statistics_routes, console.auditor, pages/audit/AuditPage.tsx +1 more); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
@@ -2850,7 +3120,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M33.5.1.3": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (connectors.manifest, console.role_surfaces, identity.staff_source); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
@@ -2870,7 +3140,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M33.7.1.3": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit.chain_check, console.elevation, docs_routes +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M33/elevation-chain, no PR",
     updated: "2026-10-06",
   },
@@ -2940,12 +3210,12 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M34.3.1.1": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 3 (built, not wired): adoption.visibility_summary (what it can and cannot see, plain language, from the reader's reach) is built and tested; no route or page calls it. NEXT: Serve it from a route for the signed-in person (reach-scoped) and link it from Ask or My workspace.",
     updated: "2026-10-13",
   },
   "M34.3.1.2": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 3 (built, not wired): adoption.privacy_posture reads the install's configuration into plain sentences and is tested (test_adoption); no route or page calls it (locale.py names its keys only). NEXT: Serve privacy_posture on a staff-facing page or Ask help panel; reader needs no grant.",
     updated: "2026-10-13",
   },
@@ -2955,7 +3225,7 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M34.3.2.1": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 2 (partly built): 36 runbooks exist in docs/console/runbooks and launch.screen_runbook_gaps and guide_docs.runbook_gaps sweep them against the screen registry (test_guide_docs). No route or page serves them; docs_routes serves only the build pages. NEXT: Add a help route serving docs/console/runbooks per screen and a link on each console page (see M34.4.1).",
     updated: "2026-10-13",
   },
@@ -2980,7 +3250,7 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M35.1.1.3": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 2 (partly built): locale.RIGHT_TO_LEFT deferral with trigger is defined, and rules_for refuses an RTL tag with its reason; but console.configuration._locales_problem swallows the LocaleError into a generic sentence, and locale_facts and triggered have no caller. NEXT: Pass the deferral's sentence through the settings refusal and report triggered() on the Install screen; then write the check (also M35.4.3).",
     updated: "2026-10-13",
   },
@@ -3025,9 +3295,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M35.3.2.2": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): locale.PUSH_FOR_APPROVALS with Trigger.APPROVALS_WAIT_LONGER_THAN_THE_STATED_HOURS and PUSH_IS_DUE_ABOVE_HOURS=4 is defined and tested; triggered() has no caller and nothing measures approval waits, so the trigger can never fire. NEXT: Build the wait measurement (see M35.4.5) and call locale.triggered from the report; that completes this leaf.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built (owner decision 222 A): the typical approval wait is measured through migration 0227's view gate.approval_wait (raised_at and decided_at only, no person) by ops/approval_wait.py and reaches This install as two facts, the typical wait and whether push for approvals is now worth building, decided by locale.triggered; no count of approvals is ever shown, an install with nothing decided is unknown with its reason and never zero, and GET /install is tested at the route (tests/unit/test_install_approval_wait_route.py, with a mutation table). PRIOR WORK (2026-10-13 triage): locale.PUSH_FOR_APPROVALS with Trigger.APPROVALS_WAIT_LONGER_THAN_THE_STATED_HOURS and PUSH_IS_DUE_ABOVE_HOURS=4 is defined and tested; triggered() has no caller and nothing measures approval waits, so the trigger can never fire. NEXT: Build the wait measurement (see M35.4.5) and call locale.triggered from the report; that completes this leaf. PROVE ON THE INSTALL: run the acceptance run and read the result of the_approval_wait_is_measured_and_push_is_reported (it raises and approves three approvals in the acceptance department, as the Approvals route does, and leaves nothing behind); then open Install, This install, and see the typical approval wait and the push sentence, or unknown with a reason while nothing has been decided.",
+    updated: "2026-10-14",
   },
   "M36.1.1.1": {
     status: "READY FOR TESTING",
@@ -3035,7 +3305,7 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M36.1.1.4": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops/scaling.py partitioning_is_due is tested (test_scaling.py) but nothing imports brain.ops.scaling; controls.NOT_A_SCHEDULE calls it a person's decision. It takes a retention window and interval, not a measured row count or query latency, and GET /install/capacity does not evaluate it. NEXT: wire partitioning_is_due with the measured ledger row count and p95 into a section on GET /install/capacity; also note the trigger needs a row-count or latency input, not just the window",
     updated: "2026-10-13",
   },
@@ -3080,7 +3350,7 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M36.1.4.3": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops/scaling.py trigger predicates are tested (test_scaling.py) but nothing imports brain.ops.scaling; controls.NOT_A_SCHEDULE says each is a decision for a person asked when someone looks. GET /install/capacity (install_routes.py) does not evaluate them. NEXT: wire host_split_is_due(profile) with measured memory headroom into GET /install/capacity; resilience requirement input has no source yet",
     updated: "2026-10-13",
   },
@@ -3315,37 +3585,42 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M38.2.2.4": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agents.install_store, memory.turn, ops.memory_store); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #252's branch M6/w3-fastlane-role (may be replayed already); closed PR #255's branch M16/w3-confirmed (may be replayed already); closed PR #299's branch M8/w2-escalation (may be replayed already); +2 more",
     updated: "2026-10-06",
   },
   "M38.2.2.5": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (automation_schedule_routes, console.automation_schedule, ops.automation_run +5 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #84's branch M5/model-health-routing-residency (may be replayed already); old backup branch recovery/from-windows-20260928-wt-automation-memory; old backup branch recovery/from-windows-20260928-wt-g2; +1 more",
     updated: "2026-10-06",
   },
   "M38.3.3.1": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (channels.lark, digest_routes, ops.acceptance_checks_digest +6 more); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M38.3.3.2": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_digest, ops.digest, ops.digest_run); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M38.3.3.3": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_digest, ops.digest, ops.digest_run); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M38.3.3.4": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (channels.lark, digest_routes, ops.acceptance_checks_digest +7 more); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
+  "M38.5.4": {
+    status: "IN PROGRESS",
+    why: "owner-approved 2026-10-14: Built beside Done on /build, the tracker and status.json, and the proof sweep on one complete clean run with a repeat of only the failed or not-run checks; in a pull request (M38/built-and-proven-tracker), not yet on main; proved when the owner's install shows both figures and a repeat completes a clean run",
+    updated: "2026-10-14",
+  },
   "M39.1.1.1": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.workspace, ops.acceptance_checks_agent_page); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
@@ -3400,7 +3675,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M39.2.3.5": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PLAN 2026-10-12 (agent Knowledge section, P1): the counts need storage that does not exist. ops.retrieval_event keeps no document, no question and no principal, so a per-item, per-agent count cannot be read from it; a new record of (agent, item, day, count) with no question text is needed, which is a migration (next free number is 0213, the coordinator's) behind a flag; the figure is shown beside each item in the Knowledge section (M39.9.1.1). PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_capability_routes, console.agent_tabs); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #235's branch M39/w3-agent-workspace-5 (may be replayed already); closed PR #254's branch M39/w3-agent-workspace-6 (may be replayed already); closed PR #257's branch M39/w3-agent-workspace-7 (may be replayed already); +1 more",
     updated: "2026-10-12",
   },
@@ -3420,7 +3695,7 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M39.2.4.4": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_group_routes, channel_routes, channels.adapter +9 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M39/group-install, no PR; closed PR #263's branch M39/w3-agent-workspace-8 (may be replayed already)",
     updated: "2026-10-06",
   },
@@ -3455,12 +3730,12 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M39.5.1.1": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.agent_output, ops.acceptance_workspace, ops.artifact_report +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +10 more",
     updated: "2026-10-06",
   },
   "M39.5.1.2": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.agent_output, ops.acceptance_workspace, ops.artifact_store +1 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +10 more",
     updated: "2026-10-06",
   },
@@ -3470,42 +3745,42 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M39.5.1.4": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.agent_output, ops.acceptance_workspace, ops.artifact_report); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +10 more",
     updated: "2026-10-06",
   },
   "M39.5.1.5": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_artifact_routes, console.agent_output, ops.acceptance_workspace +4 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +10 more",
     updated: "2026-10-06",
   },
   "M39.5.2.1": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_artifact_routes, console.agent_output, ops.acceptance_workspace +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +10 more",
     updated: "2026-10-06",
   },
   "M39.5.2.2": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_artifact_routes, console.agent_output, ops.acceptance_workspace +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +10 more",
     updated: "2026-10-06",
   },
   "M39.5.2.3": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_artifact_routes, console.agent_output, ops.acceptance_workspace +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +10 more",
     updated: "2026-10-06",
   },
   "M39.5.2.4": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_artifact_routes, console.agent_output, ops.acceptance_workspace +4 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +10 more",
     updated: "2026-10-06",
   },
   "M39.5.2.5": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_artifact_routes, console.agent_output, ops.acceptance_workspace +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +10 more",
     updated: "2026-10-06",
   },
   "M39.6.2.3": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PLAN 2026-10-12: partly built (the paused-automation alert #440, the failure notice #431); needs owner decision 172 on whether a pause also stops the agent's questions (recommendation: no). PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (automation_paused_told, console.agent_automations, ops.automation_run +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-automation-memory",
     updated: "2026-10-12",
   },
@@ -3520,12 +3795,12 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M39.8.4": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_workspace); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +10 more",
     updated: "2026-10-06",
   },
   "M39.8.5": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_artifact_routes, console.agent_output, ops.acceptance_workspace +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; branch M39/channel-rows, no PR; +10 more",
     updated: "2026-10-06",
   },
@@ -3550,7 +3825,7 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.1.1.3": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 2 (partly built): Idle and absolute session policy built and enforced (identity/sessions.py SESSION_IDLE, bearer checks sid). Admin sessions list exists (session_routes /govern/sessions). Member's own device list member.shell.devices/end_device has no caller and no /me route; it also takes the in-memory SessionRegistry, not StoredSessions. NEXT: add GET /me/devices and POST /me/devices/end over identity.session_store.StoredSessions with the own-session check from shell.end_device, then a check",
     updated: "2026-10-13",
   },
@@ -3585,7 +3860,7 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.2.1.1": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 2 (partly built): Count of the month's questions built (mine_routes.questions_asked over ops.question_asked, shown on MyWorkspace). Corrections not separated: the view says CORRECTIONS_ARE_NOT_RECORDED, now stale because POST /threads/{id}/corrections (thread_routes, chat.thread_store.correct) records them. NEXT: count the person's corrections from the thread store in mine_routes and replace MineAskedView.corrections text with a number; member_activity.activity_this_month is the model",
     updated: "2026-10-13",
   },
@@ -3620,7 +3895,7 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.2.2.5": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 3 (built, not wired): member_activity.request_agent and AgentRequest are built (routes to the agent's department) with no caller and no store. access_request_routes only handles field and department requests to the data steward, not agents. NEXT: add POST /me/agents/{id}/request calling request_agent, store the request and deliver it as a notice to the department admin (reuse access_request store pattern)",
     updated: "2026-10-13",
   },
@@ -3670,12 +3945,12 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.3.3.1": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 2 (partly built): Artifacts are listed per agent (agent_artifact_routes GET artifacts, latest, download) and estate-wide for admins (artifact_routes /govern/artifacts). member_library.produced_for_me (everything by any agent for this person) has no caller and no route. NEXT: add GET /me/artifacts calling produced_for_me over agent.artifact rows with caller_id = the person; add to MyWorkspace",
     updated: "2026-10-13",
   },
   "M40.3.3.3": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 3 (built, not wired): member_library.share/open_share/Share built, no caller, no table for a share row (shape has no entitlement by design). NEXT: add a share table plus POST /me/artifacts/{id}/share calling share and GET using open_share; needs a migration number",
     updated: "2026-10-13",
   },
@@ -3685,17 +3960,17 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.4.1.2": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 2 (partly built): One-click undo per item built and wired: POST /me/memory/forget and /me/learning/undo (MyWorkspace Forget, digest undo link). Undo-all: member_activity.undo_all exists but has no caller (govern_estate lists undo_all as a refused bulk word for the console). NEXT: add POST /me/memory/forget-all over StoredMemoryRecords.undo for the person's own memories and an Undo all button",
     updated: "2026-10-13",
   },
   "M40.4.1.4": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 3 (built, not wired): member_activity.opt_out/LearningOptOut built (states the cost), no caller, no stored flag, and the memory formation path (chat/remember, memory.turn) reads no opt-out. NEXT: store a per-person opt-out (ops.setting or table), check it in memory formation, expose POST /me/learning/opt-out",
     updated: "2026-10-13",
   },
   "M40.4.2.1": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 3 (built, not wired): member_activity.what_is_stored/StoredAboutMe built, no caller. thread_routes export (export_my_history) covers conversations only; /me/workspace shows five cards but not 'what is stored and where'. NEXT: add GET /me/stored calling what_is_stored and a card on MyWorkspace",
     updated: "2026-10-13",
   },
@@ -3705,7 +3980,7 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.4.2.4": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 2 (partly built): Writer side is wired and checked: ops.sensitive_read_store.SensitiveReadRecorder writes record_read ledger entries (acceptance_audit.py checks them). Member page: member_activity.who_read_my_record has no caller; GET /audit shows own entries only on the admin audit screen. NEXT: add GET /me/reads calling who_read_my_record over AuditView and a MyWorkspace card",
     updated: "2026-10-13",
   },
@@ -3730,22 +4005,22 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.5.2.1": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 2 (partly built): GET /me/channels (binding_routes, MyChannels.tsx) lists channels switched on and bound, with bound_at. 'Primary' is not modelled: member.connections.reachability/ChannelPreference/reachable_on are uncalled and nothing stores a primary. NEXT: store a primary channel per person and surface it through reachability in my_channels view",
     updated: "2026-10-13",
   },
   "M40.5.2.2": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 3 (built, not wired): member.connections.ChannelPreference/wants built, no caller, no store; ops/notices.py rejects per-person preference and keeps one install-wide switch per notice kind. NEXT: add a preference store and make ops/notices senders ask wants() per person",
     updated: "2026-10-13",
   },
   "M40.5.2.3": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 3 (built, not wired): member.connections.channels_that_may_approve built, no caller. approval_cards sends Lark cards to every addressed binding, switched install-wide by INSTALL_LARK_CARD_APPROVALS; there is no per-approver choice. NEXT: store the approver's console-or-Lark choice and have approval_cards.send_raised honour it via channels_that_may_approve",
     updated: "2026-10-13",
   },
   "M40.5.2.4": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 3 (built, not wired): member.connections.QuietHours/may_deliver built, no caller; nothing outside the module mentions quiet hours (tell_later, learning_told, automation notices ignore them). NEXT: store quiet hours per person and call may_deliver in tell_later.tell for digests and automation notices",
     updated: "2026-10-13",
   },
@@ -3780,7 +4055,7 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M42.1.2": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 2 (partly built): install.sh step 12 mints POSTGRES_PASSWORD, APP_ROLE_PASSWORD and BRAIN_SETUP_SECRET with openssl on the client server (wired). variables.py:shared_secrets and unminted_secrets refuse shared or weak values but nothing calls them outside tests. NEXT: Run unminted_secrets over the install's own environment in an install check and expose shared_secrets as a command for the variables repository.",
     updated: "2026-10-13",
   },
@@ -3940,22 +4215,22 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M6.2.2": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (cache, gate.caches); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M6.2.3": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (app, cache, gate.caches +1 more); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M6.2.4": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (app, cache, gate.caches +1 more); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
   "M6.2.5": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in app, cache, gate.caches +2 more; NOT wired: ops.effects",
     updated: "2026-10-06",
   },
@@ -3965,17 +4240,17 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M7.1.3": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (install, knowledge.ingest, knowledge.scanners +5 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #129's branch M7/links-scanning-queue (may be replayed already); closed PR #217's branch M7/w2-knowledge-3 (may be replayed already); closed PR #219's branch M7/w2-knowledge-4 (may be replayed already); +2 more",
     updated: "2026-10-06",
   },
   "M7.1.4": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (knowledge.uploads, ops.acceptance_ingest); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #217's branch M7/w2-knowledge-3 (may be replayed already); closed PR #219's branch M7/w2-knowledge-4 (may be replayed already); closed PR #232's branch M7/w2-knowledge-5 (may be replayed already); +1 more",
     updated: "2026-10-06",
   },
   "M7.1.5": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (knowledge.ingest, knowledge.ingest_queue, knowledge.uploads +7 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #129's branch M7/links-scanning-queue (may be replayed already); closed PR #160's branch M27/console-knowledge (may be replayed already); closed PR #164's branch M27/console-knowledge-r2 (may be replayed already); +4 more",
     updated: "2026-10-06",
   },
@@ -3985,12 +4260,12 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M39.10.1": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "P1. Partly built: agents/model.py has Visibility (GLOBAL, DEPARTMENT, PERSONAL) with an owner_id, and the agent page shows its audience. What is missing is the kind named as a choice at creation and on the page. REUSE agents.model.AgentAudience, agents.creation, agent_routes.",
     updated: "2026-10-12",
   },
   "M39.10.2": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "P1. Partly built: agents/creation.py makes a personal agent for its maker (AgentAudience PERSONAL, owner_id) and brain.member_activity.build_personal_agent materialises one. What is missing is the builder's own flow for a person to make one and the capability rule that only an administrator may make a team agent. REUSE agents.creation, agents.authoring, member_activity.",
     updated: "2026-10-12",
   },
@@ -4010,7 +4285,7 @@ const PROGRESS = {
     updated: "2026-10-12",
   },
   "M39.10.6": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "P1. Install check for the first, second and third leaves, with reserved people; held if it uses a made-up mailbox.",
     updated: "2026-10-12",
   },
@@ -4020,32 +4295,32 @@ const PROGRESS = {
     updated: "2026-10-12",
   },
   "M39.9.1.1": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "P1, the core of the Knowledge requirement. Today the API lists Knowledge as one of seven workspace tabs (console/workspace.Tab.KNOWLEDGE) and the Profile draws a read-only card of what the agent's rule reaches (AgentCapabilities.tsx KnowledgeCard: M39.2.3.1, .3, .4), but the console's tab strip draws only Conversations, Automations, Memory, Artifacts and Settings, so there is no Knowledge section and no list of items. REUSE: the workspace tab read, brain.knowledge.item (retrievable, badge), console/agent_tabs.KnowledgeScope. REMAINING: a paged read of the items this agent draws on at the reader's reach, and AgentKnowledge.tsx with its empty state. M39.1.2.2 is reopened for the missing tabs.",
     updated: "2026-10-12",
   },
   "M39.9.1.2": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "P1. DEPENDS on M39.9.1.1 and on the owner's answer to needs item 176 (where an item added from an agent lives; built as recommended, company layer). REUSE: brain.knowledge.uploads.receive_upload, knowledge_intake_routes (POST /knowledge/uploads and the queued door), console/agent_tabs.plan_addition (its `reached` answer). REMAINING: an agent-scoped add route calling the door and returning plan_addition's answer, and the form. Today the card's 'Add a document or a link' only links away to /knowledge. M39.2.3.2 is reopened.",
     updated: "2026-10-12",
   },
   "M39.9.1.3": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "P1. DEPENDS on M39.9.1.1 and item 176. REUSE: brain.knowledge.uploads.receive_link, POST /knowledge/links (fetched once, the company's own copy), brain.tools.fetch (address checks on every redirect), plan_addition. REMAINING: the agent-scoped add route and form, shared with M39.9.1.2.",
     updated: "2026-10-12",
   },
   "M39.9.1.4": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "P1. DEPENDS on M39.9.1.2 and M39.9.1.3. REUSE: the 'Widen what it draws on, through a draft' action already on the Knowledge card (onWiden), agents/authoring drafts. REMAINING: name the unreached item beside it and make the one next step a press, never a silent change to every agent (ADDING_AN_ITEM_IS_NOT_THE_SAME_AS_REACHING_IT).",
     updated: "2026-10-12",
   },
   "M39.9.1.5": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "P2. DEPENDS on M39.9.1.1. REUSE: the knowledge lifecycle on the Knowledge page (review dates, replace, retire) and brain.knowledge.uploads for a refetch. REMAINING: the same affordances from the agent's section, refusing for whoever may not change the item as the Knowledge page does.",
     updated: "2026-10-12",
   },
   "M39.9.1.6": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "P1, a safety property. DEPENDS on M39.9.1.1. Items the reader may not read are absent with no count of what is hidden (DENIED and ABSENT are indistinguishable), and the agent's run reaches the intersection with the caller. REUSE: brain.knowledge.item.retrievable and the existing E_run machinery; REMAINING: the list read's tests and an install check that a colleague without the grant sees nothing.",
     updated: "2026-10-12",
   },
@@ -4055,7 +4330,7 @@ const PROGRESS = {
     updated: "2026-10-12",
   },
   "M39.9.1.8": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "P1, the proof the install must show. DEPENDS on M39.9.1.1 to M39.9.1.4 and M39.9.1.6; written as an install check (see .scratch/assign/COMMON.md): reserved people, rolled-back writes, NOT_RUN where no object store is connected.",
     updated: "2026-10-12",
   },
@@ -4065,7 +4340,7 @@ const PROGRESS = {
     updated: "2026-10-12",
   },
   "M39.9.2.1": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "P2. Today an agent's Automations section is a gallery of outcome templates with a one-step install, a list of this agent's automations and per-automation pause, resume, reschedule, remove and run history (M39.6.1.x, automation_gallery_routes, automations_routes, AgentAutomations), and an installed automation runs through the `automation_run` control; there is no way to start a new one that is not a template. REUSE: the gallery and install route (confirmation digest), the automation run store. REMAINING: the New automation entry, a description-in-words path and the create route; DEPENDS on M17.4.2 (outcome templates and stored, versioned workflow data) for anything beyond a template with changed settings.",
     updated: "2026-10-12",
   },
@@ -4080,7 +4355,7 @@ const PROGRESS = {
     updated: "2026-10-12",
   },
   "M39.9.2.4": {
-    status: "OPEN",
+    status: "READY FOR TESTING",
     why: "P2. DEPENDS on M39.9.2.1 and M39.9.2.3. REUSE: the simulate route of gate/leash.govern and the preview step of the gallery install. REMAINING: replay the last few triggers at the owner's reach with every write simulated and nothing sent, and show the result before the switch.",
     updated: "2026-10-12",
   },
@@ -4190,9 +4465,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.7.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Attach a file to the web composer is built (console/src/pages/AskAttach.tsx, thread_routes POST /threads/attachments, M12.3.6). Dictation is not: no speech tool is registered anywhere in src. NEXT: register a speech-to-text tool in the tool registry, add a record control on Ask that posts audio and fills the text; keep the transcription at the person's reach",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built (M40/ask-dictation, owner decision 220 B, browser-side only): Ask has a Dictate your question button that uses the speech recognition built into the person's browser (console/src/pages/AskDictation.tsx, askDictationCore.ts); no server route, vendor or key, and nothing is sent to our side, which a test asserts on requests. The language is the browser's own, finished phrases are appended after what was typed and stay editable, a browser with none is told so in a sentence, a blocked microphone is told how to allow it, and listening stops when the question is sent and when the page is left. PRIOR WORK (2026-10-13 triage): Attach a file to the web composer is built (AskAttach.tsx, POST /threads/attachments, M12.3.6). Dictation is not: no speech tool is registered anywhere in src. NEXT: register a speech-to-text tool; superseded by 220 B (browser-side only). Not proved in a real browser: tests drive a fake recogniser. PROVE ON THE INSTALL: (1) open Ask in Chrome or Edge on a phone and on a laptop, sign in as a member; (2) press Dictate your question, allow the microphone when asked, say a short question, press the button again; the words appear in the question box after anything already typed, and can be edited; (3) block the microphone for the site and press the button: the page says how to allow it; (4) press Ask while listening: listening stops; (5) in Firefox the page says dictation is not available and typing still works; (6) with the browser's network panel open, nothing is requested to this server while dictating. Note for the owner: Chrome and Safari do the listening through their own vendors' services, which is the browser's doing and not ours; the page says nothing is sent to this server.",
+    updated: "2026-10-14",
   },
   "M40.7.4": {
     status: "BLOCKED",
@@ -4435,12 +4710,12 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M30.6.10": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 3 (built, not wired): controls.backup_exposure (daily, WOKEN) and recovery.alerts() exist; Runner backup_exposure in schedule_runner.py has needs= and no run, so the control never runs on its cadence and alerts nobody. Includes the not-verified-last-rehearsal case via last_attempt (tested). NEXT: same wiring as M30.3.10; then the check reads the control's last run from the Jobs route and an alert addressed to the named person",
     updated: "2026-10-13",
   },
   "M34.4.1": {
-    status: "IN PROGRESS",
+    status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 2 (partly built): Runbooks per screen exist (36 files) with a gap sweep (launch.screen_runbook_gaps); alert runbooks via ops.controls.runbook_gaps. The incident playbook is a Python table (ops.reliability.MATRIX) nothing renders, and no help route serves any of it. NEXT: Build GET help pages serving runbooks, alert runbooks and a rendered playbook; extend the sweep to fail when a screen or alert has none.",
     updated: "2026-10-13",
   },
@@ -4480,9 +4755,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M35.4.5": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Only the constants exist: locale.PUSH_IS_DUE_ABOVE_HOURS and the deferral. Suspension rows carry raise and decide times but nothing computes a typical wait or reports that push is due. NEXT: Add a read over gate.suspension (raised to decided) giving the median wait, show it on Approvals or Install, and call locale.triggered; then a check.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built (owner decision 222 A): the read is migration 0227's view gate.approval_wait over gate.suspension (the two times of each decided approval, no id, person or verdict), ops/approval_wait.py gives the median over the last 90 days (never a count; nothing decided is None, shown as unknown with the reason), console/installation.approval_wait_facts words it with the push verdict from locale.triggered, install_routes serves it on GET /install, and ops/acceptance_checks_approval_wait.py is the install check. Route tests and a mutation table are in tests/unit/test_install_approval_wait_route.py. PRIOR WORK (2026-10-13 triage): Only the constants exist: locale.PUSH_IS_DUE_ABOVE_HOURS and the deferral. Suspension rows carry raise and decide times but nothing computes a typical wait or reports that push is due. NEXT: Add a read over gate.suspension (raised to decided) giving the median wait, show it on Approvals or Install, and call locale.triggered; then a check. PROVE ON THE INSTALL: as for M35.3.2.2, run the acceptance run and read the_approval_wait_is_measured_and_push_is_reported, then open Install, This install.",
+    updated: "2026-10-14",
   },
   "M35.4.6": {
     status: "IN PROGRESS",

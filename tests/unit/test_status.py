@@ -772,9 +772,14 @@ def test_the_real_document_reports_what_its_own_first_paragraph_says() -> None:
     did, for as long as the count was a running total."""
     import re
 
+    from brain.docs_derived import render_needs
     from brain.docs_routes import DOCS, NEEDS_FILE, _needs_count
 
-    text = (DOCS / NEEDS_FILE).read_text(encoding="utf-8")
+    # As served. The file carries a marker and no number since 2026-10-14, because the typed
+    # sentence was the line every pull request that opened an item edited; the sentence this
+    # test reads is the one the route generates from the headings, which is the one a person
+    # is shown.
+    text = render_needs((DOCS / NEEDS_FILE).read_text(encoding="utf-8"))
     # Singular as well as plural. The pattern was `(\d+) items are open`, which quietly
     # required the document to be ungrammatical the day exactly one item was left, and that
     # day arrived: the sentence read "1 item is open" and the test reported that the
@@ -1724,7 +1729,14 @@ def test_the_status_page_shows_each_waves_count_per_status(
     while the tracker keeps them."""
     docs = tmp_path / "docs"
     docs.mkdir()
-    wave = {"wave": 0, "name": "Foundation", "total": 10, "done": 4, "percent": 40.0}
+    wave = {
+        "wave": 0,
+        "name": "Foundation",
+        "total": 10,
+        "done": 4,
+        "percent": 40.0,
+        "built": 6,
+    }
     counts = {"in_progress": 3, "ready_for_testing": 2, "blocked": 1, "open": 0}
     body = {"commit": "abc1234", "waves": [{**wave, **counts}], "done_task_ids": []}
     (docs / "status.json").write_text(json.dumps(body), encoding="utf-8")
@@ -1736,7 +1748,7 @@ def test_the_status_page_shows_each_waves_count_per_status(
     row = re.search(r"<tr><td>Wave 0</td>.*?</tr>", page)
     assert row is not None
     cells = re.findall(r'<td class="n">([^<]*)</td>', row.group(0))
-    assert cells == ["4/10", "40.0%", "3", "2", "1", "0"]
+    assert cells == ["4/10", "40.0%", "6/10", "3", "2", "1", "0"]
     assert '<th style="text-align:right">Blocked</th>' in page
 
 

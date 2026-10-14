@@ -14,6 +14,14 @@ Prose cannot be tested and should not be. What can be tested is a number that al
 somewhere machine-readable, so the count is carried in a `data-` attribute and held against
 `docs/needs-rupash.md`, which is the file both the count and the console read from.
 
+**Since 2026-10-14 the figures are not typed in the file at all.** Each is an empty marker that
+the route fills in when the page is served (`brain.docs_derived`), because the typed figure was
+the line every pull request that opened a question edited, and two such pull requests could not
+merge. The checks below therefore read the page *as served*, which is what a person sees, and
+`tests/unit/test_docs_derived.py` holds the source to empty markers. These tests are the
+independent half: they work out each expected figure their own way and fail when the served page
+disagrees, so a route that fills a marker wrongly is caught here and not by the reader.
+
 Task ids: M0.6.4
 """
 
@@ -24,69 +32,42 @@ from pathlib import Path
 
 import pytest
 
-from brain.docs_routes import _needs_count
+from brain.docs_derived import ZERO_WORD, in_words
 
 ARCHITECTURE = Path(__file__).resolve().parents[2] / "docs" / "architecture.html"
-
-#: A count is written out in prose in the document rather than as a digit, so the test has to
-#: know both forms. It was a table, and the table ran out three times: at ten, at twenty (the
-#: twenty-first open question, 2026-10-05) and at thirty (the thirty-first, 2026-10-06), each time
-#: turning the comparison into a `KeyError` that named the table rather than the drift. A table
-#: that runs out is a check that stops working at a number nobody chose, so the words are now
-#: worked out for any count instead. Nought is written as `ZERO_WORD`, as the document says it.
-ZERO_WORD = "none"
-
-_UNITS = (
-    "",
-    "one",
-    "two",
-    "three",
-    "four",
-    "five",
-    "six",
-    "seven",
-    "eight",
-    "nine",
-    "ten",
-    "eleven",
-    "twelve",
-    "thirteen",
-    "fourteen",
-    "fifteen",
-    "sixteen",
-    "seventeen",
-    "eighteen",
-    "nineteen",
-)
-_TENS = ("", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety")
+NEEDS = ARCHITECTURE.parent / "needs-rupash.md"
 
 
-def in_words(n: int) -> str:
-    """A count from 0 to 999 as the document writes it: "none", "seven", "thirty-one"."""
-    if n == 0:
-        return ZERO_WORD
-    if not 0 < n < 1000:
-        raise ValueError(f"{n} is outside the counts this document writes in words")
-    hundreds, rest = divmod(n, 100)
-    if rest < 20:
-        tail = _UNITS[rest]
-    else:
-        tens, units = divmod(rest, 10)
-        tail = _TENS[tens] + (f"-{_UNITS[units]}" if units else "")
-    if not hundreds:
-        return tail
-    head = f"{_UNITS[hundreds]} hundred"
-    return f"{head} and {tail}" if tail else head
+def _served() -> str:
+    """The architecture page as the route serves it, which is what a reader is shown."""
+    from fastapi.testclient import TestClient
+
+    from brain.app import create_app
+
+    response = TestClient(create_app()).get("/build/architecture")
+    assert response.status_code == 200
+    return response.text
+
+
+def _open_headings() -> int:
+    """How many items the needs document holds under Open, counted here and not by the
+    function the route uses, so the two cannot be wrong in the same way."""
+    count = 0
+    for line in NEEDS.read_text(encoding="utf-8").splitlines():
+        if line.startswith("# Answered"):
+            break
+        if re.match(r"^## \d+\.", line):
+            count += 1
+    return count
 
 
 def _stated_open_questions() -> str:
-    """The word inside the marked span, or a failure naming what is missing."""
-    html = ARCHITECTURE.read_text(encoding="utf-8")
-    found = re.search(r'<span data-open-questions="[^"]*">([^<]+)</span>', html)
+    """The word inside the marked span of the served page, or a failure naming what is missing."""
+    found = re.search(r'<span data-open-questions="[^"]*">([^<]+)</span>', _served())
     if found is None:
         pytest.fail(
-            "the architecture no longer marks its open-question count, so nothing can "
-            "check it against the tracker"
+            "the architecture no longer marks its open-question count, or the route no longer "
+            "fills it, so nothing can check it against the tracker"
         )
     return found.group(1).strip().lower()
 
@@ -95,10 +76,12 @@ def test_the_architecture_agrees_with_the_tracker_about_how_many_questions_are_o
     """The sentence said six while three were open, and it named two decided ones as though
     they were live.
 
-    Compared against `docs/needs-rupash.md` through the same function the console uses, so
-    there is one source and not two opinions about it. Delete this and the number drifts
-    again, silently, and the person who reads it is the client."""
-    actual = _needs_count()
+    Compared against the headings of `docs/needs-rupash.md` counted in this file, and read from
+    the page as it is served, so a route that fills the marker from the wrong number fails here.
+    Delete this and the number can drift again, silently, and the person who reads it is the
+    client."""
+    actual = _open_headings()
+    assert actual > 0, "no open items were counted, so this compared nothing"
 
     assert _stated_open_questions() == in_words(actual), (
         f"the architecture says {_stated_open_questions()!r} open questions and there are {actual}"
@@ -198,9 +181,8 @@ def test_the_page_renders_bold_and_bullets_rather_than_showing_their_marks() -> 
 
 
 def _stated_screen_count() -> str:
-    """The word inside the marked span, or a failure naming what is missing."""
-    html = ARCHITECTURE.read_text(encoding="utf-8")
-    found = re.search(r'<span data-screen-count="[^"]*">([^<]+)</span>', html)
+    """The word inside the marked span of the served page, or a failure naming what is missing."""
+    found = re.search(r'<span data-screen-count="[^"]*">([^<]+)</span>', _served())
     if found is None:
         pytest.fail(
             "the architecture no longer marks its console screen count, so nothing can "
@@ -237,9 +219,8 @@ def test_the_screen_count_is_carried_somewhere_a_test_can_read() -> None:
 
 
 def _stated_part_count() -> str:
-    """The word inside the marked span, or a failure naming what is missing."""
-    html = ARCHITECTURE.read_text(encoding="utf-8")
-    found = re.search(r'<span data-part-count="[^"]*">([^<]+)</span>', html)
+    """The word inside the marked span of the served page, or a failure naming what is missing."""
+    found = re.search(r'<span data-part-count="[^"]*">([^<]+)</span>', _served())
     if found is None:
         pytest.fail(
             "the architecture no longer marks how many things an agent composes, so nothing "
@@ -304,9 +285,8 @@ def test_the_composition_table_names_availability_and_not_the_ceiling() -> None:
 
 
 def _stated(attribute: str, what: str) -> str:
-    """The word inside a marked span, or a failure naming what is missing."""
-    html = ARCHITECTURE.read_text(encoding="utf-8")
-    found = re.search(rf'<span {attribute}="[^"]*">([^<]+)</span>', html)
+    """The word inside a marked span of the served page, or a failure naming what is missing."""
+    found = re.search(rf'<span {attribute}="[^"]*">([^<]+)</span>', _served())
     if found is None:
         pytest.fail(f"the architecture no longer marks {what}, so nothing can check it")
     return found.group(1).strip().lower()

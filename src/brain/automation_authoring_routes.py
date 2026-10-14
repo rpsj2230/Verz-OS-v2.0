@@ -33,7 +33,7 @@ Task ids: M39.9.2.1, M39.9.2.2, M39.9.2.3, M39.9.2.4, M17.4.1, M17.4.2
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from datetime import datetime
 from typing import Annotated, Final, Protocol, runtime_checkable
 
@@ -53,6 +53,7 @@ from brain.console.automation_authoring import (
     A_REHEARSAL_WRITES_AND_SENDS_NOTHING,
     AUTHORED_TASK,
     DAY_OPS,
+    EVENTS_ARE_OFF,
     FIELD_KEY,
     IT_STARTS_PAUSED,
     MAXIMUM_INSTRUCTION,
@@ -86,7 +87,9 @@ from brain.console.automation_gallery import (
 )
 from brain.core.errors import Absent, Failed
 from brain.ops.agent_automation_store import StoredAgentAutomations
+from brain.ops.automation_event import WEBHOOK_NOT_OFFERED_ON_THE_FORM
 from brain.ops.features import AUTOMATION_AUTHORING, is_on
+from brain.ops.features_declared.automation_events import AUTOMATION_EVENTS
 from brain.orchestration.unattended import TriggerKind
 from brain.routing_routes import sessions_of
 
@@ -189,8 +192,10 @@ class TriggerOption(BaseModel):
 
     kind: TriggerKind
     label: str
-    #: Whether anything on this install fires this kind. Presentation only: the write decides.
+    #: Whether anything on this install fires this kind now. Presentation only: the write decides.
     fires: bool
+    #: Set when this kind is never offered, in words. The form lists it and cannot choose it.
+    not_offered: str | None = None
 
 
 class OpOption(BaseModel):
@@ -337,6 +342,20 @@ def authors_of(request: Request) -> AutomationAuthors:
     return StoredAgentAutomations(_sessions(request))
 
 
+async def events_are_on(request: Request) -> bool:
+    """Whether a change may start an automation on this install. Off until somebody turns it on.
+
+    `app.state.automation_events_on` wins when something put a boolean there, as for the switch
+    above. Asked by the options and the preview, which say whether a change-started automation can
+    be started, and never by the write: saving is allowed either way.
+    """
+    found = getattr(request.app.state, "automation_events_on", None)
+    if isinstance(found, bool):
+        return found
+    async with _sessions(request)() as session:
+        return await is_on(session, AUTOMATION_EVENTS)
+
+
 async def authoring_is_on(request: Request) -> bool:
     """Whether New automation is switched on. Off on every install until somebody turns it on.
 
@@ -407,7 +426,10 @@ def _cadence_of(asked: CadenceAsked | None) -> Cadence | None:
 
 
 def _authored_from(
-    body: AuthoringAsked, agent: AgentRecord, fields: Mapping[str, ConditionField]
+    body: AuthoringAsked,
+    agent: AgentRecord,
+    fields: Mapping[str, ConditionField],
+    listenable: Collection[str],
 ) -> Authored:
     """What was written, or `AuthoringRefusedError` carrying every reason."""
     template = template_for(body.template_id)
@@ -439,6 +461,7 @@ def _authored_from(
         condition=condition,
         fields=fields,
         template=template,
+        listenable=listenable,
     )
 
 
@@ -471,8 +494,23 @@ def _authoring_door(agent_id: str, body: AuthoringAsked, asked: Asking) -> None:
         raise _not_here("scope", asked)
 
 
+def _fires_now(trigger: TriggerChoice, *, events_on: bool) -> bool:
+    """Whether this trigger starts anything on this install now: a schedule, or a change when on."""
+    if trigger.kind is TriggerKind.SCHEDULE:
+        return True
+    return trigger.kind is TriggerKind.CONNECTOR_EVENT and events_on
+
+
+def _why_it_does_not_fire(trigger: TriggerChoice) -> str:
+    return EVENTS_ARE_OFF if trigger.kind is TriggerKind.CONNECTOR_EVENT else NOTHING_FIRES_THIS_YET
+
+
 def preview_view(
-    shown: AuthoringPreview, asked: Asking, fields: Mapping[str, ConditionField]
+    shown: AuthoringPreview,
+    asked: Asking,
+    fields: Mapping[str, ConditionField],
+    *,
+    events_on: bool = False,
 ) -> AuthoringPreviewView:
     one = shown.authored
     lines = rehearse(
@@ -489,8 +527,12 @@ def preview_view(
         guards=one.guards.strip(),
         task=one.task,
         trigger=one.trigger.words(),
-        fires=one.trigger.fires,
-        nothing_fires=None if one.trigger.fires else NOTHING_FIRES_THIS_YET,
+        fires=_fires_now(one.trigger, events_on=events_on),
+        nothing_fires=(
+            None
+            if _fires_now(one.trigger, events_on=events_on)
+            else _why_it_does_not_fire(one.trigger)
+        ),
         condition=None if one.condition is None else one.condition.words(),
         tools=list(one.tools),
         runs_as=shown.runs_as.id,
@@ -524,6 +566,7 @@ async def authoring_options(request: Request, agent_id: str, asked: Asked) -> Au
     agent = await _visible_agent(request, agent_id, asked)
     fields = await _fields_of(request, agent)
     serving = set((await connectors_of(request)).serving())
+    events_on = await events_are_on(request)
     return AuthoringOptions(
         enabled=True,
         templates=[
@@ -539,7 +582,15 @@ async def authoring_options(request: Request, agent_id: str, asked: Asked) -> Au
             for one in sorted(BUILT_IN, key=lambda t: (t.name, t.template_id))
         ],
         triggers=[
-            TriggerOption(kind=kind, label=TRIGGER_LABELS[kind], fires=kind is TriggerKind.SCHEDULE)
+            TriggerOption(
+                kind=kind,
+                label=TRIGGER_LABELS[kind],
+                fires=kind is TriggerKind.SCHEDULE
+                or (kind is TriggerKind.CONNECTOR_EVENT and events_on),
+                not_offered=WEBHOOK_NOT_OFFERED_ON_THE_FORM
+                if kind is TriggerKind.WEBHOOK
+                else None,
+            )
             for kind in TriggerKind
         ],
         fields=[
@@ -567,13 +618,17 @@ async def authoring_preview(
     _authoring_door(agent_id, body, asked)
     agent = await _visible_agent(request, agent_id, asked)
     fields = await _fields_of(request, agent)
+    listenable = _serving_connectors(agent, set((await connectors_of(request)).serving()))
     try:
-        authored = _authored_from(body, agent, fields)
+        authored = _authored_from(body, agent, fields, listenable)
     except AuthoringRefusedError as exc:
         return _refused(exc.findings)
     shown = preview(authored, agent, author=asked.caller.principal, author_reach=asked.reach)
     return JSONResponse(
-        status_code=200, content=preview_view(shown, asked, fields).model_dump(mode="json")
+        status_code=200,
+        content=preview_view(
+            shown, asked, fields, events_on=await events_are_on(request)
+        ).model_dump(mode="json"),
     )
 
 
@@ -593,8 +648,9 @@ async def author_automation(
     _authoring_door(agent_id, body, asked)
     agent = await _visible_agent(request, agent_id, asked)
     fields = await _fields_of(request, agent)
+    listenable = _serving_connectors(agent, set((await connectors_of(request)).serving()))
     try:
-        authored = _authored_from(body, agent, fields)
+        authored = _authored_from(body, agent, fields, listenable)
     except AuthoringRefusedError as exc:
         return _refused(exc.findings)
     shown = preview(authored, agent, author=asked.caller.principal, author_reach=asked.reach)

@@ -27,6 +27,7 @@ import json
 import os
 import shutil
 import subprocess
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -37,6 +38,14 @@ SCRIPT = REPO / "ops" / "deploy" / "brain-deploy"
 BASH = shutil.which("bash")
 
 pytestmark = pytest.mark.skipif(BASH is None, reason="the deploy script is bash")
+
+
+def _gnu_date() -> bool:
+    """Whether `date -Is` answers, as it does on the Linux servers the script runs on and does not
+    on the BSD `date` a Mac ships, where it prints nothing and the record has no timestamp."""
+    done = subprocess.run(["date", "-Is"], capture_output=True, text=True, check=False)
+    return done.returncode == 0 and bool(done.stdout.strip())
+
 
 OLD = "sha256:old"
 NEW = "sha256:new"
@@ -80,6 +89,7 @@ if [ "$1" = inspect ]; then
       *RestartPolicy*) echo "$2|$3|$4|$6" ;;
       *State.Status*) h="$7"; [ "$h" = - ] && h=""; echo "$5|$8|$h" ;;
       *compose.project*) echo "$2" ;;
+      *'{{.Image}}'*) echo "$5" ;;
     esac
     exit 0
   fi
@@ -136,9 +146,17 @@ case "$1" in
     exit $? ;;
   tag) echo "$2" > "$S/tag"; exit 0 ;;
   compose) cp "$S/tag" "$S/running"; exit 0 ;;
-  create) echo cid ;;
+  create)
+    # An image the scenario calls unopenable cannot be created from, as one that is gone cannot.
+    grep -qxF "$2" "$S/unopenable" 2>/dev/null && exit 1
+    echo "cid-$2" ;;
   cp)
     case "$2" in
+      *:/app/RELEASE.json)
+        # `cid-<image>:/app/RELEASE.json`: the manifest the scenario gave that image, if any.
+        img="${2#cid-}"; img="${img%:/app/RELEASE.json}"
+        key="$(printf '%s' "$img" | tr -c 'A-Za-z0-9' '_')"
+        if [ -f "$S/manifests/$key" ]; then cat "$S/manifests/$key"; exit 0; fi ;;
       *:/app/ops/openbao/.) [ -d "$S/openbao" ] || exit 1; cp -R "$S/openbao/." "$3"; exit 0 ;;
       *:/app/ops/keycloak/accounts-client.sh)
         [ -f "$S/accounts" ] || exit 1; cp "$S/accounts" "$3"; exit 0 ;;
@@ -184,6 +202,9 @@ def deploy(
     apply_exit: int | None = None,
     accounts_exit: int | None = None,
     overlays_exit: int | None = None,
+    manifests: Mapping[str, str] | None = None,
+    unopenable: tuple[str, ...] = (),
+    recreate_all: bool = False,
 ) -> Ran:
     """Run the real script once: the app runs `running`, the registry's tag is `NEW`.
 
@@ -193,6 +214,9 @@ def deploy(
     `ops/keycloak/accounts-client.sh` that records whom it was pointed at and exits with it.
     `overlays_exit` gives the new image an `ops/deploy/overlays/apply.sh` that does the same, and
     None gives it none, as an image from before the optional services step shipped in it.
+    `manifests` gives an image, by its id, the `RELEASE.json` text `docker cp` reads out of it, and
+    an image with none has the one the stub always had, which names no fingerprint; `unopenable`
+    names images `docker create` refuses; `recreate_all` sets the operator's override.
     """
     state = tmp_path / "state"
     bin_dir = tmp_path / "bin"
@@ -217,6 +241,13 @@ def deploy(
         (state / name).write_text(
             "".join(f"{one}\n" for one in rows), encoding="utf-8", newline="\n"
         )
+    (state / "manifests").mkdir()
+    for image, text in (manifests or {}).items():
+        key = "".join(c if c.isalnum() else "_" for c in image)
+        (state / "manifests" / key).write_text(text, encoding="utf-8", newline="\n")
+    (state / "unopenable").write_text(
+        "".join(f"{one}\n" for one in unopenable), encoding="utf-8", newline="\n"
+    )
     uuid_file = tmp_path / "uuid"
     uuid_file.write_text(UUID, encoding="utf-8", newline="\n")
     faildir = tmp_path / "failed"
@@ -265,6 +296,7 @@ def deploy(
         "BRAIN_DEPLOY_READY_TRIES": "2",
         "BRAIN_DEPLOY_READY_GAP": "0",
         "BRAIN_DEPLOY_VAULT_TOKEN_FILE": token.as_posix(),
+        **({"BRAIN_DEPLOY_RECREATE_ALL": "1"} if recreate_all else {}),
     }
     assert BASH is not None
     done = subprocess.run(
@@ -294,6 +326,14 @@ def deploy(
 
 def first(calls: list[str], prefix: str) -> int:
     return next(i for i, call in enumerate(calls) if call.startswith(prefix))
+
+
+def first_copy_of(calls: list[str], path: str) -> int:
+    """The first `docker cp` out of a created container of `path`. The stub names a container
+    after the image it was made from (`cid-<image>`), so the call is not one fixed string."""
+    return next(
+        i for i, call in enumerate(calls) if call.startswith("cp cid-") and f":{path} " in call
+    )
 
 
 def test_a_healthy_image_answers_ready_beside_the_old_one_before_the_old_one_is_replaced(
@@ -478,6 +518,7 @@ def test_a_first_deploy_has_nothing_to_gate_against_and_records_that_it_deployed
     assert [(one["outcome"], one["previous"]) for one in ran.records] == [("deployed", "")]
 
 
+@pytest.mark.skipif(not _gnu_date(), reason="the record is stamped with GNU `date -Is`")
 def test_every_record_carries_the_task_ids_baked_into_the_image_and_reads_as_a_deployment(
     tmp_path: Path,
 ) -> None:
@@ -609,9 +650,7 @@ def test_a_release_applies_its_own_vault_changes_before_anything_runs_its_image(
 
     assert ran.code == 0, ran.output
     assert ran.applied == f"applied with {(tmp_path / 'deploy.token').as_posix()}"
-    copied = next(
-        i for i, call in enumerate(ran.calls) if call.startswith("cp cid:/app/ops/openbao/.")
-    )
+    copied = first_copy_of(ran.calls, "/app/ops/openbao/.")
     started = first(ran.calls, "run -d --name brain-candidate-")
     assert copied < started
     assert ran.running == NEW
@@ -715,7 +754,7 @@ def test_once_the_app_and_its_workers_are_ready_the_release_s_optional_services_
 
     assert ran.code == 0, ran.output
     assert ran.overlays == f"ran with app-{UUID}"
-    copied = first(ran.calls, "cp cid:/app/ops/deploy/overlays/.")
+    copied = first_copy_of(ran.calls, "/app/ops/deploy/overlays/.")
     recreated = max(i for i, call in enumerate(ran.calls) if call.startswith("compose up"))
     assert recreated < copied
     assert [one["outcome"] for one in ran.records] == ["deployed"]
@@ -750,3 +789,274 @@ def test_an_image_held_back_or_older_than_the_optional_services_step_never_runs_
     assert held.overlays == ""
     assert older.code == 0, older.output
     assert "carries no optional services step" in older.output
+
+
+# ------------------------------------------------ a service is left running when nothing changed
+#: Two fingerprints of what a worker runs, as `brain.ops.restart_scope` writes them: sixty-four
+#: lower-case hexadecimal characters. Not made by the module under test, because a fixture the
+#: producer made would be the producer agreeing with itself; the end-to-end test below makes real
+#: ones.
+FP_A = "a" * 64
+FP_B = "b" * 64
+
+
+def manifest_text(fingerprint: str | None) -> str:
+    """The `RELEASE.json` text CI writes into an image, made by the manifest's own writer, so the
+    script reads the indented form the producer produces and not one this file imagined."""
+    from datetime import UTC, datetime
+
+    from brain.ops.release_manifest import ReleaseManifest
+    from brain.ops.restart_scope import WORKER_FINGERPRINT_KEY
+
+    return ReleaseManifest(
+        commit="0" * 40,
+        built_at=datetime(2019, 1, 1, tzinfo=UTC),
+        extra={} if fingerprint is None else {WORKER_FINGERPRINT_KEY: fingerprint},
+    ).to_json()
+
+
+def recreated(ran: Ran) -> list[str]:
+    """The services `docker compose up` was run for, in order, by name."""
+    return [call.rsplit(" ", 1)[1] for call in ran.calls if call.startswith("compose up")]
+
+
+def test_a_service_whose_image_runs_the_same_files_as_the_new_one_is_left_running(
+    tmp_path: Path,
+) -> None:
+    """The merge changed nothing a worker runs (documents, a test, the console's source), so the
+    two images carry one fingerprint: the app is recreated, because it serves what changed, and
+    each worker keeps its container, its process and the acceptance run in it. The deployment
+    record says which were kept, and the line is one `brain.ops.deployments` still parses.
+
+    Delete this and every merge kills the worker again, which is what ended an acceptance run
+    thirty-five minutes long on the owner's install every few minutes through a night."""
+    from datetime import datetime
+
+    from brain.ops.deployments import Deployment
+
+    ran = deploy(
+        tmp_path,
+        running=OLD,
+        good={OLD, NEW},
+        containers=INSTALL,
+        manifests={OLD: manifest_text(FP_A), NEW: manifest_text(FP_A)},
+    )
+
+    assert ran.code == 0, ran.output
+    assert recreated(ran) == ["app"]
+    assert ran.running == NEW
+    assert ran.containers[f"brain-worker-{UUID}"][4] == OLD
+    assert ran.containers[f"brain-parse-worker-{UUID}"][4] == OLD
+    assert "brain-worker is left running" in ran.output
+    assert ran.records[0]["outcome"] == "deployed"
+    assert ran.records[0]["services_updated"] == ""
+    assert ran.records[0]["services_kept"] == "brain-worker,brain-parse-worker"
+    assert ran.records[0]["services_failed"] == ""
+    line = {**ran.records[0], "at": datetime(2019, 1, 1).astimezone().isoformat()}
+    assert Deployment.from_line(json.dumps(line)).outcome == "deployed"
+
+
+def test_a_service_whose_image_differs_in_what_a_worker_runs_is_recreated(tmp_path: Path) -> None:
+    """The sibling of the test above: with different fingerprints every service follows the app as
+    it always did. A rule tested only by the case where it leaves things alone is satisfied by a
+    script that never recreates a worker.
+
+    Delete this and the worker can stay on old code for ever, with everything else green."""
+    ran = deploy(
+        tmp_path,
+        running=OLD,
+        good={OLD, NEW},
+        containers=INSTALL,
+        manifests={OLD: manifest_text(FP_A), NEW: manifest_text(FP_B)},
+    )
+
+    assert ran.code == 0, ran.output
+    assert recreated(ran) == ["app", "brain-worker", "brain-parse-worker"]
+    assert ran.containers[f"brain-worker-{UUID}"][4] == NEW
+    assert ran.records[0]["services_updated"] == "brain-worker,brain-parse-worker"
+    assert ran.records[0]["services_kept"] == ""
+
+
+def test_each_service_is_judged_by_the_image_it_is_running_and_not_by_the_apps(
+    tmp_path: Path,
+) -> None:
+    """A worker an earlier deploy failed to move can be two images behind while its neighbour is one
+    behind, and the app's own previous image says nothing about either. The one whose image has
+    the new fingerprint is kept and the one that has not is recreated.
+
+    Delete this and the comparison can be made against the app's image, which leaves a stale worker
+    running whenever the app was current and the worker was not."""
+    older = "sha256:older"
+    stale = (INSTALL[0], INSTALL[1].replace(OLD, older), *INSTALL[2:])
+    ran = deploy(
+        tmp_path,
+        running=OLD,
+        good={OLD, NEW},
+        containers=stale,
+        manifests={
+            OLD: manifest_text(FP_A),
+            older: manifest_text(FP_B),
+            NEW: manifest_text(FP_A),
+        },
+    )
+
+    assert ran.code == 0, ran.output
+    assert recreated(ran) == ["app", "brain-parse-worker"]
+    assert ran.records[0]["services_kept"] == "brain-worker"
+    assert ran.records[0]["services_updated"] == "brain-parse-worker"
+
+
+@pytest.mark.parametrize(
+    ("label", "manifests", "unopenable", "recreate_all"),
+    [
+        ("the running image carries no fingerprint", {NEW: FP_A}, (), False),
+        ("the new image carries no fingerprint", {OLD: FP_A}, (), False),
+        ("neither image carries one", {}, (), False),
+        (
+            "both carry a value that is not sixty-four hexadecimal",
+            {OLD: "a" * 63, NEW: "a" * 63},
+            (),
+            False,
+        ),
+        ("both carry an upper-case value", {OLD: "A" * 64, NEW: "A" * 64}, (), False),
+        ("the running image cannot be opened", {OLD: FP_A, NEW: FP_A}, (OLD,), False),
+        ("the new image cannot be opened", {OLD: FP_A, NEW: FP_A}, (NEW,), False),
+        ("the operator asks for everything to be recreated", {OLD: FP_A, NEW: FP_A}, (), True),
+    ],
+)
+def test_every_doubt_about_whether_a_worker_changed_recreates_it(
+    tmp_path: Path,
+    label: str,
+    manifests: dict[str, str | None],
+    unopenable: tuple[str, ...],
+    recreate_all: bool,
+) -> None:
+    """A worker is left alone only on proof, and each of these is a way of not having it: an image
+    built before the fingerprint existed (which every install meets once), one that cannot be read,
+    a value that is not a fingerprint, and the operator's own override. In each the worker is
+    recreated as every deploy did before.
+
+    Delete this and a missing or malformed fingerprint can read as 'nothing changed', which leaves a
+    worker on old code with every check green: the quiet direction to be wrong in. (case: {label})
+    """
+    ran = deploy(
+        tmp_path,
+        running=OLD,
+        good={OLD, NEW},
+        containers=INSTALL,
+        manifests={image: manifest_text(fp) for image, fp in manifests.items()},
+        unopenable=unopenable,
+        recreate_all=recreate_all,
+    )
+
+    assert ran.code == 0, f"{label}: {ran.output}"
+    assert recreated(ran) == ["app", "brain-worker", "brain-parse-worker"], label
+    assert ran.records[0]["services_kept"] == "", label
+
+
+def test_when_the_new_image_has_no_fingerprint_no_running_image_is_opened_to_compare(
+    tmp_path: Path,
+) -> None:
+    """With nothing to compare against there is nothing to learn from the running images, so none
+    is opened, and each worker is recreated.
+
+    Delete this and every deploy of an image without a fingerprint creates a container from each
+    worker's image for an answer that cannot matter."""
+    ran = deploy(
+        tmp_path,
+        running=OLD,
+        good={OLD, NEW},
+        containers=INSTALL,
+        manifests={OLD: manifest_text(FP_A)},
+    )
+
+    assert recreated(ran) == ["app", "brain-worker", "brain-parse-worker"]
+    assert not any(call.startswith(f"create {OLD}") for call in ran.calls)
+
+
+def test_an_image_the_gate_held_back_leaves_every_worker_alone_whatever_its_fingerprint(
+    tmp_path: Path,
+) -> None:
+    """The comparison is made after the app is ready on the new image and never before, so a held
+    back image reads no fingerprint and recreates nothing.
+
+    Delete this and a fingerprint read can move in front of the gate, which is where a decision
+    about a worker would be made on an image that never answered ready."""
+    ran = deploy(
+        tmp_path,
+        running=OLD,
+        good={OLD},
+        containers=INSTALL,
+        manifests={OLD: manifest_text(FP_A), NEW: manifest_text(FP_B)},
+    )
+
+    assert ran.code == 1
+    assert recreated(ran) == []
+    # The task ids are read from the tag; a fingerprint is read from an image id, and none was.
+    assert not any(call.startswith("cp cid-sha256:") for call in ran.calls)
+
+
+def test_what_ci_writes_for_a_documents_only_merge_is_what_the_script_leaves_a_worker_for(
+    tmp_path: Path,
+) -> None:
+    """The producer and the consumer together, from a real repository and not a fixture of either:
+    three commits (the start, a change to a build document and a test, then a change to the
+    application's source), each turned into a `RELEASE.json` by `build_manifest` as CI does. The
+    script run between the first two leaves the worker running, and between the last two recreates
+    it.
+
+    Delete this and the fingerprint's format and the script's reading of it can drift apart, each
+    right by its own test, and a worker is then restarted by every merge again or never at all."""
+    import subprocess
+
+    from brain.ops.release_manifest import build_manifest
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+
+    def write(name: str, text: str) -> None:
+        target = repo / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding="utf-8", newline="\n")
+        git("add", "-A")
+
+    git("init", "-q", "-b", "main")
+    git("config", "user.email", "t@example.com")
+    git("config", "user.name", "Test")
+    write("src/brain/thing.py", "VALUE = 1\n")
+    write("docs/page.md", "one\n")
+    write("tests/test_thing.py", "def test_x() -> None: ...\n")
+    git("commit", "-q", "-m", "start")
+    start = build_manifest(repo).to_json()
+    write("docs/page.md", "two\n")
+    write("tests/test_thing.py", "def test_y() -> None: ...\n")
+    git("commit", "-q", "-m", "documents and a test")
+    documents = build_manifest(repo).to_json()
+    write("src/brain/thing.py", "VALUE = 2\n")
+    git("commit", "-q", "-m", "the application")
+    application = build_manifest(repo).to_json()
+
+    (tmp_path / "quiet").mkdir()
+    (tmp_path / "loud").mkdir()
+    quiet = deploy(
+        tmp_path / "quiet",
+        running=OLD,
+        good={OLD, NEW},
+        containers=INSTALL,
+        manifests={OLD: start, NEW: documents},
+    )
+    loud = deploy(
+        tmp_path / "loud",
+        running=OLD,
+        good={OLD, NEW},
+        containers=INSTALL,
+        manifests={OLD: documents, NEW: application},
+    )
+
+    assert quiet.code == 0, quiet.output
+    assert recreated(quiet) == ["app"]
+    assert loud.code == 0, loud.output
+    assert recreated(loud) == ["app", "brain-worker", "brain-parse-worker"]

@@ -44,6 +44,8 @@ export interface TriggerOption {
   readonly kind: TriggerKind;
   readonly label: string;
   readonly fires: boolean;
+  /** Set when this kind is never offered, in the API's words. The form lists it and cannot choose it. */
+  readonly notOffered: string | null;
 }
 
 export interface OpOption {
@@ -192,7 +194,7 @@ export function readAuthoringOptions(payload: unknown): AuthoringOptions | null 
     if (kind === undefined || label === undefined || typeof entry?.["fires"] !== "boolean") {
       continue;
     }
-    triggers.push({ kind, label, fires: entry["fires"] });
+    triggers.push({ kind, label, fires: entry["fires"], notOffered: said(entry["not_offered"]) ?? null });
   }
   const options: FieldOption[] = [];
   for (const item of Array.isArray(fields["fields"]) ? (fields["fields"] as readonly unknown[]) : []) {
