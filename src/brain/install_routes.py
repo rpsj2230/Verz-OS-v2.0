@@ -188,6 +188,7 @@ from brain.console.version_view import panel as updates_panel
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.deployment.release_feed import ReleaseWatch, feed_address
+from brain.deployment.update_mode import follows_every_release
 from brain.ops.admission import (
     FIRST_BOTTLENECK_AT_SCALE,
     Budget,
@@ -1520,6 +1521,7 @@ async def updates(request: Request, asked: Asked) -> UpdatesView:
             running_release(
                 pinned_image=settings.app_image,
                 built_commit="" if manifest is None else manifest.commit,
+                follows_every_release=follows_every_release(),
             ),
             told,
             now=asked.now,

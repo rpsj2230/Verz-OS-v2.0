@@ -719,8 +719,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "Feature and module enablement": {
     screens: ["/features"],
-    routes: ["/api/v1/install/features*", "/api/v1/install/plugins*", "/api/v1/orchestration/weighed-plans"],
-    tables: ["ops.fanout_gate", "ops.plugin_install", "ops.plugin_version"],
+    routes: ["/api/v1/install/features*", "/api/v1/install/plugins*", "/api/v1/orchestration/weighed-plans", "/api/v1/migration*"],
+    tables: ["ops.fanout_gate", "ops.migration_record", "ops.plugin_install", "ops.plugin_version"],
     installation: [],
     gaps: [
       {
@@ -732,6 +732,16 @@ export const AREAS: Readonly<Record<string, Area>> = {
         what: "A weighed plan starts nothing: no coordinating agent exists to dispatch the agents it would split across.",
         because:
           "The panel says nothing_is_started; the planner that asks a model for subtasks, the callee allow-list and the specialist run are M18.5.x, and the global parallelism budget at dispatch is M18.3.5.",
+      },
+      {
+        what: "Nothing in a migration reaches the old system: a revocation, a job stopped and an act done are recorded as a person says they are.",
+        because:
+          "brain.migration.decommission says nothing here can check any of them, so a cutover is refused only while an act with a security consequence is unrecorded; the exporter and the old system's side of the comparison are a plugin that does not exist (M37.1.2, M37.1.3.1).",
+      },
+      {
+        what: "A saved migration document is not an entry in the audit ledger.",
+        because:
+          "ops.migration_record keeps a version per save with who saved it, appended and never edited, and a save changes nobody's access and no configuration.",
       },
       {
         what: "A weighed plan is not an entry in the audit ledger.",
@@ -749,7 +759,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     screens: ["/subscribers", "/notifications"],
     routes: ["/api/v1/govern/subscribers", "/api/v1/notifications*"],
     tables: ["ops.outbox_event", "ops.outbox_delivery"],
-    installation: ["INSTALL_SENDER_ADDRESS"],
+    installation: ["INSTALL_SENDER_ADDRESS", "INSTALL_ALERT_EMAIL"],
     gaps: [
       {
         what: "No notice is sent to a person yet.",
@@ -940,7 +950,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     screens: ["/updates", "/install"],
     routes: ["/api/v1/install/updates"],
     tables: ["ops.deployment_record"],
-    installation: [],
+    installation: ["INSTALL_UPDATE_MODE"],
     gaps: [],
   },
 };

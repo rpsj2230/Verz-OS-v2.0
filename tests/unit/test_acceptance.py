@@ -794,6 +794,14 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         NOT_RUN,
         "this install names no public skill to import, so no import from GitHub was asked",
     )
+    # The alert that a mechanism has not run ships switched off, so the check says in words that it
+    # asked nothing; `tests/unit/test_acceptance_control_alerts.py` switches it on and runs it.
+    alert_outcome, alert_reason = outcomes.pop(
+        "a_mechanism_that_has_not_run_is_told_to_whoever_holds_the_alert"
+    )
+    assert alert_outcome == NOT_RUN
+    assert alert_reason.startswith("the control_not_run_alerts feature")
+    assert "is switched off on this install" in alert_reason
     # No key and no hosted profile here, so every check that reaches a model says it was not run;
     # `tests/unit/test_acceptance_models.py` runs them against providers that answer, and
     # `tests/unit/test_acceptance_answers.py` the answer checks against the stand-in.

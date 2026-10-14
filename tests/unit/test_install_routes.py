@@ -66,6 +66,10 @@ from brain.console.version_view import panel as updates_panel
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.scope import Clause, Op, Scope
 from brain.deployment.release_feed import CHECK_VARIABLE, FEED_VARIABLE, ReleaseWatch
+from brain.deployment.update_mode import (
+    AN_INSTALL_THAT_FOLLOWS_EVERY_RELEASE_IS_NEVER_BEHIND_BY_CHOICE,
+    THIS_INSTALL_FOLLOWS_EVERY_RELEASE_BY_CHOICE,
+)
 from brain.install_routes import (
     CAPACITY_READ,
     INSTALL_READ,
@@ -1204,6 +1208,33 @@ def test_an_image_reference_that_is_not_a_release_names_none_and_says_why() -> N
     assert body["running"]["tag"] == ""
     assert "pins no release" in body["running"]["cannot_say"]
     assert body["standing"] == Standing.UNKNOWN_RUNNING.value
+
+
+def test_an_install_set_to_follow_every_release_is_not_told_to_pin_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Through the real route: the same `latest` image on an install whose how-it-updates setting
+    is `continuous` names no release and says that is the choice, and the answer does not tell it
+    to run the update script with a tag first. The standing is unchanged, so the nine ways the
+    screen can be drawn are still nine. The default install's sentence is asserted beside it.
+
+    Delete this and the route can stop handing the setting to `running_release`, so a staging
+    server's Updates screen tells it to undo what it was set up to do, with every unit test
+    around it green."""
+    app = _app_with({"APP_IMAGE": "ghcr.io/example/brain:latest"})
+    with TestClient(app, raise_server_exceptions=False) as c:
+        app.state.gate = _wiring()
+        ordinary = get(c, "u_admin", UPDATES_PATH).json()
+        monkeypatch.setenv("INSTALL_UPDATE_MODE", "continuous")
+        chosen = get(c, "u_admin", UPDATES_PATH).json()
+
+    assert "pins no release" in ordinary["running"]["cannot_say"]
+    assert chosen["running"]["tag"] == ""
+    assert chosen["running"]["cannot_say"] == THIS_INSTALL_FOLLOWS_EVERY_RELEASE_BY_CHOICE
+    assert chosen["standing"] == Standing.UNKNOWN_RUNNING.value
+    assert chosen["says"] == AN_INSTALL_THAT_FOLLOWS_EVERY_RELEASE_IS_NEVER_BEHIND_BY_CHOICE
+    assert chosen["what_to_do"].startswith("Nothing to pin")
+    assert chosen["what_to_do"] != ordinary["what_to_do"]
 
 
 def test_the_updates_screen_answers_before_the_release_list_does() -> None:

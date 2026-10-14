@@ -128,6 +128,7 @@ from brain.tables.manifest_draft import (
 from brain.tables.member_preference import MemberPreferenceRow
 from brain.tables.member_share import AgentRequestRow, ArtifactShareRow
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
+from brain.tables.migration_record import MigrationRecordRow
 from brain.tables.model_health import (
     ChainDepthAlertRow,
     ProviderHealthRow,
@@ -566,6 +567,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0240_fanout_gate. Points at nothing: a run and an administrator are values, so a decision of
     # the gate outlives both.
     "ops.fanout_gate",
+    # 0241_migration_record. Points at nothing: a person is a value, so a saved version outlives the
+    # person who saved it.
+    "ops.migration_record",
 )
 
 __all__ = [
@@ -662,6 +666,7 @@ __all__ = [
     "MemberPreferenceRow",
     "MessageRole",
     "MessageRow",
+    "MigrationRecordRow",
     "ModelAttemptRow",
     "ModelProviderRow",
     "OAuthConsentRow",
