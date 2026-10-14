@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-14T16:39:08.507125+00:00",
-  "commit": "a29a69e6",
-  "commit_subject": "The Settings screen refuses optional services that would not all fit in the memory the server last measured, and the trace ledger and detector no longer read as blocked on memory (#603)",
+  "generated_at": "2026-10-14T17:02:28.875818+00:00",
+  "commit": "4ca27bf6",
+  "commit_subject": "CI shards are balanced on recorded durations and the registry tests stop collecting garbage 2,300 times (shards of 50 to 90 minutes) (#609)",
   "total": 1626,
   "done": 1134,
   "percent": 69.7,
