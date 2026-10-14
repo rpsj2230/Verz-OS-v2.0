@@ -302,19 +302,28 @@ def test_a_change_from_before_the_arming_starts_nothing_and_one_just_after_it_do
 def test_a_paused_automation_is_not_listening_and_a_record_removed_is_not_a_change(
     url: str,
 ) -> None:
-    """No arming, no run; and a retired record is not offered. Delete this and a stopped
-    automation goes on running, or a record a source dropped starts a run."""
+    """No arming, no run; and a retired record is not offered even beside a live one of its kind.
+    Delete this and a stopped automation goes on running, or a record a source dropped starts a
+    run, which the live record beside it is here to show cannot be explained by there being no
+    records at all."""
     paused = arm(url, "paused", armed_at=None)
     changed(url, paused.source, "rec_1", NOW - timedelta(minutes=30))
     listening = arm(url, "retired")
-    changed(url, listening.source, "rec_1", NOW - timedelta(minutes=30))
-    sql(url, "UPDATE proj.record SET deleted_at = now() WHERE source = %s", listening.source)
+    changed(url, listening.source, "rec_gone", NOW - timedelta(minutes=30))
+    sql(
+        url,
+        "UPDATE proj.record SET deleted_at = now() WHERE source = %s AND source_id = 'rec_gone'",
+        listening.source,
+    )
+    live = changed(url, listening.source, "rec_live", NOW - timedelta(minutes=29))
 
     done = tick(url)
 
-    assert done == []
+    assert len(done) == 1
     assert recorded(url, paused.automation) == []
-    assert recorded(url, listening.automation) == []
+    assert [row[0] for row in recorded(url, listening.automation)] == [
+        event_run_id(listening.automation, live)
+    ]
 
 
 def test_a_pass_runs_at_most_five_changes_and_the_rest_wait_for_the_next_pass(url: str) -> None:
@@ -499,3 +508,41 @@ def test_the_worker_starts_nothing_on_a_change_until_the_switch_is_on_and_the_cl
     assert len(recorded(url, one.automation)) == 1
     assert recorded(url, hook.automation) == []
     assert next_run(url, hook.automation) == ARMED
+
+
+def _claimed_by_the_clock(url: str, automation: str) -> object:
+    from brain.gate.entitlement_store import StoredEntitlements
+    from brain.identity.principal_store import StoredPrincipals
+
+    async def go() -> object:
+        built = engine(url)
+        try:
+            sessions = make_session_factory(built)
+            return await runs.run_one(
+                sessions,
+                automation,
+                now=NOW,
+                principals=StoredPrincipals(sessions),
+                entitlements=StoredEntitlements(sessions),
+            )
+        finally:
+            await built.dispose()
+
+    return run(go)
+
+
+def test_the_clocks_own_claim_refuses_a_row_a_change_or_a_call_starts_whatever_its_next_run(
+    url: str,
+) -> None:
+    """The claim is the guard and the list of owed ids is only a shortcut, so it is asked of the
+    claim directly: an armed listener and a webhook, both due by force, are not claimed and nothing
+    is recorded or paused. Delete this and the guard can go from the claim with the worker's tick
+    still green, and the first caller that claims by id runs a listener as a schedule with no
+    cadence and refuses it."""
+    listener = arm(url, "claimed")
+    hook = arm(url, "claimed_hook", trigger="webhook")
+
+    assert _claimed_by_the_clock(url, listener.automation) is None
+    assert _claimed_by_the_clock(url, hook.automation) is None
+    assert recorded(url, listener.automation) == recorded(url, hook.automation) == []
+    assert next_run(url, listener.automation) == next_run(url, hook.automation) == ARMED
