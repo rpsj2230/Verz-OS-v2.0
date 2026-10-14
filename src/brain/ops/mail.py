@@ -50,6 +50,7 @@ import json
 import re
 import smtplib
 import ssl
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from email.message import EmailMessage
@@ -63,6 +64,7 @@ from brain.ops.idempotency import (
     CallOutcome,
     Disposition,
     Intent,
+    Issued,
     Operation,
     OperationLedger,
     OperationState,
@@ -657,3 +659,62 @@ def send_trial(
     if issued.operation.state is OperationState.FAILED:
         return Trial(TrialOutcome.REFUSED)
     return Trial(TrialOutcome.UNSETTLED)
+
+
+# ----------------------------------------------------------------- one alert, once
+#: The tool an alert to an address is recorded under, beside the test message's.
+ALERT_TOOL: Final = "mail.alert"
+
+
+@dataclass(frozen=True)
+class AlertSent:
+    """What one alert to an address came to: whether this call sent it, and what the relay said.
+
+    `outcome` is None when the key had been used before, because that attempt recorded itself and
+    this one asked nobody.
+    """
+
+    issued: bool
+    outcome: CallOutcome | None = None
+    code: int | None = None
+
+    @property
+    def accepted(self) -> bool:
+        return self.issued and self.outcome is CallOutcome.OK
+
+
+def alert_operation(*, actor: str, intent_ref: str, to: str) -> Operation:
+    """The operation one alert is: who sends it, which occasion it is for, and to whom."""
+    return operation_for(
+        Intent(principal_id=actor, intent_ref=intent_ref),
+        connector=MAIL_CONNECTOR,
+        tool=ALERT_TOOL,
+        arguments={"to": to},
+    )
+
+
+def send_alert(
+    run: Callable[[Callable[[OperationLedger], Issued]], Issued],
+    operation: Operation,
+    transport: MailTransport,
+    message: Message,
+) -> AlertSent:
+    """Send one message through `issue_once`, so a second call for the same occasion sends none.
+
+    `run` is how the caller reaches its operation ledger on the thread this is called on, as
+    `brain.channel_routes.ledger_of` hands one. A caller that wants to try again next pass reads
+    `accepted`. A relay that refused or could not be reached leaves the key used, as `issue_once`
+    does for every effect that may have happened, so this is for a message whose occasion is named
+    by the caller and moves when the occasion does.
+    """
+    answered: list[MailAnswer] = []
+
+    def post(_: Operation) -> CallOutcome:
+        answer = transport.send(message)
+        answered.append(answer)
+        return answer.outcome
+
+    issued = run(lambda held: issue_once(held, operation, post))
+    if issued.issued and answered:
+        return AlertSent(True, answered[-1].outcome, answered[-1].code)
+    return AlertSent(False)
