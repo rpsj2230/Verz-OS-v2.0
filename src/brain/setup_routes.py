@@ -13,7 +13,10 @@ point.** No middle screen is served over HTTP and the console has no wizard scre
 answers are posted together and each is recorded through `answer` or `skip`, which ask for the
 setup code and the count exactly as they do on their own. Nothing here validates an answer:
 what is wrong with one is `problems_with`'s finding, told by step, field and catalogue key.
-Resuming a half-finished install from `setup-draft.json` (M42.5.12) is not served by this route.
+Resuming a half-finished install (M42.5.12) is two routes beside it, `/setup/draft` and
+`/setup/draft/read`, behind the same setup code and the same single refusal, which keep what
+has been answered without a credential and hand it back; this one discards that draft when it
+appoints.
 
 **The setup code is asked before anything is said about the answers**, so somebody without it
 learns neither that a screen is unfinished nor that a setting differs. A finished install, a
@@ -114,17 +117,19 @@ that would have to be built.
 Rejected: appointing and discarding the settings. It is what a route reaching for `appoint`
 would do first, and it is the door closed before the settings are written.
 
-Task ids: M42.5.6, M42.5.10, M42.5.14, M27.8.7, M42.6.2, M27.9.9
+Task ids: M42.5.12, M42.5.6, M42.5.10, M42.5.14, M27.8.7, M42.6.2, M27.9.9
 """
 
 from __future__ import annotations
 
 import enum
 import hmac
+import tempfile
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Final, Protocol, runtime_checkable
 
 import structlog
@@ -152,6 +157,7 @@ from brain.ops.credentials import (
 from brain.runtime import serves_alone
 from brain.settings import process_environment
 from brain.setup_wizard import (
+    DRAFT_FILE_NAME,
     MAX_ANSWER_CHARS,
     REVIEW_STATES,
     WIZARD,
@@ -159,15 +165,20 @@ from brain.setup_wizard import (
     Draft,
     StepId,
     WizardClosedError,
+    WizardError,
     WizardLockedError,
     answer,
     apply_install,
     assert_open,
     assert_unlocked,
+    discard_draft,
     is_answered,
     new_draft,
+    next_step,
+    read_draft,
     skip,
     steward_problems,
+    write_draft,
 )
 from brain.sign_in_routes import FINISH_PATH, enrolment_of
 
@@ -245,6 +256,10 @@ NO_APPOINTMENT_WHERE_NOBODY_COULD_SIGN_IN_AFTER_IT: Final = (
 #: Where the appointment is served. Beside the finishing screen, outside the API prefix, because
 #: it takes the setup code and no token.
 APPOINTMENT_PATH: Final = "/setup/appointment"
+
+#: Where the half-finished draft is kept and read back (M42.5.12), beside the appointment.
+DRAFT_PATH: Final = "/setup/draft"
+DRAFT_READ_PATH: Final = "/setup/draft/read"
 
 #: The prefix a first administrator's principal id is minted under.
 PRINCIPAL_PREFIX: Final = "u_"
@@ -382,6 +397,33 @@ class AppointedView(BaseModel):
     restart_needed: bool
 
 
+class DraftReadAsked(BaseModel):
+    """The setup code, and nothing else: what is read back is asked for with the same key."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    setup_code: str = Field(max_length=MAX_ANSWER_CHARS)
+
+
+class DraftSavedView(BaseModel):
+    """Which screens the draft now holds. Names screens and never an answer."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kept: list[StepId]
+
+
+class DraftView(BaseModel):
+    """What this install stopped at, with every secret answer already dropped by `snapshot`."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    answers: dict[StepId, dict[str, str]]
+    skipped: list[StepId]
+    #: The screen to show next, or None when nothing has been kept.
+    next_step: StepId | None
+
+
 @dataclass(frozen=True)
 class Appointment:
     """What came of asking. Appointed exactly when `principal_id` is set."""
@@ -459,6 +501,78 @@ def draft_of(
             if step.stores and not is_answered(step, draft)
         )
     return draft, tuple(found)
+
+
+def draft_file_of(request: Request) -> Path:
+    """Where this process keeps the draft: a path on `app.state`, or its temporary directory.
+
+    The application container has no directory of the install's to write in, so the default is the
+    one place a process may always write. It lives as long as the container does, which is the
+    length of a setup and no longer: a draft that outlived an update would be one written by a
+    release that asked other questions.
+    """
+    found = getattr(request.app.state, "setup_draft_path", None)
+    return found if isinstance(found, Path) else Path(tempfile.gettempdir()) / DRAFT_FILE_NAME
+
+
+async def keep_draft(
+    appointer: Appointer,
+    asked: AppointmentAsked,
+    *,
+    enrolment: Enrolment | None,
+    path: Path,
+    now: datetime,
+) -> tuple[StepId, ...]:
+    """Keep every screen answered so far, and say which, or refuse as the appointment refuses.
+
+    The posted answers go through `draft_of`, so a screen with something wrong in it is simply not
+    kept, and a credential is dropped by `write_draft`. Nothing is told about what was wrong: the
+    person finds out on the screen, as they would have.
+    """
+    if enrolment is None:
+        raise _nothing_to_appoint()
+    administrators = await appointer.administrators(now)
+    try:
+        assert_open(administrators)
+        assert_unlocked(enrolment, asked.setup_code, now=now)
+        draft, _problems = draft_of(asked, enrolment, administrators=administrators, now=now)
+    except (WizardClosedError, WizardLockedError) as refused:
+        raise _nothing_to_appoint() from refused
+    write_draft(path, draft)
+    return tuple(StepId(one) for one in (*sorted(draft.answers), *sorted(draft.skipped)))
+
+
+async def read_kept_draft(
+    appointer: Appointer,
+    setup_code: str,
+    *,
+    enrolment: Enrolment | None,
+    path: Path,
+    now: datetime,
+) -> DraftView:
+    """What was kept, behind the setup code and the one refusal; nothing kept is an empty view."""
+    if enrolment is None:
+        raise _nothing_to_appoint()
+    administrators = await appointer.administrators(now)
+    try:
+        assert_open(administrators)
+        assert_unlocked(enrolment, setup_code, now=now)
+    except (WizardClosedError, WizardLockedError) as refused:
+        raise _nothing_to_appoint() from refused
+    try:
+        draft = read_draft(path)
+    except (WizardError, ValueError, OSError):
+        # A file this release cannot read is no draft: the person starts again, which is what
+        # they would have done before there was one.
+        log.info("setup draft unreadable")
+        draft = None
+    if draft is None:
+        return DraftView(answers={}, skipped=[], next_step=None)
+    return DraftView(
+        answers={StepId(name): dict(values) for name, values in draft.answers.items()},
+        skipped=[StepId(one) for one in sorted(draft.skipped)],
+        next_step=next_step(draft),
+    )
 
 
 def steward_of(applied: Applied, *, principal_id: str, steward_id: str) -> NamedSteward | None:
@@ -701,10 +815,55 @@ async def appoint_from_setup(request: Request, body: AppointmentAsked) -> JSONRe
     if result.reason is not None:
         unkept = UnkeptView(unkept=result.unkept, variables=result.variables, reason=result.reason)
         return JSONResponse(status_code=409, content=unkept.model_dump(mode="json"))
+    # The draft has done its work; a failure to remove it leaves a file that is read as one more
+    # unfinished setup of an install that no longer has a wizard.
+    try:
+        discard_draft(draft_file_of(request))
+    except OSError:
+        log.info("setup draft not removed")
     view = AppointedView(
         principal_id=result.principal_id,
         finish_path=FINISH_PATH,
         provider_key=result.provider_key,
         restart_needed=result.restart_needed,
+    )
+    return JSONResponse(status_code=200, content=view.model_dump(mode="json"))
+
+
+@router.post(DRAFT_PATH, response_model=DraftSavedView, responses=_TOLD)
+async def save_setup_draft(request: Request, body: AppointmentAsked) -> JSONResponse:
+    """Keep what has been answered so far, so closing the browser continues where it stopped."""
+    appointer = appointer_of(request)
+    if appointer is None:
+        raise Failed("no first administrator store on this process")
+    try:
+        kept = await keep_draft(
+            appointer,
+            body,
+            enrolment=enrolment_of(request),
+            path=draft_file_of(request),
+            now=datetime.now(UTC),
+        )
+    except BrainError:
+        raise
+    except OSError as exc:
+        raise Failed(f"keeping the draft: {type(exc).__name__}") from exc
+    return JSONResponse(
+        status_code=200, content=DraftSavedView(kept=list(kept)).model_dump(mode="json")
+    )
+
+
+@router.post(DRAFT_READ_PATH, response_model=DraftView, responses=_TOLD)
+async def read_setup_draft(request: Request, body: DraftReadAsked) -> JSONResponse:
+    """What was kept, for the setup code that was presented."""
+    appointer = appointer_of(request)
+    if appointer is None:
+        raise Failed("no first administrator store on this process")
+    view = await read_kept_draft(
+        appointer,
+        body.setup_code,
+        enrolment=enrolment_of(request),
+        path=draft_file_of(request),
+        now=datetime.now(UTC),
     )
     return JSONResponse(status_code=200, content=view.model_dump(mode="json"))

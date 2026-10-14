@@ -153,6 +153,7 @@ from brain.ops.channel_store import ChannelRecord
 from brain.ops.idempotency import Intent
 from brain.ops.limit_store import ValkeyWindowStore
 from brain.ops.limits import LimitDecision, LimiterState, check
+from brain.ops.member_preference_store import StoredPreferences
 from brain.tables.channel import DeliveryOutcome
 
 log = structlog.get_logger()
@@ -782,6 +783,7 @@ async def send_raised(request: Request, suspension: SuspendedAction) -> int:
     """
     # Imported here: `brain.channel_routes` imports this module to decide presses.
     from brain.channel_routes import _deliver, addresses_of, bindings_of, records_of
+    from brain.routing_routes import sessions_of
 
     try:
         record = await records_of(request).get(Channel.LARK)
@@ -798,6 +800,18 @@ async def send_raised(request: Request, suspension: SuspendedAction) -> int:
             addressed=await book.addressed(Channel.LARK),
             now=now,
         )
+        sessions = sessions_of(request)
+        if sessions is not None and planned:
+            # An approver who chose the console as where their approvals wait is sent no card
+            # (M40.5.2.3): the approval is on their Approvals screen, which is where they said.
+            chosen = await StoredPreferences(sessions).of_many(
+                {one.recipient for one in planned if one.recipient}
+            )
+            planned = tuple(
+                one
+                for one in planned
+                if not one.recipient or chosen[one.recipient].lets_an_approval_go_to(Channel.LARK)
+            )
         sent = 0
         for one in planned:
             delivered = await _deliver(request, one, record, datetime.now(UTC))

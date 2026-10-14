@@ -14,6 +14,8 @@ Task ids: M42.1.1, M42.1.2, M42.3.2, M42.5.2, M30.1.4, M30.1.5
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from brain.deployment.variables import (
@@ -390,3 +392,46 @@ def test_the_minimum_length_is_the_one_first_run_already_decided() -> None:
     just_short = "a" * (MIN_SECRET_CHARS - 1)
     assert unminted_secrets({"POSTGRES_PASSWORD": just_short})
     assert unminted_secrets({"POSTGRES_PASSWORD": "a" * MIN_SECRET_CHARS}) == ()
+
+
+# --- the command line (M42.1.1, M42.3.2) ------------------------------------------------
+
+
+def test_the_template_command_prints_the_template_and_refuses_what_it_cannot_explain(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`template` is `template_for` reached from a shell: the same text, and an unexplained
+    variable refused with the generator's sentence and a usage status. Delete this and the
+    generator has no caller again, and the refusal is only ever shown inside Python."""
+    from brain.deployment.variables import EXIT_CLEAN, EXIT_USAGE, main
+
+    assert main(["template", "acme-prod", "APP_IMAGE=the image tag"]) == EXIT_CLEAN
+    assert capsys.readouterr().out == template_for("acme-prod", also={"APP_IMAGE": "the image tag"})
+    assert main(["template", "acme-prod", "APP_IMAGE="]) == EXIT_USAGE
+    assert "cannot explain" in capsys.readouterr().err
+    assert main(["template"]) == EXIT_USAGE
+
+
+def test_the_check_command_names_a_fork_and_a_shared_secret_and_passes_install_files(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A repository of two install files with blank, minted-on-the-server credentials passes; a
+    directory of product code, and one credential set to the same value on two installs, each
+    fail and name the install and the setting and never the value. Delete this and the
+    variables repository's own job has nothing to call, or prints the password it found."""
+    from brain.deployment.variables import EXIT_CLEAN, EXIT_FOUND, main
+
+    shared = "s" * MIN_SECRET_CHARS
+    (tmp_path / "acme-prod.env").write_text("POSTGRES_PASSWORD=\nINSTALL_COMPANY_NAME=Acme\n")
+    (tmp_path / "beta-prod.env").write_text("POSTGRES_PASSWORD=\n")
+    (tmp_path / "README.md").write_text("values only\n")
+    assert main(["check", str(tmp_path)]) == EXIT_CLEAN
+    capsys.readouterr()
+
+    (tmp_path / "acme-prod.env").write_text(f"POSTGRES_PASSWORD={shared}\n")
+    (tmp_path / "beta-prod.env").write_text(f"POSTGRES_PASSWORD={shared}\n")
+    (tmp_path / "pyproject.toml").write_text("[project]\n")
+    assert main(["check", str(tmp_path)]) == EXIT_FOUND
+    said = capsys.readouterr().out
+    assert "pyproject.toml" in said and "POSTGRES_PASSWORD on acme-prod" in said
+    assert shared not in said

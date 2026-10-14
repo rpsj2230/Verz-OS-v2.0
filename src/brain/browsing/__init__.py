@@ -43,5 +43,6 @@ holding the Docker socket, creating and removing those and relaying `wire`, the 
 transcript for the recordings bucket's window, and `verification` judges a run on its actions,
 then on masked pictures, then on its system of record. There is no Docker, gVisor or browser on the
 machine this was written on, so every decision is tested and none of the plumbing has run;
-`ops/browser/REHEARSAL.md` is the rehearsal for a server that can.
+`driver` is the worker's half, joined to the real runner in a test and an install check with a
+stand-in page, and `ops/browser/REHEARSAL.md` is the rehearsal for a server that can.
 """

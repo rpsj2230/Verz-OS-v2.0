@@ -57,7 +57,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Final, Protocol
 
@@ -76,7 +76,7 @@ from brain.ops.idempotency import (
     advance,
     resume,
 )
-from brain.ops.queue import InFlight, Redrive
+from brain.ops.queue import InFlight, Redrive, Verdict
 from brain.tables.operation import OperationRow
 
 # ------------------------------------------------------------------ written-down reasons
@@ -169,6 +169,8 @@ class QueueSweep:
     moved_on: tuple[str, ...]
     #: The task each job id belongs to, for the report.
     tasks: Mapping[str, str]
+    #: Why each set-aside job was set aside, a word of `brain.ops.jobs.DeadLetterReason`, by id.
+    reasons: Mapping[str, str] = field(default_factory=dict)
 
     def summary(self) -> str:
         """One line for the run record: counts, and the set-aside jobs by id and task."""
@@ -190,6 +192,19 @@ class QueueSweep:
         return said
 
 
+def dead_letter_reason(verdict: Verdict) -> str:
+    """Why a job the sweep set aside was, as `brain.ops.jobs.DeadLetterReason` says it.
+
+    A job re-driven too often is that; every other job the sweep sets aside was running when its
+    worker stopped and is not safe to run twice, which is the quarantine.
+    """
+    from brain.ops.jobs import DeadLetterReason
+
+    if verdict is Verdict.DEAD_LETTER:
+        return DeadLetterReason.RE_DRIVEN_TOO_OFTEN.value
+    return DeadLetterReason.QUARANTINED_AFTER_A_STOP.value
+
+
 async def sweep_queue(queue: QueueRows, *, now: datetime) -> QueueSweep:
     """Decide every recoverable job with `crash.redrive` and make the move it allows (M23.3.1).
 
@@ -203,6 +218,7 @@ async def sweep_queue(queue: QueueRows, *, now: datetime) -> QueueSweep:
     ran_again: list[str] = []
     set_aside: list[str] = []
     moved_on: list[str] = []
+    reasons: dict[str, str] = {}
     decided_running = redrive(running, {}, now)
     decided_failed = redrive(failed, {}, now)
     for one in decided_running:
@@ -212,6 +228,8 @@ async def sweep_queue(queue: QueueRows, *, now: datetime) -> QueueSweep:
         elif one.recovery is not Recovery.LEAVE_IT:
             moved = await queue.set_aside(one.job_id)
             (set_aside if moved else moved_on).append(one.job_id)
+            if moved:
+                reasons[one.job_id] = dead_letter_reason(one.verdict)
     for one in decided_failed:
         if one.may_run_again:
             moved = await queue.run_again(one.job_id, now)
@@ -222,6 +240,7 @@ async def sweep_queue(queue: QueueRows, *, now: datetime) -> QueueSweep:
         set_aside=tuple(set_aside),
         moved_on=tuple(moved_on),
         tasks=tasks,
+        reasons=reasons,
     )
 
 
@@ -434,7 +453,15 @@ def run_queue_redrive_now(
     async def run() -> QueueSweep:
         app = queue_app(queue_url, pool_max=1)
         async with app.open_async():
-            return await sweep_queue(DriverQueue(app, REDRIVE_BY_TASK), now=now)
+            queue = DriverQueue(app, REDRIVE_BY_TASK)
+            swept = await sweep_queue(queue, now=now)
+            # The console reads these from `ops.dead_letter`, because the driver's own tables are
+            # refused to it. The jobs this sweep set aside first, with the reason it had, then every
+            # other failed job nobody will run again.
+            for job_id, reason in swept.reasons.items():
+                await queue.keep_aside(job_id, reason, now)
+            await queue.keep_failed(now)
+            return swept
 
     return asyncio.run(run(), loop_factory=loop_factory)
 

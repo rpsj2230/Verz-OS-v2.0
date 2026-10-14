@@ -169,6 +169,84 @@ def test_fewer_than_two_runs_is_refused() -> None:
         runs_from_rows([row("r1", OLD, "2999-01-01T01:00:00+00:00", "x", "M1.1.1")])
 
 
+def with_status(rows: list[dict[str, Any]], status: str) -> list[dict[str, Any]]:
+    """Rows as `ROWS_QUERY` prints them, each saying what its run's status is."""
+    return [{**one, "run_status": status} for one in rows]
+
+
+def test_a_resumed_run_is_read_as_one_run_whenever_its_rows_were_written() -> None:
+    """A run the worker finished after a restart has rows written hours apart under one id, and
+    that is one run: one commit, one start, every check once. Delete this and a run is read as two
+    because its rows are far apart, or its late checks are lost, and no task closes on it."""
+    early = [row("r2", NEW, "2999-01-01T02:00:00+00:00", "one", "M1.1.1")]
+    late = [
+        {**row("r2", NEW, "2999-01-01T02:00:00+00:00", "two", "M1.1.2"), "checked_at": "2999-01-02"}
+    ]
+    previous = [row("r1", OLD, "2999-01-01T01:00:00+00:00", "one", "M1.1.1")]
+    previous += [row("r1", OLD, "2999-01-01T01:00:00+00:00", "two", "M1.1.2")]
+    rows = with_status(early + previous + late, "complete")
+    latest, before = runs_from_rows(rows)
+    assert (latest.run_id, latest.commit) == ("r2", NEW)
+    assert sorted(latest.results) == ["one", "two"]
+    assert before.run_id == "r1"
+    assert dict(sweep_of(rows).closes) == {"M1.1.1": ("one",), "M1.1.2": ("two",)}
+
+
+def test_a_run_that_is_not_complete_is_ignored_whatever_it_says() -> None:
+    """A run still going, or abandoned for a newer release, has rows and is not a run that was
+    seen: the newest *complete* two are judged. Delete this and a half-written newest run, with
+    most checks missing, makes every task they proved read as seen on one run only."""
+    complete = fixture([("x", "M1.1.1", "passed")], [("x", "M1.1.1", "passed")])
+    partial = [row("r3", "c" * 40, "2999-01-01T03:00:00+00:00", "x", "M1.1.1", "failed")]
+    gone = [row("r4", "d" * 40, "2999-01-01T04:00:00+00:00", "x", "M1.1.1", "failed")]
+    rows = with_status(complete, "complete")
+    rows += with_status(partial, "running") + with_status(gone, "abandoned")
+    latest, before = runs_from_rows(rows)
+    assert (latest.commit, before.commit) == (NEW, OLD)
+    assert dict(sweep_of(rows).closes) == {"M1.1.1": ("x",)}
+
+
+def test_only_runs_that_are_not_complete_leave_too_few_runs() -> None:
+    """With one complete run and one that is not, there are not two runs: refused, not judged on
+    the incomplete one. Delete this and the sweep closes a task on a run nobody finished."""
+    rows = with_status(
+        [row("r1", OLD, "2999-01-01T01:00:00+00:00", "x", "M1.1.1")], "complete"
+    ) + with_status([row("r2", NEW, "2999-01-01T02:00:00+00:00", "x", "M1.1.1")], "running")
+    with pytest.raises(SweepError, match="two runs"):
+        runs_from_rows(rows)
+
+
+def test_rows_with_no_status_are_complete_runs_as_every_run_was_before_the_status_existed() -> None:
+    """A file printed by an older query, or a run written whole before `ops.acceptance_run`, has
+    no status and is complete. Delete this and every saved file and every old run is ignored."""
+    latest, before = runs_from_rows(
+        fixture([("x", "M1.1.1", "passed")], [("x", "M1.1.1", "passed")])
+    )
+    assert (latest.commit, before.commit) == (NEW, OLD)
+
+
+def test_a_run_whose_rows_name_two_releases_is_refused() -> None:
+    """A_RUN_NAMES_ONE_RELEASE. Results of two builds under one run id would close a task on a
+    mixture, so the sweep stops and says so. Delete this and a resume that crossed releases goes
+    through as a run."""
+    rows = fixture([("x", "M1.1.1", "passed")], [("x", "M1.1.1", "passed")])
+    rows.append(row("r2", OLD, "2999-01-01T02:00:00+00:00", "y", "M1.1.2"))
+    with pytest.raises(SweepError, match="more than one commit"):
+        runs_from_rows(rows)
+
+
+def test_the_query_asks_for_complete_runs_only_and_says_each_rows_status() -> None:
+    """Structure of `ROWS_QUERY`: it joins the run record, filters the choice of runs to complete
+    ones with a missing record counting as complete, and returns the status as a key. Delete this
+    and the query can be edited back to every run without the database test noticing on a machine
+    that skips it."""
+    query = " ".join(ROWS_QUERY.split())
+    assert "left join ops.acceptance_run y on y.run_id = x.run_id" in query
+    assert "where coalesce(y.status, 'complete') = 'complete'" in query
+    assert "jsonb_build_object('run_status', coalesce(u.status, 'complete'))" in query
+    assert query.index("coalesce(y.status") < query.index("limit 2")
+
+
 def test_closes_lines_group_by_module_in_the_work_breakdowns_order() -> None:
     """`M13.5.10` comes after `M13.5.9`, and each module has its own line.
 
@@ -265,7 +343,7 @@ def test_the_two_newest_runs_are_read_from_a_real_database() -> None:
 
     if database_url() is None:
         pytest.skip("DATABASE_URL is unset; CI sets it")
-    with modelled("brain_proof_sweep", ["ops.acceptance_result"]) as url:
+    with modelled("brain_proof_sweep", ["ops.acceptance_result", "ops.acceptance_run"]) as url:
         for run, commit, hour in (
             ("00000000-0000-4000-8000-000000000001", "c" * 40, 1),
             ("00000000-0000-4000-8000-000000000002", OLD, 2),
@@ -285,3 +363,57 @@ def test_the_two_newest_runs_are_read_from_a_real_database() -> None:
     latest, previous = runs_from_rows(rows)
     assert (latest.commit, previous.commit) == (NEW, OLD)
     assert {str(one["commit"]) for one in rows} == {NEW, OLD}
+
+
+@pytest.mark.needs_db
+def test_the_query_reads_two_complete_runs_and_never_a_running_or_abandoned_one() -> None:
+    """Six runs: two complete with a record, one complete with none (written whole before the
+    record existed), one running, one abandoned and one older complete. `ROWS_QUERY` returns the
+    newest two *complete* ones, however new the unfinished runs are, each row saying `complete`.
+    Delete this and the newest unfinished run is judged, or an old run with no record is dropped."""
+    import asyncio
+
+    from brain.db import normalise_database_url
+    from brain.ops.proof_sweep import rows_from_database
+    from tests.fixtures.scratch_postgres import database_url, modelled, sql
+
+    if database_url() is None:
+        pytest.skip("DATABASE_URL is unset; CI sets it")
+    runs = (
+        ("00000000-0000-4000-8000-000000000001", "1" * 40, 1, "complete"),
+        ("00000000-0000-4000-8000-000000000002", "2" * 40, 2, None),
+        ("00000000-0000-4000-8000-000000000003", "3" * 40, 3, "complete"),
+        ("00000000-0000-4000-8000-000000000004", "4" * 40, 4, "running"),
+        ("00000000-0000-4000-8000-000000000005", "5" * 40, 5, "abandoned"),
+    )
+    with modelled(
+        "brain_proof_sweep_status", ["ops.acceptance_result", "ops.acceptance_run"]
+    ) as url:
+        for run, commit, hour, status in runs:
+            started = f"2999-01-01T0{hour}:00:00+00:00"
+            sql(
+                url,
+                "INSERT INTO ops.acceptance_result (run_id, commit, occasion, check_name, leaves,"
+                " outcome, reason, started_at, checked_at) VALUES (%s, %s, 'deploy', 'a_check',"
+                " 'M1.1.1', 'passed', NULL, %s, %s)",
+                run,
+                commit,
+                started,
+                started,
+            )
+            if status is not None:
+                sql(
+                    url,
+                    "INSERT INTO ops.acceptance_run (run_id, commit, occasion, status, started_at,"
+                    " ended_at) VALUES (%s, %s, 'deploy', %s, %s, %s)",
+                    run,
+                    commit,
+                    status,
+                    started,
+                    None if status == "running" else started,
+                )
+        rows = asyncio.run(rows_from_database(normalise_database_url(url)))
+    latest, previous = runs_from_rows(rows)
+    assert (latest.commit, previous.commit) == ("3" * 40, "2" * 40)
+    assert {str(one["run_status"]) for one in rows} == {"complete"}
+    assert len(rows) == 2

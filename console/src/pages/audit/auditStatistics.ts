@@ -32,6 +32,8 @@ export const AUDIT_STATISTICS_API_PATH = "/audit/statistics";
 export const STATISTICS_HEADING = "Refusals and redactions";
 export const STATISTICS_LEDE = "The last seven days, over other people's entries you may read. Your own entries are never counted.";
 export const REDACTED_LABEL = "Entries with a detail withheld";
+/** Told only to a reader whose audit grant covers everybody; the API sends null to anybody else. */
+export const REDACTED_REQUESTS_LABEL = "Questions answered with something withheld";
 export const NO_PATTERN = "No pattern of refusals you may be told about.";
 export const UNREADABLE_STATISTICS = "The statistics could not be read.";
 

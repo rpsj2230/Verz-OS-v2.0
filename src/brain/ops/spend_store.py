@@ -110,15 +110,31 @@ async def recorded(session: AsyncSession) -> tuple[Actual, ...]:
     return tuple(actual_from(one) for one in found.scalars().all())
 
 
+async def recorded_since(session: AsyncSession, since: datetime) -> tuple[Actual, ...]:
+    """Every cost recorded at or after `since`, oldest first. What a windowed report reads.
+
+    A window rather than every row ever: a cost-per-answer figure and a shape ranking are read at
+    a screen, and a read of the whole ledger grows with the install's age.
+    """
+    found = await session.execute(
+        select(SpendActualRow).where(SpendActualRow.at >= since).order_by(SpendActualRow.at)
+    )
+    return tuple(actual_from(one) for one in found.scalars().all())
+
+
 async def question_shape_report(
     session: AsyncSession,
     entitlement: EntitlementSet,
     *,
     now: datetime,
     include_machine: bool = False,
+    since: datetime | None = None,
 ) -> ShapeReport:
-    """What each question shape cost, at this reader's reach. See the module docstring."""
-    actuals = await recorded(session)
+    """What each question shape cost, at this reader's reach. See the module docstring.
+
+    Over every recorded cost unless `since` names the start of a window.
+    """
+    actuals = await recorded(session) if since is None else await recorded_since(session, since)
     shapes = await shapes_for(session, {one.trace_id for one in actuals})
     return shape_report(actuals, shapes, entitlement, now=now, include_machine=include_machine)
 

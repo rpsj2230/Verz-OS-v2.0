@@ -26,15 +26,25 @@ ops
 # applies before starting it (Dockerfile says why). Policies and the script that loads them only.
 !ops/openbao/apply-release.sh
 !ops/openbao/policies/*.hcl
+!ops/openbao/compose.yml
+!ops/openbao/switch-to-auto-unseal.sh
+# The server's deploy hook and the script that refreshes it from here (Dockerfile says why).
+!ops/deploy/brain-deploy
+!ops/deploy/brain-autodeploy
 # And the optional services step the deploy hook copies out of the image (brain.ops.overlays).
 !ops/deploy/overlays/apply.sh
 !ops/deploy/overlays/langfuse.attach.yml
 !ops/deploy/overlays/langfuse.prepare.sh
 !ops/deploy/overlays/langfuse.hand.sh
+!ops/deploy/overlays/s3-identity.sh
+!ops/deploy/overlays/objectstore.prepare.sh
+!ops/deploy/overlays/objectstore.hand.sh
+!ops/deploy/overlays/automation.prepare.sh
 !ops/deploy/overlays/class-pools.yml
 !ops/deploy/overlays/class-pools.prepare.sh
 !ops/langfuse/clickhouse-memory.xml
 !ops/seaweedfs/provision.sh
+!ops/automation/egress.conf
 docs/wbs
 *.md
 !README.md

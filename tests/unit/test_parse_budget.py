@@ -173,16 +173,24 @@ def test_the_parse_worker_is_large_enough_for_the_largest_file_the_door_admits()
 def test_the_general_worker_cannot_hold_what_the_door_admits_and_the_check_says_so() -> None:
     """The finding that forced a second container, and the proof that this check can fail.
 
-    `brain-worker` is 384 MiB across seven slots, so a job gets about 48 MiB and the door
-    admits a 50 MiB PDF: a parse there cannot hold its own input. A check that only ever ran
-    against the container it was written for would pass whether or not it worked, which is the
-    reason `parse_worker_gaps` takes the component as a parameter at all.
+    `brain-worker` runs seven slots of about 48 MiB each and the door admits a 50 MiB PDF: a parse
+    there cannot hold its own input. It was 384 MiB, where the whole container was too small for
+    the door's largest file as well; since 2026-10-13 it is 768 MiB, for headroom the install's
+    acceptance run needs, and the whole container can now hold that file, so the check that still
+    refuses it is the one about slots: seven of them each told they may have everything that is
+    left. The over-the-budget finding is proved with a reserve that leaves less than the door's
+    largest file, which is what the container was before the headroom.
+
+    A check that only ever ran against the container it was written for would pass whether or not
+    it worked, which is the reason `parse_worker_gaps` takes the component as a parameter at all.
 
     Delete this and the arithmetic could be inverted and every other test here would stay
     green, because the parse worker is sized to satisfy it either way."""
     findings = parse_worker_gaps(CONCURRENCY, worker_component="brain-worker")
+    squeezed = parse_worker_gaps(CONCURRENCY, worker_component="brain-worker", reserve_mib=600)
 
-    assert any("over the" in finding and "budget" in finding for finding in findings), findings
+    assert any("7 slots" in finding for finding in findings), findings
+    assert any("over the" in finding and "budget" in finding for finding in squeezed), squeezed
 
 
 def test_a_reserve_of_nothing_turns_the_second_cap_into_a_copy_of_the_first() -> None:

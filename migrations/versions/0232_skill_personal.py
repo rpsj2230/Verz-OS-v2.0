@@ -24,8 +24,8 @@ stated rather than hidden because the downgrade has nothing else to do with it.
 
 Task ids: M40.3.2.1, M40.3.2.2, M40.3.2.3, M40.3.2.4
 
-Revision ID: 0231
-Revises: 0225
+Revision ID: 0232
+Revises: 0231
 """
 
 from __future__ import annotations
@@ -33,9 +33,9 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0231"
-# Renumbered by the train engineer when this lands; nothing here depends on anything after 0225.
-down_revision = "0225"
+revision = "0232"
+# Follows 0231, the head of main when this was landed. Nothing here depends on 0226 to 0231.
+down_revision = "0231"
 branch_labels = None
 depends_on = None
 

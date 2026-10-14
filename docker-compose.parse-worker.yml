@@ -2,8 +2,8 @@
 # container sized for one job whose size somebody outside this company chose.
 #
 # **Why this is a second container rather than a slot in the first one, which is arithmetic
-# and not taste.** `brain-worker` is budgeted 384 MiB across seven slots, so a job gets about
-# 48 MiB. The knowledge door admits a 50 MiB PDF. A parse in that container cannot hold its
+# and not taste.** `brain-worker` runs seven slots of 48 MiB (inside 384 MiB until 2026-10-13, 768 MiB now),
+# so a job gets about 48 MiB. The knowledge door admits a 50 MiB PDF. A parse in that container cannot hold its
 # own input, never mind what reading it costs, so the two choices were to shrink the door's
 # ceilings or to size a container for the parse. Shrinking the door was rejected: 50 MiB of
 # PDF is an ordinary scanned book, and refusing it would move a memory problem onto somebody
@@ -94,7 +94,7 @@ services:
     environment:
       # Which component this container is. Every memory figure the preflight checks is
       # against this component's limit, and without it this process would size itself as the
-      # general worker: seven slots inside 384 MiB, which is not what is deployed here.
+      # general worker: seven slots inside the general worker's limit, which is not what is deployed here.
       BRAIN_WORKER_COMPONENT: brain-parse-worker
       # Through the session pooler, not through `pgbouncer`, and deliberately not the same
       # string as DATABASE_URL: `brain.ops.queue.queue_url_refusals` runs against these two

@@ -260,7 +260,8 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         belongs=Belongs.IDENTITY,
         meaning=(
             "The client id of the application registered with that directory: a Google OAuth "
-            "client or a Microsoft Entra app registration. `unset` means nobody has said, and "
+            "client, a Microsoft Entra app registration or the App ID of a Lark application. "
+            "`unset` means nobody has said, and "
             "sign-in is then not brokered. Its secret is never a setting: it is a file in the "
             "identity provider's vault, see docs/install/authentication.md."
         ),
@@ -512,8 +513,10 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
             "Comma-separated optional services this server runs beside its profile, started by "
             "the next release only where the server's measured memory has room for them: "
             "presidio for the personal data detector, langfuse for the trace ledger and its file "
-            "store, sandbox for the script sandbox, which needs gVisor on the server. `none` runs "
-            "none of them. Changed on Install, Settings."
+            "store, sandbox for the script sandbox, which needs gVisor on the server, objectstore "
+            "for the file store that holds uploaded documents and exports, and automation for the "
+            "automation canvas, which takes 896 MiB. `none` runs none of them. Changed on "
+            "Install, Settings."
         ),
         default="none",
     ),

@@ -326,6 +326,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents/{agent_id}/learning",
       "/api/v1/console/agents/{agent_id}/stats",
       "/api/v1/agents/{agent_id}/budget",
+      "/api/v1/agents/{agent_id}/budget/ceilings",
       "/api/v1/agents/{agent_id}/capabilities",
       "/api/v1/agents/{agent_id}/preview",
       "/api/v1/agents/{agent_id}/knowledge*",
@@ -718,13 +719,19 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "Feature and module enablement": {
     screens: ["/features"],
-    routes: ["/api/v1/install/features*"],
+    routes: ["/api/v1/install/features*", "/api/v1/install/plugins*"],
     tables: ["ops.plugin_install", "ops.plugin_version"],
     installation: [],
     gaps: [
       {
-        what: "A plugin cannot be installed or enabled.",
-        because: "Nothing loads a plugin yet: the Features screen says plugins_have_no_loader, and ops.plugin_install has no writer a route calls.",
+        what: "A recorded plugin is not loaded: switching one on changes its record and nothing runs.",
+        because:
+          "The points that take code run it in a sidecar or a sandbox and neither runner exists, so the panel says no_plugin_is_loaded; M29.2.4 (a drain on upgrade) and M29.2.5 (an isolation tier enforced by a host) wait on one.",
+      },
+      {
+        what: "A plugin's install, enable, upgrade, rollback or removal is not an entry in the audit ledger.",
+        because:
+          "ops.plugin_install has no trigger that appends one, and adding it is a migration that widens the ledger's action list and subject grammar; the route logs who pressed it and the row keeps its history of versions.",
       },
     ],
   },
@@ -761,7 +768,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
   "Scheduled jobs and background work": {
     screens: ["/jobs", "/jobs/:name", "/jobs/:name/:view", "/runs"],
     routes: ["/api/v1/jobs*", "/api/v1/operate/runs", "/api/v1/operations/interrupted"],
-    tables: ["ops.control_run", "ops.operation", "ops.acceptance_result"],
+    tables: ["ops.control_run", "ops.operation", "ops.acceptance_result", "ops.acceptance_run", "ops.dead_letter"],
     installation: [],
     gaps: [
       {
@@ -787,8 +794,25 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/company/activity",
       "/company/consumption",
     ],
-    routes: ["/api/v1/report/*", "/api/v1/me/workspace", "/api/v1/company/*", "/api/v1/quality/*"],
+    routes: [
+      "/api/v1/report/*",
+      "/api/v1/me/workspace",
+      "/api/v1/me/preferences*",
+      "/api/v1/me/devices*",
+      "/api/v1/me/reads",
+      "/api/v1/me/artifacts*",
+      "/api/v1/me/stored",
+      "/api/v1/me/shares",
+      "/api/v1/me/shared*",
+      "/api/v1/me/agents/*",
+      "/api/v1/me/agent-requests",
+      "/api/v1/company/*",
+      "/api/v1/quality/*",
+    ],
     tables: [
+      "agent.artifact_share",
+      "agent.agent_request",
+      "auth.member_preference",
       "ops.question_asked",
       "ops.question_gap",
       "ops.report_refresh",
@@ -918,6 +942,8 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
   "/signed-out": "The page a person lands on after signing out, which asks nothing and manages nothing.",
   "/*": "The page drawn for an address the console does not have, which manages nothing.",
   "POST /api/v1/answer": "The answer lane behind Ask, which writes no row an administrator manages.",
+  "GET /api/v1/welcome":
+    "The starter questions a person is offered on their first visit to Ask, for their own department and kept to what they may ask; it reads nothing an administrator manages and writes nothing.",
   "POST /api/v1/answer/mark":
     "A person marking an answer they were given helpful or not, one bit against its reference, which no administrator manages and nothing that answers reads.",
   "POST /api/v1/answer/copied":
