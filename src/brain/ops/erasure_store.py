@@ -260,6 +260,10 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         # row to leave, so an erasure keeps it and reports it kept.
         "agent.artifact_share": "shared_by",
         "agent.agent_request": "requested_by",
+        # A skill a person added for themselves and whether they offered it (`0232`). `0232` grants
+        # no way for a row to leave, so an erasure keeps these and reports them kept: the skill is
+        # in the library under its digest and a decision about it is not the person's to undo.
+        "agent.skill_personal": "owner_id",
         # What an agent produced, for the person it was produced for. `0058` grants no way for a
         # row to leave, so an erasure keeps these and reports them kept.
         "agent.artifact": "caller_id",

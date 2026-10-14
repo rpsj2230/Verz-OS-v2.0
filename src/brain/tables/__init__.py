@@ -180,6 +180,7 @@ from brain.tables.skill import (
     SkillScriptRow,
 )
 from brain.tables.skill_invocation import SkillInvocationRow
+from brain.tables.skill_personal import SkillPersonalRow
 from brain.tables.spend import ReportRefreshRow, SpendActualRow
 from brain.tables.staff import StaffMemberRow, StaffSyncRunRow
 from brain.tables.stewardship import ConnectorStewardRow, SelfGrantRow
@@ -555,6 +556,8 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "agent.agent_request",
     # 0231_acceptance_run_record. Points at nothing: its id is carried by value on the result rows.
     "ops.acceptance_run",
+    # 0232_skill_personal. Points at nothing: the digest and the person are values.
+    "agent.skill_personal",
 )
 
 __all__ = [
@@ -700,6 +703,7 @@ __all__ = [
     "SkillDetachmentRow",
     "SkillExportRow",
     "SkillInvocationRow",
+    "SkillPersonalRow",
     "SkillRehearsalRow",
     "SkillRetirementRow",
     "SkillReviewRow",
