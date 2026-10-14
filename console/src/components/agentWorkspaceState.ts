@@ -172,6 +172,16 @@ export interface WorkspaceTabView {
 export const SET_ON_THIS_AGENT = "instance";
 
 /**
+ * The third source, which this console also acts on: a value the agent's own learning wrote after
+ * a person approved it (M16.7.1), copied from `brain.agents.template.FieldSource.LEARNED`.
+ *
+ * Drawn as a local difference all the same, because it is one, and as its own word, because a
+ * person who wants to give back exactly what the agent taught itself has to be able to tell it
+ * from what an administrator set.
+ */
+export const TAUGHT_BY_THE_AGENT = "learned";
+
+/**
  * One path of one agent's composition, with both sides of it (M39.1.1.5).
  *
  * **Both values are required and there is no shape with one of them.** A row saying a path

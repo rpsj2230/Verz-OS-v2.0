@@ -125,6 +125,7 @@ def test_every_declared_reader_asks_about_its_feature_and_nothing_else_asks() ->
         "brain.browsing.driver",
         "brain.tools.document_generation",
         "brain.control_not_run_told",
+        "brain.learned_instruction_store",
     }
 
 
@@ -258,6 +259,7 @@ def test_switching_a_feature_on_writes_its_row_and_the_next_read_sees_it(
         "migration_workspace": False,
         "browser_runs": False,
         "control_not_run_alerts": False,
+        "agent_learned_changes": False,
     }
 
 

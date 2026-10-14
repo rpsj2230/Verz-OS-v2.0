@@ -169,6 +169,11 @@ const PROGRESS = {
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
     updated: "2026-10-13",
   },
+  "M16.7.1": {
+    status: "IN PROGRESS",
+    why: "Built: a change the agent learned is marked as the agent's own learning, naming the person who approved it, the Prompts screen shows it and gives it back, and the ledger names the approver; it never replaces instructions an administrator set, and it is written only while the switch 'Let what an agent learns change its instructions' is on (it ships off). What is not built is the first thing that learns an instruction change: nothing the product learns writes into an agent yet, so on an install this is proved by the check applying one change itself. To see it: after the release, open Install, Acceptance, run the checks and read the row 'what an agent taught itself is marked and can be given back'.",
+    updated: "2026-10-15",
+  },
   "M16.7.8": {
     status: "READY FOR TESTING",
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
@@ -198,6 +203,11 @@ const PROGRESS = {
     status: "READY FOR TESTING",
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
     updated: "2026-10-13",
+  },
+  "M13.8.11": {
+    status: "READY FOR TESTING",
+    why: "Built: before anybody upgrades an agent, the review lists what the new version would leave missing on this install (a tool nothing provides, a connector that is not connected, a question nobody has answered), and accepting it switches the agent off with the same list, as an install does. To prove it on the install: after the release, open Install, Acceptance, run the checks and read the row 'accepting a version runs the checks an install runs', which should pass in the two newest runs. Then on an agent's Profile, with a newer version of its template on offer, read 'What this version needs on this install'.",
+    updated: "2026-10-15",
   },
   "M13.9.1": {
     status: "READY FOR TESTING",
