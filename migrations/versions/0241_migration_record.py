@@ -32,9 +32,9 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "0241"
-# The plan's number. On this branch it follows `0240` (the fan-out gate's table, which the same
-# Features page draws beside it); on the migration-only branch it follows 0225. The coordinator
-# re-points it at whichever migration is the head when the train is assembled.
+# It follows `0240`, the fan-out gate's table, which the same Features page draws beside it, and
+# that follows `0231`, the head of main when both were landed. Landed before it, `0240` is the head
+# this follows; landed after another migration, it is re-pointed at that one.
 down_revision = "0240"
 branch_labels = None
 depends_on = None
