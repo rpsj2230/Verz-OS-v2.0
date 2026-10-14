@@ -5,11 +5,13 @@ opens a connection. The worker's schedule starts `run_acceptance_now` through
 `brain.ops.schedule_runner`, once per newly deployed commit and whenever a Super Admin presses run
 now on the Scheduled jobs screen, and it writes one row per check to `ops.acceptance_result`.
 
-**A row is written as each check finishes, and a run survives the worker's restart.** A run is
-thirty-five minutes and more and every deploy restarts the worker, so rows written at the end were
-never written on a busy day, and no task could close. The run is opened in `ops.acceptance_run`
-before its first check, each result is appended as it ends, and a worker that finds an unfinished
-run of the commit it serves finishes it under the same id, running only what has no result. See
+**A row is written as each check finishes, and a run survives a restart of the same commit.** A
+run is thirty-five minutes and more and a deploy that changes what the worker runs restarts it, so
+rows written at the end were never written on a busy day, and no task could close. The run is
+opened in `ops.acceptance_run` before its first check, each result is appended as it ends, and a
+worker that finds an unfinished run of the commit it serves finishes it under the same id, running
+only what has no result. A deploy of a new commit starts a run afresh, and a deploy that changes
+nothing the worker runs does not restart it (`brain.ops.restart_scope`). See
 `brain.ops.acceptance_resume`, which says what was rejected and why a heartbeat and not a lock.
 `run_acceptance` is the one place a run is marked complete, after its last check.
 
