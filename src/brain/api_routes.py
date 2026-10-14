@@ -268,6 +268,7 @@ from brain.ops.signal_store import StoredSignals
 from brain.ops.slack_messages_live import Alongside
 from brain.ops.trace_sink import CountingTraceSink
 from brain.reviewed_connectors import current as reviewed_now
+from brain.tools.document_generation import RunIdentity, identity_of
 from brain.tools.own_results import OWN_RESULT_POLICIES
 from brain.tools.registry import ToolRegistry
 from brain.tools.skills import ImportedSkill, SkillPin, offered_cards
@@ -1914,12 +1915,18 @@ class RunToolCaller:
         *,
         agent_id: str | None = None,
         skills: Mapping[str, Any] | None = None,
+        produced_for: RunIdentity | None = None,
     ) -> None:
         from brain.automation_routes import RegistryToolCaller
 
         # The run's agent and the skills it was offered, for the two skill tools only; a handler
         # that declares neither parameter is never handed them. See `brain.tools.skill_tools`.
-        self.inner = RegistryToolCaller(registry, bound={"agent_id": agent_id, "skills": skills})
+        # Which agent, as it was, and which run a file is attributed to, for the document tool
+        # alone (`brain.tools.document_generation`), under the same rule.
+        self.inner = RegistryToolCaller(
+            registry,
+            bound={"agent_id": agent_id, "skills": skills, "produced_for": produced_for},
+        )
 
     def call(
         self,
@@ -2123,7 +2130,12 @@ def agent_runtime_for(
         asker=asking.reach,
         registry=registry,
         leash=held,
-        tools=RunToolCaller(registry, agent_id=agent.agent_id, skills=skills),
+        tools=RunToolCaller(
+            registry,
+            agent_id=agent.agent_id,
+            skills=skills,
+            produced_for=identity_of(agent, _bound_trace_id()),
+        ),
         policy_for=policy_of(registry),
         reach_now=reach_again(request, asking),
         halted=halted,
