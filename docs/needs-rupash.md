@@ -958,7 +958,10 @@ leaks nothing. C can be added later without undoing it. I will not build it unti
 
 ## 163. What stops tasks being proved on your install: one list
 
-**In plain terms:** a task is only counted as done once the install's own checks for it pass, on two runs.
+**In plain terms:** a task is only counted as done once the install's own checks for it pass, on one
+complete run (you decided on 2026-10-14 that one clean full run is enough, where it was two before; a run
+that came back with a failed or not-run check is repeated for only those checks, and /build shows
+"Built" beside "Done" so progress shows before the install has run its checks).
 After the last count (#422), the checks below could not pass on your install, for reasons only you can
 change. Each line is one action and points to the item with its steps. Nothing here is new to decide.
 

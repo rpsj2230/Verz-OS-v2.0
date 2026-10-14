@@ -3614,6 +3614,11 @@ const PROGRESS = {
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (channels.lark, digest_routes, ops.acceptance_checks_digest +7 more); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
+  "M38.5.4": {
+    status: "IN PROGRESS",
+    why: "owner-approved 2026-10-14: Built beside Done on /build, the tracker and status.json, and the proof sweep on one complete clean run with a repeat of only the failed or not-run checks; in a pull request (M38/built-and-proven-tracker), not yet on main; proved when the owner's install shows both figures and a repeat completes a clean run",
+    updated: "2026-10-14",
+  },
   "M39.1.1.1": {
     status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.workspace, ops.acceptance_checks_agent_page); open for proof on the install or a decision, not for code",

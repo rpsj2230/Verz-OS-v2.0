@@ -226,7 +226,7 @@ let waveRows = "";
 for (const w of Object.keys(waves).sort()) {
   const ms = TREE.filter(m => m.wave == w).map(m => m.id).join(" · ");
   const win = WIN[w];
-  waveRows += `<tr><td class="k">W${w} · ${SCH.NAMES[w]||""}</td><td class="m">${fmt(win.start)} – ${fmt(win.end)}</td><td class="m">${win.tracks}</td><td class="m" data-wavecount="${w}">${wavesBuildable[w]}</td><td class="m" data-wavedone="${w}">0</td>${STATUS_COLS.map(one => `<td class="m" data-wavest="${w}|${one}">0</td>`).join("")}<td>${ms}</td></tr>
+  waveRows += `<tr><td class="k">W${w} · ${SCH.NAMES[w]||""}</td><td class="m">${fmt(win.start)} – ${fmt(win.end)}</td><td class="m">${win.tracks}</td><td class="m" data-wavecount="${w}">${wavesBuildable[w]}</td><td class="m" data-wavedone="${w}">0</td><td class="m" data-wavebuilt="${w}">0</td>${STATUS_COLS.map(one => `<td class="m" data-wavest="${w}|${one}">0</td>`).join("")}<td>${ms}</td></tr>
 `;
 }
 
@@ -255,7 +255,9 @@ h1{font-family:var(--display);font-weight:600;font-size:clamp(32px,4.6vw,48px);l
 .srcBadge{font-family:var(--mono,monospace);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#7a716c;padding:2px 0;display:inline-block}
 .srcBadge.live{color:#14724a;font-weight:600}
 .cb:disabled+.lbl{cursor:default}
-.track{height:9px;background:var(--sunk);border-radius:99px;overflow:hidden;margin-top:11px}
+.track{position:relative;height:9px;background:var(--sunk);border-radius:99px;overflow:hidden;margin-top:11px}
+.why{font-size:12px;line-height:1.5;color:var(--muted);margin:8px 0 0}
+li.leaf.built .lbl::after{content:"BUILT";font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.06em;color:var(--warn);background:var(--warn-bg);padding:2px 5px;border-radius:2px;align-self:flex-start;margin-top:1px;flex:none}
 .fill{height:100%;background:var(--accent);width:0%;border-radius:99px;transition:width .25s ease}
 .barBot{display:flex;flex-wrap:wrap;gap:8px;margin-top:11px;align-items:center}
 .wchip{font-family:var(--mono);font-size:9.5px;padding:3px 8px;border-radius:2px;background:var(--sunk);color:var(--muted);white-space:nowrap}
@@ -356,9 +358,11 @@ footer{margin-top:48px;padding-top:15px;border-top:1px solid var(--rule);font-fa
 
 <div class="bar">
   <div class="barTop">
-    <div><span class="pct" id="pct">0%</span><small id="pctLbl">complete</small></div>
+    <div title="Done: shown working. The install's own checks passed for the task, or for work that lives only in the repository a named CI job proves it."><span class="pct" id="pct">0%</span><small id="pctLbl">done (shown working)</small></div>
+    <div title="Built: merged to main, CI passed and a test names the task. Not yet shown working on the install, so never counted as done. Includes every task that is done."><span class="pct" id="pctBuilt" style="color:var(--muted)">0%</span><small id="pctBuiltLbl">built (CI-checked, not yet shown working on the install)</small></div>
     <div class="stats">
       <span><b id="cDone">0</b> done</span>
+      <span title="Built and not yet shown working: in the Built figure and not in Done."><b id="cBuiltOnly">0</b> built, not yet proven</span>
       <span><b id="cTotal">${BUILDABLE}</b> buildable</span>
       <span><b id="cLeft">${BUILDABLE}</b> remaining</span>
       <span title="Leaves a commit can close. Every percentage on this page counts only these."><b id="cBuild">0</b> of ${BUILDABLE} buildable</span>
@@ -375,7 +379,8 @@ footer{margin-top:48px;padding-top:15px;border-top:1px solid var(--rule);font-fa
       <button id="bReset">Reset</button>
     </div>
   </div>
-  <div class="track"><div class="fill" id="fill"></div></div>
+  <div class="track"><div class="fill" id="fillBuilt" style="position:absolute;left:0;top:0;background:var(--muted);opacity:.4"></div><div class="fill" id="fill" style="position:relative"></div></div>
+  <p class="why" id="builtNote">Done means the task has been shown working. Built means the code is merged to main, CI passed and a test names the task, but nobody has yet shown it working on the install, so it is never counted as done. A tester will later promote built tasks to Done.</p>
   <div class="barBot" id="waveChips"></div>
   <div class="now" id="now"><b>Current wave:</b> <span class="cur">not started</span></div>
   <div><span class="srcBadge" id="srcBadge">checking source…</span></div>
@@ -391,7 +396,7 @@ ${toc}</ol></nav>
 <div class="rule">Every leaf is a deliverable with a checkbox. A module is complete when every leaf under it is ticked <em>and</em> its invariants pass. Nothing is done because it looks finished.</div>
 <p>Ids run four and five levels deep - <code>M0.2.1</code> is a subtask, <code>M31.1.1.3</code> a step within one. Put the id in the commit message and the traceability file so progress is a query rather than a meeting.</p>
 <p>Ticks are stored in this browser only, so each person tracks their own view. Use <strong>Export</strong> to produce a JSON snapshot for the traceability file or to share with the team.</p>
-<div class="tscroll"><table><thead><tr><th>Wave</th><th>Dates</th><th>Tracks</th><th>Items</th><th>Done</th><th>In progress</th><th>Ready for testing</th><th>Blocked</th><th>Open</th><th>Modules</th></tr></thead><tbody>
+<div class="tscroll"><table><thead><tr><th>Wave</th><th>Dates</th><th>Tracks</th><th>Items</th><th>Done</th><th>Built</th><th>In progress</th><th>Ready for testing</th><th>Blocked</th><th>Open</th><th>Modules</th></tr></thead><tbody>
 ${waveRows}</tbody></table></div>
 </section>
 
@@ -407,6 +412,10 @@ Derived from the Company Brain architecture, module by module, so coverage is tr
   var state={};
   try{state=JSON.parse(localStorage.getItem(KEY)||"{}")}catch(e){state={}}
   var boxes=[].slice.call(document.querySelectorAll(".cb"));
+  // Leaves built and not yet proven, from status.json: merged, CI passed and a test names them.
+  // Never part of state, so a built leaf is never ticked or counted as done.
+  var builtOnly={};
+  var builtKnown=false;
   // Acts are listed but never counted: every percentage divides by the buildable leaves.
   var isActBox=function(b){return b.getAttribute("data-act")!==null};
   // Decided leaves are counted in no total either, and never as client tasks.
@@ -428,7 +437,7 @@ Derived from the Company Brain architecture, module by module, so coverage is tr
     // migration and is shown beside the figure. Folded together the figure stops rising
     // short of 100 and the stop does not mean the build stalled. brain.status counts the
     // same way, so /build and this page agree.
-    var buildDone=0, actsLeft=0, byStatus={};
+    var buildDone=0, actsLeft=0, byStatus={}, builtN=0;
     boxes.forEach(function(b){
       var id=b.getAttribute("data-id");
       var mod=id.split(".")[0];
@@ -451,7 +460,11 @@ Derived from the Company Brain architecture, module by module, so coverage is tr
       // was not used here. No backticks in this comment: it sits inside a template string.
       var w=b.getAttribute("data-wave");
       if(w===null||w==="")w=String(waveOf[mod]);
-      byWave[w]=byWave[w]||{d:0,t:0,s:{}}; byWave[w].t++;
+      byWave[w]=byWave[w]||{d:0,t:0,b:0,s:{}}; byWave[w].t++;
+      // Built and not yet proven. A leaf a commit closed is done and is never counted here.
+      var isBuilt=!state[id]&&builtOnly[id]===1;
+      b.closest("li.leaf").classList.toggle("built",isBuilt);
+      if(isBuilt){builtN++;byWave[w].b++}
       // A closed leaf is DONE whatever progress.js says; only an open one counts by its status.
       if(!state[id]){var st=b.getAttribute("data-status")||"OPEN";byWave[w].s[st]=(byWave[w].s[st]||0)+1;byStatus[st]=(byStatus[st]||0)+1}
       byMod[mod]=byMod[mod]||{d:0,t:0}; byMod[mod].t++;
@@ -475,6 +488,12 @@ Derived from the Company Brain architecture, module by module, so coverage is tr
     document.getElementById("pct").textContent=p+"%";
     document.getElementById("fill").style.width=p+"%";
     document.getElementById("cDone").textContent=done;
+    // Built is shown only when status.json said so. A page opened as a local file knows nothing
+    // of merged commits, and a built figure equal to done would read as nothing being built.
+    var pb=total?Math.round((done+builtN)/total*1000)/10:0;
+    document.getElementById("pctBuilt").textContent=builtKnown?pb+"%":"n/a";
+    document.getElementById("fillBuilt").style.width=builtKnown?pb+"%":"0%";
+    document.getElementById("cBuiltOnly").textContent=builtKnown?builtN:"n/a";
     document.getElementById("cLeft").textContent=total-done;
     document.getElementById("cBuild").textContent=buildDone;
     document.getElementById("cActs").textContent=actsLeft;
@@ -509,6 +528,7 @@ Derived from the Company Brain architecture, module by module, so coverage is tr
       var extra=["IN PROGRESS","READY FOR TESTING","BLOCKED"].filter(function(k){return o.s[k]}).map(function(k){return o.s[k]+" "+k.toLowerCase()}).join(" · ");
       chips+='<span class="wchip'+(v===100?' done':'')+'">Wave '+w+' <b>'+o.d+'/'+o.t+'</b> '+v+'%'+(extra?' · '+extra:'')+'</span>';
       var dc=document.querySelector('[data-wavedone="'+w+'"]');if(dc)dc.textContent=o.d;
+      var bc=document.querySelector('[data-wavebuilt="'+w+'"]');if(bc)bc.textContent=builtKnown?(o.d+o.b):"n/a";
       ["IN PROGRESS","READY FOR TESTING","BLOCKED","OPEN"].forEach(function(k){var c=document.querySelector('[data-wavest="'+w+'|'+k+'"]');if(c)c.textContent=o.s[k]||0});
       if(current===null&&v<100)current=w;
     });
@@ -570,6 +590,9 @@ Derived from the Company Brain architecture, module by module, so coverage is tr
   }).then(function(st){
     state={};
     (st.done_task_ids||[]).forEach(function(id){state[id]=1});
+    builtOnly={};
+    (st.built_task_ids||[]).forEach(function(id){builtOnly[id]=1});
+    builtKnown=st.built!==undefined;
     boxes.forEach(function(b){b.disabled=true;b.title="Set by merged commits, not by hand"});
     var rb=document.getElementById("bReset"); if(rb) rb.remove();
     var badge=document.getElementById("srcBadge");

@@ -8355,7 +8355,8 @@
     "M38.4.2.5",
     "M38.5.1",
     "M38.5.2",
-    "M38.5.3"
+    "M38.5.3",
+    "M38.5.4"
    ],
    "leaf_texts": [
     "Branch per track named for its module, so twelve concurrent tracks do not collide",
@@ -8412,7 +8413,8 @@
     "Cassettes refreshed from live so future development stays faithful",
     "After each staging deploy the permission canaries and the row-level security sweep run against the staging database, and a failure stops the commit being promoted",
     "CI scans the image and every locked dependency for known vulnerabilities on each build and fails on a critical finding without a recorded exception, and a written threat model of the install's exposed surfaces is kept beside the release",
-    "On the owner's install a Maintenance Agent assembled from the console answers a real maintenance question in Lark from uploaded maintenance knowledge and the ticket desk, runs one workflow that stops for one approval, and the run is signed off against acceptance criteria written before it"
+    "On the owner's install a Maintenance Agent assembled from the console answers a real maintenance question in Lark from uploaded maintenance knowledge and the ticket desk, runs one workflow that stops for one approval, and the run is signed off against acceptance criteria written before it",
+    "On the owner's install the task tracker, /build and status.json show Done, which has been shown working, beside Built, which is merged with CI passed and a test naming the task and not yet shown working, with a note in plain words and no built task counted as done, and the install proof sweep closes a task on one complete clean run, a run repeatable for only the checks that failed or came back not run"
    ],
    "leaf_waves": {
     "M38.2.1.4": 1,
@@ -8432,7 +8434,8 @@
     "M38.4.2.3": 5,
     "M38.4.2.4": 5,
     "M38.4.2.5": 5,
-    "M38.5.3": 3
+    "M38.5.3": 3,
+    "M38.5.4": 1
    },
    "leaf_acts": {
     "M38.1.1.5": {
@@ -8526,6 +8529,11 @@
      "status": "IN PROGRESS",
      "why": "Wave 2 batch 2, connector registries and the minimal index (C1), under the owner's rule that connectors never bulk-sync",
      "updated": "2026-09-28"
+    },
+    "M38.5.4": {
+     "status": "IN PROGRESS",
+     "why": "owner-approved 2026-10-14: Built beside Done on /build, the tracker and status.json, and the proof sweep on one complete clean run with a repeat of only the failed or not-run checks; in a pull request (M38/built-and-proven-tracker), not yet on main; proved when the owner's install shows both figures and a repeat completes a clean run",
+     "updated": "2026-10-14"
     }
    }
   },
