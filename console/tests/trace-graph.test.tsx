@@ -37,7 +37,7 @@
  * Task ids: M32.5.2.3, M20.2.1
  */
 
-import { render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 import ts from "typescript";
 import { describe, expect, test } from "vitest";
 import { DataTable, type GridColumn } from "../src/components/DataTable";
@@ -45,6 +45,7 @@ import { flowEdges } from "../src/components/GraphCanvas";
 import {
   COLUMN_GAP,
   EMPTY_GRAPH,
+  UNNAMED_STEP,
   NODE_WIDTH,
   ROW_GAP,
   RUN_ENDINGS,
@@ -460,18 +461,20 @@ describe("what the canvas draws", () => {
     expect(classesFor("")).toEqual(["graph-node"]);
   });
 
-  test("the canvas cannot be dragged, connected, selected or reached by tab", () => {
-    // What breaks if this is deleted: a trace of something that already happened becomes an
-    // editor. The mechanism is that the nodes and edges are props with no change handlers, so
-    // a change has nowhere to go; the flags are what stop the surface from saying it can be
+  test("the canvas cannot be dragged, connected or selected, and its steps are reached by tab and read aloud", () => {
+    // What breaks if this is deleted: either half. A trace of something that already happened
+    // becomes an editor (the mechanism is that the nodes and edges are props with no change
+    // handlers, so a change has nowhere to go; the flags stop the surface from saying it can be
     // acted on when it cannot, and a control that looks live and does nothing is read as a
-    // permission problem. The source is parsed rather than searched, because this file writes
-    // out in prose the very flags it sets.
+    // permission problem). Or the surface goes back to being a picture a keyboard cannot enter,
+    // which is the requirement this was changed for on 2026-10-14: each step takes a tab stop and
+    // says its words and its kind, and the library's select-and-move keys stay off, because a
+    // focused step that moved when an arrow was pressed would be an editor again. The source is
+    // parsed rather than searched, because this file writes out in prose the very flags it sets.
     const source = parseConsoleSource(CANVAS_MODULE);
     for (const attribute of [
       "nodesDraggable",
       "nodesConnectable",
-      "nodesFocusable",
       "edgesFocusable",
       "edgesReconnectable",
       "elementsSelectable",
@@ -480,15 +483,35 @@ describe("what the canvas draws", () => {
       expect(uses, attribute).toHaveLength(1);
       expect(uses[0]?.text, attribute).toBe("{false}");
     }
+    // Present with no value, which is `true`; and the keyboard handling of the library is off.
+    for (const attribute of ["nodesFocusable", "disableKeyboardA11y"]) {
+      const uses = jsxAttributeUses(source, attribute);
+      expect(uses, attribute).toHaveLength(1);
+      expect(uses[0]?.text, attribute).toBe("");
+    }
     // And there is nowhere for a change to be sent even if one were made.
     expect(jsxAttributeUses(source, "onNodesChange")).toEqual([]);
     expect(jsxAttributeUses(source, "onEdgesChange")).toEqual([]);
 
     const container = render(<TraceGraph caption="A run" run={ended(WHOLE_RUN)} />).container;
-    const node = container.querySelector(".react-flow__node") as HTMLElement;
-    expect(node.getAttribute("class")).not.toContain("draggable");
-    expect(node.getAttribute("class")).not.toContain("selectable");
-    expect(node.hasAttribute("tabindex")).toBe(false);
+    const nodes = [...container.querySelectorAll<HTMLElement>(".react-flow__node")];
+    expect(nodes).toHaveLength(3);
+    for (const node of nodes) {
+      expect(node.getAttribute("class")).not.toContain("draggable");
+      expect(node.getAttribute("class")).not.toContain("selectable");
+      expect(node.getAttribute("tabindex")).toBe("0");
+    }
+    expect(nodes.map((node) => node.getAttribute("aria-label"))).toEqual(["Ingress, gate", "Route, gate", "Invoke, tool"]);
+    // Nothing on a focused step answers a key: the library's description of its select-and-move
+    // keys is not attached, so a screen reader is not told of controls this surface lacks.
+    expect(nodes.every((node) => !node.hasAttribute("aria-describedby"))).toBe(true);
+    const first = nodes[0] as HTMLElement;
+    first.focus();
+    const placed = first.style.transform;
+    fireEvent.keyDown(first, { key: "ArrowRight" });
+    fireEvent.keyDown(first, { key: "Enter" });
+    expect(first.getAttribute("class")).not.toContain("selected");
+    expect(first.style.transform).toBe(placed);
   });
 
   test("every step that arrived is drawn, with the words the API used", () => {
@@ -563,5 +586,80 @@ describe("what the canvas draws", () => {
       expect(container.querySelector(".graph__empty")).toBeNull();
       expect(container.querySelector(".graph__busy")).not.toBeNull();
     }
+  });
+});
+
+describe("the drawing in words", () => {
+  function outlineOn(container: HTMLElement): string[] {
+    return [...container.querySelectorAll(".graph__outline li")].map((one) => one.textContent ?? "");
+  }
+
+  test("every step is listed in the drawing's order, with the steps a line leads to", () => {
+    // What breaks if this is deleted: the text alternative. The canvas is a picture, and a person
+    // who cannot see it or cannot follow it by tabbing across boxes has nothing; the list is the
+    // same steps in words, each saying where it goes next, so the lines can be followed without
+    // being seen. The kinds are the same words the boxes carry.
+    const container = render(<TraceGraph caption="A run" run={ended(WHOLE_RUN)} />).container;
+
+    expect(outlineOn(container)).toEqual(["Ingress gate Then: Route.", "Route gate Then: Invoke.", "Invoke tool"]);
+    expect(container.querySelector(".graph__outline")?.tagName).toBe("OL");
+  });
+
+  test("a step the caller may not see is not in the list, and leaves nothing that says it was", () => {
+    // What breaks if this is deleted: the rule `AN_EDGE_TO_A_MISSING_NODE_IS_A_MISSING_NODE` stopping
+    // at the canvas. This run's edges still name two steps that did not arrive. The list must name
+    // neither, must not say a step "ends here" (a step whose child was withheld would then read as
+    // a leaf, which is a claim the drawing does not make), and must carry no count of steps.
+    const container = render(<TraceGraph caption="A run" run={ended(PARTIAL_RUN)} />).container;
+
+    expect(outlineOn(container)).toEqual(["Ingress gate Then: Route.", "Route gate Then: Invoke.", "Invoke tool"]);
+    const text = container.querySelector(".graph__outline-wrap")?.textContent ?? "";
+    expect(text).not.toMatch(/identify|entitle/i);
+    expect(text).not.toMatch(/ends? here|last step|final/i);
+    expect(text).not.toMatch(/\d/);
+  });
+
+  test("a step with no name is called nothing that reveals its number", () => {
+    // What breaks if this is deleted: a gap read off the list. On a trace a step's id is its
+    // number, so a list that fell back to the id for a nameless step would say 2, 3, 5 and so
+    // that a step 4 exists, which the drawing packs its rows to avoid saying.
+    const nameless = readCompletedRun({
+      status: backendRequestStatuses()[0],
+      nodes: [
+        { id: "2", label: "", kind: "" },
+        { id: "5", label: "Route", kind: "" },
+      ],
+      edges: [{ from: "2", to: "5" }],
+    });
+    const container = render(<TraceGraph caption="A run" run={nameless} />).container;
+
+    expect(outlineOn(container)).toEqual([`${UNNAMED_STEP} Then: Route.`, "Route"]);
+    expect(container.querySelector(".graph__outline-wrap")?.textContent ?? "").not.toMatch(/\d/);
+  });
+
+  test("a skip link ahead of the drawing reaches the list, which is not itself a tab stop", () => {
+    // What breaks if this is deleted: the cost of making the steps tab stops. A keyboard user who
+    // does not want to tab across every box needs somewhere to go, and the link is only worth
+    // anything if it points at an element that exists and can take focus; the list takes it from
+    // the link and not from the tab key, so the page gains no stop it did not need.
+    const container = render(<TraceGraph caption="A run" run={ended(WHOLE_RUN)} />).container;
+    const skip = container.querySelector<HTMLAnchorElement>("a.skip-link");
+    const target = container.querySelector<HTMLElement>(".graph__outline");
+
+    expect(skip?.getAttribute("href")).toBe(`#${target?.id ?? "missing"}`);
+    expect(target?.getAttribute("tabindex")).toBe("-1");
+    expect(container.querySelector(".react-flow")?.compareDocumentPosition(skip as Node)).toBe(
+      Node.DOCUMENT_POSITION_PRECEDING,
+    );
+  });
+
+  test("the list reads the same graph the canvas draws and has a heading a reader can find", () => {
+    // What breaks if this is deleted: a list assembled from something other than the drawn graph,
+    // which could say more than the drawing does. Both come from `run.graph`; the node count equals
+    // the list's length only as a property of one input, never as a figure drawn on the page.
+    const container = render(<TraceGraph caption="A run" run={ended(WHOLE_RUN)} />).container;
+
+    expect(outlineOn(container)).toHaveLength(nodeIdsOn(container).length);
+    expect(container.querySelector(".graph__outline-heading")?.textContent).toBe("The steps as a list");
   });
 });
