@@ -2975,9 +2975,9 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M32.5.2.3": {
-    status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in components/GraphCanvas.tsx, components/ProcedureCanvas.tsx, components/TraceGraph.tsx +4 more; NOT wired: pages/Audit.route.tsx, pages/audit/TracePage.tsx",
-    updated: "2026-10-06",
+    status: "READY FOR TESTING",
+    why: "built (M32/react-flow-keyboard-and-list): the trace graph on Audit then Trace and the agent builder's procedure canvas are both drawn through React Flow, each step takes a tab stop and is read aloud with its words and kind, a skip link jumps past the drawing, and the trace has the steps as a list under it; to prove on the install: sign in as a reader holding the trace reader role, open Audit then Trace, enter a trace id and a reason, press Tab and see each box take the focus ring, press Tab until the link Skip the drawing appears, press Enter and land on the list of steps, then open an agent's draft, go to its Procedure step and do the same",
+    updated: "2026-10-14",
   },
   "M32.6.1.1": {
     status: "OPEN",
@@ -4888,6 +4888,11 @@ const PROGRESS = {
     status: "IN PROGRESS",
     why: "TRIAGE 2026-10-13 class 2 (partly built): docs/install/network.md and threat-model.md describe public ports, TLS and the allowlist, and ops/security exists; no probe from outside the allowlist and no alert on the install's own certificate within fourteen days exists (ops/website_probe.py reads other sites' certificates only). NEXT: Build an external probe job and a certificate-expiry alert to a named person, then a check that reads the alert configuration; the outside-address probe itself is a person step.",
     updated: "2026-10-13",
+  },
+  "M12.3.5": {
+    status: "READY FOR TESTING",
+    why: "built for Word only, behind a switch that ships off (brain.tools.document_generation, tool documents.generate_document); decks and spreadsheets wait on needs-rupash 193 and are not offered. NO PRIOR WORK existed (no note, no branch, no code). Proved on the install when: 1. Install, Features: switch on 'Let an agent produce a Word document from an approved template'. 2. Knowledge: add a document of kind Template holding a line such as 'Prepared for {{client_name}}.' and have its steward verify it. 3. Give a person, and an agent whose tools include documents.generate_document, the capabilities invoke:generated_document and read:generated_document. 4. As that person ask the agent to produce a document from the template with a value for client_name: its answer names a file, which is listed under that person's artifacts and opens in Word with the value in it. 5. Ask the same as a person in another department, and with a draft or unverified document as the template: nothing is produced and the refusal is the same sentence. Limit: the layout is rebuilt from the template's text, so the original file's styles and logo are not carried; that needs a link from each library item to its original file, which is a migration.",
+    updated: "2026-10-14",
   },
 };
 
