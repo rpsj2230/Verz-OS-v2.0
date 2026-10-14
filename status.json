@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-14T14:45:13.674699+00:00",
-  "commit": "33065e9d",
-  "commit_subject": "The trace graph and the procedure canvas have keyboard-focusable steps, a list alternative and a skip link (M32.5.2.3) (#604)",
+  "generated_at": "2026-10-14T15:41:10.029936+00:00",
+  "commit": "c1447c71",
+  "commit_subject": "An agent can fill an approved company template into a Word file kept for the person asking, behind a switch that ships off (#607)",
   "total": 1626,
   "done": 1134,
   "percent": 69.7,
-  "built": 1278,
-  "built_percent": 78.6,
-  "built_unproven": 144,
+  "built": 1279,
+  "built_percent": 78.7,
+  "built_unproven": 145,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -56,6 +56,7 @@
     "M12.2.2",
     "M12.2.3",
     "M12.2.9",
+    "M12.3.5",
     "M12.4.11",
     "M12.4.5",
     "M12.4.7",
@@ -195,13 +196,13 @@
       "done": 197,
       "percent": 71.9,
       "in_progress": 0,
-      "ready_for_testing": 53,
+      "ready_for_testing": 54,
       "blocked": 15,
-      "open": 9,
+      "open": 8,
       "acts": 0,
       "decided": 20,
-      "built": 251,
-      "built_percent": 91.6
+      "built": 252,
+      "built_percent": 92.0
     },
     {
       "wave": 3,
@@ -393,7 +394,7 @@
       "done": 24,
       "acts": 0,
       "decided": 4,
-      "built": 31
+      "built": 32
     },
     {
       "module": "M13",
@@ -2185,6 +2186,11 @@
       "status": "READY FOR TESTING",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in app, ops.sandbox, ops.sandbox_runner +2 more; NOT wired: ops.sandbox_client. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; closed PR #252's branch M6/w3-fastlane-role (may be replayed already); closed PR #255's branch M16/w3-confirmed (may be replayed already); +1 more",
       "updated": "2026-10-06"
+    },
+    "M12.3.5": {
+      "status": "READY FOR TESTING",
+      "why": "built for Word only, behind a switch that ships off (brain.tools.document_generation, tool documents.generate_document); decks and spreadsheets wait on needs-rupash 193 and are not offered. NO PRIOR WORK existed (no note, no branch, no code). Proved on the install when: 1. Install, Features: switch on 'Let an agent produce a Word document from an approved template'. 2. Knowledge: add a document of kind Template holding a line such as 'Prepared for {{client_name}}.' and have its steward verify it. 3. Give a person, and an agent whose tools include documents.generate_document, the capabilities invoke:generated_document and read:generated_document. 4. As that person ask the agent to produce a document from the template with a value for client_name: its answer names a file, which is listed under that person's artifacts and opens in Word with the value in it. 5. Ask the same as a person in another department, and with a draft or unverified document as the template: nothing is produced and the refusal is the same sentence. Limit: the layout is rebuilt from the template's text, so the original file's styles and logo are not carried; that needs a link from each library item to its original file, which is a migration.",
+      "updated": "2026-10-14"
     },
     "M12.4.5": {
       "status": "READY FOR TESTING",
