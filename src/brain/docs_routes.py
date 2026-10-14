@@ -8,7 +8,7 @@ These routes are public-by-deployment but carry no company data, they describe t
 not the client's records. Nothing here touches the gate.
 
 Task ids: M38.3.2.1, M38.3.2.2, M38.3.2.3, M38.3.2.4, M38.3.2.5, M27.8.1, M38.2.1.6, M38.2.1.1
-Task ids: M38.5.1
+Task ids: M38.5.1, M38.5.4
 """
 
 from __future__ import annotations
@@ -262,6 +262,49 @@ def _shipped_at() -> str:
     return f" · shipped {manifest.built_at:%d %b %H:%M} UTC"
 
 
+#: What the first figure on /build is called. It keeps the name it had, Done, and says what the
+#: word has always meant, so the second figure cannot be read as a softer version of it.
+DONE_LABEL: Final = "Done (shown working)"
+
+#: What the second figure is called. Approved by the owner on 2026-10-14. See
+#: `brain.status.A_BUILT_IS_CI_CHECKED_AND_NEVER_SHOWN_WORKING`.
+BUILT_LABEL: Final = "Built (CI-checked, not yet shown working on the install)"
+
+#: The plain-words note under the figures, shared with the tracker's wording in meaning.
+DONE_VERSUS_BUILT: Final = (
+    "Done means the task has been shown working: the install's own checks passed for it, or, "
+    "for work that lives only in the repository, a named CI job proves it. Built means the code "
+    "is merged to main, CI passed and a test in the repository names the task, but nobody has "
+    "yet shown it working on the install, so it is never counted as done. The Built figure "
+    "includes every task that is Done. A tester will later run the install checks and promote "
+    "built tasks to Done, so Built runs ahead and Done catches up."
+)
+
+
+def _built_figure(s: dict[str, Any]) -> tuple[str, str, float]:
+    """The Built headline, its caption and the width of its bar, from a status file.
+
+    A status file written before the figure existed carries no `built`, and that is said rather
+    than shown as zero: a zero would read as nothing being built.
+    """
+    if "built" not in s:
+        return "n/a", "this build did not report a built figure", 0.0
+    built = int(s["built"])
+    unproven = int(s.get("built_unproven", 0))
+    caption = (
+        f"{built} of {s.get('total', 0)} buildable tasks: {s.get('done', 0)} done plus "
+        f"{unproven} built and not yet shown working"
+    )
+    return f"{s.get('built_percent', 0.0)}%", caption, float(s.get("built_percent", 0.0))
+
+
+def _built_cell(wave: dict[str, Any]) -> str:
+    """A wave's built count over its total, or a dash for a status file that has no figure."""
+    if "built" not in wave:
+        return "-"
+    return f"{wave['built']}/{wave['total']}"
+
+
 @router.get("/build", response_class=HTMLResponse)
 async def build_status(request: Request) -> HTMLResponse:
     """A one-screen answer to 'where is this up to', with links to the full documents."""
@@ -275,6 +318,7 @@ async def build_status(request: Request) -> HTMLResponse:
         f'<td class="n">{w["done"]}/{w["total"]}</td>'
         f'<td class="b"><span style="width:{w["percent"]}%"></span></td>'
         f'<td class="n">{w["percent"]}%</td>'
+        f'<td class="n">{_built_cell(w)}</td>'
         f'<td class="n">{w.get("in_progress", 0)}</td><td class="n">{w.get("ready_for_testing", 0)}</td>'
         f'<td class="n">{w.get("blocked", 0)}</td><td class="n">{w.get("open", 0)}</td></tr>'
         for w in waves
@@ -304,6 +348,7 @@ async def build_status(request: Request) -> HTMLResponse:
         else "no requirements register published"
     )
 
+    built_pct, built_caption, built_width = _built_figure(s)
     shipped = _shipped_at()
     return HTMLResponse(f"""<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -316,11 +361,15 @@ body{{margin:0;background:var(--ground);color:var(--ink);font:15px/1.55 {SANS}}}
 .w{{max-width:860px;margin:0 auto;padding:44px 22px 80px}}
 h1{{font-family:{SANS};font-size:34px;margin:0 0 4px;letter-spacing:-.02em}}
 .sub{{font-family:{MONO};font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--brand)}}
-.big{{display:flex;align-items:baseline;gap:14px;margin:26px 0 6px}}
+.big{{display:flex;flex-wrap:wrap;align-items:flex-start;gap:14px 44px;margin:26px 0 6px}}
+.big .fig .lab{{font-family:{MONO};font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);max-width:300px}}
 .big .p{{font-size:64px;font-weight:600;line-height:1;letter-spacing:-.03em;font-variant-numeric:tabular-nums}}
+.big .fig.built .p{{font-size:44px;color:var(--dim)}}
 .big .c{{font-family:{MONO};font-size:12px;color:var(--dim)}}
-.track{{height:8px;background:var(--line);border-radius:99px;overflow:hidden;margin:10px 0 22px}}
-.track>span{{display:block;height:100%;background:var(--brand);border-radius:99px}}
+.track{{position:relative;height:8px;background:var(--line);border-radius:99px;overflow:hidden;margin:10px 0 22px}}
+.track>span{{position:absolute;left:0;top:0;display:block;height:100%;background:var(--brand);border-radius:99px}}
+.track>span.built{{background:var(--dim);opacity:.45}}
+.plain{{font-size:13.5px;line-height:1.6;margin:0 0 22px}}
 table{{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:26px}}
 th{{font-family:{MONO};font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);text-align:left;padding:6px 8px 5px 0;border-bottom:1px solid var(--line)}}
 td{{padding:7px 8px 7px 0;border-bottom:1px solid var(--line)}}
@@ -335,14 +384,18 @@ code{{font-family:{MONO};font-size:11.5px;color:var(--brand)}}
 </style></head><body><div class="w">
 <div class="sub">{installed_name()} · build status</div>
 <h1>{current_name}</h1>
-<div class="big"><span class="p">{pct}%</span>
-<span class="c">{s.get("done", 0)} of {s.get("total", 0)} buildable tasks · {today_line}<br>
+<div class="big"><div class="fig"><div class="lab">{DONE_LABEL}</div><span class="p">{pct}%</span>
+<div class="c">{s.get("done", 0)} of {s.get("total", 0)} buildable tasks</div></div>
+<div class="fig built"><div class="lab">{BUILT_LABEL}</div><span class="p">{built_pct}</span>
+<div class="c">{built_caption}</div></div></div>
+<div class="c" style="font-family:{MONO};font-size:12px;color:var(--dim)">{today_line}<br>
 {s.get("acts", 0)} client tasks on the week of a migration, not counted<br>
 {s.get("decided", 0)} decided, not needed as written<br>
 {requirements_line}<br>
-commit {s.get("commit", "?")}{shipped}</span></div>
-<div class="track"><span style="width:{pct}%"></span></div>
-<div style="overflow-x:auto"><table><thead><tr><th>Wave</th><th>Name</th><th style="text-align:right">Done</th><th></th><th style="text-align:right">%</th><th style="text-align:right">In progress</th><th style="text-align:right">Ready for testing</th><th style="text-align:right">Blocked</th><th style="text-align:right">Open</th></tr></thead>
+commit {s.get("commit", "?")}{shipped}</div>
+<div class="track"><span class="built" style="width:{built_width}%"></span><span style="width:{pct}%"></span></div>
+<p class="plain">{DONE_VERSUS_BUILT}</p>
+<div style="overflow-x:auto"><table><thead><tr><th>Wave</th><th>Name</th><th style="text-align:right">Done</th><th></th><th style="text-align:right">%</th><th style="text-align:right">Built</th><th style="text-align:right">In progress</th><th style="text-align:right">Ready for testing</th><th style="text-align:right">Blocked</th><th style="text-align:right">Open</th></tr></thead>
 <tbody>{wave_rows}</tbody></table></div>
 <a class="btn pri" href="/build/tracker">Task tracker</a>
 <a class="btn" href="/build/waves">Wave reports</a>
@@ -354,9 +407,11 @@ commit {s.get("commit", "?")}{shipped}</span></div>
 <ul>{recent}</ul>
 <h3 style="font-family:{SANS};font-size:15px;margin:24px 0 6px">Next up</h3>
 <ul>{upcoming}</ul>
-<p class="note">Every figure here is computed from commits merged to main, never entered by
-hand. A task counts as done when a commit naming its id is on main and CI passed, so this
-page cannot show progress that does not exist. Generated at build time from
+<p class="note">Every figure here is computed from commits merged to main and the tests in the
+repository, never entered by hand. A task counts as done only when a commit naming its id is on
+main with the proof the project asks for, so this page cannot show a task as working that nobody
+has shown working. A task counts as built when its code is merged, CI passed and a test names it,
+and it is never counted as done on that. Generated at build time from
 {s.get("commit", "?")}, so it always describes the code actually running.</p>
 </div></body></html>""")
 

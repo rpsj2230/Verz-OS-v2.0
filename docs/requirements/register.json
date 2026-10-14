@@ -18744,6 +18744,21 @@
     "M10.7.8"
    ],
    "decision": null
+  },
+  {
+   "id": "OWN6-1",
+   "source": "owner, 2026-10-14 (chat): progress should show without waiting for the install's proof, and one clean full install run, not two, is the gate",
+   "area": "Hosting and delivery",
+   "requirement": "The tracker shows a second figure, Built, beside Done: a task is built when its code is merged to main, CI passed and a test names it, and it is never called done until the install's proof has closed it; and the install proof sweep closes a task on one complete clean run of every check, with a way to repeat only the checks that failed or did not run.",
+   "leaves": [
+    "M38.3.1.4",
+    "M38.3.2.3",
+    "M38.5.1"
+   ],
+   "proof": [
+    "M38.5.4"
+   ],
+   "decision": null
   }
  ]
 }
