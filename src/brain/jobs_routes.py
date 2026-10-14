@@ -62,7 +62,7 @@ table, for `brain.api`'s reason, and a history across every job, which would be 
 screen. A job with no runner says so on its row (`needs`); a pause is an `ops.setting` row, so
 it outlives a restart of either process, which is the rest of the leaf.
 
-Task ids: M27.8.13, M27.15.47, M17.1.5
+Task ids: M27.8.13, M27.15.47, M17.1.5, M27.13.3
 """
 
 from __future__ import annotations
@@ -90,7 +90,19 @@ from brain.gate.context import TrafficClass
 from brain.listing import Column, ListAsked, Listing
 from brain.ops.controls import Control
 from brain.ops.features import SCHEDULE_CONTROL, is_on
+from brain.ops.features_declared.job_redrive import JOB_REDRIVE
 from brain.ops.jobs import DeadLetter, DeadLetterReason, JobState, may_see
+from brain.ops.redrive_control import (
+    PersonAsk,
+    RedriveError,
+    WorkerAnswer,
+    answered_in,
+    answered_states,
+    ask,
+    asked_in,
+    asked_states,
+    standing_of,
+)
 from brain.ops.retention_store import released_controls
 from brain.ops.schedule import DESTRUCTIVE, Owed, report_only_now, schedulable
 from brain.ops.schedule_control import (
@@ -230,6 +242,11 @@ class DeadLetterView(BaseModel):
     set_aside_at: datetime
     #: Whether what the job refers to is still kept, so it can still be investigated.
     actionable: bool
+    #: When a person last asked for this job to be run again, and the worker's answer in words.
+    #: Null for a job nobody has asked about, which is what a reader who was never told of the
+    #: control sees as well, so the field says nothing about who may ask.
+    run_again_asked_at: datetime | None = None
+    run_again_standing: str | None = None
 
 
 class DeadLettersPage(BaseModel):
@@ -241,6 +258,10 @@ class DeadLettersPage(BaseModel):
     items: list[DeadLetterView]
     #: The reason words, so the page names each in words without a copy of the list.
     reasons: list[str]
+    #: Whether `job_redrive` is switched on. Presentation: the control asks again.
+    run_again_switched_on: bool = False
+    #: Whether this caller holds the schedule's authority. Presentation: the control asks again.
+    may_run_again: bool = False
 
 
 class JobChanged(BaseModel):
@@ -565,6 +586,18 @@ def _refused_because(reason: str) -> Absent:
     return Absent(message, public_message=message)
 
 
+#: What a caller holding the authority is told when running a set-aside job again is off.
+REDRIVE_SWITCHED_OFF: Final = (
+    "running a job that was set aside again from the console is switched off on this install, "
+    "and an administrator switches it on under Install, Features"
+)
+
+#: What a caller is told of a set-aside job whose references are gone.
+REFERENCES_HAVE_OUTLIVED_THE_JOB: Final = (
+    "that job was set aside longer ago than what it refers to is kept, so running it again would "
+    "fail for a reason this screen already gives"
+)
+
 #: What a caller holding the authority is told when the feature is off.
 SWITCHED_OFF: Final = (
     "pausing and running jobs from the console is switched off on this install, and an "
@@ -634,7 +667,12 @@ DEAD_LETTERS_LOADED: Final = 500
 
 
 def dead_letters_shown(
-    entries: Sequence[DeadLetter], reach: EntitlementSet, now: datetime
+    entries: Sequence[DeadLetter],
+    reach: EntitlementSet,
+    now: datetime,
+    *,
+    asks: Mapping[str, PersonAsk] | None = None,
+    answers: Mapping[str, WorkerAnswer] | None = None,
 ) -> list[DeadLetterView]:
     """The set-aside jobs this reader may be shown, newest first, as the screen draws them.
 
@@ -645,6 +683,8 @@ def dead_letters_shown(
     nothing records what was skipped, so the list a reader gets is the list they would get had the
     others never been written.
     """
+    asked = asks or {}
+    answered = answers or {}
     return [
         DeadLetterView(
             job_id=one.job_id,
@@ -653,6 +693,8 @@ def dead_letters_shown(
             attempts=one.attempts,
             set_aside_at=one.at,
             actionable=one.is_actionable(now),
+            run_again_asked_at=asked[one.job_id].at if one.job_id in asked else None,
+            run_again_standing=standing_of(asked.get(one.job_id), answered.get(one.job_id)),
         )
         for one in entries
         if may_see(one, reach, now) or may_see_job(one.task, reach, now)
@@ -679,6 +721,9 @@ async def dead_letters(request: Request, asked: Asked) -> DeadLettersPage:
             .scalars()
             .all()
         )
+        asks = asked_in(await asked_states(session))
+        answers = answered_in(await answered_states(session))
+        switched_on = await is_on(session, JOB_REDRIVE)
     entries = [
         DeadLetter(
             job_id=row.job_id,
@@ -693,8 +738,83 @@ async def dead_letters(request: Request, asked: Asked) -> DeadLettersPage:
     ]
     return DeadLettersPage(
         as_of=asked.now,
-        items=dead_letters_shown(entries, asked.reach, asked.now),
+        items=dead_letters_shown(entries, asked.reach, asked.now, asks=asks, answers=answers),
         reasons=[one.value for one in DeadLetterReason],
+        run_again_switched_on=switched_on,
+        may_run_again=may_control(asked.reach, asked.now),
+    )
+
+
+class RedriveAsked(BaseModel):
+    """What one press of Run again recorded, as the database now holds it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    job_id: str
+    asked_at: datetime
+    asked_by: str
+    #: The worker answers within a minute; this is its standing for the ask just made.
+    standing: str
+
+
+@router.post("/jobs/dead/{job_id}/redrive", response_model=RedriveAsked, responses=COMMON_RESPONSES)
+async def redrive_dead_letter(request: Request, job_id: str, asked: Asked) -> RedriveAsked:
+    """Ask for one set-aside job to be run again: the worker puts it back on its next minute.
+
+    **The authority and the job's own read come first and together**, before the database, so a
+    caller without either is refused identically whether or not this process has a pool and
+    whether or not the job exists. The job is then looked up in what this reader may be shown, so
+    an id nobody set aside, one this reader may not see and one that is not digits are the one
+    refusal. The switch is read last of the three, and a caller holding the authority is told by
+    name when it is off (see `brain.ops.redrive_control` for why it is a person's act).
+
+    **A dead letter older than the payload store's window is refused in words**, because what its
+    arguments refer to is gone and a run would fail for a reason this screen has already said.
+    """
+    if not may_control(asked.reach, asked.now):
+        log.info("run again refused", principal=asked.caller.principal.id)
+        raise _not_controllable()
+    async with _require_sessions(request)() as session:
+        found = (
+            await session.execute(select(DeadLetterRow).where(DeadLetterRow.job_id == job_id))
+        ).scalar_one_or_none()
+        entry = (
+            None
+            if found is None
+            else DeadLetter(
+                job_id=found.job_id,
+                task=found.task,
+                principal_id=found.principal_id,
+                traffic_class=TrafficClass(found.traffic_class),
+                reason=DeadLetterReason(found.reason),
+                attempts=found.attempts,
+                at=found.set_aside_at,
+            )
+        )
+        if entry is None or not (
+            may_see(entry, asked.reach, asked.now)
+            or may_see_job(entry.task, asked.reach, asked.now)
+        ):
+            await session.rollback()
+            raise _not_controllable()
+        if not await is_on(session, JOB_REDRIVE):
+            await session.rollback()
+            raise _refused_because(REDRIVE_SWITCHED_OFF)
+        if not entry.is_actionable(asked.now):
+            await session.rollback()
+            raise _refused_because(REFERENCES_HAVE_OUTLIVED_THE_JOB)
+        try:
+            await _attribute(session, asked)
+            await ask(session, job_id, at=asked.now, by=asked.caller.principal.id)
+        except RedriveError:
+            await session.rollback()
+            raise _not_controllable() from None
+        await session.commit()
+    return RedriveAsked(
+        job_id=job_id,
+        asked_at=asked.now,
+        asked_by=asked.caller.principal.id,
+        standing=standing_of(PersonAsk(at=asked.now, by=asked.caller.principal.id), None) or "",
     )
 
 
