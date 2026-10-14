@@ -658,7 +658,10 @@ CHUNK: Final = sa.Table(
         f"parse_path IS NULL OR {_one_of('parse_path', PARSE_PATHS)}", name="parse_path_is_a_path"
     ),
     sa.CheckConstraint(
-        "(parse_path IS NULL) = (parse_engine IS NULL)", name="parse_engine_with_its_path"
+        "parse_path IS NULL OR parse_engine IS NOT NULL", name="parse_engine_follows_its_path"
+    ),
+    sa.CheckConstraint(
+        "parse_engine IS NULL OR parse_path IS NOT NULL", name="parse_path_follows_its_engine"
     ),
     sa.CheckConstraint("span_end > span_start", name="span_is_not_empty"),
     sa.CheckConstraint("length(btrim(owner_id)) > 0", name="owned"),
