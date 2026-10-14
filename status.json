@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-14T02:03:47.043156+00:00",
-  "commit": "892f1f02",
-  "commit_subject": "Items 220 to 223 are decided: browser speech, chat with email fallback, a counts-free approval wait view, and schedule plus connector change (#583)",
+  "generated_at": "2026-10-14T02:20:02.766085+00:00",
+  "commit": "32c52f89",
+  "commit_subject": "The control registry install check reports not run when the repository's workflow files are not on the install (#585)",
   "total": 1625,
   "done": 864,
   "percent": 53.2,
