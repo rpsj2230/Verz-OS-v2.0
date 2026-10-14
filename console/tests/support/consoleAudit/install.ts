@@ -21,7 +21,7 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("PUT /api/v1/migration/cutover", "document.path", `${MIGRATION_API_PATH}/cutover`),
   ],
   "src/pages/install/MigrationPanel.tsx COMPLETE_PATH": [at("POST /api/v1/migration/cutover/complete", "COMPLETE_PATH", COMPLETE_PATH)],
-  "src/pages/install/OrchestrationPanel.tsx REHEARSALS_API_PATH": [at("POST /api/v1/orchestration/rehearsals", "REHEARSALS_API_PATH", REHEARSALS_API_PATH)],
+  "src/pages/install/OrchestrationPanel.tsx REHEARSALS_API_PATH": [at("POST /api/v1/orchestration/weighed-plans", "REHEARSALS_API_PATH", REHEARSALS_API_PATH)],
   "src/pages/install/PluginsPanel.tsx PLUGINS_API_PATH": [at("POST /api/v1/install/plugins", "PLUGINS_API_PATH", PLUGINS_API_PATH)],
   "src/pages/install/PluginsPanel.tsx verbPath(row.plugin_id, verb)": [
     at("POST /api/v1/install/plugins/{plugin_id}/enable", "verbPath", verbPath("stand-in", "enable")),
@@ -86,7 +86,7 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     audit: NO_PLUGIN_LEDGER_ENTRY,
     behaviour: A_PLUGIN_ROW_IS_FOLLOWED_BY_THE_INSTALL_CHECK,
   },
-  "POST /api/v1/orchestration/rehearsals": {
+  "POST /api/v1/orchestration/weighed-plans": {
     row: A_WEIGHED_PLAN_IS_FOLLOWED_BY_THE_INSTALL_CHECK,
     audit: NO_LEDGER_ENTRY_FOR_A_WEIGHED_PLAN,
     behaviour: A_WEIGHED_PLAN_IS_FOLLOWED_BY_THE_INSTALL_CHECK,

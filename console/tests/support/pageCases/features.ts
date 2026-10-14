@@ -52,7 +52,7 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         workspace_is_on: true,
         nothing_reaches_the_old_system: true,
       },
-      "/api/v1/orchestration/rehearsals": {
+      "/api/v1/orchestration/weighed-plans": {
         decisions: [
           {
             run_id: "rehearsal-1",

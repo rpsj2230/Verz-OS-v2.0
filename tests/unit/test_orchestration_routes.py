@@ -34,7 +34,7 @@ from brain.tables.fanout_gate import FanoutGateRow
 from tests.fixtures.console_http import Stub, console_client, get, post
 from tests.fixtures.setting_rows import Result, SettingRows
 
-PATH = f"{API_PREFIX}/orchestration/rehearsals"
+PATH = f"{API_PREFIX}/orchestration/weighed-plans"
 EVERYWHERE = Scope.unrestricted()
 
 GRANTS = {

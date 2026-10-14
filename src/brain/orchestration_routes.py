@@ -64,6 +64,7 @@ from brain.console.govern import NOWHERE, _in_reach
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.core.lane import Lane
+from brain.locale import currency_or_unset
 from brain.models.routing import Tier
 from brain.ops import fanout_gate_store
 from brain.ops.features import ORCHESTRATION_REHEARSAL, is_on
@@ -221,6 +222,9 @@ class MergedView(BaseModel):
     reports: list[SubtaskCostView]
     #: The sum of the rows above, never a figure carried beside them.
     total_minor: int
+    #: The unit of every figure above: the install's currency, or `XXX` when it has chosen none
+    #: (`brain.report_routes.A_FIGURE_SAYS_ITS_CURRENCY_AND_ITS_CLOCK`).
+    currency: str
     complete: bool
     #: What is missing, in words, or empty when nothing is.
     notice: str
@@ -339,6 +343,7 @@ def merged_view(answer: MergedAnswer, ids: frozenset[str]) -> MergedView:
             for one in answer.reports
         ],
         total_minor=answer.total_minor,
+        currency=currency_or_unset(),
         complete=answer.is_complete,
         notice=answer.notice(disclosable=ids),
     )
@@ -404,7 +409,9 @@ def _read_timestamp(spec: FieldSpec, value: object) -> object:
 router = APIRouter(prefix=API_PREFIX, tags=["orchestration"])
 
 
-@router.get("/orchestration/rehearsals", response_model=DecisionsPage, responses=COMMON_RESPONSES)
+@router.get(
+    "/orchestration/weighed-plans", response_model=DecisionsPage, responses=COMMON_RESPONSES
+)
 async def decisions(request: Request, asked: Asked) -> DecisionsPage:
     """The decisions the gate has kept, newest first, for a caller who may weigh a plan."""
     if not may_rehearse(asked.reach, asked.now):
@@ -419,7 +426,7 @@ async def decisions(request: Request, asked: Asked) -> DecisionsPage:
 
 
 @router.post(
-    "/orchestration/rehearsals",
+    "/orchestration/weighed-plans",
     status_code=201,
     response_model=PlanWeighedView,
     responses=COMMON_RESPONSES,

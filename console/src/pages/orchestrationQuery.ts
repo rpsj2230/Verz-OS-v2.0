@@ -18,7 +18,7 @@ export type GateRow = components["schemas"]["GateView"];
 export type RehearsalBody = components["schemas"]["PlanWeighedView"];
 
 /** Where the API keeps this panel. */
-export const REHEARSALS_API_PATH = "/orchestration/rehearsals";
+export const REHEARSALS_API_PATH = "/orchestration/weighed-plans";
 
 export const ORCHESTRATION_TITLE = "Multi-agent plans";
 export const READING_DECISIONS = "Reading the plans weighed so far.";
