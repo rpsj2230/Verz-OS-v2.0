@@ -33,7 +33,8 @@ a queue in that path adds a hop that can only make the wait longer.
 
 **A slot has a size as well as a class, and until now it had only one size.** `MIB_PER_SLOT`
 is one number for every job in the fleet, and two containers are budgeted from it very
-differently: `brain-worker` holds seven slots inside 384 MiB, and `brain-parse-worker` holds
+differently: `brain-worker` holds seven slots inside 768 MiB (384 until 2026-10-13), and
+`brain-parse-worker` holds
 one job inside 512 MiB because the job's size was chosen by whoever made the document. Both
 of them drained `system`, because `queue_name_for` derived the queue from the traffic class
 alone, so **the 50 MiB PDF the knowledge door admits could be fetched into a 48 MiB slot**.
@@ -1655,6 +1656,49 @@ FAILED_JOBS_SQL: Final = (
 #: The heartbeat a job with no live worker is read as having: before any real one.
 NO_HEARTBEAT: Final = datetime(1970, 1, 1, tzinfo=UTC)
 
+#: Writes one set-aside job into `ops.dead_letter` from the driver's own row, so the task, the
+#: traffic class and the attempts are the queue's and not the caller's. A class the queue's name
+#: does not start with is the system's. Written once: a second sweep over the same job writes
+#: nothing. See `0228`.
+KEEP_ASIDE_SQL: Final = (
+    "INSERT INTO ops.dead_letter"
+    " (job_id, task, principal_id, traffic_class, reason, attempts, set_aside_at)"
+    " SELECT j.id::text, j.task_name, 'system',"
+    " CASE WHEN split_part(j.queue_name, '.', 1) = ANY(%(classes)s)"
+    " THEN split_part(j.queue_name, '.', 1) ELSE 'system' END,"
+    " %(reason)s, j.attempts, %(at)s"
+    " FROM procrastinate_jobs AS j WHERE j.id = %(id)s"
+    " ON CONFLICT (job_id) DO NOTHING"
+)
+
+#: Every failed job nobody is going to run again that is not in `ops.dead_letter` yet: a task not
+#: declared safe, or a safe one at the re-drive cap. Newest first and bounded, so the first sweep
+#: over an old install reads a page and the next sweep reads the next.
+KEEP_FAILED_SQL: Final = (
+    "INSERT INTO ops.dead_letter"
+    " (job_id, task, principal_id, traffic_class, reason, attempts, set_aside_at)"
+    " SELECT j.id::text, j.task_name, 'system',"
+    " CASE WHEN split_part(j.queue_name, '.', 1) = ANY(%(classes)s)"
+    " THEN split_part(j.queue_name, '.', 1) ELSE 'system' END,"
+    " CASE WHEN j.task_name = ANY(%(safe)s) THEN 're_driven_too_often'"
+    " ELSE 'attempts_exhausted' END,"
+    " j.attempts,"
+    " COALESCE((SELECT max(e.at) FROM procrastinate_events AS e WHERE e.job_id = j.id), %(at)s)"
+    " FROM procrastinate_jobs AS j"
+    " CROSS JOIN LATERAL ("
+    "SELECT count(*) AS redrives FROM procrastinate_events AS e"
+    " WHERE e.job_id = j.id AND e.type IN ('deferred_for_retry', 'retried')"
+    ") AS r"
+    " WHERE j.status = 'failed'"
+    " AND NOT (j.task_name = ANY(%(safe)s) AND r.redrives < %(cap)s)"
+    " AND NOT EXISTS (SELECT 1 FROM ops.dead_letter AS d WHERE d.job_id = j.id::text)"
+    " ORDER BY j.id DESC LIMIT %(most)s"
+    " ON CONFLICT (job_id) DO NOTHING"
+)
+
+#: The most failed jobs one sweep copies into `ops.dead_letter`.
+MOST_KEPT_PER_SWEEP: Final = 500
+
 
 class DriverQueue:
     """`brain.ops.recovery_run.QueueRows` over the driver, the one module that may name it.
@@ -1707,6 +1751,28 @@ class DriverQueue:
 
     async def run_again(self, job_id: str, now: datetime) -> bool:
         return await _moved(self.app.job_manager.retry_job_by_id_async(int(job_id), now))
+
+    async def keep_aside(self, job_id: str, reason: str, at: datetime) -> None:
+        """Write one job the sweep just set aside into `ops.dead_letter`, once."""
+        await self.app.connector.execute_query_async(
+            KEEP_ASIDE_SQL,
+            classes=[one.value for one in TrafficClass],
+            reason=reason,
+            at=at,
+            id=int(job_id),
+        )
+
+    async def keep_failed(self, at: datetime) -> None:
+        """Copy every failed job nobody will run again into `ops.dead_letter`, a page at a time."""
+        safe = sorted(t for t, said in self.redrive_by_task.items() if said is Redrive.SAFE)
+        await self.app.connector.execute_query_async(
+            KEEP_FAILED_SQL,
+            classes=[one.value for one in TrafficClass],
+            safe=safe,
+            cap=MAX_REDRIVES,
+            at=at,
+            most=MOST_KEPT_PER_SWEEP,
+        )
 
     async def set_aside(self, job_id: str) -> bool:
         from procrastinate.jobs import Status

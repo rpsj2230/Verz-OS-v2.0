@@ -307,6 +307,52 @@ export function appointmentBody(
   };
 }
 
+/** Where what has been answered is kept, and read back: `brain.setup_routes.DRAFT_PATH`. */
+export const DRAFT_PATH = "/setup/draft";
+export const DRAFT_READ_PATH = "/setup/draft/read";
+
+/** What the draft route answers when asked to read: `brain.setup_routes.DraftView`. */
+export type DraftView = components["schemas"]["DraftView"];
+
+/**
+ * The body that keeps the draft: the appointment's body, cut at the screen just finished, so a
+ * screen not yet visited is not kept as answered (an optional screen with every field blank is a
+ * valid answer, and one nobody saw must not read as one).
+ */
+export function draftBody(
+  setupCode: string,
+  answers: Answers,
+  skipped: ReadonlySet<StepKey>,
+  finished: StepKey,
+): AppointmentAsked {
+  const upTo = SCREENS.findIndex((screen) => screen.key === finished);
+  const seen = new Set(SCREENS.slice(0, upTo + 1).map((screen) => screen.key));
+  const whole = appointmentBody(setupCode, answers, skipped);
+  return {
+    setup_code: whole.setup_code,
+    answers: Object.fromEntries(
+      Object.entries(whole.answers ?? {}).filter(([key]) => seen.has(key as StepKey)),
+    ),
+    skipped: (whole.skipped ?? []).filter((key) => seen.has(key)),
+  };
+}
+
+/** The answers a draft carries and the screen to show next, or null when it kept nothing. */
+export function readDraft(
+  view: DraftView,
+): { answers: Answers; skipped: ReadonlySet<StepKey>; at: number } | null {
+  const kept = Object.entries(view.answers);
+  if (kept.length === 0 && view.skipped.length === 0) {
+    return null;
+  }
+  const at = SCREENS.findIndex((screen) => screen.key === view.next_step);
+  return {
+    answers: Object.fromEntries(kept),
+    skipped: new Set(view.skipped),
+    at: at >= 0 ? at : 1,
+  };
+}
+
 /** The finishing screen's body. The token travels as the bearer header, never in here. */
 export function finishBody(setupCode: string, principalId: string): FinishAsked {
   return { setup_code: setupCode, principal_id: principalId };

@@ -28,6 +28,7 @@ is the check's own sentence; this is `brain.ops.acceptance_models`'
 `A_CHECK_S_QUESTION_IS_SHOWN_ONLY_ITS_OWN_DOCUMENT`, reused with its helpers.
 
 Task ids: M16.1.2, M16.1.3, M16.1.4, M16.1.5, M16.4.1, M16.4.4, M16.6.3, M16.7.10, M16.7.12
+Task ids: M26.3.4
 """
 
 from __future__ import annotations
@@ -481,7 +482,7 @@ def _names(scope: Mapping[str, Any], principal_id: str, department: str) -> bool
 
 # ------------------------------------------------ M16.1.4, M16.4.4 re-checked at every read
 @check(
-    leaves=("M16.1.4", "M16.4.4"),
+    leaves=("M16.1.4", "M16.4.4", "M26.3.4"),
     sentence=(
         "A memory a person formed on Ask records the capabilities they held, is shown back to "
         "them while they hold them, and stops being shown on the Memory screen and to a model "

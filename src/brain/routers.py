@@ -326,9 +326,29 @@ from brain.knowledge_routes import router as knowledge_router
 # `brain.lark_connect_routes`.
 from brain.lark_connect_routes import router as lark_connect_router
 
+# Sign in with Lark: the one address the sign-in service posts a returned code to, answered only on
+# an install that brokers sign-in to Lark. See `brain.lark_sign_in_routes`.
+from brain.lark_sign_in_routes import router as lark_sign_in_router
+
 # Logs: the warnings and errors this install kept, redacted on their way in, searchable and
 # paged, behind `admin:application_log` over everything. See `brain.log_routes`.
 from brain.log_routes import router as log_router
+
+# Asking for an agent you can see and cannot run. Gated on the member grant. See
+# `brain.member_agent_request_routes`.
+from brain.member_agent_request_routes import router as member_agent_request_router
+
+# A member's own settings: whether they are learnt from, where they are reached and when not.
+# Gated on the member grant. See `brain.member_preference_routes`.
+from brain.member_preference_routes import router as member_preference_router
+
+# A member's own account: their devices, who read their record, what agents made for them and what
+# is kept about them. Gated on the member grant. See `brain.member_self_routes`.
+from brain.member_self_routes import router as member_self_router
+
+# A member's artifacts handed to colleagues, and what was handed to them. Gated on the member grant.
+# See `brain.member_share_routes`.
+from brain.member_share_routes import router as member_share_router
 
 # My workspace, the member screen `home`: what the person asking has asked, kept and been
 # given, gated on the member grant and on nothing administrative. See `brain.mine_routes`.
@@ -362,6 +382,11 @@ from brain.operate_routes import router as operate_router
 # The interrupted actions: every side effect a stopped worker left unconfirmed and what the
 # recovery sweep learnt about it, for a reader who may see that sweep. See `brain.operation_routes`.
 from brain.operation_routes import router as operation_router
+
+# Plugins: the extension points, the plugins recorded on this install and the moves between their
+# states, behind `admin:plugin` over everything and the `plugin_registry` switch. A record, not a
+# loader: nothing runs a plugin. See `brain.plugin_routes`.
+from brain.plugin_routes import router as plugin_router
 
 # Disabling a person and enabling them again, from the Departments and teams screen, behind the
 # grant decision in a scope admitting their row. See `brain.principal_state_routes`.
@@ -469,6 +494,10 @@ from brain.sign_in_routes import router as sign_in_router
 from brain.skill_draft_routes import router as skill_draft_router
 from brain.skill_routes import router as skill_router
 
+# The Spend report's other readings: what an answer costs as a distribution, the question shapes
+# that cost most, and the budget stops in force. See `brain.spend_detail_routes`.
+from brain.spend_detail_routes import router as spend_detail_router
+
 # The Staff sources screen and the trial run behind it. A router of its own because it
 # refuses nobody on its listing: a source sits at `brain.console.govern.NOWHERE`, so the
 # answer for a reader who reaches none of them is the empty page rather than the refusal
@@ -515,6 +544,10 @@ from brain.vault_routes import router as vault_router
 # `admin:webhook_subscriber`. Built on `NoEchoRoute`, because two of its writes carry a
 # secret. See `brain.webhook_routes`.
 from brain.webhook_routes import router as webhook_router
+
+# The starter questions a new person is offered for their own department on the empty Ask page,
+# kept to what their admitted reach lets them ask. See `brain.welcome_routes`.
+from brain.welcome_routes import router as welcome_router
 
 # The website widget's front door: a stranger's browser is handed a session, or told why not, and
 # its questions are answered from knowledge marked public alone, with no sign-in and the origin

@@ -892,7 +892,7 @@ def test_the_worker_container_carries_an_explicit_memory_limit() -> None:
     limits = _compose_service()["deploy"]
 
     assert isinstance(limits, dict)
-    assert limits["resources"]["limits"]["memory"] == "384M"
+    assert limits["resources"]["limits"]["memory"] == "768M"
 
 
 def test_the_worker_container_is_sized_as_the_component_it_is_budgeted_as() -> None:
@@ -906,6 +906,33 @@ def test_the_worker_container_is_sized_as_the_component_it_is_budgeted_as() -> N
     declared = component("brain-worker").memory_mib
 
     assert limits["resources"]["limits"]["memory"] == f"{declared}M"
+
+
+#: What one process in the worker container held when the kernel killed it, read on the owner's
+#: install on 2026-10-13: about 339 MB of anonymous memory, in a container limited to 384 MiB, which
+#: was killed about every 25 to 35 minutes, thirty times in a day, ending the acceptance run that
+#: lives in it. A fact about a machine, written here and not imported, so that changing the limit
+#: cannot move the figure it is judged against.
+MEASURED_ANONYMOUS_MB_AT_THE_KILL = 339
+
+
+def test_the_worker_limit_leaves_at_least_twice_the_headroom_the_kill_was_measured_at() -> None:
+    """The acceptance run's process reached about 339 MB of anonymous memory against a 384 MiB limit
+    and was killed, so 384 was 13% over the measured need and too tight: the kernel counts the page
+    cache and the rest of the container beside one process's anonymous pages. The limit is now at
+    least twice the measurement, in the compose file that runs and in the component the budget is
+    computed from, and the old limit is shown to fail the same rule.
+
+    Delete this and the limit can be cut back to a figure that looks tidy beside the slot arithmetic
+    while the acceptance run goes on dying in the container."""
+    declared = component("brain-worker").memory_mib
+    limits = _compose_service()["deploy"]
+    assert isinstance(limits, dict)
+    running = int(str(limits["resources"]["limits"]["memory"]).rstrip("M"))
+
+    assert running == declared
+    assert declared >= 2 * MEASURED_ANONYMOUS_MB_AT_THE_KILL
+    assert 2 * MEASURED_ANONYMOUS_MB_AT_THE_KILL > 384
 
 
 def test_the_workers_slot_budget_sits_strictly_below_its_cgroup_limit() -> None:

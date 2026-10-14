@@ -5255,7 +5255,7 @@
    "proof": [
     "M19.9.2"
    ],
-   "decision": null
+   "decision": "needs-rupash 230: what is built ends a run at its first action outside the envelope and approves the envelope up front; suspending and asking again is the question"
   },
   {
    "id": "ARC-B-022",
@@ -15127,7 +15127,7 @@
    "proof": [
     "M30.6.8"
    ],
-   "decision": null
+   "decision": "needs-rupash 215: the wizard takes the logo as an address; whether it should upload one is asked"
   },
   {
    "id": "GAP2-16",
@@ -18728,6 +18728,20 @@
    ],
    "proof": [
     "M11.9.17"
+   ],
+   "decision": null
+  },
+  {
+   "id": "DEC-139B",
+   "source": "needs-rupash 139 (decided 2026-10-13, option B)",
+   "area": "Channels",
+   "requirement": "The website widget's answers are written by the model from the public passages only, under a daily spending cap the owner sets in the console, and the widget falls back to the passages once the cap is reached.",
+   "leaves": [
+    "M10.7.6",
+    "M10.7.7"
+   ],
+   "proof": [
+    "M10.7.8"
    ],
    "decision": null
   }

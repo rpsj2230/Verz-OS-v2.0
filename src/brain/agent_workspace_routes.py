@@ -23,7 +23,15 @@ over everything for an agent no department owns. See `AN_AGENTS_BUDGET_IS_ITS_DE
 it and may not set its budget is told which role would let them, which names a role and never a
 figure: `brain.ops.spend.A_REFUSAL_CARRIES_NO_FIGURE`.
 
-Task ids: M39.1.3.4
+**The per-run and per-day ceilings are the second write, and they are the other half of
+`agent_ceilings`** (M21.1.4). `PUT /agents/{id}/budget/ceilings` takes both figures at once, because
+`brain.ops.budgets.agent_ceilings` refuses a run ceiling above the day's (it could never bind) and a
+route that took them one at a time could not hold that, and appends both rows as the next version of
+each in one transaction, by the same authority over the same place. The day's is enforced by the
+used-up stop (`brain.ops.budget_stop_store` keys every agent's day and month); the run's is a
+recorded ceiling that nothing enforces yet, and the response does not claim it is.
+
+Task ids: M39.1.3.4, M21.1.4
 """
 
 from __future__ import annotations
@@ -47,7 +55,13 @@ from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.scope import Scope
 from brain.locale import currency_or_unset
 from brain.ops.budget_store import append, in_force
-from brain.ops.budgets import BudgetError, BudgetLevel, BudgetPeriod, BudgetRow
+from brain.ops.budgets import (
+    BudgetError,
+    BudgetLevel,
+    BudgetPeriod,
+    BudgetRow,
+    agent_ceilings,
+)
 
 log = structlog.get_logger()
 
@@ -78,6 +92,13 @@ BUDGET_AUTHORITY: Final[Capability] = Capability(value="admin:budget")
 MAX_CEILING_MINOR: Final = 1_000_000_000
 
 BUDGET_PATH: Final = "/agents/{agent_id}/budget"
+CEILINGS_PATH: Final = "/agents/{agent_id}/budget/ceilings"
+
+#: The sentence a run ceiling above the day's is answered with.
+A_RUN_CEILING_ABOVE_THE_DAYS_CAN_NEVER_BIND: Final = (
+    "A run cannot be allowed more than the agent may spend in a day, because the day's ceiling "
+    "would stop it first. Lower the run's figure or raise the day's."
+)
 
 
 class BudgetAsked(BaseModel):
@@ -87,6 +108,30 @@ class BudgetAsked(BaseModel):
 
     ceiling_minor: Annotated[int, Field(ge=1, le=MAX_CEILING_MINOR)]
     reason: Annotated[str, Field(min_length=1, max_length=200)]
+
+
+class CeilingsAsked(BaseModel):
+    """An agent's per-run and per-day ceilings together, in the install's minor units, and why."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    per_run_minor: Annotated[int, Field(ge=1, le=MAX_CEILING_MINOR)]
+    per_day_minor: Annotated[int, Field(ge=1, le=MAX_CEILING_MINOR)]
+    reason: Annotated[str, Field(min_length=1, max_length=200)]
+
+
+class CeilingsView(BaseModel):
+    """The agent's per-run and per-day ceilings as they now stand."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    agent_id: str
+    per_run_minor: int
+    per_day_minor: int
+    currency: str
+    run_version: int
+    day_version: int
+    effective_from: datetime
 
 
 class BudgetView(BaseModel):
@@ -173,6 +218,40 @@ async def write_budget(
     return row
 
 
+def next_ceilings(
+    runs: BudgetRow | None,
+    days: BudgetRow | None,
+    *,
+    agent_id: str,
+    per_run_minor: int,
+    per_day_minor: int,
+    author: str,
+    reason: str,
+    now: datetime,
+) -> tuple[BudgetRow, BudgetRow]:
+    """The agent's next per-run and per-day ceilings: version one, or the one in force superseded.
+
+    `agent_ceilings` is asked first, so the pair is refused as a pair (a run above the day) whether
+    or not either has a history, and its rows are used as they are for an agent with none.
+    """
+    first = agent_ceilings(
+        agent_id=agent_id,
+        per_run_minor=per_run_minor,
+        per_day_minor=per_day_minor,
+        author=author,
+        effective_from=now,
+    )
+
+    def following(current: BudgetRow | None, made: BudgetRow) -> BudgetRow:
+        if current is None:
+            return made
+        return current.superseded_by(
+            ceiling_minor=made.ceiling_minor, author=author, effective_from=now, reason=reason
+        )
+
+    return following(runs, first[0]), following(days, first[1])
+
+
 def _refused(message: str) -> JSONResponse:
     return JSONResponse(status_code=403, content={"message": message})
 
@@ -212,4 +291,51 @@ async def set_agent_budget(
         currency=currency_or_unset(),
         version=row.version,
         effective_from=row.effective_from,
+    )
+
+
+@router.put(CEILINGS_PATH, response_model=CeilingsView, responses=COMMON_RESPONSES)
+async def set_agent_ceilings(
+    request: Request, agent_id: str, body: CeilingsAsked, asked: Asked
+) -> JSONResponse | CeilingsView:
+    """Set the agent's per-run and per-day ceilings together. See the module docstring."""
+    factory = _require_session_factory(request)
+    async with factory() as session:
+        record, _ = await _visible_record(session, agent_id, asked)
+        if not may_set_budget(asked.reach, record, asked.now):
+            log.info("agent ceilings refused", principal=asked.caller.principal.id)
+            return _refused(SETTING_A_BUDGET_NEEDS_THE_BUDGET_ROLE)
+        runs = await in_force(session, (BudgetLevel.AGENT, agent_id, BudgetPeriod.RUN), asked.now)
+        days = await in_force(session, (BudgetLevel.AGENT, agent_id, BudgetPeriod.DAY), asked.now)
+        try:
+            per_run, per_day = next_ceilings(
+                runs,
+                days,
+                agent_id=agent_id,
+                per_run_minor=body.per_run_minor,
+                per_day_minor=body.per_day_minor,
+                author=asked.caller.principal.id,
+                reason=body.reason,
+                now=asked.now,
+            )
+        except BudgetError:
+            await session.rollback()
+            if body.per_run_minor > body.per_day_minor:
+                return JSONResponse(
+                    status_code=422,
+                    content={"message": A_RUN_CEILING_ABOVE_THE_DAYS_CAN_NEVER_BIND},
+                )
+            return JSONResponse(status_code=409, content={"message": A_BUDGET_CHANGED_JUST_NOW})
+        for row in (per_run, per_day):
+            await append(session, row, ent_hash=asked.reach.ent_hash(), trace_id=trace_of_request())
+        await session.commit()
+    log.info("agent ceilings set", agent=agent_id, principal=asked.caller.principal.id)
+    return CeilingsView(
+        agent_id=agent_id,
+        per_run_minor=per_run.ceiling_minor,
+        per_day_minor=per_day.ceiling_minor,
+        currency=currency_or_unset(),
+        run_version=per_run.version,
+        day_version=per_day.version,
+        effective_from=asked.now,
     )

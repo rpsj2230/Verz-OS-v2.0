@@ -26,9 +26,36 @@
 # nothing has changed is a cheap conditional request rather than a download. The lesson is
 # narrow and worth keeping: a comparison between two values produced by different commands
 # is a comparison that needs proving equal in the working case, and I never proved it.
+#
+# THE DEPLOY HOOK IS REFRESHED FROM THE IMAGE BEFORE IT RUNS (2026-10-13). `brain-deploy` is
+# installed once, by hand, and a release that adds a step to it (the vault's changes, the sign-in
+# accounts client, the optional services) used to reach a server only when somebody copied the new
+# file out of a checkout. Measured on the first install, the installed hook was three weeks behind
+# the repository, and so had never started an optional service, applied a release's vault policies
+# or reported the server's container runtimes: the console refused to switch the script sandbox on
+# for want of that report, and nothing said why. Now the image carries the hook
+# (/app/ops/deploy/brain-deploy) and `refresh_hook` below copies it out of the image about to be
+# deployed, so a release runs with the hook it was tested with.
+#
+# WHY HERE AND NOT IN brain-deploy. A hook that refreshes itself is a hook that is only as new as
+# the one before it: the release that adds a step is deployed by the old hook, which has no
+# refresh. This script is the one that runs the hook, so it is the one that can put the new one
+# there first. (A server whose copy of THIS file predates the refresh needs it copied once, by
+# hand: docs/install/server-steps.md says how.)
+#
+# WHAT IT NEVER DOES. Fail the deploy, or install a hook that does not parse: the file must be
+# non-empty, start with a bash shebang and pass `bash -n`, or the installed one runs as before. It
+# keeps the one it replaces as `brain-deploy.previous`, and writes the new one beside it and moves
+# it into place, so a run that is reading the old hook (bash reads a script as it goes) keeps its
+# own file. It is the image the server already pulled and already trusts to run as root:
+# brain-deploy copies the image's vault, accounts and optional-services scripts out and runs them
+# the same way.
 set -euo pipefail
 
 IMAGE="ghcr.io/rpsj2230/verz-brain-v2.0:latest"
+# Overridable for tests/unit/test_hook_refresh.py, which runs the function below against a stubbed
+# docker and has no /usr/local/bin to write to.
+HOOK="${BRAIN_AUTODEPLOY_HOOK:-/usr/local/bin/brain-deploy}"
 
 # The container name is one deployment's and is read rather than written, for the reason
 # spelled out in brain-deploy: an identifier from another install makes `docker inspect`
@@ -50,6 +77,47 @@ mkdir -p "$(dirname "$HEARTBEAT")"
 note() {
   printf '{"checked_at":"%s","action":"%s","detail":"%s"}\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "$2" > "$HEARTBEAT"
+}
+
+# Copy the deploy hook out of the image that is about to be deployed, when it differs from the
+# installed one. Every ending is a return 0: see the header, "What it never does".
+refresh_hook() {
+  local dir cid
+  dir="$(mktemp -d)"
+  if ! cid="$(docker create "$IMAGE" 2>/dev/null)"; then
+    rm -rf "$dir"
+    echo "hook: could not open $IMAGE to read its deploy hook; the installed one is used" >&2
+    return 0
+  fi
+  if ! docker cp "$cid:/app/ops/deploy/brain-deploy" "$dir/brain-deploy" >/dev/null 2>&1; then
+    docker rm -f "$cid" >/dev/null 2>&1 || true
+    rm -rf "$dir"
+    echo "hook: $IMAGE carries no deploy hook, being older than the release that ships it; the installed one is used" >&2
+    return 0
+  fi
+  docker rm -f "$cid" >/dev/null 2>&1 || true
+  if [ ! -s "$dir/brain-deploy" ] \
+     || ! head -n 1 "$dir/brain-deploy" | grep -q '^#!.*bash' \
+     || ! bash -n "$dir/brain-deploy" 2>/dev/null; then
+    rm -rf "$dir"
+    echo "hook: the deploy hook in $IMAGE is empty, not bash or does not parse; the installed one is used" >&2
+    return 0
+  fi
+  if [ -f "$HOOK" ] && cmp -s "$dir/brain-deploy" "$HOOK"; then
+    rm -rf "$dir"
+    return 0
+  fi
+  if [ -f "$HOOK" ]; then
+    cp -p "$HOOK" "$HOOK.previous" || true
+  fi
+  if install -m 0755 "$dir/brain-deploy" "$HOOK.new" && mv -f "$HOOK.new" "$HOOK"; then
+    echo "hook: $HOOK refreshed from $IMAGE; the one it replaced is kept as $HOOK.previous"
+  else
+    rm -f "$HOOK.new"
+    echo "hook: $HOOK could not be refreshed; the installed one is used" >&2
+  fi
+  rm -rf "$dir"
+  return 0
 }
 
 # Bring the tag up to date. Cheap when nothing has moved: the registry answers with a 304
@@ -77,6 +145,7 @@ if [ -n "$running" ] && [ "$running" = "$tag_id" ]; then
 fi
 
 note "deploying" "$tag_id"
+refresh_hook
 /usr/local/bin/brain-deploy
 note "deployed" "$tag_id"
 

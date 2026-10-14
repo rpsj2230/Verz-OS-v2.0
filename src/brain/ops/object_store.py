@@ -49,13 +49,23 @@ where `ops/backup/brain-backup` writes, which is a fact about the taker rather t
 never the body's message.** A refusal body quotes the bucket and the key, and a key can say what a
 file is about; the code (`SignatureDoesNotMatch`, `NoSuchKey`) is what a person acts on.
 
+**The key is handed over by the release, and kept with the application's own token.** The object
+store overlay (`brain.ops.overlays`) mints the application's key pair on the server, writes it into
+the store's access file and gives it to this module's `keep`, run inside the application by
+`ops/deploy/overlays/objectstore.hand.sh`, which writes the slot `object_store_at_start` reads at
+start. The pair is on standard input and in no argument, and a refusal says why without it. A slot
+written by a release is read by a process only when it next starts, since the client is built once.
+Rejected: the deploy step writing the slot with its own token, which would give the deploy policy a
+reach into provider slots it has no other use for; and the key in the environment file the
+application reads, which is the credential chain this module was written to avoid.
+
 Rejected: retrying here. `brain.ops.effects` classifies a put by key as the same result when
 repeated, so a caller may retry, and one that does knows why it failed; a retry loop inside the
 client would put a second timeout in front of every screen that reads the store.
 
 Rejected: presigned URLs, for `brain.ops.storage.StorageBackend`'s reason.
 
-Task ids: M32.3.1.4, M32.3.2.1, M32.3.2.2
+Task ids: M32.3.1.4, M32.3.2.1, M32.3.2.2, M32.3.1.1
 """
 
 from __future__ import annotations
@@ -63,6 +73,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import re
+import sys
 import xml.etree.ElementTree as ElementTree
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -75,6 +86,7 @@ import structlog
 
 from brain.install import InstallError, value_of
 from brain.ops.backup_manifest import DRILL_SUFFIX, MANIFEST_SUFFIX
+from brain.ops.credentials import CredentialVault
 from brain.ops.openbao import (
     DYNAMIC_MOUNTS,
     OpenBaoVault,
@@ -590,6 +602,62 @@ def object_store_at_start(
     return ObjectStore(backend=made, prefix=prefix)
 
 
+# ------------------------------------------------------------------ the key, handed over
+
+
+def credential_from(lines: Sequence[str]) -> StoreCredential:
+    """The key pair as the deploy step hands it over: the access key line, then the secret line.
+
+    Anything but exactly two non-empty lines is refused, so a hand-over that lost one of them is
+    never kept as a pair whose secret is the access key.
+    """
+    found = [one.strip() for one in lines if one.strip()]
+    if len(found) != 2:
+        msg = "the deploy step handed over something other than an access key and a secret key"
+        raise StorageError(msg)
+    return StoreCredential(access_key_id=found[0], secret_access_key=found[1])
+
+
+def keep_credential(
+    vault: CredentialVault, credential: StoreCredential, *, backend: Backend = Backend.SEAWEEDFS
+) -> None:
+    """Write the pair to the backend's own slot, the one `object_store_at_start` reads."""
+    vault.write_static_kv(
+        credential_path(backend),
+        {
+            ACCESS_KEY_FIELD: credential.access_key_id,
+            SECRET_KEY_FIELD: credential.secret_access_key,
+        },
+    )
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """`keep`, with the key pair on standard input: what the deploy step runs in the application."""
+    args = list(sys.argv[1:] if argv is None else argv)
+    if args != ["keep"]:
+        print("usage: python -m brain.ops.object_store keep < key-pair", file=sys.stderr)
+        return 64
+    try:
+        from brain.settings import Settings
+
+        credential = credential_from(sys.stdin.read().splitlines())
+        settings = Settings()
+        if not settings.vault_address or not settings.vault_token:
+            msg = "this install names no vault, so the store's key has nowhere to be kept"
+            raise StorageError(msg)
+        keep_credential(
+            OpenBaoVault(settings.vault_address, settings.vault_token, role=VaultRole.APPLICATION),
+            credential,
+        )
+    except Exception as error:
+        from brain.ops.safe_error import describe
+
+        print(f"SAY the object store's key was not kept: {describe(error)}")
+        return 1
+    print("SAY the object store's key is kept in the vault")
+    return 0
+
+
 # ------------------------------------------------------------------ the backup bucket
 
 
@@ -624,3 +692,7 @@ def backup_objects(backend: StorageBackend) -> Callable[[], tuple[tuple[str, str
         )
 
     return read
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

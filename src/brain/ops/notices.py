@@ -253,7 +253,11 @@ NOTICES: Final[tuple[Notice, ...]] = (
         title="Work with no copy anywhere",
         told="Whoever is on call.",
         about="How long the install has gone without a backup it could be recovered from.",
-        how="No channel is chosen for it yet, so nothing sends it.",
+        how=(
+            "Once a day each alert is posted to the conversation chosen for the evening digest, "
+            "and the report behind it is kept on the install. Nothing is posted when no "
+            "conversation is chosen."
+        ),
         composed_by="brain.ops.recovery:alerts",
         fixed_because=A_NOTICE_THAT_EXISTS_TO_CATCH_MISUSE_HAS_NO_SWITCH,
     ),

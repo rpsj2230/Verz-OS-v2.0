@@ -21,8 +21,8 @@ they were, and no run reads project context.
 
 Task ids: M40.7.7
 
-Revision ID: 0232
-Revises: 0225
+Revision ID: 0233
+Revises: 0232
 """
 
 from __future__ import annotations
@@ -30,9 +30,10 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0232"
-# Renumbered by the train engineer when this lands; nothing here depends on anything after 0225.
-down_revision = "0225"
+revision = "0233"
+# Follows 0232, the personal skill table, so the two land in this order. Nothing here depends on
+# anything after 0225.
+down_revision = "0232"
 branch_labels = None
 depends_on = None
 

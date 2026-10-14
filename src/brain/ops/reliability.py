@@ -1327,6 +1327,34 @@ MATRIX: Final[tuple[FailureMode, ...]] = (
         ),
     ),
     FailureMode(
+        component="automation-egress",
+        fails="the canvas's egress proxy is down, or its allowlist file is missing or unreadable",
+        presents_as=(
+            "flows that call a connector fail at the call, with a refused or unreachable proxy; "
+            "the editor still opens, because the canvas itself is up"
+        ),
+        blocks=("automation flows that call a source outside this install",),
+        retry=RetryClass.AFTER_VERIFICATION,
+        response=(
+            "the proxy is the only route out and the canvas has no other, so a flow fails closed "
+            "rather than reaching an address nobody allowed; a step that may have reached its "
+            "source before the failure is resumed from the operation record, as for the canvas"
+        ),
+    ),
+    FailureMode(
+        component="automation-db",
+        fails="the canvas's own database is down or out of disk",
+        presents_as="the canvas reports no worker and flows stop running; the editor does not load",
+        blocks=("automation flows",),
+        retry=RetryClass.AFTER_VERIFICATION,
+        response=(
+            "it holds the flows and their run history only and is on an internal network with a "
+            "password that exists for it alone, so nothing of this system's data is at risk; "
+            "restoring it from its volume brings the flows back, and a run in flight is judged "
+            "by the operation record and not by the canvas's own history"
+        ),
+    ),
+    FailureMode(
         component="record-matcher",
         fails="the matching job exits non-zero, or finds no export and exits 3",
         presents_as=(

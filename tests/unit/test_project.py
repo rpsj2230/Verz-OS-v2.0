@@ -10,11 +10,11 @@ from pathlib import Path
 
 from brain.tables.project import KINDS, NAME_CHARS, PRINCIPAL_ID_CHARS, REF_CHARS
 
-MIGRATION = Path(__file__).parents[2] / "migrations" / "versions" / "0232_personal_project.py"
+MIGRATION = Path(__file__).parents[2] / "migrations" / "versions" / "0233_personal_project.py"
 
 
 def _migration() -> object:
-    spec = importlib.util.spec_from_file_location("m0232", MIGRATION)
+    spec = importlib.util.spec_from_file_location("m0233", MIGRATION)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

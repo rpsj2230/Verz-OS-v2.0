@@ -29,7 +29,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from brain.db import Base
 
-#: As `0232` states them, held equal by `tests/unit/test_tables.py`.
+#: As `0233` states them, held equal by `tests/unit/test_tables.py`.
 PRINCIPAL_ID_CHARS: Final = 128
 NAME_CHARS: Final = 120
 REF_CHARS: Final = 128

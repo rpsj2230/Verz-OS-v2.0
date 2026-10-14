@@ -43,7 +43,8 @@ Not claimed here, and the reasons have moved. The custom piece (M32.6.1.3) is Ty
 `ops/automation/piece`, built and loaded by `tests/unit/test_automation_piece_package.py`, and
 the route it calls is `brain.automation_routes`, which the install's acceptance check
 `brain.ops.acceptance_checks_automation` posts steps to. The container (M32.6.1.1) is
-`docker-compose.automation.yml`, which an install runs only when its owner adds that file. What
+`docker-compose.automation.yml`, which a release starts only where `INSTALL_SERVICES` names
+`automation` (`brain.ops.overlays`), and which costs 896 MiB with its proxy and its database. What
 is here is the boundary the piece obeys and the checks that say whether it does.
 
 Task ids: M32.6.1.2, M32.6.1.4, M32.6.2.1, M32.6.2.2

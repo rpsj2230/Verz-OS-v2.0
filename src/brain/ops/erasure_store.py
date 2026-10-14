@@ -251,7 +251,20 @@ DRAIN_LIMIT: Final = 20
 SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
     {
         "agent.agent": "owner_id",
-        # A person's own project (`0232`). `0232` grants no way for a project to leave, so an
+        # A setting a person keeps about themselves (`0229`): whether they learn, where they are
+        # reached and when not. Theirs, and the application may delete it, so an erasure removes it.
+        "auth.member_preference": "principal_id",
+        # An artifact the person handed to a colleague (`0230`), theirs as the act is. The colleague
+        # is named on it as the one it was made out to; the sharer may withdraw it and so an erasure
+        # removes it. A request for an agent the person asked to run (`0230`) grants no way for a
+        # row to leave, so an erasure keeps it and reports it kept.
+        "agent.artifact_share": "shared_by",
+        "agent.agent_request": "requested_by",
+        # A skill a person added for themselves and whether they offered it (`0232`). `0232` grants
+        # no way for a row to leave, so an erasure keeps these and reports them kept: the skill is
+        # in the library under its digest and a decision about it is not the person's to undo.
+        "agent.skill_personal": "owner_id",
+        # A person's own project (`0233`). `0233` grants no way for a project to leave, so an
         # erasure keeps these and reports them kept; the threads and files it lists are erased by
         # their own tables' rules, and the list of them is the project's items, below.
         "agent.project": "owner_id",
@@ -368,7 +381,7 @@ class Through:
 THROUGH: Final[Mapping[str, Through]] = MappingProxyType(
     {
         "chat.message": Through(parent="chat.conversation", key="conversation_id", parent_key="id"),
-        # A thread or file listed in a person's project is theirs through the project (`0232`).
+        # A thread or file listed in a person's project is theirs through the project (`0233`).
         "agent.project_item": Through(parent="agent.project", key="project_id", parent_key="id"),
         # A draft's saves and the acts on each are its owner's through the draft (`0149`). A second
         # person's approval names them as an actor, not an owner, so the row is the draft's owner's.
@@ -525,6 +538,8 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # sentence the check wrote: `0133` keeps no principal, and the people a check acts as are
         # reserved ones that exist only inside its rolled-back transaction.
         "ops.acceptance_result",
+        # A run's record keeps a commit, an occasion, a status and three instants (`0231`).
+        "ops.acceptance_run",
         "ops.model_attempt",
         # A provider's terms and a matrix change name the administrator who wrote them, an actor
         # and not an owner (`0097`).
@@ -547,6 +562,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # request that found it used up and of the people told: actors, and a stop is the budget's
         # period rather than anybody's record (`0211`).
         "ops.budget_stop",
+        # A job set aside names its task, its class and why, and the system as its principal
+        # unless the driver row named one: an operational fact, not anybody's record (`0228`).
+        "ops.dead_letter",
         # How many answers of an agent cited a document on a day (`0213`): no question, no
         # principal and no text, so a count is about the agent's use of a document and nobody's.
         "ops.agent_item_use",

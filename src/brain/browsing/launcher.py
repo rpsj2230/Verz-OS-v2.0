@@ -35,11 +35,11 @@ origins.
 fails unless `runsc` is registered, so a host where gVisor was never installed shows an unhealthy
 launcher rather than a healthy one whose every run is refused at creation.
 
-Not built, and stated: the worker side of the channel, which would compile an envelope, open a
-connection here, send the start line, resolve credentials at the action boundary, and record the
-transcript through `brain.browsing.recording`. Nothing in the repository calls this service yet.
-None of the socket code below has run against a Docker daemon; the decisions it makes are tested and
-the plumbing is the rehearsal in `ops/browser/REHEARSAL.md`.
+The worker side of the channel is `brain.browsing.driver`: it compiles and stores the envelope,
+opens a connection here, sends the start line, resolves credentials at the instruction, and records
+the transcript through `brain.browsing.recording`, behind the `browser_runs` switch, which ships
+off. None of the socket code below has run against a Docker daemon; the decisions it makes are
+tested and the plumbing is the rehearsal in `ops/browser/REHEARSAL.md`.
 
 Task ids: M19.1.1, M19.1.5, M19.1.6
 """

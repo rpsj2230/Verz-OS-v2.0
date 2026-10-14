@@ -143,7 +143,7 @@ and any trial read of the staff source a person asked for on the Staff sources p
 paragraph declined M32.4.1.4 because the compose file had never run on the host it was sized for,
 the ground `docker-compose.langfuse.yml` still stands on for M32.1.1.1. The owner's install has run
 this container since then, printing the plan `WorkerPlan.describe` writes, one shard per traffic
-class at its declared concurrency inside the 384 MiB limit, and
+class at its declared concurrency inside the worker's memory limit, and
 `brain.ops.acceptance_checks_deployment.the_worker_serves_each_traffic_class_from_its_own_slots`
 asks this module's own `preflight`, `declared_slots` and `plan_for` of the container the suite runs
 in on every deploy, and shows `preflight` refusing that environment with one class taken away.
@@ -206,6 +206,12 @@ from brain.ops.connections import (
     client_named,
 )
 from brain.ops.connector_probe_run import tick_probes
+from brain.ops.container_limit import (
+    cgroup_limit_mib,
+    given_limit_mib,
+    limit_findings,
+    planned_share_mib,
+)
 from brain.ops.heartbeat import beat, heartbeat_path, ready
 from brain.ops.inference import inference_gaps
 from brain.ops.inference_client import make_client
@@ -488,10 +494,12 @@ def declared_slots(env: Mapping[str, str]) -> tuple[Mapping[TrafficClass, int], 
 class WorkerPlan:
     """What this worker would run, and what it would cost.
 
-    `memory_mib` is the limit the component was budgeted at rather than anything measured.
-    That is the honest source: the container's cgroup limit is set from the compose file,
-    the compose file is held equal to `brain.ops.wiring` by test, and a worker reading its
-    own cgroup would be reading the same number one step later.
+    `memory_mib` is the limit the plan is made against: the container's own cgroup limit when
+    the kernel states one, else the limit the component was budgeted at. It was the budget alone
+    until 2026-10-13, on the argument that the compose file is held equal to `brain.ops.wiring`
+    by test and a worker reading its own cgroup would read the same number one step later. That
+    held until a limit was raised by hand on a server, after which the worker printed a figure
+    the container did not have; see `brain.ops.container_limit`.
     """
 
     shards: tuple[Shard, ...]
@@ -525,7 +533,8 @@ class WorkerPlan:
         rather than being looked up while it is happening.
         """
         sizing = (
-            f"{self.slot_memory_mib} MiB of a {self.memory_mib} MiB limit"
+            f"{self.slot_memory_mib} MiB of a {self.memory_mib} MiB limit "
+            f"(a plan may spend {planned_share_mib(self.memory_mib)})"
             if self.slot_class is SlotClass.STANDARD
             # The standard-slot arithmetic understates a whole-container plan by an order of
             # magnitude, and printing it unqualified is what would make an operator shrink
@@ -552,8 +561,12 @@ def plan_for(
     *,
     worker_component: str = "brain-worker",
     slot_class: SlotClass = SlotClass.STANDARD,
+    limit_mib: int | None = None,
 ) -> WorkerPlan:
-    """The processes this allocation lays out, against the component's own memory limit.
+    """The processes this allocation lays out, against the container's memory limit.
+
+    `limit_mib` is what the container was given, as `brain.ops.container_limit` reads it, and the
+    component's own budget when it is None.
 
     The slot class reaches `worker_shards` rather than being recorded beside the plan, because
     it is what the queue names are derived from: a plan that carried it as a label while the
@@ -561,7 +574,7 @@ def plan_for(
     """
     return WorkerPlan(
         shards=worker_shards(allocation, slot_class),
-        memory_mib=component(worker_component).memory_mib,
+        memory_mib=component(worker_component).memory_mib if limit_mib is None else limit_mib,
     )
 
 
@@ -1793,14 +1806,41 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None
     worker_component = declared_component(environment)
     slot_class, _ = declared_slot_class(environment)
 
+    # The limit this container was actually given, which the plan is made against and the margin
+    # is judged against; the product's budget where the kernel states none. Read here, in the one
+    # place that starts a process, and never inside `preflight`, so that the checks above stay
+    # the same on every machine they are run on.
+    given = given_limit_mib(component(worker_component).memory_mib, cgroup_limit_mib())
+    margin_refusals: tuple[str, ...] = ()
+    margin_advice: tuple[str, ...] = ()
+    if slot_class is SlotClass.STANDARD:
+        margin_refusals, margin_advice = limit_findings(
+            sum(allocation.values()),
+            MIB_PER_SLOT,
+            given,
+            where=f"on {worker_component!r}",
+        )
+    if margin_refusals:
+        print("this worker will not start:", file=sys.stderr)
+        for finding in margin_refusals:
+            print(f"  - {finding}", file=sys.stderr)
+        return EXIT_MISCONFIGURED
+
     # After the refusals and before anything starts. Printed rather than returned, and to
     # stderr rather than stdout, because a worker with an advisory against it is a worker that
     # runs: these lines sit in the log beside the plan, and the exit code stays whatever the
     # start itself produces.
-    for advisory in advisories(environment, worker_component=worker_component):
+    for advisory in (
+        *advisories(environment, worker_component=worker_component),
+        *margin_advice,
+    ):
         print(f"  ! {advisory}", file=sys.stderr)
 
-    print(plan_for(allocation, worker_component=worker_component, slot_class=slot_class).describe())
+    print(
+        plan_for(
+            allocation, worker_component=worker_component, slot_class=slot_class, limit_mib=given
+        ).describe()
+    )
     if worker_component == PARSE_WORKER_COMPONENT:
         # The plan's own numbers understate this container by an order of magnitude: it says
         # one slot at `MIB_PER_SLOT` of a 512 MiB limit, and an operator reading that would

@@ -75,6 +75,7 @@ WIRED = [one.name for one in RUNNERS if one.run is not None]
 STARTED = [
     ("retention_sweep", True),
     ("canary_run", False),
+    ("backup_exposure", False),
     ("denial_digest", False),
     ("directory_sync", False),
     ("knowledge_reverification", False),
@@ -162,7 +163,7 @@ def starts(monkeypatch: pytest.MonkeyPatch) -> Starts:
 
 
 # ------------------------------------------------------------------- without a server
-def test_the_wired_runners_are_the_twenty_two_the_schedule_is_meant_to_start() -> None:
+def test_the_wired_runners_are_the_twenty_three_the_schedule_is_meant_to_start() -> None:
     """Asserted against the names, so a runner wired or unwired later moves this on purpose.
 
     The webhook dispatch, the erasure queue and the permission canaries joined on 2026-09-17,
@@ -171,14 +172,15 @@ def test_the_wired_runners_are_the_twenty_two_the_schedule_is_meant_to_start() -
     joined on 2026-09-21, the model health prober on 2026-09-22, the hourly denial digest on
     2026-09-28 and the install acceptance checks the same day, and the escalation expiry, the
     two recovery sweeps and the evening digest on 2026-09-30, and the entity registry, the
-    weekly fit and the approved actions on 2026-10-06, and the supervision review on 2026-10-07,
-    in the registry's own order.
+    weekly fit and the approved actions on 2026-10-06, the supervision review on 2026-10-07, and the
+    backup exposure report on 2026-10-13, in the registry's own order.
 
-    Delete this and every assertion below that names the twenty-two could be satisfied by a table
+    Delete this and every assertion below that names the twenty-three could be satisfied by a table
     that had quietly lost one of them."""
     assert WIRED == [
         "retention_sweep",
         "canary_run",
+        "backup_exposure",
         "denial_digest",
         "directory_sync",
         "knowledge_reverification",
@@ -486,6 +488,7 @@ def test_a_due_control_is_started_once_and_its_run_is_recorded(starts: Starts) -
             ("acceptance_run", "ok", False, "acceptance_run ran"),
             ("approved_actions", "ok", False, "approved_actions ran"),
             ("automation_run", "ok", False, "automation_run ran"),
+            ("backup_exposure", "ok", False, "backup_exposure ran"),
             ("canary_run", "ok", False, "canary_run ran"),
             ("connector_sync", "ok", False, "connector_sync ran"),
             ("denial_digest", "ok", False, "denial_digest ran"),
@@ -595,6 +598,7 @@ def test_a_control_whose_lock_another_replica_holds_is_not_started_and_the_rest_
             "acceptance_run",
             "approved_actions",
             "automation_run",
+            "backup_exposure",
             "canary_run",
             "connector_sync",
             "denial_digest",
@@ -636,6 +640,7 @@ def test_a_runner_that_raises_is_recorded_as_failed_with_its_reason_and_the_next
             ("acceptance_run", "ok", "acceptance_run ran"),
             ("approved_actions", "ok", "approved_actions ran"),
             ("automation_run", "ok", "automation_run ran"),
+            ("backup_exposure", "ok", "backup_exposure ran"),
             ("canary_run", "ok", "canary_run ran"),
             ("connector_sync", "ok", "connector_sync ran"),
             ("denial_digest", "ok", "denial_digest ran"),
@@ -711,6 +716,7 @@ def test_the_tick_records_the_re_verification_nag_through_the_real_runner(
     assert others.calls == [
         ("retention_sweep", True),
         ("canary_run", False),
+        ("backup_exposure", False),
         ("denial_digest", False),
         ("directory_sync", False),
         ("escalation_expiry", False),

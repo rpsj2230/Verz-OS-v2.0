@@ -119,10 +119,31 @@ _MARKED_AS_THE_CALLER: Final = (
     "brain.knowledge.lifecycle_store.as_person told the marker's reach first, so know.item's "
     "policy reads the settings for the person brain.knowledge.public judged"
 )
+_SET_FOR_THE_ENVELOPE_S_ASKER: Final = (
+    "put_envelope has one caller, brain.browsing.driver.prepare_run, which runs "
+    "brain.gate.suspension_store.at_reach for the asker's own reach in the same transaction "
+    "before it, so the row's asked_by is judged against the person whose session this is; and "
+    "record_decision is called from the approval's own transaction (HeldRows.record), which "
+    "at_reach set for the approver, so decided_by is judged against the person who decided. "
+    "Setting it inside the store from the row's own value would make the policy true of every "
+    "row, which is the check turned into a comment"
+)
 USES_EXPLAINED: Final[Mapping[tuple[str, str, str], str]] = MappingProxyType(
     {
+        ("brain.browsing.envelope_store", "agent.browser_envelope", "INSERT"): (
+            _SET_FOR_THE_ENVELOPE_S_ASKER
+        ),
+        ("brain.browsing.envelope_store", "agent.browser_envelope", "UPDATE"): (
+            _SET_FOR_THE_ENVELOPE_S_ASKER
+        ),
         ("brain.ops.schedule_store", "ops.control_run", "INSERT"): _RECORDED_BY_THE_WORKER,
         ("brain.ops.schedule_store", "ops.control_run", "UPDATE"): _RECORDED_BY_THE_WORKER,
+        ("brain.ops.queue", "ops.dead_letter", "INSERT"): (
+            "keep_aside and keep_failed are DriverQueue's, called by run_queue_redrive_now on the "
+            "connection brain.ops.recovery_run opens on the queue's own URL, the owner's login and "
+            "never the application's (A_QUEUE_IS_OPENED_ON_THE_QUEUE_S_URL_AND_NEVER_THE_"
+            "APPLICATION_S), so 0228 grants brain_app SELECT alone"
+        ),
         ("brain.ops.erasure_store", "ops.erasure_request", "UPDATE"): (
             "drain_erasure_queue runs on the psycopg connection brain.ops.schedule_runner opens as "
             "the database owner, and refuses a connection row-level security narrows, because a "

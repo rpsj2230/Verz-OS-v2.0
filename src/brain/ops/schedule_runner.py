@@ -864,6 +864,41 @@ def acceptance_run(now: datetime, report_only: bool, database_url: str) -> str:
     )
 
 
+#: Why the daily backup report records itself and sends nothing in report-only mode.
+A_BACKUP_REPORT_IN_REPORT_ONLY_MODE_RECORDS_AND_SENDS_NOTHING: Final = (
+    "Report-only mode means decide and do not act, and a message to a room is an act, so a "
+    "report asked to only report reads nothing and says so."
+)
+
+
+def backup_exposure(now: datetime, report_only: bool, database_url: str) -> str:
+    """Read the backup bucket, record what was found and say each alert once, or say why not.
+
+    `brain.ops.backup_report_run.run_backup_report_now` is the literal call the registry reads,
+    with the worker's vault for the object store's key and the channel's secret, and the install's
+    profile for the recovery point. Declines in report-only mode, see
+    `A_BACKUP_REPORT_IN_REPORT_ONLY_MODE_RECORDS_AND_SENDS_NOTHING`, and takes the worker's event
+    loop for the reason `spend_report_refresh` gives.
+    """
+    if report_only:
+        return (
+            "report only: no backup report was recorded and no alert was sent. "
+            f"{A_BACKUP_REPORT_IN_REPORT_ONLY_MODE_RECORDS_AND_SENDS_NOTHING}"
+        )
+    from brain.ops.backup_report_run import run_backup_report_now
+    from brain.ops.worker import _loop_factory
+
+    settings = settings_from(process_environment())
+    return run_backup_report_now(
+        database_url,
+        now=now,
+        vault_address=settings.vault_address,
+        vault_token=settings.vault_token,
+        profile=settings.profile,
+        loop_factory=_loop_factory(),
+    )
+
+
 #: Why a runner's `needs` names no function, task, person or decision.
 A_JOBS_NEEDS_IS_WRITTEN_FOR_AN_ADMINISTRATOR: Final = (
     "A job's page shows what it is waiting for under Cannot start yet, on every install. Found "
@@ -895,15 +930,9 @@ RUNNERS: Final[tuple[Runner, ...]] = (
             "back, which this install does not keep yet"
         ),
     ),
-    # For whoever builds it: the backup and verification sequences `alerts` takes, the rows the
-    # nightly dump of needs-rupash item 44 would produce.
-    Runner(
-        name="backup_exposure",
-        needs=(
-            "a record of each backup taken and each check that one can be read back, which "
-            "this install does not keep yet"
-        ),
-    ),
+    # Wired on 2026-10-13: `brain.ops.backup_report_run` reads the manifests the nightly dump
+    # writes, records the report and says each alert once to the evening digest's conversation.
+    Runner(name="backup_exposure", run=backup_exposure, workload=WorkloadClass.BACKGROUND),
     # Wired on 2026-09-28: `brain.ops.denial_digest_run` reads the hour's refusals from the
     # ledger, resolves every live person's reach, and keeps what `digest` raises in the cache.
     Runner(name="denial_digest", run=denial_digest, workload=WorkloadClass.BATCH),
@@ -1042,6 +1071,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return approved_actions(now, report_only, database_url)
         case "supervision_review":
             return supervision_review(now, report_only, database_url)
+        case "backup_exposure":
+            return backup_exposure(now, report_only, database_url)
         case _:
             runner = runner_for(name)
             msg = (

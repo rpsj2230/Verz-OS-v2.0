@@ -16,10 +16,11 @@ nothing else in common are put to a person, so a review item is open between the
 state a reviewer's link is about.
 
 **Three readers, and the third is the one the leaf is held to.** An asker reading both rows is told
-the one sentence and neither figure. A reviewer reading both, holding the reviewer's capability
-over everything on a session with a second factor, is told where to check it. An asker reading
-only the first row's department is asked twice, before the second row exists and after, and the
-two replies must be the same bytes: a withheld record must not make a name ambiguous.
+the one sentence and then each client's figure on its own, never added together. A reviewer
+reading both, holding the reviewer's capability over everything on a session with a second factor,
+is told where to check it. An asker reading only the first row's department is asked twice, before
+the second row exists and after, and the two replies must be the same bytes: a withheld record
+must not make a name ambiguous.
 
 Task ids: M14.6.5
 """
@@ -65,8 +66,8 @@ WITHHELD_RECORD_TOLD: Final = (
     "second record did not exist"
 )
 NOT_NAMED_AMBIGUOUS: Final = (
-    "an asker reading two clients with one name was not told it could not tell which, or was "
-    "told a figure"
+    "an asker reading two clients with one name was not told it could not tell which and given "
+    "each client's figure on its own"
 )
 LINK_TO_A_NON_REVIEWER: Final = "the review reference was shown to somebody who is not a reviewer"
 REVIEWER_NOT_LINKED: Final = "a reviewer was not handed the review reference for the two clients"
@@ -184,7 +185,8 @@ async def a_shared_name_is_named_and_a_withheld_record_changes_nothing(
     h: Harness,
 ) -> None:
     from brain.classification_routes import CLASSIFICATION_READ, CLASSIFICATION_WRITE
-    from brain.gate.streaming import Event, encode, frames
+    from brain.gate.answer import SEVERAL_CLIENTS_ANSWERED_ON_THEIR_OWN
+    from brain.gate.streaming import frames
     from brain.knowledge.classified_rows import TABLES_SOURCE
     from brain.knowledge.columns import ColumnAccess, table_capability
     from brain.resolution.canonical import SourceRef
@@ -277,13 +279,16 @@ async def a_shared_name_is_named_and_a_withheld_record_changes_nothing(
     body = frames(told.frames)
     if str(item) in body:
         raise CheckFailedError(LINK_TO_A_NON_REVIEWER)
+    # Told it could not tell which, and then each client's figure on its own (needs-rupash 159),
+    # in one line each and never added together.
     if (
-        encode(Event.TEXT, UNRESOLVED_TEXT) not in told.frames
-        or first[SELL_PRICE] in body
-        or second[SELL_PRICE] in body
+        UNRESOLVED_TEXT not in body
+        or SEVERAL_CLIENTS_ANSWERED_ON_THEIR_OWN not in body
+        or first[SELL_PRICE] not in body
+        or second[SELL_PRICE] not in body
     ):
         raise CheckFailedError(NOT_NAMED_AMBIGUOUS)
 
     linked = await _ask(h, reviewer_person, reviewer, name)
-    if encode(Event.TEXT, UnresolvedNotice(review_ref=str(item)).render()) not in linked.frames:
+    if UnresolvedNotice(review_ref=str(item)).render() not in frames(linked.frames):
         raise CheckFailedError(REVIEWER_NOT_LINKED)
