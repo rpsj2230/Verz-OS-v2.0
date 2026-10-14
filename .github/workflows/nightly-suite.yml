@@ -105,7 +105,20 @@ jobs:
           [ -n "$files" ] || { echo "::error::shard ${{ matrix.shard }} has no test files"; exit 1; }
           echo "ran=true" >> "$GITHUB_OUTPUT"
           echo "shard ${{ matrix.shard }} of ${{ strategy.job-total }}: $(echo "$files" | wc -l) file(s)"
-          uv run pytest --cov --cov-report= --cov-fail-under=0 $files
+          uv run pytest --cov --cov-report= --cov-fail-under=0 --durations=25 --junitxml="$GITHUB_WORKSPACE/timing-shard-${{ matrix.shard }}.xml" $files
+
+      - name: Keep this shard's test durations
+        # The whole suite's durations, every night: the record the shards are balanced on
+        # (`brain.ops.test_timings`) is regenerated from these reports, so this is where a test
+        # that has become slow is first seen. Kept when a test failed as well, and for a month.
+        if: ${{ !cancelled() && steps.suite.outputs.ran == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: timing-shard-${{ matrix.shard }}
+          path: ${{ github.workspace }}/timing-shard-${{ matrix.shard }}.xml
+          if-no-files-found: warn
+          overwrite: true
+          retention-days: 30
 
       - name: Migrations go forward, back, and forward again
         # A migration that cannot be reversed is a deploy with no way home. This runs the

@@ -11,14 +11,23 @@ but it is the same mistake in the other direction, and a split that can duplicat
 **Every runner computes the same split.** Each shard is a separate machine asking this module
 for its own share, and none of them sees the others' answers. So the split is a pure function
 of the tree: the files are the ones a bare `pytest` would collect, read from the same
-`pyproject.toml` settings pytest reads, and they are weighed by line count rather than by
-bytes, because a checkout with CRLF line endings has different byte sizes and the same lines.
+`pyproject.toml` settings pytest reads, and they are weighed from `ops/ci/test-timings.json`, a
+file in the repository, never from anything fetched at run time.
 
-**Balanced by size because there is no record of durations.** The repository keeps no timings
-per file, and the pytest progress log of the single job advanced at a roughly even rate through
-the alphabet, so the lines in a file are a fair proxy for its cost. The assignment is the
-classic greedy one, heaviest file first onto the lightest shard, which keeps the heaviest and
-lightest shards within one file's weight of each other.
+**Balanced by recorded duration, with the lines in a file as the fallback (2026-10-14).** It was
+balanced by line count alone, "because there is no record of durations", and that was measured to
+be wrong where it mattered: one shard in every pull request run took 66 to 123 minutes while the
+other seven took 12 to 25, because a line count cannot see one file that costs an hour
+(`brain.ops.test_timings` has the measurement and the reasons). A file with a recorded time is
+weighed by it, a file without one by its lines at the rate the recorded files show, and the
+assignment is the classic greedy one, heaviest first onto the lightest shard, which keeps the
+heaviest and lightest shards within one file's weight of each other.
+
+**A test that costs minutes is a unit of its own (`brain.ops.test_timings.CARVED_OUT`).** The shard
+is handed pytest arguments and not only files: the file, with a `--deselect` for each carved test
+that runs in another shard, and `file::test` for a carved test that runs here without its file.
+Every test still runs exactly once, which `tests/unit/test_test_shards.py` proves by asking pytest
+to collect each shard's arguments and comparing the union with the file's own collection.
 
 **A shard with nothing in it is refused rather than printed.** The workflow hands this output
 to `pytest` as arguments, and `pytest` given no arguments runs `testpaths`: an empty shard would
@@ -33,11 +42,13 @@ import argparse
 import fnmatch
 import sys
 import tomllib
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Final
 
-REPO: Final = Path(__file__).resolve().parents[3]
+from brain.ops import test_timings
+
+REPO: Final = test_timings.REPO
 
 #: pytest's own defaults for the two settings, used when `pyproject.toml` does not set them.
 DEFAULT_PYTHON_FILES: Final = ("test_*.py", "*_test.py")
@@ -103,11 +114,9 @@ def collected(root: Path = REPO) -> tuple[str, ...]:
 
 
 def weight(path: Path) -> int:
-    """The cost of one file, in lines, so a CRLF checkout weighs a file the same as LF.
-
-    At least one, so an empty file still counts as a file a shard has to hold.
-    """
-    return max(1, path.read_bytes().count(b"\n"))
+    """The cost of one file in lines: the fallback weight, and what a test file with no recorded
+    time is estimated from (`brain.ops.test_timings.weights`)."""
+    return test_timings.lines(path)
 
 
 def partition(
@@ -141,13 +150,58 @@ def partition(
     return tuple(tuple(sorted(group)) for group in groups)
 
 
+def arguments(group: Iterable[str]) -> tuple[str, ...]:
+    """The pytest arguments that run exactly the units in `group`.
+
+    A plain file is itself. A carved file whose own unit is here is the file, with a `--deselect`
+    for each carved test that is not here; a carved test here without its file is `file::test`.
+    Never both the file and one of its tests, which pytest would run twice.
+    """
+    chosen = set(group)
+    made: list[str] = []
+    for name in sorted(one for one in chosen if "::" not in one):
+        made.append(name)
+        made.extend(
+            f"--deselect={name}::{test}"
+            for test in test_timings.CARVED_OUT.get(name, ())
+            if f"{name}::{test}" not in chosen
+        )
+    made.extend(
+        sorted(one for one in chosen if "::" in one and test_timings.unit_path(one) not in chosen)
+    )
+    return tuple(made)
+
+
+def units_run(args: Iterable[str]) -> set[str]:
+    """The units a set of pytest arguments runs: the inverse of `arguments`.
+
+    A file is its own unit and, with it, every carved test of that file that is not deselected;
+    `file::test` is that test alone. Asserting the units of every shard are disjoint and cover the
+    suite is how the split is held to running every test once.
+    """
+    given = list(args)
+    deselected = {one.removeprefix("--deselect=") for one in given if one.startswith("--deselect=")}
+    ran: set[str] = set()
+    for one in given:
+        if one.startswith("--"):
+            continue
+        ran.add(one)
+        if "::" not in one:
+            ran |= {
+                f"{one}::{test}"
+                for test in test_timings.CARVED_OUT.get(one, ())
+                if f"{one}::{test}" not in deselected
+            }
+    return ran
+
+
 def shard(number: int, of: int, root: Path = REPO) -> tuple[str, ...]:
-    """The files shard `number` runs, counting from one, out of `of` shards."""
+    """The pytest arguments shard `number` runs, counting from one, out of `of` shards."""
     if not 1 <= number <= of:
         msg = f"shard {number} is not one of 1 to {of}"
         raise ShardError(msg)
-    files = collected(root)
-    return partition({name: weight(root / name) for name in files}, of)[number - 1]
+    wanted = test_timings.units(collected(root))
+    return arguments(partition(test_timings.weights(wanted, root), of)[number - 1])
 
 
 def main(argv: Sequence[str] | None = None) -> int:

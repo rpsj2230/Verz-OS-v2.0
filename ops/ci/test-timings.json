@@ -1,0 +1,9 @@
+{
+ "note": "Seconds per test file, and per carved-out test as file::test, regenerated from the shards' JUnit reports by `python -m brain.ops.test_timings refresh <directory>`. Read by brain.ops.test_shards to balance the CI shards; a file missing here is weighed by its lines.",
+ "seconds": {
+  "tests/unit/test_acceptance.py": 14.5,
+  "tests/unit/test_acceptance.py::test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results": 896.6,
+  "tests/unit/test_acceptance.py::test_the_page_serves_the_newest_run_of_the_commit_it_is_asked_about": 306.2,
+  "tests/unit/test_acceptance.py::test_the_worker_runs_once_per_commit_and_again_when_asked": 276.3
+ }
+}

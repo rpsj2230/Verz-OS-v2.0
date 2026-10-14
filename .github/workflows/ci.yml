@@ -142,6 +142,16 @@ jobs:
   # widen the selection, not to trust it. `ops/DEPLOY.md` says what an ordinary pull request no
   # longer proves.
   #
+  # **The shards are balanced on recorded durations, not on lines (2026-10-14).** Over the last ten
+  # successful pull request runs one shard took 66 to 123 minutes and the other seven 4 to 44,
+  # and the slow one changed from run to run, because it was whichever shard held the one test
+  # that ran the whole acceptance registry twice (`tests/unit/test_acceptance.py`; the table is in
+  # `ops/DEPLOY.md`, "What the unit shards cost"). A line count cannot see a file like that.
+  # `brain.ops.test_shards` weighs each file from `ops/ci/test-timings.json`, which
+  # `brain.ops.test_timings` regenerates from the JUnit report every shard keeps (the
+  # `timing-shard-*` artefact, here and in the nightly suite), and a file with no recorded time
+  # falls back to its lines. The job and the check names are unchanged, so no required check moved.
+  #
   # **No shard enforces the coverage floor, and that is deliberate.** A quarter of the suite
   # covers a fraction of the code, so each shard passes `--cov-fail-under=0` and keeps its data
   # file instead; the `coverage` job below combines all of them and enforces the floor from
@@ -243,7 +253,20 @@ jobs:
           [ -n "$files" ] || { echo "::error::shard ${{ matrix.shard }} has no test files"; exit 1; }
           echo "ran=true" >> "$GITHUB_OUTPUT"
           echo "shard ${{ matrix.shard }} of ${{ strategy.job-total }}: $(echo "$files" | wc -l) file(s)"
-          uv run pytest --cov --cov-report= --cov-fail-under=0 $files
+          uv run pytest --cov --cov-report= --cov-fail-under=0 --durations=25 --junitxml="$GITHUB_WORKSPACE/timing-shard-${{ matrix.shard }}.xml" $files
+
+      - name: Keep this shard's test durations
+        # What the shards are balanced on (`brain.ops.test_timings`). Kept when a test failed as
+        # well, because a red shard's durations are as true as a green one's, and not when the
+        # shard ran nothing. A missing file is a warning and never a reason to fail the shard.
+        if: ${{ !cancelled() && steps.suite.outputs.ran == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: timing-shard-${{ matrix.shard }}
+          path: ${{ github.workspace }}/timing-shard-${{ matrix.shard }}.xml
+          if-no-files-found: warn
+          overwrite: true
+          retention-days: 30
 
       - name: Migrations go forward, back, and forward again
         # A migration that cannot be reversed is a deploy with no way home. This runs the
