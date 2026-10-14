@@ -50,6 +50,7 @@ from brain.console.agent_automations import (
     schedule_basis,
 )
 from brain.console.automation_authoring import (
+    EVENTS_ARE_OFF,
     NOTHING_FIRES_THIS_YET,
     WRITES_WAIT_FOR_A_PERSON,
     Authored,
@@ -63,12 +64,16 @@ from brain.console.automation_schedule import (
     may_start,
     may_stop,
     shown_start,
+    shown_start_on_change,
     shown_stop,
 )
 from brain.console.automations import ChangeKind
 from brain.core.errors import Absent, Failed
 from brain.ops.automation_run import PausedBecause, RunRecord
 from brain.ops.automation_run_store import Listed, StoredAutomationSchedules
+from brain.ops.features import is_on
+from brain.ops.features_declared.automation_events import AUTOMATION_EVENTS
+from brain.orchestration.unattended import TriggerKind
 from brain.routing_routes import sessions_of
 from brain.tables.automation_run import STARTED
 
@@ -245,6 +250,31 @@ def schedules_of(request: Request) -> AutomationSchedules:
     return StoredAutomationSchedules(factory)
 
 
+async def events_are_on(request: Request) -> bool:
+    """Whether a change may start an automation on this install. Off until somebody turns it on.
+
+    Asked before an automation a change starts is offered a start or started, and never before a
+    stop: a switch turned off must not leave an automation listening with no way to stop it. See
+    `brain.ops.features.A_SWITCH_TURNED_OFF_DOES_NOT_TRAP_WHAT_IT_OPENED`.
+    """
+    found = getattr(request.app.state, "automation_events_on", None)
+    if isinstance(found, bool):
+        return found
+    factory = sessions_of(request)
+    if factory is None:
+        raise Failed("no database on this process")
+    async with factory() as session:
+        return await is_on(session, AUTOMATION_EVENTS)
+
+
+def _listens_to(listed: Listed) -> str:
+    """The source this automation listens to when a change starts it, or empty."""
+    one = listed.authored
+    if one is None or one.trigger.kind is not TriggerKind.CONNECTOR_EVENT:
+        return ""
+    return one.trigger.source
+
+
 def _not_here(reason: str, asked: Asking) -> Absent:
     log.info("automation schedule refused", reason=reason, principal=asked.caller.principal.id)
     return Absent("no automation is answerable here for this caller")
@@ -302,8 +332,14 @@ def run_view(run: RunRecord, asked: Asking) -> RunView:
     )
 
 
-def automation_view(listed: Listed, agent: AgentRecord, asked: Asking) -> AutomationView | None:
-    """One automation as this reader sees it, or None when its template is gone."""
+def automation_view(
+    listed: Listed, agent: AgentRecord, asked: Asking, *, events_on: bool = False
+) -> AutomationView | None:
+    """One automation as this reader sees it, or None when its template is gone.
+
+    `events_on` is whether the install has switched on starting by a change. It decides only
+    whether an automation a change starts is offered a start: a stop is offered either way.
+    """
     one = listed.automation
     template = template_by_id(listed.template_id)
     if template is None and listed.authored is None:
@@ -321,7 +357,13 @@ def automation_view(listed: Listed, agent: AgentRecord, asked: Asking) -> Automa
         (run for run in listed.runs if shown.last is not None and run.finished_at == shown.last.at),
         None,
     )
-    start = None if cadence is None else shown_start(one, cadence, now=asked.now)
+    listens = _listens_to(listed)
+    if cadence is not None:
+        start = shown_start(one, cadence, now=asked.now)
+    elif listens and events_on:
+        start = shown_start_on_change(one, listens, now=asked.now)
+    else:
+        start = None
     startable = (
         start is not None
         and not listed.removed
@@ -340,8 +382,8 @@ def automation_view(listed: Listed, agent: AgentRecord, asked: Asking) -> Automa
     cannot_start = None
     if one.paused and not listed.removed:
         cannot_start = ADOPT_IT_FIRST if not live else cannot_start_because(one, agent, asked.now)
-        if cannot_start is None and cadence is None:
-            cannot_start = NOTHING_FIRES_THIS_YET
+        if cannot_start is None and start is None:
+            cannot_start = EVENTS_ARE_OFF if listens else NOTHING_FIRES_THIS_YET
     return AutomationView(
         automation_id=one.automation_id,
         name=one.name,
@@ -354,7 +396,9 @@ def automation_view(listed: Listed, agent: AgentRecord, asked: Asking) -> Automa
         start_confirmation=start.confirmation if startable and start is not None else None,
         start_becomes=start.becomes if startable and start is not None else None,
         stop_confirmation=(
-            shown_stop(one, cadence).confirmation if stoppable and cadence is not None else None
+            shown_stop(one, cadence, listens_to=listens).confirmation
+            if stoppable and (cadence is not None or listens)
+            else None
         ),
         cannot_start=cannot_start,
         authored=None if listed.authored is None else authored_view(listed.authored),
@@ -378,7 +422,8 @@ _TOLD: Final[dict[int | str, dict[str, object]]] = {
 async def agent_automations(request: Request, agent_id: str, asked: Asked) -> AutomationsView:
     """This agent's automations this reader may see, each with its last run and its controls."""
     agent, seen = await _visible(request, agent_id, asked)
-    views = (automation_view(one, agent, asked) for one in seen)
+    events_on = await events_are_on(request)
+    views = (automation_view(one, agent, asked, events_on=events_on) for one in seen)
     return AutomationsView(items=[one for one in views if one is not None])
 
 
@@ -400,13 +445,21 @@ async def _change(
     cadence = listed.cadence or (None if template is None else template.cadence)
     if listed.removed:
         raise _not_here("removed", asked)
-    if cadence is None:
+    listens = _listens_to(listed)
+    events_on = await events_are_on(request)
+    if cadence is None and not listens:
         # An automation whose trigger nothing fires has no cadence to start from or stop at, and is
         # answered as one that does not exist, as any other control the reader is not offered is.
         raise _not_here("trigger", asked)
+    if cadence is None and starting and not events_on:
+        raise _not_here("switch", asked)
     shown: ScheduleShown
     if starting:
-        shown = shown_start(one, cadence, now=asked.now)
+        shown = (
+            shown_start(one, cadence, now=asked.now)
+            if cadence is not None
+            else shown_start_on_change(one, listens, now=asked.now)
+        )
         if (
             shown.becomes is None
             or not listed.owner_live(asked.now)
@@ -416,7 +469,7 @@ async def _change(
     else:
         if not may_stop(one, asked.reach, now=asked.now):
             raise _not_here("stop", asked)
-        shown = shown_stop(one, cadence)
+        shown = shown_stop(one, cadence, listens_to=listens)
     try:
         change = changed(shown, confirmation=body.confirmation, guards=listed.guards)
     except NotConfirmedError:
@@ -438,7 +491,7 @@ async def _change(
         automation=after,
         stopped_because=STARTED if starting else PausedBecause.STOPPED.value,
     )
-    view = automation_view(moved, agent, asked)
+    view = automation_view(moved, agent, asked, events_on=events_on)
     return JSONResponse(
         status_code=200, content=None if view is None else view.model_dump(mode="json")
     )
