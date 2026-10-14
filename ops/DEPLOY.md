@@ -39,6 +39,64 @@ not a deploy.
 Verified 2026-09-04: `ghcr.io/rpsj2230/verz-brain-v2.0:6593cf3`,
 digest `sha256:131e228179c16705a9cb6c31fc15ef05a18bed91f892d0d3048e5e3d278d5f53`.
 
+## What CI costs per merge, and why main does not reuse a pull request's result
+
+A merge is checked twice: by the pull request's run and by the run on `main` that gates the
+deploy. Measured on 2026-10-14 (GitHub's free plan runs 20 jobs at a time):
+
+| Run | Jobs | Job-minutes | Wall clock |
+| --- | --- | --- | --- |
+| Pull request, task list only | 4 | about 1 | under 1 minute |
+| Pull request, unit tests selected by the diff | 21 | 56 | 12 minutes |
+| Pull request, whole suite (a workflow, fixture or lock file changed) | 21 to 24 | 127 to 222 | 45 to 50 minutes, queued |
+| `main`, a code change | 8 | about 12 | 7 to 15 minutes, 31 to 63 on busy days when jobs queued |
+| `main`, task list only | 2 | under 1 | under 1 minute |
+
+The eight shards are 63% of a selected pull request run and 80% of a full one. `main` already
+runs none of them: since 2026-09-28 it runs only the gates a deploy depends on (lint and types,
+the sweeps, the install from empty, the migrations over an install-shaped database, the previous
+release on the new schema, the whole stack and the tracker). So the work a merge repeats is
+those eight jobs, about 12 job-minutes, which is a fifth of a selected pull request run and a
+twentieth of a full one. Test selection, the nightly suite and the path filters already cut the
+rest, and the pull request run is the cost worth looking at next, not main's.
+
+**Options measured for the part that is left, and what was done with each.**
+
+- **Reuse the pull request's result when the merged tree is identical (rejected).** Sound for
+  the tree and not for the two other things `main`'s gates read. `previous_release` tests the
+  build before this change, which is the pull request's base on a pull request and the push's
+  `before` on `main`, so a tree match with a different base is a different test. `sweeps` and
+  `docs` read the `Closes:` trailers of the squash commit's own message, which the pull request
+  never saw. And the branch protection does not require a branch to be up to date (`strict:
+  false`), so only 10 of the last 60 merges (17%) squashed to the tree their pull request ran,
+  fewer once the base must match too. A fail-closed version would skip one job in six merges, keep
+  the history-reading jobs anyway, and add a lookup in the one path that gates the server.
+- **Cancel the running CI on `main` when a newer merge arrives (rejected).** `main` already
+  collapses a burst: GitHub keeps one run going and only the newest waiting, and 8 of the last 30
+  runs on `main` were such replaced runs (each cancelled with no job started). Cancelling the running one as well saves about ten
+  job-minutes per burst and risks starving the deploy for as long as merges arrive closer
+  together than a run is long, which left nothing deployed on 2026-09-28. Pull request branches
+  already cancel a superseded run.
+- **Skip work for task-list-only and docs-only commits (already there).** `Kind of change` skips
+  every product suite for a task-list diff, and `brain.ops.ci_paths` skips four pull-request-only
+  jobs by path.
+- **Serialise the publish (done).** The one real hazard found while measuring. See below.
+
+**Which commit is deployed when runs overlap.** CI runs on `main` queue in order and the newest
+is never cancelled, so the newest commit's CI always runs. Each green run starts a `Deploy` of its
+own commit and the server deploys whatever `:latest` points at. Until 2026-10-14 nothing ordered
+those builds, so a code commit followed by a task-list commit (whose CI takes under a minute)
+started two builds together and `:latest` ended on whichever finished last. The build job is now
+in one concurrency group that never cancels a running build: GitHub keeps the build that is
+publishing, replaces any waiting one with the newer, and runs that next. A burst of merges
+publishes the commit that was already building and then `main`'s tip, which is deployed last.
+The ones between show as cancelled in the Actions list before they built anything.
+`tests/unit/test_ci_duplicate_work.py` holds it. What it does not cover: two `Deploy` runs created
+out of order by GitHub, which the minutes between CI completions make unlikely, and the
+staging-check job of a superseded commit, which waits ten minutes for a verdict the newer
+deploy has overwritten and fails (seen on 2026-10-13); that is the check's design and is left as
+it is.
+
 ## The target box
 
 **Every value in this runbook that names a machine is a placeholder**, written as
@@ -118,6 +176,19 @@ On the server, as root, once:
 After that, every merge to `main` that passes CI is live within a few minutes, and the
 `Deploy` workflow goes red if it is not. `journalctl -u brain-autodeploy.service -n 50` is
 the history, and `/var/lib/brain-deploy/heartbeat.json` says what the last check decided.
+
+**The worker is not restarted by a merge that changes nothing it runs.** The application is
+recreated by every deploy, because it serves the console and the build documents out of its
+image. The worker is recreated only when the image it would move to has a different
+`worker_fingerprint` in its `RELEASE.json` from the image it is running: a hash of every committed
+file except those under `docs/`, `tests/`, `console/`, `e2e/`, `matcher/` and `.github/`
+(`brain.ops.restart_scope`). So a merge of documents, tests, the console's source or workflows
+leaves an acceptance run in progress alone. Any doubt (an image from before the fingerprint
+existed, one that cannot be opened) restarts it as before, and the journal says which services
+were left running (`services left running:`). To restart everything anyway, for instance to give
+the worker newer documents, run `BRAIN_DEPLOY_RECREATE_ALL=1 /usr/local/bin/brain-deploy` once.
+The first deploy after this ships restarts the worker once, because the image it is running has no
+fingerprint to compare.
 
 `brain-deploy` prefers to ask Coolify to deploy, on `127.0.0.1` with a token in
 `/root/.coolify-deploy-token`, so the panel's own record stays true; with no token it

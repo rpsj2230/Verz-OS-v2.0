@@ -25,6 +25,11 @@ trivially rewritable with `docker build --label` on top of a pulled image, and a
 that a person can alter without leaving a trace reads as stronger evidence than it is.
 A file inside the layer is no harder to alter, but nobody mistakes it for a guarantee.
 
+**It also carries the fingerprint of what a worker runs** (`extra["worker_fingerprint"]`, from
+`brain.ops.restart_scope`), because that comparison is also one that needs git and the server has
+none: the deploy script leaves a worker running when the image it would move to has the same
+fingerprint as the one it runs.
+
 Task ids: M38.1.3.5
 """
 
@@ -36,6 +41,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from brain.ops.restart_scope import WORKER_FINGERPRINT_KEY, fingerprint_of
 from brain.status import claimed_ids
 
 #: Where the manifest lives inside the image. Read at startup, absent in development, and
@@ -178,12 +184,21 @@ def build_manifest(
             # disagrees with the tracker is the one printed on the deployment record.
             ids.update(claimed_ids(subject, body))
 
+    # What the worker would run if this commit were deployed, for the server's deploy script to
+    # compare with what each worker is running (`brain.ops.restart_scope`). Left out when git
+    # cannot say, which the script reads as "restart the worker".
+    extra: dict[str, str] = {}
+    worker = fingerprint_of(repo, commit)
+    if worker:
+        extra[WORKER_FINGERPRINT_KEY] = worker
+
     return ReleaseManifest(
         commit=commit,
         built_at=now or datetime.now(UTC),
         task_ids=tuple(sorted(ids)),
         previous_commit=previous,
         span=kind if previous else "none",
+        extra=extra,
     )
 
 
