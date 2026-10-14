@@ -32,17 +32,22 @@
  * The argument is in `graph.ts` and it is the same one `paging.ts` makes about a table
  * footer: the disclosing number does not have to be a count of hidden things.
  *
- * **No route sends a trace graph.** `readCompletedRun` in `graph.ts` reads the shape this
- * console proposes, and nothing under `/api/v1` produces it. What is checked here is this
- * console's half of the conversation.
+ * **The drawing has a list beside it** (`GraphOutline.tsx`), which is the text alternative: the
+ * same steps in the same words, one line each, with a skip link ahead of the drawing for a keyboard
+ * user who would rather not tab across every box. The steps are keyboard focusable and named; see
+ * `GraphCanvas.tsx` for why that changed on 2026-10-14.
+ *
+ * **A route sends it now**: `brain.trace_routes` serves one trace, `traceQuery.ts` turns it into the
+ * shape `readCompletedRun` in `graph.ts` reads, and `pages/audit/TracePage.tsx` draws it.
  *
  * Task ids: M32.5.2.3, M20.2.1
  */
 
 import type { ApiFailure } from "../api/errors";
 import { NOTHING_TO_SHOW } from "./DataTable";
-import { GraphCanvas } from "./GraphCanvas";
-import type { CompletedRun } from "./graph";
+import { GraphCanvas, SKIP_TO_THE_LIST } from "./GraphCanvas";
+import { GraphOutline } from "./GraphOutline";
+import { anchorOf, type CompletedRun } from "./graph";
 import { FailureNotice } from "../ui/FailureNotice";
 
 interface TraceGraphProps {
@@ -58,6 +63,8 @@ interface TraceGraphProps {
 
 export function TraceGraph({ caption, run, failure = null, busy = false }: TraceGraphProps) {
   const empty = run !== null && run.graph.nodes.length === 0;
+  // Derived from the caption, with no hook, so this file still holds no state (`trace-graph.test.tsx`).
+  const anchor = `${anchorOf(caption)}-as-a-list`;
 
   return (
     <div className="graph">
@@ -73,7 +80,10 @@ export function TraceGraph({ caption, run, failure = null, busy = false }: Trace
        * has not finished loading.
        */}
       {!failure && run !== null && !empty ? (
-        <GraphCanvas label={caption} graph={run.graph} />
+        <>
+          <GraphCanvas label={caption} graph={run.graph} skipTo={{ anchor, words: SKIP_TO_THE_LIST }} />
+          <GraphOutline anchor={anchor} label={caption} graph={run.graph} />
+        </>
       ) : null}
 
       {!failure && !busy && empty ? <p className="graph__empty">{NOTHING_TO_SHOW}</p> : null}
