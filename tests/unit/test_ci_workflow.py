@@ -413,7 +413,8 @@ def test_the_unit_suite_runs_as_shards_that_between_them_run_every_test_file() -
 
     Delete this and the matrix can lose a shard, or the step can pass a literal count that no
     longer matches it, and a quarter of the suite stops running with every job green."""
-    from brain.ops.test_shards import collected, shard
+    from brain.ops.test_shards import collected, shard, units_run
+    from brain.ops.test_timings import units
 
     job = _job(SHARD_JOB)
     numbers = job["strategy"]["matrix"]["shard"]
@@ -435,8 +436,8 @@ def test_the_unit_suite_runs_as_shards_that_between_them_run_every_test_file() -
     assert lines[-1].split()[:4] == ["uv", "run", "pytest", "--cov"]
     assert lines[-1].endswith(" $files")
 
-    listed = [name for number in numbers for name in shard(number, len(numbers))]
-    assert sorted(listed) == sorted(collected())
+    listed = [name for number in numbers for name in units_run(shard(number, len(numbers)))]
+    assert sorted(listed) == sorted(units(collected()))
 
 
 def test_every_shard_has_a_database_of_its_own() -> None:
@@ -479,6 +480,41 @@ def test_every_shard_keeps_its_coverage_data_under_a_name_of_its_own() -> None:
     assert upload["with"]["path"] == "${{ env.COVERAGE_FILE }}"
     assert "${{ matrix.shard }}" in str(upload["with"]["name"])
     assert upload["with"]["if-no-files-found"] == "error"
+
+
+def test_every_shard_keeps_its_test_durations_for_the_record_the_split_is_balanced_on() -> None:
+    """**The shards are balanced on recorded durations (`brain.ops.test_timings`), and the record
+    is regenerated from the reports each shard keeps.** So the pytest step writes a JUnit report
+    named for its shard and prints its slowest tests into the log, and a step after it uploads that
+    report under a name of its own, even when a test failed (a red shard's times are as true) and
+    never failing the shard for want of a file (a duration is not a reason for a red check).
+
+    Delete this and the step can stop writing the report, or two shards can upload one name, and
+    the record goes stale until the split is as lopsided as it was when one shard took 66 to 123
+    minutes and the other seven took 12 to 25."""
+    job = _job(SHARD_JOB)
+    index, step = _shard_step()
+    line = _live_lines(step)[-1]
+    reports = re.findall(r'--junitxml="([^"]+)"', line)
+    uploads = [
+        (position, one)
+        for position, one in enumerate(job["steps"])
+        if str(one.get("uses", "")).startswith("actions/upload-artifact")
+        and str(one.get("with", {}).get("name", "")).startswith("timing-")
+    ]
+
+    assert "--durations=25" in line.split()
+    assert len(reports) == 1 and "${{ matrix.shard }}" in reports[0]
+    assert len(uploads) == 1
+    position, upload = uploads[0]
+    assert position > index, "the report is uploaded before the tests that write it have run"
+    assert upload["with"]["name"] == "timing-shard-${{ matrix.shard }}"
+    assert (
+        reports[0].replace("$GITHUB_WORKSPACE", "${{ github.workspace }}")
+        == (upload["with"]["path"])
+    )
+    assert upload["with"]["if-no-files-found"] == "warn"
+    assert upload["if"] == "${{ !cancelled() && steps.suite.outputs.ran == 'true' }}"
 
 
 def test_the_floor_job_keeps_the_name_the_unit_job_had_and_cannot_pass_by_being_skipped() -> None:
