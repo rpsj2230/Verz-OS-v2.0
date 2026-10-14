@@ -57,6 +57,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Final
 
+from brain.deployment.app_environment import VAULT_SETTINGS, WORKER_VAULT_CHOICE
 from brain.firstrun import _CREDENTIAL_NAME, _NAMES_A_PLACE, MIN_SECRET_CHARS
 from brain.install import INSTALLATION, Belongs
 
@@ -105,6 +106,26 @@ ENV_FILE_SUFFIX: Final = ".env"
 #: survives: a blocklist of `src`, `Dockerfile` and `pyproject.toml` is green for the fourth
 #: shape a fork arrives in, and a fork arriving in a shape nobody listed is the whole failure.
 PERMITTED_BESIDE: Final[frozenset[str]] = frozenset({"README.md", ".gitignore", ".gitattributes"})
+
+#: The variables that hold a token the vault issued, and not one the installer generated: the
+#: application's and the worker's. Derived from the two names `brain.deployment.app_environment`
+#: already owns, and held equal to the tokens the installer asks the vault to mint by a test.
+#:
+#: Their length is the vault's. OpenBao service tokens are about twenty-six characters, which is
+#: shorter than `MIN_SECRET_CHARS` and correct, so `unminted_secrets` does not apply the length
+#: test to them. Empty and shared are still faults, so it still applies those two.
+ISSUED_BY_THE_VAULT: Final[frozenset[str]] = frozenset({VAULT_SETTINGS[1], WORKER_VAULT_CHOICE})
+
+#: Why a vault-issued token is exempt from the length test and from nothing else.
+THE_LENGTH_OF_WHAT_THE_VAULT_ISSUED_IS_THE_VAULT_S_AND_NOT_THE_INSTALLER_S: Final = (
+    "The installer asks the vault to mint the application's and the worker's tokens and writes "
+    "what it is handed, so their length is the vault's choice: an OpenBao service token is about "
+    "twenty-six characters. Holding it to the length the installer chooses for the secrets it "
+    "generates fails every correct install, with no way to make it pass short of a token the "
+    "vault did not mint. The length test is the only one that does not carry over. A blank "
+    "token is still a vault nobody can reach, and one token doing for two settings is still the "
+    "application's and the worker's policies being one."
+)
 
 #: Names whose value is public even though the name reads like a credential. A public key is
 #: half of a pair and is meant to be copied, so refusing to emit one would make the template
@@ -330,7 +351,10 @@ def unminted_secrets(values: Mapping[str, str]) -> tuple[str, ...]:
 
     The length is `brain.firstrun.MIN_SECRET_CHARS` rather than a number chosen here, because
     a second opinion about how long a generated secret has to be is a second opinion that is
-    lower on the day somebody is in a hurry.
+    lower on the day somebody is in a hurry. **It is applied to what the installer generates and
+    not to a token the vault issued** (`ISSUED_BY_THE_VAULT`): see
+    `THE_LENGTH_OF_WHAT_THE_VAULT_ISSUED_IS_THE_VAULT_S_AND_NOT_THE_INSTALLER_S`. Those are still
+    refused when empty and when two settings hold one value.
 
     Names, never values. See `A_CHECK_THAT_PRINTS_THE_VALUE_IS_THE_LEAK_IT_LOOKS_FOR`.
     """
@@ -343,7 +367,7 @@ def unminted_secrets(values: Mapping[str, str]) -> tuple[str, ...]:
         if not value:
             found.append(f"{name} is empty, so nothing was minted for it on this server")
             continue
-        if len(value) < MIN_SECRET_CHARS:
+        if len(value) < MIN_SECRET_CHARS and name not in ISSUED_BY_THE_VAULT:
             found.append(
                 f"{name} is shorter than {MIN_SECRET_CHARS} characters, which is short "
                 "enough to be guessed rather than generated"
