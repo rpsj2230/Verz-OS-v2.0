@@ -3296,8 +3296,8 @@ const PROGRESS = {
   },
   "M35.3.2.2": {
     status: "READY FOR TESTING",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): locale.PUSH_FOR_APPROVALS with Trigger.APPROVALS_WAIT_LONGER_THAN_THE_STATED_HOURS and PUSH_IS_DUE_ABOVE_HOURS=4 is defined and tested; triggered() has no caller and nothing measures approval waits, so the trigger can never fire. NEXT: Build the wait measurement (see M35.4.5) and call locale.triggered from the report; that completes this leaf.",
-    updated: "2026-10-13",
+    why: "built (owner decision 222 A): the typical approval wait is measured through migration 0227's view gate.approval_wait (raised_at and decided_at only, no person) by ops/approval_wait.py and reaches This install as two facts, the typical wait and whether push for approvals is now worth building, decided by locale.triggered; no count of approvals is ever shown, an install with nothing decided is unknown with its reason and never zero, and GET /install is tested at the route (tests/unit/test_install_approval_wait_route.py, with a mutation table). PRIOR WORK (2026-10-13 triage): locale.PUSH_FOR_APPROVALS with Trigger.APPROVALS_WAIT_LONGER_THAN_THE_STATED_HOURS and PUSH_IS_DUE_ABOVE_HOURS=4 is defined and tested; triggered() has no caller and nothing measures approval waits, so the trigger can never fire. NEXT: Build the wait measurement (see M35.4.5) and call locale.triggered from the report; that completes this leaf. PROVE ON THE INSTALL: run the acceptance run and read the result of the_approval_wait_is_measured_and_push_is_reported (it raises and approves three approvals in the acceptance department, as the Approvals route does, and leaves nothing behind); then open Install, This install, and see the typical approval wait and the push sentence, or unknown with a reason while nothing has been decided.",
+    updated: "2026-10-14",
   },
   "M36.1.1.1": {
     status: "READY FOR TESTING",
@@ -4751,8 +4751,8 @@ const PROGRESS = {
   },
   "M35.4.5": {
     status: "READY FOR TESTING",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Only the constants exist: locale.PUSH_IS_DUE_ABOVE_HOURS and the deferral. Suspension rows carry raise and decide times but nothing computes a typical wait or reports that push is due. NEXT: Add a read over gate.suspension (raised to decided) giving the median wait, show it on Approvals or Install, and call locale.triggered; then a check.",
-    updated: "2026-10-13",
+    why: "built (owner decision 222 A): the read is migration 0227's view gate.approval_wait over gate.suspension (the two times of each decided approval, no id, person or verdict), ops/approval_wait.py gives the median over the last 90 days (never a count; nothing decided is None, shown as unknown with the reason), console/installation.approval_wait_facts words it with the push verdict from locale.triggered, install_routes serves it on GET /install, and ops/acceptance_checks_approval_wait.py is the install check. Route tests and a mutation table are in tests/unit/test_install_approval_wait_route.py. PRIOR WORK (2026-10-13 triage): Only the constants exist: locale.PUSH_IS_DUE_ABOVE_HOURS and the deferral. Suspension rows carry raise and decide times but nothing computes a typical wait or reports that push is due. NEXT: Add a read over gate.suspension (raised to decided) giving the median wait, show it on Approvals or Install, and call locale.triggered; then a check. PROVE ON THE INSTALL: as for M35.3.2.2, run the acceptance run and read the_approval_wait_is_measured_and_push_is_reported, then open Install, This install.",
+    updated: "2026-10-14",
   },
   "M35.4.6": {
     status: "IN PROGRESS",
