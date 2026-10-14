@@ -142,7 +142,12 @@ function Runs({ body }: { readonly body: QualityBody }) {
   return (
     <SectionCard title={RUNS_HEADING} footer={<Note>{FINDINGS_GO_TO_THE_ALERT}</Note>}>
       {body.runs.length === 0 ? (
-        <Quiet>{NO_RUN_IN_PERIOD}</Quiet>
+        <EmptyList
+          compact
+          title={NO_RUN_IN_PERIOD}
+          adds="A run is recorded each time a canary runs, and none is added by hand."
+          by={BY_THE_INSTALL}
+        />
       ) : (
         <div className="flex min-w-0 flex-col gap-3">
           <RunStrip runs={body.runs} />

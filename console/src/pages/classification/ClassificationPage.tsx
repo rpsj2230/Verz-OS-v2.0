@@ -546,6 +546,8 @@ function ClassifiedTable({ entity, openColumn }: { readonly entity: string; read
             columns={columns}
             rows={page.columns}
             rowId={(row) => row.column}
+            emptyAdds="A column is listed for each column of the table's uploaded file, so upload the table again."
+            emptyBy={["super_admin"]}
             failure={answer.failure}
             busy={answer.busy}
           />

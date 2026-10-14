@@ -19,7 +19,7 @@
 
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
-import { Fact, FactList, Note, PageHeader, SectionCard } from "../../components/kit";
+import { BY_THE_INSTALL, EmptyList, Fact, FactList, Note, PageHeader, SectionCard } from "../../components/kit";
 import { FailureNotice } from "../../ui/FailureNotice";
 import { Notice } from "../../ui/Notice";
 import { CREDENTIALS_ADDRESS } from "./credentialRows";
@@ -64,7 +64,12 @@ function VaultBody() {
     <>
       <SectionCard title="Connector run leases" footer={<Note>{page.leases_told}</Note>}>
         {page.leases === null || page.leases === undefined ? null : page.leases.length === 0 ? (
-          <p className="m-0 text-[12.5px] text-dim">{NO_LEASES}</p>
+          <EmptyList
+            compact
+            title={NO_LEASES}
+            adds="A lease is recorded each time a connector run takes one."
+            by={BY_THE_INSTALL}
+          />
         ) : (
           <div className="overflow-x-auto">
             <table aria-label="Leases" className="w-full min-w-[20rem] border-collapse text-[13px]">

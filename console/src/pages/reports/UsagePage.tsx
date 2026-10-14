@@ -178,7 +178,12 @@ function Departments({ lines }: { readonly lines: NonNullable<UsageBody["departm
   return (
     <SectionCard title={BY_DEPARTMENT}>
       {ordered.length === 0 ? (
-        <Quiet>{NO_DEPARTMENT}</Quiet>
+        <EmptyList
+          compact
+          title={NO_DEPARTMENT}
+          adds="A department is listed once it is in the directory and somebody in it asks a question."
+          by={["super_admin"]}
+        />
       ) : (
         <BarList
           caption={BY_DEPARTMENT}
@@ -201,7 +206,12 @@ function People({ lines }: { readonly lines: NonNullable<UsageBody["people"]> })
   return (
     <SectionCard title={BY_PERSON}>
       {lines.length === 0 ? (
-        <Quiet>{NOBODY_ASKED}</Quiet>
+        <EmptyList
+          compact
+          title={NOBODY_ASKED}
+          adds="A person is listed once they ask a question, and none is added by hand."
+          by={BY_THE_INSTALL}
+        />
       ) : (
         <BarList
           caption={BY_PERSON}

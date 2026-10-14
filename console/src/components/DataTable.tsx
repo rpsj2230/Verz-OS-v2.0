@@ -57,6 +57,7 @@ import {
 } from "@tanstack/react-table";
 import type { ApiFailure } from "../api/errors";
 import { Lock } from "../ui/Lock";
+import { EmptyList, type EmptyBy } from "./kit/states";
 import { filterValueBudget, lockedCellKey } from "./paging";
 import { FailureNotice, THAT_DID_NOT_WORK } from "../ui/FailureNotice";
 
@@ -128,6 +129,10 @@ interface DataTableProps<T extends RowData> {
   readonly busy?: boolean;
   /** False over a route that never issues a cursor, so no pager is drawn that cannot be pressed. */
   readonly pages?: boolean;
+  /** The act that puts a row on the table, as one sentence. Required: see `kit/states.tsx` `EmptyList`. */
+  readonly emptyAdds: string;
+  /** Who does it. Required: see `EmptyList`. */
+  readonly emptyBy: EmptyBy;
   readonly hasNext?: boolean;
   readonly canGoBack?: boolean;
   readonly onNext?: () => void;
@@ -156,6 +161,8 @@ export function DataTable<T extends RowData>({
   onPrevious,
   filters = NO_FILTERS,
   onFilterChange,
+  emptyAdds,
+  emptyBy,
 }: DataTableProps<T>) {
   const table = useTable({
     features,
@@ -248,7 +255,7 @@ export function DataTable<T extends RowData>({
        * something for it to exclude.
        */}
       {!failure && !busy && rows.length === 0 ? (
-        <p className="grid__empty">{NOTHING_TO_SHOW}</p>
+        <EmptyList compact title={NOTHING_TO_SHOW} adds={emptyAdds} by={emptyBy} />
       ) : null}
 
       {busy ? (

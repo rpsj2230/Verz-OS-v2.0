@@ -27,6 +27,7 @@ import {
   type MyAccounts as MyAccountsBody,
 } from "../pages/connectors/consentAtVendor";
 import { FailureNotice } from "../ui/FailureNotice";
+import { EmptyList } from "./kit/states";
 
 export const READING_MY_ACCOUNTS = "Reading which of your accounts you may connect.";
 export const NO_MY_ACCOUNTS = "No source here is connected by each person with their own account.";
@@ -71,7 +72,14 @@ export function MyAccounts() {
     );
   }
   if (answer.data.accounts.length === 0) {
-    return <p className="note">{NO_MY_ACCOUNTS}</p>;
+    return (
+      <EmptyList
+        compact
+        title={NO_MY_ACCOUNTS}
+        adds="A source is listed once an administrator connects one that each person connects with their own account."
+        by={["connector_admin", "super_admin"]}
+      />
+    );
   }
   return (
     <>

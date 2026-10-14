@@ -32,6 +32,7 @@ import { useEffect, useRef } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { request } from "../api/client";
 import { useResource } from "../api/useResource";
+import { BY_THE_INSTALL, EmptyList } from "../components/kit";
 import { FailureNotice } from "../ui/FailureNotice";
 import {
   anchorOf,
@@ -118,7 +119,14 @@ export function CitedDocument() {
       {cited !== "" && !found ? (
         <p className="note">{document.truncated ? CITED_PASSAGE_NOT_SHOWN : CITED_PASSAGE_GONE}</p>
       ) : null}
-      {document.passages.length === 0 ? <p className="note">{NO_PASSAGES}</p> : null}
+      {document.passages.length === 0 ? (
+        <EmptyList
+          compact
+          title={NO_PASSAGES}
+          adds="The install cuts a document into passages when it is added, and none is added by hand."
+          by={BY_THE_INSTALL}
+        />
+      ) : null}
       {document.passages.map((one) => {
         const here = one.chunkId === cited;
         return (

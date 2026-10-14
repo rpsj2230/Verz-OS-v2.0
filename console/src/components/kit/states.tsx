@@ -125,10 +125,11 @@ export function EmptyList({
   action,
   icon,
   className,
+  compact = false,
 }: {
   readonly title: string;
-  /** What the list is for, said once. */
-  readonly description: ReactNode;
+  /** What the list is for, said once. Left out where the title already says it. */
+  readonly description?: ReactNode | undefined;
   /** The act that puts a row on the list, as one sentence. */
   readonly adds: string;
   /** Who does it. */
@@ -136,7 +137,27 @@ export function EmptyList({
   readonly action?: ReactNode | undefined;
   readonly icon?: ReactNode | undefined;
   readonly className?: string | undefined;
+  /**
+   * One paragraph in place of the dashed block, for a small list inside a card or a tab, where the
+   * block's padding would be larger than the list it stands for. The same three sentences.
+   */
+  readonly compact?: boolean | undefined;
 }) {
+  if (compact) {
+    return (
+      <p data-slot="empty-list" data-compact="" className={cn("m-0 min-w-0 text-[13px] leading-snug text-dim", className)}>
+        <span data-slot="empty-title" className="text-body">
+          {title}
+        </span>{" "}
+        {description === undefined ? null : (
+          <>
+            <span data-slot="empty-what">{description}</span>{" "}
+          </>
+        )}
+        <span data-slot="empty-adds">{adds}</span> <span data-slot="empty-by">{whoAdds(by)}</span>
+      </p>
+    );
+  }
   return (
     <div data-slot="empty-list" className="min-w-0">
       <EmptyState

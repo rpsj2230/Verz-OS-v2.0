@@ -31,6 +31,7 @@ import { Plus, UserCog } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useResource } from "../../api/useResource";
 import {
+  BY_THE_INSTALL,
   EmptyList,
   EntityTable,
   FailureState,
@@ -142,7 +143,12 @@ function Catalogue() {
     },
   ];
   return roles.length === 0 ? (
-    <p className="m-0 text-[13px] text-dim">There are no roles to show.</p>
+    <EmptyList
+      compact
+      title="There are no roles to show."
+      adds="The platform's six roles are compiled in with the release, and none is added by hand."
+      by={BY_THE_INSTALL}
+    />
   ) : (
     <EntityTable caption="The platform roles" columns={columns} rows={roles} rowId={(row) => row.role} rowLabel={(row) => roleWords(row.role)} />
   );
@@ -290,7 +296,14 @@ function GroupRules({ version, onWritten }: { readonly version: number; readonly
   } else if (answer.data === null) {
     body = <LoadingState label="Loading the directory group mappings." rows={2} />;
   } else if (page.rules.length === 0) {
-    body = <p className="m-0 text-[13px] text-dim">No directory group maps to a role yet.</p>;
+    body = (
+      <EmptyList
+        compact
+        title="No directory group maps to a role yet."
+        adds="Map a directory group to a role with the form on this screen."
+        by={["super_admin", "department_admin"]}
+      />
+    );
   } else {
     body = (
       <EntityTable
@@ -377,7 +390,14 @@ function Misconfigured() {
   } else if (answer.data === null) {
     body = <LoadingState label="Checking the Approver role against the approve permission." rows={1} />;
   } else if (rows.length === 0) {
-    body = <p className="m-0 text-[13px] text-dim">Nobody you may see holds one without the other.</p>;
+    body = (
+      <EmptyList
+        compact
+        title="Nobody you may see holds one without the other."
+        adds="A mismatch is listed when somebody holds the Approver role without the approving capability, or the reverse."
+        by={BY_THE_INSTALL}
+      />
+    );
   } else {
     body = (
       <ul className="m-0 flex list-none flex-col divide-y divide-line p-0">
@@ -427,7 +447,12 @@ function Nominations({ version, onWritten }: { readonly version: number; readonl
     body = (
       <div className="flex flex-col gap-4">
         {page.deciding.length === 0 ? (
-          <p className="m-0 text-[13px] text-dim">{NOTHING_TO_DECIDE}</p>
+          <EmptyList
+            compact
+            title={NOTHING_TO_DECIDE}
+            adds="Somebody nominates a person for a role, and the nomination waits here for a Super Admin."
+            by={["super_admin", "department_admin"]}
+          />
         ) : (
           <EntityTable
             caption="Nominations waiting for your decision"

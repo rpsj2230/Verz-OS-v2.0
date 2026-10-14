@@ -118,7 +118,12 @@ function Overview({
       </SectionCard>
       <SectionCard title="People" lede="Everybody in it you may see, in its teams or not.">
         {people.length === 0 ? (
-          <p className="m-0 text-[13px] text-dim">Nobody you may see is listed in this department.</p>
+          <EmptyList
+            compact
+            title="Nobody you may see is listed in this department."
+            adds="Place a person in the department from the People screen with Move to a department."
+            by={["super_admin", "department_admin"]}
+          />
         ) : (
           <ul className="m-0 flex list-none flex-col divide-y divide-line p-0">
             {people.map((one) => (

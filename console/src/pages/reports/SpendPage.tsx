@@ -41,7 +41,6 @@ import { USAGE_AND_COST } from "./UsagePage";
 import {
   BarList,
   DEFAULT_PERIOD,
-  Quiet,
   REPORTS_CRUMB,
   ReportHeader,
   Switch,
@@ -124,7 +123,12 @@ function Recorded({ report }: { readonly report: SpendReportBody }) {
       {hint === null ? null : <Note>{hint}</Note>}
       <SectionCard title={byWords(report.dimension)}>
         {ordered.length === 0 ? (
-          <Quiet>{NO_COST_IN_PERIOD}</Quiet>
+          <EmptyList
+            compact
+            title={NO_COST_IN_PERIOD}
+            adds="A cost is recorded each time a model answers a question, and none is added by hand."
+            by={BY_THE_INSTALL}
+          />
         ) : (
           <BarList
             caption={byWords(report.dimension)}

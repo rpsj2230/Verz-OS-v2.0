@@ -25,7 +25,7 @@
 import { Bot } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
-import { Chip, FailureState, LoadingState, Note, SectionCard } from "../../components/kit";
+import { Chip, EmptyList, FailureState, LoadingState, Note, SectionCard } from "../../components/kit";
 import { VERB_WORDS } from "../../layout/signInStrengthQuery";
 import { scopeLines } from "../scopeText";
 import { dayWords } from "../access/formParts";
@@ -79,7 +79,12 @@ function HeldLine({ held }: { readonly held: Held }) {
 
 function Holds({ detail }: { readonly detail: PersonDetail }) {
   if (detail.held.length === 0) {
-    return <p className="m-0 text-[13px] text-dim">{HOLDS_NOTHING_SHOWN}</p>;
+    return <EmptyList
+        compact
+        title={HOLDS_NOTHING_SHOWN}
+        adds="Give a capability or assign a pack from the person's Grants view."
+        by={["super_admin", "department_admin"]}
+      />;
   }
   return (
     <div className="flex flex-col gap-3">
@@ -110,7 +115,12 @@ function Roles({ principalId }: { readonly principalId: string }) {
   }
   const held = readRolesHeld(holders.data, principalId);
   if (held.length === 0) {
-    return <p className="m-0 text-[13px] text-dim">No role you may see.</p>;
+    return <EmptyList
+        compact
+        title="No role you may see."
+        adds="Appoint the person to a role on the Roles screen."
+        by={["super_admin", "department_admin"]}
+      />;
   }
   return (
     <ul className="m-0 flex list-none flex-col divide-y divide-line p-0">

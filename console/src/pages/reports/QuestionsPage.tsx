@@ -36,7 +36,7 @@ import {
   type GapLineBody,
   type QuestionsBody,
 } from "../questionsQuery";
-import { BarList, DEFAULT_PERIOD, Quiet, REPORTS_CRUMB, ReportHeader, counted, periodWords, sheetOf, type ReportPeriod } from "./reportParts";
+import { BarList, DEFAULT_PERIOD, REPORTS_CRUMB, ReportHeader, counted, periodWords, sheetOf, type ReportPeriod } from "./reportParts";
 
 export const QUESTIONS_HEADING = "Questions and gaps";
 export const QUESTIONS_LEDE = "What people asked that no connected source could answer, and what would fix it.";
@@ -108,7 +108,12 @@ function Gaps({ body }: { readonly body: QuestionsBody }) {
       {body.nothing_connected ? <NothingConnected body={body} /> : null}
       <SectionCard title={BY_DEPARTMENT} lede={BY_DEPARTMENT_LEDE}>
         {departments.length === 0 ? (
-          <Quiet>{NO_GAP_IN_PERIOD}</Quiet>
+          <EmptyList
+            compact
+            title={NO_GAP_IN_PERIOD}
+            adds="A gap is recorded whenever somebody asks a question no connected source could answer."
+            by={BY_THE_INSTALL}
+          />
         ) : (
           <BarList
             caption={BY_DEPARTMENT}

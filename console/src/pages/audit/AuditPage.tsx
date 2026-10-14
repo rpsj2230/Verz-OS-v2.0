@@ -354,7 +354,12 @@ function Statistics() {
       ) : (
         <div className="flex min-w-0 flex-col gap-3">
           {found.refusals.length === 0 ? (
-            <p className="m-0 text-[13px] text-dim">{NO_PATTERN}</p>
+            <EmptyList
+              compact
+              title={NO_PATTERN}
+              adds="A pattern is listed when refusals of one shape repeat, and none is added by hand."
+              by={BY_THE_INSTALL}
+            />
           ) : (
             <ul className="m-0 flex list-none flex-col divide-y divide-line p-0">
               {found.refusals.map((one) => (

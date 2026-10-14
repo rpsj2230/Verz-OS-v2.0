@@ -218,7 +218,12 @@ function Dashboard({ slug, people }: { readonly slug: string; readonly people: R
           {() => {
             const rows = readPeople(people.data);
             return rows.length === 0 ? (
-              <p className="m-0 text-[13px] text-dim">{NO_PERSON}</p>
+              <EmptyList
+                compact
+                title={NO_PERSON}
+                adds="Place a person in the department from the People screen with Move to a department."
+                by={["super_admin", "department_admin"]}
+              />
             ) : (
               <ul className="m-0 flex list-none flex-col divide-y divide-line p-0">
                 {rows.map((one) => (
@@ -238,7 +243,12 @@ function Dashboard({ slug, people }: { readonly slug: string; readonly people: R
             return (
               <>
                 {found === null || found.entries.length === 0 ? (
-                  <p className="m-0 text-[13px] text-dim">{NO_AGENT}</p>
+                  <EmptyList
+                    compact
+                    title={NO_AGENT}
+                    adds="Build an agent for the department and publish it, and it is listed here."
+                    by={["super_admin", "department_admin"]}
+                  />
                 ) : (
                   <ul className="m-0 flex list-none flex-col divide-y divide-line p-0">
                     {found.entries.map((entry) => (
@@ -259,7 +269,12 @@ function Dashboard({ slug, people }: { readonly slug: string; readonly people: R
           {() => {
             const rows = readDocRows(documents.data);
             return rows.length === 0 ? (
-              <p className="m-0 text-[13px] text-dim">{NO_DOCUMENT}</p>
+              <EmptyList
+                compact
+                title={NO_DOCUMENT}
+                adds="Add a document to the department from the Knowledge screen."
+                by={["super_admin", "department_admin", "member"]}
+              />
             ) : (
               <ul className="m-0 flex list-none flex-col divide-y divide-line p-0">
                 {rows.map((one) => (
@@ -350,7 +365,12 @@ function Dashboard({ slug, people }: { readonly slug: string; readonly people: R
             }
             const area = body.areas[0];
             return area === undefined ? (
-              <p className="m-0 text-[13px] text-dim">{NO_COVERAGE}</p>
+              <EmptyList
+                compact
+                title={NO_COVERAGE}
+                adds="Add a document to the department from the Knowledge screen, and it is counted here."
+                by={["super_admin", "department_admin", "member"]}
+              />
             ) : (
               <FactList>
                 <Fact label="Documents">{String(area.items)}</Fact>

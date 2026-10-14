@@ -12,7 +12,7 @@
 import { useState } from "react";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
-import { Chip, ConfirmDialog, SectionCard } from "../../components/kit";
+import { BY_THE_INSTALL, Chip, ConfirmDialog, EmptyList, SectionCard } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { FailureNotice } from "../../ui/FailureNotice";
 import { transferApiPath, type Transfer } from "../staffSourcesQuery";
@@ -62,7 +62,12 @@ export function Transfers({
   return (
     <SectionCard title={TRANSFERS_HEADING} lede={TRANSFERS_LEDE}>
       {waiting.length === 0 ? (
-        <p className="m-0 text-[13px] text-dim">{NO_TRANSFERS}</p>
+        <EmptyList
+          compact
+          title={NO_TRANSFERS}
+          adds="An agent waits here when the staff sync marks its owner as having left."
+          by={BY_THE_INSTALL}
+        />
       ) : (
         <ul aria-label={TRANSFERS_HEADING} className="m-0 flex min-w-0 list-none flex-col p-0">
           {waiting.map((one) => (

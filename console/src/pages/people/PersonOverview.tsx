@@ -31,6 +31,7 @@ import { useResource } from "../../api/useResource";
 import {
   Advanced,
   ConfirmDialog,
+  EmptyList,
   Fact,
   FactList,
   FailureState,
@@ -135,7 +136,12 @@ function OwnedAutomations({ principalId }: { readonly principalId: string }) {
   } else if (found.data === null) {
     body = <LoadingState label="Loading the automations they own." rows={2} />;
   } else if (owned.length === 0) {
-    body = <p className="m-0 text-[13px] text-dim">{NO_AUTOMATIONS_OWNED}</p>;
+    body = <EmptyList
+        compact
+        title={NO_AUTOMATIONS_OWNED}
+        adds="An automation runs as a person once it is installed on an agent they own."
+        by={["super_admin", "department_admin"]}
+      />;
   } else {
     body = (
       <ul data-slot="owned-automations" className="m-0 flex list-none flex-col divide-y divide-line p-0">
@@ -180,7 +186,12 @@ function Stewarded({ principalId }: { readonly principalId: string }) {
   } else if (agents.data === null) {
     body = <LoadingState label="Loading the agents they steward." rows={2} />;
   } else if (owned.length === 0 && waiting.length === 0) {
-    body = <p className="m-0 text-[13px] text-dim">{NO_AGENTS_STEWARDED}</p>;
+    body = <EmptyList
+        compact
+        title={NO_AGENTS_STEWARDED}
+        adds="Hand an agent to the person as its steward from the agent's own page."
+        by={["super_admin", "department_admin"]}
+      />;
   } else {
     body = (
       <ul className="m-0 flex list-none flex-col divide-y divide-line p-0">

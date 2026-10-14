@@ -39,7 +39,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
-import { ConfirmDialog, FailureState, LoadingState, Note, PageHeader, SectionCard } from "../../components/kit";
+import { BY_THE_INSTALL, ConfirmDialog, EmptyList, FailureState, LoadingState, Note, PageHeader, SectionCard } from "../../components/kit";
 import { SHOW_MORE } from "../../components/ListControls";
 import { useListing } from "../../components/useListing";
 import { RoutingSettings } from "../../components/RoutingSettings";
@@ -115,7 +115,14 @@ export function GoldenFirst() {
 
 function RecentChanges({ changes }: { readonly changes: readonly ChangeRow[] }) {
   if (changes.length === 0) {
-    return <Note>{NO_CHANGES}</Note>;
+    return (
+      <EmptyList
+        compact
+        title={NO_CHANGES}
+        adds="A change is recorded each time the matrix is changed, and none is added by hand."
+        by={BY_THE_INSTALL}
+      />
+    );
   }
   return (
     <ol className="m-0 flex list-none flex-col gap-2 p-0">
