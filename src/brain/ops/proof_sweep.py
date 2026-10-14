@@ -19,7 +19,8 @@ prove the product on the install's own database with reserved people, which is t
 the work. Some pass against a vendor account, channel secret or stand-in the check made itself,
 which shows the code and not that the install can reach the real thing. Telling the two apart is a
 judgement about each check, not something a row says, so it lives in
-`docs/proof-sweep-holds.json`, each held task with its reason
+`docs/proof-sweep-holds.json` and the files of `docs/proof-sweep-holds.d/` (a new hold goes in a
+file of its own, see `holds_at`), each held task with its reason
 (`A_RESULT_ON_SOMETHING_MADE_UP_IS_HELD`). Rejected: inferring it from the check's sentence,
 which would hold or release a task because of a word in a description.
 
@@ -329,9 +330,35 @@ async def rows_from_database(database_url: str) -> list[dict[str, Any]]:
 
 
 def holds_at(path: Path) -> dict[str, str]:
-    """The held tasks and their reasons. See `A_RESULT_ON_SOMETHING_MADE_UP_IS_HELD`."""
-    loaded: dict[str, str] = json.loads(path.read_text(encoding="utf-8"))["held"]
-    return loaded
+    """The held tasks and their reasons. See `A_RESULT_ON_SOMETHING_MADE_UP_IS_HELD`.
+
+    **The list is the file and every `*.json` in the directory beside it named like it with `.d`
+    (`docs/proof-sweep-holds.d/`), read in name order, each holding `{"held": {leaf: reason}}`.**
+    A pull request that adds a hold writes a file of its own there, so two of them cannot conflict:
+    the single file was a JSON object whose last entry carries no comma, so appending a hold edited
+    the line above it as well, and two pull requests appending at the end conflicted every time, on
+    a file a conflicted pull request cannot be merged for. A hold released by a proof still deletes
+    its line from the file or the directory, which conflicts only with a neighbouring line.
+
+    **A leaf held in two places is refused rather than merged**, because the two reasons cannot both
+    be the reason and the later one silently winning would hide the first. Rejected: a union merge
+    attribute on the single file, which on a JSON object can join two appended entries into text
+    that does not parse, and whose effect on the hosting service's own mergeability check cannot be
+    shown from here.
+    """
+    held: dict[str, str] = {}
+    origin: dict[str, Path] = {}
+    directory = path.with_suffix(".d")
+    extra = sorted(directory.glob("*.json")) if directory.is_dir() else []
+    for source in (path, *extra):
+        loaded: dict[str, str] = json.loads(source.read_text(encoding="utf-8"))["held"]
+        for leaf, reason in loaded.items():
+            if leaf in held:
+                msg = f"{leaf} is held in both {origin[leaf]} and {source}"
+                raise ValueError(msg)
+            held[leaf] = reason
+            origin[leaf] = source
+    return held
 
 
 def main(argv: Sequence[str] | None = None) -> int:

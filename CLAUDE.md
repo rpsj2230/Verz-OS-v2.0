@@ -542,6 +542,24 @@ that had nothing to do with backups. Call it something else.
 **`ruff` reads the word "noqa" inside an ordinary comment as a directive.** Reword rather than
 explain a suppression using that word.
 
+**A conflicted pull request gets no CI, so a shared file must not be one two pull requests edit at
+one line.** On 2026-10-14 three pull requests went dirty on the same few lines, thirty to sixty
+minutes each. Three rules came out of it, each held by a test:
+
+- **Never type a count into a document.** The open-item sentence at the top of
+  `docs/needs-rupash.md` is a marker line and the architecture's figures are empty `<span
+  data-...="">` markers; both are filled when the page is served (`brain.docs_derived`). Open or
+  answer an item by editing the item and nothing else.
+- **A new feature is a file, not a constant.** Declare it in its own module under
+  `brain/ops/features_declared/` and import it from there; do not append to `features.py` or to
+  its tuple (`brain.ops.features.declared_in`).
+- **A new proof hold is a file.** Put it in `docs/proof-sweep-holds.d/<anything>.json`, shaped
+  `{"held": {"M1.2.3": "reason"}}`, not at the end of `docs/proof-sweep-holds.json`.
+
+Not solved, and worth knowing before you meet it: a new item in `docs/needs-rupash.md` is
+inserted under `# Open` like every other, and `docs/wbs/progress.js` entries are edited in place,
+so two pull requests that touch the same item or the same leaf still conflict.
+
 **WBS task ids are positional, so a group is appended and never inserted.** `M27.5.5` means
 "the fifth leaf of the fifth task group of M27", and nothing anchors it to a name. Adding
 `Install screens` as M27's fifth group on 2026-09-07 silently repointed every `M27.5.x` claim
