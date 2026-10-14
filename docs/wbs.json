@@ -5848,6 +5848,11 @@
      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (install_routes, ops.acceptance_operations_console, ops.features +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #180's branch M27/console-platform (may be replayed already)",
      "updated": "2026-10-06"
     },
+    "M27.15.52": {
+     "status": "READY FOR TESTING",
+     "why": "built: console/tests/destructive-labels.test.ts refuses any label that starts Delete, Remove, Take it out and the like (thirty-four became Withdraw, Retire, Detach, Disconnect, End membership and Supersede) and holds that the console sends no DELETE, and tests/unit/test_hard_deletes.py derives from the migrations the tables the application may delete from and holds them to the six that brain.ops.hard_deletes argues (it found obs.trace_step, granted by 0226 through a constant the old text scan could not see). Proved in CI: the console job (Console types, boundaries, tests, build) and the Unit tests shards run them. On the install: open a person's Grants view and read the button beside a grant, which says Withdraw, and an agent's Memory, which says Retire.",
+     "updated": "2026-10-15"
+    },
     "M27.15.54": {
      "status": "READY FOR TESTING",
      "why": "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
@@ -5883,6 +5888,11 @@
      "why": "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
      "updated": "2026-10-13"
     },
+    "M27.15.62": {
+     "status": "BLOCKED",
+     "why": "part of the task text conflicts with the owner's 2026-09-18 record access view and waits on needs-rupash item 188. Built under either answer: console/tests/reach-questions.test.ts and tests/unit/test_reach_questions.py hold that every who-can-reach question the console and API offer is declared with what it is asked of, that only the record access view takes anything naming a record, that it is read for the reader before any candidate and refuses every reader the way an unknown entity is refused. Nothing asserts that no route answers who can see a named record.",
+     "updated": "2026-10-15"
+    },
     "M27.15.63": {
      "status": "OPEN",
      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_people_console_3); open for proof on the install or a decision, not for code",
@@ -5892,6 +5902,16 @@
      "status": "OPEN",
      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_people_console_2); open for proof on the install or a decision, not for code",
      "updated": "2026-10-06"
+    },
+    "M27.15.69": {
+     "status": "IN PROGRESS",
+     "why": "partly built: kit EmptyList takes the act that adds a row and who does it as required props (ListPage and WholeList take emptyAdds and emptyBy), roles come from the platform's six (kit/roles.ts, held to brain.identity.roles.Role), and console/tests/empty-lists.test.tsx mounts every page with its lists emptied, holds each empty list to an act, a who and no cause, and holds the bare paragraphs that still say nothing is there to a named backlog (console/tests/support/bareEmpties.ts). Converted: every ListPage, every WholeList and every EmptyState that was a list. NOT done: the backlog's BARE_LISTS, empty lists drawn as a plain paragraph inside a page's cards and tabs (about fifty sentences, and the views a page does not open first are not mounted by the test at all). NEXT: convert each BARE_LISTS sentence with a compact EmptyList and take it out of the record.",
+     "updated": "2026-10-15"
+    },
+    "M27.15.72": {
+     "status": "READY FOR TESTING",
+     "why": "built: console/tests/styled-classes.test.ts compiles the component layer's stylesheet and refuses any class in the markup with no selector and no emitted utility (it found bg-surface, text-ink-3 and text-danger, which nothing defined, and two dozen unstyled hooks), and console/tests/one-failure-component.test.ts refuses a failure drawn by hand, a failure heading typed anywhere but ui/FailureNotice, and a private failure component (it found twelve writes drawing failure.message with no reference). Proved in CI: the console job (Console types, boundaries, tests, build) in .github/workflows/ci.yml runs both through npm run test. On the install: make a write fail, for example set an agent's monthly budget while holding no budget role, and read the heading, the sentence and the reference under the form.",
+     "updated": "2026-10-15"
     },
     "M27.15.81": {
      "status": "OPEN",
