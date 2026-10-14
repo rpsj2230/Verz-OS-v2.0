@@ -20,9 +20,10 @@ to it. What it proves is that the condition is stored, read back and said in wor
 install reports that field.
 
 **What is not proved here is a condition deciding a run.** Nothing yet reads a live record at a
-run to decide a condition, and nothing fires a connector event or a webhook, so the second check
-proves that those two kinds are stored, shown and refused at the run with the reason an install
-that cannot perform them gives, rather than that they fire. That is needs-rupash 209.
+run to decide a condition. The second check proves the three kinds as the owner decided them
+(needs-rupash 223, option B): a schedule and a change are written and read back as written, a
+webhook is refused when written, and a row a change starts is never claimed by the clock. That a
+change actually starts a run is `brain.ops.acceptance_checks_automation_event`'s.
 
 **Nothing leaves the transaction.** Every row is a reserved person's, an agent of acceptance_a named
 for the run, and an automation of that agent, all rolled back with the check; nothing is sent.
@@ -56,8 +57,9 @@ IT_DID_NOT_RUN_AS_ITS_WRITER: Final = "the due automation did not run as the per
 A_REACH_WAS_INVENTED: Final = "a person without the read the task needs was not refused at the run"
 A_KIND_DID_NOT_READ_BACK: Final = "a trigger did not read back as the kind that was written"
 A_KIND_HAD_THE_WRONG_CADENCE: Final = "a trigger carried a cadence its kind does not have"
-A_KIND_RAN: Final = "a trigger nothing fires was run"
-A_KIND_WAS_STARTABLE: Final = "a trigger nothing fires was offered a start"
+A_KIND_RAN: Final = "the clock ran an automation that something other than the clock starts"
+A_KIND_WAS_STARTABLE: Final = "a webhook was offered a start"
+A_WEBHOOK_WAS_WRITTEN: Final = "a webhook was written, though nothing starts work from outside"
 
 
 def _field() -> object:
@@ -294,17 +296,18 @@ async def a_person_writes_changes_and_runs_an_automation_as_themselves(
 @check(
     leaves=("M17.4.1", "M39.9.2.2"),
     sentence=(
-        "A schedule, a connector event and a webhook can each be written and read back as the kind "
-        "written, with the schedule alone carrying a cadence; the two that nothing on this install "
-        "fires are not offered a start, and a run of either is refused as one this install cannot "
-        "perform rather than counted as a failure."
+        "A schedule and a connector change can each be written and read back as the kind written, "
+        "with the schedule alone carrying a cadence; a webhook is refused when it is written, and "
+        "an automation a change starts is never claimed by the clock, however due its row looks."
     ),
 )
-async def each_kind_of_trigger_is_saved_and_only_a_schedule_can_be_started(h: Harness) -> None:
+async def each_kind_of_trigger_is_saved_and_a_webhook_is_refused(h: Harness) -> None:
     from sqlalchemy import update
 
     from brain.console.automation_authoring import (
         NOTHING_FIRES_THIS_YET,
+        Authored,
+        AuthoringRefusedError,
         TriggerChoice,
         authoring_of,
         compose,
@@ -329,13 +332,14 @@ async def each_kind_of_trigger_is_saved_and_only_a_schedule_can_be_started(h: Ha
         worker_sessions,
     )
     from brain.ops.agent_automation_store import StoredAgentAutomations
-    from brain.ops.automation_run import PausedBecause, RunOutcome
+    from brain.ops.automation_event import WEBHOOKS_ARE_NOT_OFFERED
     from brain.ops.automation_run_store import StoredAutomationSchedules, run_one
     from brain.orchestration.unattended import TriggerKind
     from brain.tables.agent_automation import AgentAutomationRow
 
     await h.found_departments()
     owner = h.principal(A, "writer")
+    source = "acceptance_source"
     tab_read = tab(Tab.AUTOMATIONS).read.requires.value
     await h.person(
         owner,
@@ -345,7 +349,11 @@ async def each_kind_of_trigger_is_saved_and_only_a_schedule_can_be_started(h: Ha
         ),
     )
     agent_id = await installed_agent(
-        h, owner, capabilities=(QUESTION_AUTHORITY.value,), scope=Scope.unrestricted()
+        h,
+        owner,
+        capabilities=(QUESTION_AUTHORITY.value,),
+        connectors=(source,),
+        scope=Scope.unrestricted(),
     )
     record = await stored_agent(h, agent_id)
     people = StoredPrincipals(h.sessions)
@@ -355,18 +363,16 @@ async def each_kind_of_trigger_is_saved_and_only_a_schedule_can_be_started(h: Ha
         raise CheckFailedError("a reserved person or the template did not read back")
     reach = await h.reach(owner)
 
-    triggers = {
+    written = {
         TriggerKind.SCHEDULE: TriggerChoice(
             kind=TriggerKind.SCHEDULE, cadence=Cadence(every=Every.DAY, hour_utc=4)
         ),
-        TriggerKind.CONNECTOR_EVENT: TriggerChoice(
-            kind=TriggerKind.CONNECTOR_EVENT, source="acceptance_source"
-        ),
-        TriggerKind.WEBHOOK: TriggerChoice(kind=TriggerKind.WEBHOOK, source="acceptance_hook"),
+        TriggerKind.CONNECTOR_EVENT: TriggerChoice(kind=TriggerKind.CONNECTOR_EVENT, source=source),
     }
+    webhook = TriggerChoice(kind=TriggerKind.WEBHOOK, source="acceptance_hook")
     ids: dict[TriggerKind, str] = {}
     store = StoredAgentAutomations(h.sessions)
-    for kind, trigger in triggers.items():
+    for kind, trigger in written.items():
         authored = compose(
             agent=record,
             name=template.name,
@@ -385,44 +391,80 @@ async def each_kind_of_trigger_is_saved_and_only_a_schedule_can_be_started(h: Ha
             trace_id=h.trace_id,
         )
 
+    # A webhook is refused when it is written: the owner decided nothing starts work from outside.
+    try:
+        compose(
+            agent=record,
+            name=template.name,
+            instruction=template.summary,
+            guards=template.guards,
+            trigger=webhook,
+            tools=(),
+            condition=None,
+            fields={},
+            template=template,
+        )
+    except AuthoringRefusedError as refused:
+        if WEBHOOKS_ARE_NOT_OFFERED not in refused.findings:
+            raise CheckFailedError(A_WEBHOOK_WAS_WRITTEN) from refused
+    else:
+        raise CheckFailedError(A_WEBHOOK_WAS_WRITTEN)
+
+    # One stored before it was refused still reads back, says it cannot be started, and is never
+    # claimed by the clock. Written as the row the earlier release wrote, past `compose`.
+    legacy = Authored(
+        name=template.name,
+        instruction=template.summary,
+        guards=template.guards,
+        trigger=webhook,
+        tools=(),
+        template_id=template.template_id,
+        task=template.task,
+    )
+    legacy_shown = preview(legacy, record, author=principal, author_reach=reach)
+    ids[TriggerKind.WEBHOOK] = await store.author(
+        authoring_of(
+            legacy_shown, confirmation=legacy_shown.confirmation, automation_id=new_automation_id()
+        ),
+        ent_hash=reach.ent_hash(),
+        trace_id=h.trace_id,
+    )
+
     schedules = StoredAutomationSchedules(h.sessions)
     held = {one.automation.automation_id: one for one in await schedules.listed(agent_id)}
-    for kind, trigger in triggers.items():
+    every = {**written, TriggerKind.WEBHOOK: webhook}
+    for kind, trigger in every.items():
         one = held.get(ids[kind])
         if one is None or one.authored is None or one.authored.trigger != trigger:
             raise CheckFailedError(A_KIND_DID_NOT_READ_BACK)
         if (one.cadence is None) != (kind is not TriggerKind.SCHEDULE):
             raise CheckFailedError(A_KIND_HAD_THE_WRONG_CADENCE)
-        if one.authored.trigger.fires is not (kind is TriggerKind.SCHEDULE):
+        if one.authored.trigger.fires is (kind is TriggerKind.WEBHOOK):
             raise CheckFailedError(A_KIND_WAS_STARTABLE)
     if "cannot be started" not in NOTHING_FIRES_THIS_YET:
         raise CheckFailedError(A_KIND_WAS_STARTABLE)
 
-    # Due by force, and run by the worker: a trigger nothing fires is refused as one this install
-    # cannot perform, and is paused with that reason.
-    unfired = (TriggerKind.CONNECTOR_EVENT, TriggerKind.WEBHOOK)
-    for kind in unfired:
+    # Due by force, and offered to the worker's clock: neither is claimed, so neither is run, and
+    # neither is paused by a refusal it was never asked to make.
+    quiet = (TriggerKind.CONNECTOR_EVENT, TriggerKind.WEBHOOK)
+    for kind in quiet:
         await h.execute(
             *h.attributed(),
             update(AgentAutomationRow)
             .where(AgentAutomationRow.automation_id == ids[kind])
             .values(next_run_at=h.now),
         )
-    # Both runs through the worker's own sessions, for the reason given above.
-    ran = []
-    for kind in unfired:
-        ran.append(
-            await run_one(
-                worker_sessions(h),
-                ids[kind],
-                now=h.now,
-                principals=StoredPrincipals(worker_sessions(h)),
-                entitlements=StoredEntitlements(worker_sessions(h)),
-            )
+    for kind in quiet:
+        claimed = await run_one(
+            worker_sessions(h),
+            ids[kind],
+            now=h.now,
+            principals=StoredPrincipals(worker_sessions(h)),
+            entitlements=StoredEntitlements(worker_sessions(h)),
         )
-    if any(one is None or one.outcome is not RunOutcome.REFUSED or not one.paused for one in ran):
-        raise CheckFailedError(A_KIND_RAN)
+        if claimed is not None:
+            raise CheckFailedError(A_KIND_RAN)
     after = {one.automation.automation_id: one for one in await schedules.listed(agent_id)}
-    for kind in unfired:
-        if after[ids[kind]].stopped_because != PausedBecause.TASK_UNBUILT.value:
+    for kind in quiet:
+        if after[ids[kind]].runs or after[ids[kind]].automation.next_run_at != h.now:
             raise CheckFailedError(A_KIND_RAN)

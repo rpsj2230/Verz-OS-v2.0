@@ -180,6 +180,11 @@ LEAF_ID: Final = re.compile(r"^M[0-9]+(\.[0-9]+){2,3}$")
 #: The longest reason a result may carry, which is also the column's width.
 REASON_CHARS: Final = 240
 
+#: How the reason of a passed result begins when a repeat of a run copied it from the run it
+#: repeats rather than running the check again. See
+#: `brain.ops.acceptance_resume.A_REPEAT_RUNS_ONLY_THE_UNSETTLED_AND_SAYS_WHAT_IT_CARRIED`.
+CARRIED_FORWARD_FROM: Final = "carried forward from run "
+
 #: The longest sentence a check may be described by.
 SENTENCE_CHARS: Final = 400
 

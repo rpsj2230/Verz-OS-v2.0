@@ -948,6 +948,12 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
     "A person marking an answer they were given helpful or not, one bit against its reference, which no administrator manages and nothing that answers reads.",
   "POST /api/v1/answer/copied":
     "A person copying an answer they were given, noted against its reference and nothing it said, which no administrator manages and nothing that answers reads.",
+  "agent.skill_personal":
+    "Whose a skill a person added for themselves is, and when they offered it to the department; the table exists and nothing reads or writes it yet (no route, no page), so no administrator manages a row of it, and the screen that does is the one that lands with the code on top.",
+  "agent.project":
+    "A person's own project, its name and owner, put away and never deleted; the table exists and nothing reads or writes it yet (no route, no page), so no administrator manages a row of it, and the screen that does lands with the code on top.",
+  "agent.project_item":
+    "The threads and files a person listed in their own project, by reference and never as a copy; the table exists and nothing reads or writes it yet, so no administrator manages a row of it.",
   "mem.mark":
     "The marks people put on their own answers, counted and read by nothing that decides an answer; no administrator manages a person's mark.",
   "mem.signal":

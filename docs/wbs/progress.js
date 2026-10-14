@@ -1591,8 +1591,8 @@ const PROGRESS = {
   },
   "M17.4.1": {
     status: "READY FOR TESTING",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Schedule trigger is built: automation_run, automation_run_store.run_automations_now started by schedule_runner, cadence from console/automation_gallery. Connector-event and webhook triggers exist only as orchestration/unattended.TriggerKind (used by adoption.channel_for_trigger); nothing starts a run on either. NEXT: build the two missing trigger paths (connector change event, inbound webhook) into automation_run and show all three kinds on the agent page's New automation PLAN 2026-10-12: also reached from the agent page's New automation (M39.9.2.2); the trigger kinds must be selectable and shown there.",
-    updated: "2026-10-13",
+    why: "built (M17/automation-start-sources) to needs-rupash 223 option B: an automation starts by a schedule or by a connector change and by nothing from outside. ops/automation_event decides what is due (per-pass and per-hour bounds, a change run once by its id), ops/automation_event_store finds changed records inside the owner's row scope and runs each as the owner through admitted_run, and the index's updated_at now moves only when a record's fields change. A webhook is refused when written and the form lists it as not offered. Behind the automation_events switch, which ships off. Proved on the install by the check a_change_starts_one_run_as_an_owner_who_may_read_it once the owner switches it on and changes a record. NOT BUILT: a condition is still not applied to a change or a schedule (needs-rupash 177); the signed inbound address is not built until a real automation needs it. PRIOR WORK: Schedule trigger built (automation_run, run_automations_now); TriggerKind existed with nothing starting a run on two of its kinds.",
+    updated: "2026-10-14",
   },
   "M17.4.2": {
     status: "READY FOR TESTING",
@@ -3296,8 +3296,8 @@ const PROGRESS = {
   },
   "M35.3.2.2": {
     status: "READY FOR TESTING",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): locale.PUSH_FOR_APPROVALS with Trigger.APPROVALS_WAIT_LONGER_THAN_THE_STATED_HOURS and PUSH_IS_DUE_ABOVE_HOURS=4 is defined and tested; triggered() has no caller and nothing measures approval waits, so the trigger can never fire. NEXT: Build the wait measurement (see M35.4.5) and call locale.triggered from the report; that completes this leaf.",
-    updated: "2026-10-13",
+    why: "built (owner decision 222 A): the typical approval wait is measured through migration 0227's view gate.approval_wait (raised_at and decided_at only, no person) by ops/approval_wait.py and reaches This install as two facts, the typical wait and whether push for approvals is now worth building, decided by locale.triggered; no count of approvals is ever shown, an install with nothing decided is unknown with its reason and never zero, and GET /install is tested at the route (tests/unit/test_install_approval_wait_route.py, with a mutation table). PRIOR WORK (2026-10-13 triage): locale.PUSH_FOR_APPROVALS with Trigger.APPROVALS_WAIT_LONGER_THAN_THE_STATED_HOURS and PUSH_IS_DUE_ABOVE_HOURS=4 is defined and tested; triggered() has no caller and nothing measures approval waits, so the trigger can never fire. NEXT: Build the wait measurement (see M35.4.5) and call locale.triggered from the report; that completes this leaf. PROVE ON THE INSTALL: run the acceptance run and read the result of the_approval_wait_is_measured_and_push_is_reported (it raises and approves three approvals in the acceptance department, as the Approvals route does, and leaves nothing behind); then open Install, This install, and see the typical approval wait and the push sentence, or unknown with a reason while nothing has been decided.",
+    updated: "2026-10-14",
   },
   "M36.1.1.1": {
     status: "READY FOR TESTING",
@@ -3613,6 +3613,11 @@ const PROGRESS = {
     status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (channels.lark, digest_routes, ops.acceptance_checks_digest +7 more); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
+  },
+  "M38.5.4": {
+    status: "IN PROGRESS",
+    why: "owner-approved 2026-10-14: Built beside Done on /build, the tracker and status.json, and the proof sweep on one complete clean run with a repeat of only the failed or not-run checks; in a pull request (M38/built-and-proven-tracker), not yet on main; proved when the owner's install shows both figures and a repeat completes a clean run",
+    updated: "2026-10-14",
   },
   "M39.1.1.1": {
     status: "READY FOR TESTING",
@@ -4460,9 +4465,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.7.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Attach a file to the web composer is built (console/src/pages/AskAttach.tsx, thread_routes POST /threads/attachments, M12.3.6). Dictation is not: no speech tool is registered anywhere in src. NEXT: register a speech-to-text tool in the tool registry, add a record control on Ask that posts audio and fills the text; keep the transcription at the person's reach",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built (M40/ask-dictation, owner decision 220 B, browser-side only): Ask has a Dictate your question button that uses the speech recognition built into the person's browser (console/src/pages/AskDictation.tsx, askDictationCore.ts); no server route, vendor or key, and nothing is sent to our side, which a test asserts on requests. The language is the browser's own, finished phrases are appended after what was typed and stay editable, a browser with none is told so in a sentence, a blocked microphone is told how to allow it, and listening stops when the question is sent and when the page is left. PRIOR WORK (2026-10-13 triage): Attach a file to the web composer is built (AskAttach.tsx, POST /threads/attachments, M12.3.6). Dictation is not: no speech tool is registered anywhere in src. NEXT: register a speech-to-text tool; superseded by 220 B (browser-side only). Not proved in a real browser: tests drive a fake recogniser. PROVE ON THE INSTALL: (1) open Ask in Chrome or Edge on a phone and on a laptop, sign in as a member; (2) press Dictate your question, allow the microphone when asked, say a short question, press the button again; the words appear in the question box after anything already typed, and can be edited; (3) block the microphone for the site and press the button: the page says how to allow it; (4) press Ask while listening: listening stops; (5) in Firefox the page says dictation is not available and typing still works; (6) with the browser's network panel open, nothing is requested to this server while dictating. Note for the owner: Chrome and Safari do the listening through their own vendors' services, which is the browser's doing and not ours; the page says nothing is sent to this server.",
+    updated: "2026-10-14",
   },
   "M40.7.4": {
     status: "BLOCKED",
@@ -4751,8 +4756,8 @@ const PROGRESS = {
   },
   "M35.4.5": {
     status: "READY FOR TESTING",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Only the constants exist: locale.PUSH_IS_DUE_ABOVE_HOURS and the deferral. Suspension rows carry raise and decide times but nothing computes a typical wait or reports that push is due. NEXT: Add a read over gate.suspension (raised to decided) giving the median wait, show it on Approvals or Install, and call locale.triggered; then a check.",
-    updated: "2026-10-13",
+    why: "built (owner decision 222 A): the read is migration 0227's view gate.approval_wait over gate.suspension (the two times of each decided approval, no id, person or verdict), ops/approval_wait.py gives the median over the last 90 days (never a count; nothing decided is None, shown as unknown with the reason), console/installation.approval_wait_facts words it with the push verdict from locale.triggered, install_routes serves it on GET /install, and ops/acceptance_checks_approval_wait.py is the install check. Route tests and a mutation table are in tests/unit/test_install_approval_wait_route.py. PRIOR WORK (2026-10-13 triage): Only the constants exist: locale.PUSH_IS_DUE_ABOVE_HOURS and the deferral. Suspension rows carry raise and decide times but nothing computes a typical wait or reports that push is due. NEXT: Add a read over gate.suspension (raised to decided) giving the median wait, show it on Approvals or Install, and call locale.triggered; then a check. PROVE ON THE INSTALL: as for M35.3.2.2, run the acceptance run and read the_approval_wait_is_measured_and_push_is_reported, then open Install, This install.",
+    updated: "2026-10-14",
   },
   "M35.4.6": {
     status: "IN PROGRESS",

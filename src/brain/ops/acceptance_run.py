@@ -13,7 +13,12 @@ worker that finds an unfinished run of the commit it serves finishes it under th
 only what has no result. A deploy of a new commit starts a run afresh, and a deploy that changes
 nothing the worker runs does not restart it (`brain.ops.restart_scope`). See
 `brain.ops.acceptance_resume`, which says what was rejected and why a heartbeat and not a lock.
-`run_acceptance` is the one place a run is marked complete, after its last check.
+`close_run` is the one place a run is marked complete, after its last check and only when the
+store holds a result for every registered check. **A run that came back with a failed or not-run
+check can be repeated for only those checks** (`repeat_unsettled`, `--repeat-unsettled` on the
+command): a new run of the same commit that copies the earlier run's passes and runs the rest, so
+one complete clean run is reached without waiting thirty-five minutes again for what passed. The
+owner decided on 2026-10-14 that one complete clean run is the gate and not two.
 
 **Every check is one database transaction, and the transaction is always rolled back.** The
 harness opens a connection, begins, and hands the product's services an `async_sessionmaker` bound
@@ -44,11 +49,12 @@ in one, holds a grant over one or is listed in one by a staff source, and whethe
 principal was ever committed or bound. Any of those records every check as not run with
 `brain.ops.acceptance.A_RESERVED_DEPARTMENT_HOLDING_A_REAL_PERSON_STOPS_THE_RUN`.
 
-Task ids: M38.5.1
+Task ids: M38.5.1, M38.5.4
 """
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import gc
 import secrets
@@ -85,14 +91,17 @@ from brain.ops.acceptance import (
 from brain.ops.acceptance_resume import (
     abandon,
     beat,
+    carried_forward,
     checked_commits,
     claim,
-    finish,
+    finish_if_whole,
+    newest_complete_run,
     open_run,
     record_check,
     recorded,
     settle,
     unfinished,
+    unsettled,
 )
 from brain.ops.safe_error import describe
 from brain.session import ApplicationRoleSession, make_app_engine
@@ -151,6 +160,10 @@ CONTROL: Final = "acceptance_run"
 
 class AcceptanceChecksFailedError(Exception):
     """A run recorded at least one failed check. Its text is `summary`; see the reason above."""
+
+
+class RepeatRefusedError(Exception):
+    """A repeat of a run could not start. Its text says why and names nothing a check read."""
 
 
 class Harness:
@@ -565,9 +578,111 @@ async def run_acceptance(
         results = await run_suite(
             engine, suite, settings=settings, stream=out, prior=prior, before=before, after=after
         )
-        if not await finish(engine, run_id):
-            print(f"{LOG_PREFIX} the run was abandoned by another worker before it ended", file=out)
+        await close_run(engine, run_id, suite, stream=out)
         return occasion, results
+    finally:
+        await engine.dispose()
+
+
+async def close_run(
+    engine: AsyncEngine, run_id: uuid.UUID, suite: Sequence[Check], *, stream: TextIO
+) -> bool:
+    """Mark a run complete if the store holds every registered check's result, and say if not.
+
+    The one place a run is closed, for
+    `A_RUN_IS_COMPLETE_ONLY_WHEN_EVERY_REGISTERED_CHECK_RECORDED`: a run short of a result stays
+    `running` and is settled like any run a restart cut short.
+    """
+    marked, lacking = await finish_if_whole(engine, run_id, [one.name for one in suite])
+    if lacking:
+        print(
+            f"{LOG_PREFIX} the run is left unfinished: {len(lacking)} registered check(s) have no "
+            f"recorded result, so it is not marked complete ({', '.join(lacking[:5])})",
+            file=stream,
+        )
+    elif not marked:
+        print(f"{LOG_PREFIX} the run was abandoned by another worker before it ended", file=stream)
+    return marked
+
+
+async def repeat_unsettled(
+    database_url: str,
+    *,
+    settings: Settings,
+    commit: str,
+    checks: Sequence[Check] | None = None,
+    stream: TextIO | None = None,
+    make_engine: Callable[[str], AsyncEngine] = make_app_engine,
+) -> tuple[Occasion | None, tuple[Result, ...]]:
+    """Run again only the checks that failed or came back not run, as a new complete run.
+
+    **The gate is one complete clean run, and this is how a run that came back short of clean
+    becomes one without waiting thirty-five minutes for the checks that already passed.** It starts
+    from the newest complete run of `commit`, copies its passes into a new run of the same commit
+    with where each came from (`CARRIED_FORWARD_FROM`), runs the rest in suite order and marks the
+    new run complete only by `close_run`. Nothing is edited: the earlier run stays as it was.
+    See `A_REPEAT_RUNS_ONLY_THE_UNSETTLED_AND_SAYS_WHAT_IT_CARRIED`.
+
+    Nothing is started, and `(None, ())` is returned, when every registered check already passed
+    in the run to repeat. `RepeatRefusedError` is raised, again with nothing started, when there is
+    no complete run of this commit to repeat or a worker is still running this commit's suite (a
+    repeat beside it would be two runs of one release at once). Rejected: repeating the newest
+    run of any commit, which would carry passes across releases.
+    """
+    out = stream or sys.stderr
+    engine = make_engine(database_url)
+    try:
+        suite = registered() if checks is None else checks
+        names = [one.name for one in suite]
+        if settle(commit, await unfinished(engine)).in_progress:
+            msg = "a worker is still running this commit, so nothing was repeated beside it"
+            raise RepeatRefusedError(msg)
+        source = await newest_complete_run(engine, commit)
+        if source is None:
+            msg = f"there is no complete run of {commit} to repeat"
+            raise RepeatRefusedError(msg)
+        earlier = await recorded(engine, source.run_id)
+        to_run = unsettled(names, earlier)
+        if not to_run:
+            print(f"{LOG_PREFIX} every check passed in the run to repeat, nothing to do", file=out)
+            return None, ()
+        carried = carried_forward(names, earlier, source.run_id)
+        run_id, started_at = uuid.uuid4(), datetime.now(UTC)
+        await open_run(
+            engine, run_id=run_id, commit=commit, occasion=Occasion.REQUEST, started_at=started_at
+        )
+
+        async def store(one: Result) -> None:
+            await record_check(
+                engine,
+                one,
+                run_id=run_id,
+                commit=commit,
+                occasion=Occasion.REQUEST,
+                started_at=started_at,
+            )
+
+        async def before(_: Check) -> None:
+            await beat(engine, run_id)
+
+        for one in carried:
+            await store(one)
+        print(
+            f"{LOG_PREFIX} repeating {len(to_run)} check(s) and carrying {len(carried)} that "
+            f"passed in run {source.run_id}",
+            file=out,
+        )
+        results = await run_suite(
+            engine,
+            suite,
+            settings=settings,
+            stream=out,
+            prior=carried,
+            before=before,
+            after=store,
+        )
+        await close_run(engine, run_id, suite, stream=out)
+        return Occasion.REQUEST, results
     finally:
         await engine.dispose()
 
@@ -624,22 +739,43 @@ async def hold_what_was_saved(database_url: str) -> None:
         await engine.dispose()
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     """Run every check now against this container's database, record it, and print each result.
 
     `python -m brain.ops.acceptance_run` inside the application or worker container: the same run
     the schedule makes, recorded as asked for, whether or not this commit was checked already.
-    Prints the words the Install page shows and nothing a check read.
+    `--repeat-unsettled` instead runs only the checks that failed or came back not run in the
+    newest complete run of this commit, as a new complete run (`repeat_unsettled`). Prints the
+    words the Install page shows and nothing a check read.
     """
+    parser = argparse.ArgumentParser(prog="python -m brain.ops.acceptance_run")
+    parser.add_argument(
+        "--repeat-unsettled",
+        action="store_true",
+        help="run only the checks that failed or did not run in the newest complete run of this "
+        "commit, and carry the passes forward into a new complete run",
+    )
+    args = parser.parse_args(argv)
     settings = Settings()
     if not settings.database_url:
         print(f"{LOG_PREFIX} no database is configured, so nothing was checked", file=sys.stderr)
         return 1
     commit = settings.resolved_commit()
     asyncio.run(hold_what_was_saved(settings.database_url))
-    _, results = asyncio.run(
-        run_acceptance(settings.database_url, settings=settings, commit=commit, force=True)
-    )
+    if args.repeat_unsettled:
+        try:
+            _, results = asyncio.run(
+                repeat_unsettled(settings.database_url, settings=settings, commit=commit)
+            )
+        except RepeatRefusedError as error:
+            print(f"{LOG_PREFIX} {error}", file=sys.stderr)
+            return 1
+        if not results:
+            return 0
+    else:
+        _, results = asyncio.run(
+            run_acceptance(settings.database_url, settings=settings, commit=commit, force=True)
+        )
     for one in results:
         leaves = " ".join(one.leaves)
         print(f"{one.outcome:8} {one.name} [{leaves}] {one.reason}".rstrip())

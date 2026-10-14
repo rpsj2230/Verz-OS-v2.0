@@ -60,9 +60,9 @@ function optionsWire(enabled = true): Record<string, unknown> {
       : [],
     triggers: enabled
       ? [
-          { kind: "schedule", label: "On a schedule", fires: true },
-          { kind: "connector_event", label: "When something changes in a connected source", fires: false },
-          { kind: "webhook", label: "When another system calls it", fires: false },
+          { kind: "schedule", label: "On a schedule", fires: true, not_offered: null },
+          { kind: "connector_event", label: "When something changes in a connected source", fires: false, not_offered: null },
+          { kind: "webhook", label: "When another system calls it", fires: false, not_offered: "Not offered. An automation here starts on a schedule or when a connected source reports a change, and nothing starts work from outside." },
         ]
       : [],
     fields: enabled
@@ -209,17 +209,22 @@ describe("New automation", () => {
     expect(stand.sent.filter((one) => one.method === "POST")).toEqual([]);
   });
 
-  test("a template start fills the words and a trigger nothing fires says so", async () => {
-    // What breaks if this is deleted: a template that leaves the form empty, or a webhook that
-    // looks live.
+  test("a template start fills the words, a change trigger says it is switched off, and a webhook is listed as not offered", async () => {
+    // What breaks if this is deleted: a template that leaves the form empty, a change trigger that
+    // looks live on an install that has not switched it on, or a webhook that can be chosen.
     const stand = await formOpen(ANSWERING);
 
     write(stand.container, "start", "unanswered_questions");
     expect((stand.container.querySelector('[name="name"]') as HTMLInputElement).value).toBe(
       "I list the questions I could not answer this week",
     );
-    write(stand.container, "trigger", "webhook");
-    expect(stand.container.textContent).toContain("Nothing on this install fires this yet");
+    write(stand.container, "trigger", "connector_event");
+    expect(stand.container.textContent).toContain("Starting on a change is switched off on this install");
+    const webhook = stand.container.querySelector('[name="trigger"] option[value="webhook"]') as HTMLOptionElement;
+    expect(webhook.disabled).toBe(true);
+    expect(webhook.textContent).toContain("(not offered)");
+    const change = stand.container.querySelector('[name="trigger"] option[value="connector_event"]') as HTMLOptionElement;
+    expect(change.disabled).toBe(false);
   });
 
   test("Review sends what was written, shows the terms and the rehearsal, and Save sends the API's digest", async () => {

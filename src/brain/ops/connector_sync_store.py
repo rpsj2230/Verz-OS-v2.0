@@ -64,6 +64,7 @@ from sqlalchemy import (
     Select,
     Table,
     and_,
+    case,
     func,
     or_,
     select,
@@ -112,6 +113,16 @@ A_RETURNED_RECORD_SERVES_AGAIN_AND_ITS_RETIREMENT_IS_KEPT: Final = (
     "into proj.record_retired with when the absence was noticed. When the source returns the "
     "record, its row serves again, and the copy is never touched, so which records went and when "
     "stays on file however often they come back."
+)
+
+
+#: Why a confirmed record does not move its change instant.
+A_RECORD_CHANGES_WHEN_ITS_FIELDS_DO_AND_NOT_WHEN_ITS_SOURCE_CONFIRMS_THEM: Final = (
+    "A sync writes every record it reads, whether or not the source changed it, so an update that "
+    "moved `updated_at` every time said only that a sync had run. It moves now when the record's "
+    "fields differ from the stored ones or when a retired record returns, which is the one marker "
+    "of 'this record changed' an automation started by a change can rest on. `last_seen_at` still "
+    "says when the source last confirmed it."
 )
 
 
@@ -234,7 +245,17 @@ def record_upsert(record: ProjectedRecord, fields: Mapping[str, StoredValue]) ->
         set_={
             "fields": statement.excluded.fields,
             "last_seen_at": statement.excluded.last_seen_at,
-            "updated_at": func.now(),
+            # Moved only by a change: the constant above gives the reason.
+            "updated_at": case(
+                (
+                    or_(
+                        table.c.fields.is_distinct_from(statement.excluded.fields),
+                        table.c.deleted_at.is_not(None),
+                    ),
+                    func.now(),
+                ),
+                else_=table.c.updated_at,
+            ),
             "deleted_at": None,
         },
         where=and_(
