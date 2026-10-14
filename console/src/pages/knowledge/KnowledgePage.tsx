@@ -415,6 +415,8 @@ export function KnowledgePage() {
         loading={LOADING_DOCUMENTS}
         emptyTitle={NO_DOCUMENTS}
         emptyDescription={NO_DOCUMENTS_DESCRIPTION}
+        emptyAdds="Add a document to a department you can read, or to yourself alone."
+        emptyBy={["super_admin", "department_admin", "member"]}
         emptyIcon={<BookOpen aria-hidden />}
         footer={truncated ? <Note>{MORE_DOCUMENTS}</Note> : undefined}
       />

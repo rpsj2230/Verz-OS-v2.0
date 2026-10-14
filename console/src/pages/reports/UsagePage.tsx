@@ -23,7 +23,7 @@
 
 import { useState } from "react";
 import { useResource } from "../../api/useResource";
-import { EmptyState, FailureState, KpiStrip, LoadingState, SectionCard, StatCard } from "../../components/kit";
+import { BY_THE_INSTALL, EmptyList, FailureState, KpiStrip, LoadingState, SectionCard, StatCard } from "../../components/kit";
 import { countWords } from "../agents/agentStats";
 import {
   NO_MODEL_CALL,
@@ -298,7 +298,14 @@ export function UsagePage() {
   } else if (answer.busy) {
     content = <LoadingState label={LOADING_USAGE} />;
   } else if (body === null || !offersAnything(body)) {
-    content = <EmptyState title={NO_USAGE} description={NO_USAGE_MORE} />;
+    content = (
+      <EmptyList
+        title={NO_USAGE}
+        description={NO_USAGE_MORE}
+        adds="Usage is recorded each time somebody asks a question, and none is added by hand."
+        by={BY_THE_INSTALL}
+      />
+    );
   } else {
     content = (
       <>

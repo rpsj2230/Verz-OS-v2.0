@@ -37,7 +37,9 @@ import {
   Advanced,
   Chip,
   DetailHeader,
+  BY_THE_INSTALL,
   DetailPage,
+  EmptyList,
   EmptyState,
   EntityTable,
   Fact,
@@ -462,7 +464,13 @@ function About({ slug }: { readonly slug: string }) {
       >
         {() =>
           rows.length === 0 ? (
-            <EmptyState title="No history to show" description={NO_HISTORY} icon={<History aria-hidden />} />
+            <EmptyList
+              title="No history to show"
+              description={NO_HISTORY}
+              adds="An entry is written whenever somebody changes the department, its teams or its people."
+              by={BY_THE_INSTALL}
+              icon={<History aria-hidden />}
+            />
           ) : (
             <div className="flex min-w-0 flex-col gap-2">
               <EntityTable caption="Changes to this department" columns={columns} rows={rows} rowId={(row) => `${row.at} ${row.action} ${row.actor_id}`} rowLabel={(row) => whenWords(row.at)} />

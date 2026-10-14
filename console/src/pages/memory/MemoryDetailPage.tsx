@@ -31,7 +31,9 @@ import {
   Advanced,
   DetailHeader,
   DetailPage,
+  BY_THE_INSTALL,
   Drawer,
+  EmptyList,
   EmptyState,
   EntityTable,
   Fact,
@@ -176,7 +178,13 @@ function RememberedView({ memory, onOpen }: { readonly memory: Memory; readonly 
       }
     >
       {all.length === 0 ? (
-        <EmptyState title={NOTHING_TO_READ} description={NOTHING_TO_READ_DESCRIPTION} icon={<Brain aria-hidden />} />
+        <EmptyList
+          title={NOTHING_TO_READ}
+          description={NOTHING_TO_READ_DESCRIPTION}
+          adds="A memory forms from what the person asks and corrects, and none is added by hand."
+          by={BY_THE_INSTALL}
+          icon={<Brain aria-hidden />}
+        />
       ) : (
         <div className="flex min-w-0 flex-col gap-3">
           <Narrowing
@@ -242,7 +250,13 @@ function HistoryView({ memory }: { readonly memory: Memory }) {
       footer={<Note>{consideredSentence(memory.consideredPerKind)}</Note>}
     >
       {steps.length === 0 ? (
-        <EmptyState title={NO_CHANGE} description={NO_CHANGE_DESCRIPTION} icon={<HistoryIcon aria-hidden />} />
+        <EmptyList
+          title={NO_CHANGE}
+          description={NO_CHANGE_DESCRIPTION}
+          adds="An entry is written whenever a memory about this person forms, is replaced or is undone."
+          by={BY_THE_INSTALL}
+          icon={<HistoryIcon aria-hidden />}
+        />
       ) : (
         <EntityTable
           caption="Changes you may read, newest first"

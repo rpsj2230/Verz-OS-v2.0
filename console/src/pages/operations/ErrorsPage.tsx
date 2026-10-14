@@ -19,7 +19,7 @@
 import { useId, useState } from "react";
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
-import { type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, type EntityColumn } from "../../components/kit";
 import {
   agentWords,
   DEFAULT_HOURS,
@@ -172,6 +172,8 @@ function Failures({ hours, onHours }: { readonly hours: number; readonly onHours
             exportName="failed-jobs"
             empty={NO_JOB_FAILURES}
             emptyDescription={NO_JOB_FAILURES_MORE}
+            emptyAdds="A row is written whenever a scheduled job fails, and none is added by hand."
+            emptyBy={BY_THE_INSTALL}
             footer={
               page.jobs_truncated || (page.jobs.length > 0 && page.failure_messages_stay_on_the_server !== false) ? (
                 <>
@@ -193,6 +195,8 @@ function Failures({ hours, onHours }: { readonly hours: number; readonly onHours
             exportName="failed-questions"
             empty={NO_REQUEST_FAILURES}
             emptyDescription={NO_REQUEST_FAILURES_MORE}
+            emptyAdds="A row is written whenever a question fails, and none is added by hand."
+            emptyBy={BY_THE_INSTALL}
             footer={page.requests_truncated ? <Line>{FULL_LIST}</Line> : undefined}
           />
           <Line>

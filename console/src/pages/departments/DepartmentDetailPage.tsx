@@ -28,6 +28,7 @@ import {
   Advanced,
   DetailHeader,
   DetailPage,
+  EmptyList,
   EmptyState,
   Fact,
   FactList,
@@ -195,9 +196,11 @@ function Teams({
         }
       >
         {department.teams.length === 0 ? (
-          <EmptyState
+          <EmptyList
             title="No teams"
             description="A team appears here once somebody who may shape this department creates one."
+            adds="Create a team with New team."
+            by={["super_admin", "department_admin"]}
             icon={<Network aria-hidden />}
           />
         ) : (

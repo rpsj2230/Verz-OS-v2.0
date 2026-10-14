@@ -30,7 +30,7 @@ import {
   Chip,
   ConfirmDialog,
   Drawer,
-  EmptyState,
+  EmptyList,
   EntityTable,
   FailureState,
   LoadingState,
@@ -447,7 +447,15 @@ export function PacksPage() {
   } else if (answer.data === null) {
     body = <LoadingState label="Loading packs." />;
   } else if (catalogue.packs.length === 0) {
-    body = <EmptyState title={NO_PACKS} description={NO_PACKS_DESCRIPTION} icon={<Package aria-hidden />} />;
+    body = (
+      <EmptyList
+        title={NO_PACKS}
+        description={NO_PACKS_DESCRIPTION}
+        adds="Create a pack from this screen by choosing the capabilities it carries."
+        by={["super_admin"]}
+        icon={<Package aria-hidden />}
+      />
+    );
   } else {
     body = (
       <EntityTable

@@ -36,7 +36,9 @@ import { useResource } from "../../api/useResource";
 import {
   Advanced,
   ConfirmDialog,
+  BY_THE_INSTALL,
   Drawer,
+  EmptyList,
   EmptyState,
   EntityTable,
   Fact,
@@ -208,7 +210,13 @@ function Applied({
   return (
     <SectionCard title="Applied automatically" lede="Each of these applied by itself and can be undone.">
       {review.tierOne.length === 0 ? (
-        <EmptyState title={NOTHING_IN_TIER} description="A preference, a correction or a re-ranking the system learns appears here once it applies." icon={<BookOpenCheck aria-hidden />} />
+        <EmptyList
+          title={NOTHING_IN_TIER}
+          description="A preference, a correction or a re-ranking the system learns appears here once it applies."
+          adds="The system forms one from what people do and correct, and none is added by hand."
+          by={BY_THE_INSTALL}
+          icon={<BookOpenCheck aria-hidden />}
+        />
       ) : (
         <div className="flex min-w-0 flex-col gap-3">
           <Narrowing
@@ -321,7 +329,13 @@ function Shadow({ review, onOpen }: { readonly review: Review; readonly onOpen: 
       action={<UnavailableAction label={UNAVAILABLE.promote.label} text={UNAVAILABLE.promote.label} reason={UNAVAILABLE.promote.reason} />}
     >
       {review.tierTwo.length === 0 ? (
-        <EmptyState title={NOTHING_IN_TIER} description="A rule the system proposes from repeated evidence appears here while it proves itself." icon={<CircleSlash aria-hidden />} />
+        <EmptyList
+          title={NOTHING_IN_TIER}
+          description="A rule the system proposes from repeated evidence appears here while it proves itself."
+          adds="The system proposes one when the same evidence repeats, and none is added by hand."
+          by={BY_THE_INSTALL}
+          icon={<CircleSlash aria-hidden />}
+        />
       ) : (
         <div className="flex min-w-0 flex-col gap-3">
           <Narrowing
@@ -417,7 +431,13 @@ function Waiting({ review, onOpen }: { readonly review: Review; readonly onOpen:
         </p>
       ) : null}
       {waiting.length === 0 ? (
-        <EmptyState title={NOTHING_IN_TIER} description="A learned change that would widen who sees what waits here for a person." icon={<Hourglass aria-hidden />} />
+        <EmptyList
+          title={NOTHING_IN_TIER}
+          description="A learned change that would widen who sees what waits here for a person."
+          adds="The system holds a change here when it would widen who sees what, and none is added by hand."
+          by={BY_THE_INSTALL}
+          icon={<Hourglass aria-hidden />}
+        />
       ) : (
         <div className="flex min-w-0 flex-col gap-3">
           <Narrowing

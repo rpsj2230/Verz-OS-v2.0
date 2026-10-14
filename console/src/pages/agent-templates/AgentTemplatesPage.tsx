@@ -103,6 +103,8 @@ export function AgentTemplatesPage() {
       loading={READING_TEMPLATES}
       emptyTitle={NO_TEMPLATES}
       emptyDescription={NO_TEMPLATES_DESCRIPTION}
+      emptyAdds="A template is published from an agent's version on the Agents screen, or ships with a release."
+      emptyBy={["super_admin", "department_admin"]}
       emptyIcon={<LayoutTemplate aria-hidden />}
     />
   );

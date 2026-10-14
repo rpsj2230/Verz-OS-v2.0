@@ -22,7 +22,7 @@ import { useCallback, useState } from "react";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
-import { Note, type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, Note, type EntityColumn } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { FailureNotice } from "../../ui/FailureNotice";
 import {
@@ -112,6 +112,8 @@ export function IncidentsPage() {
               exportName="incidents"
               empty={NOTHING_DEGRADED}
               emptyDescription={NOTHING_DEGRADED_MORE}
+              emptyAdds="A row is written whenever a part of the install degrades, and none is added by hand."
+              emptyBy={BY_THE_INSTALL}
               rowActions={(row) =>
                 page.may_acknowledge && !row.acknowledged_by ? (
                   <Button variant="outline" size="sm" disabled={busy} onClick={() => acknowledge(row)}>

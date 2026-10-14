@@ -21,7 +21,7 @@
 
 import { useState } from "react";
 import { useResource } from "../../api/useResource";
-import { EmptyState, EntityTable, FailureState, KpiStrip, LoadingState, Note, SectionCard, StatCard, type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, EmptyList, EntityTable, FailureState, KpiStrip, LoadingState, Note, SectionCard, StatCard, type EntityColumn } from "../../components/kit";
 import { cn } from "../../lib/utils";
 import { whenWords } from "../agents/agentStats";
 import { cadence, qualityApiPathFor, readQuality, resultWords, runCounts, type CanaryRunBody, type QualityBody } from "../qualityQuery";
@@ -165,7 +165,14 @@ export function QualityPage() {
   } else if (answer.busy) {
     content = <LoadingState label={LOADING_QUALITY} />;
   } else if (body === null) {
-    content = <EmptyState title={NO_QUALITY} description={NO_QUALITY_MORE} />;
+    content = (
+      <EmptyList
+        title={NO_QUALITY}
+        description={NO_QUALITY_MORE}
+        adds="A figure is recorded each time a canary runs, and none is added by hand."
+        by={BY_THE_INSTALL}
+      />
+    );
   } else {
     content = (
       <>

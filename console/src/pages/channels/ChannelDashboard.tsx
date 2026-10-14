@@ -25,6 +25,7 @@ import type { FilterChoice } from "../../components/listing";
 import { useListing } from "../../components/useListing";
 import {
   ConfirmDialog,
+  EmptyList,
   EmptyState,
   EntityTable,
   FailureState,
@@ -186,7 +187,14 @@ function Bound({ row, version, onChanged }: { readonly row: ChannelRow; readonly
   } else if (listing.busy) {
     body = <LoadingState label={READING_BOUND} />;
   } else if (listing.rows.length === 0) {
-    body = <EmptyState title={NOBODY_BOUND} description={NOBODY_BOUND_DESCRIPTION} />;
+    body = (
+      <EmptyList
+        title={NOBODY_BOUND}
+        description={NOBODY_BOUND_DESCRIPTION}
+        adds="A person binds themselves by sending, from their own chat, the code they asked for in My workspace."
+        by={["member"]}
+      />
+    );
   } else {
     body = (
       <EntityTable

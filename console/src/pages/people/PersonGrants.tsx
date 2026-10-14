@@ -23,7 +23,7 @@ import { KeyRound, Package, Plus } from "lucide-react";
 import { useCallback, useState } from "react";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
-import { Chip, ConfirmDialog, EmptyState, EntityTable, FailureState, Note, SectionCard, type EntityColumn } from "../../components/kit";
+import { Chip, ConfirmDialog, EmptyList, EntityTable, FailureState, Note, SectionCard, type EntityColumn } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { scopeLines } from "../scopeText";
 import { dayWords } from "../access/formParts";
@@ -244,7 +244,13 @@ export function PersonGrants({ detail, onWritten }: { readonly detail: PersonDet
         }
       >
         {held.length === 0 ? (
-          <EmptyState title={NOTHING_HELD} description={NOTHING_HELD_DESCRIPTION} icon={<KeyRound aria-hidden />} />
+          <EmptyList
+            title={NOTHING_HELD}
+            description={NOTHING_HELD_DESCRIPTION}
+            adds="Give a capability or assign a pack with Grant."
+            by={["super_admin", "department_admin"]}
+            icon={<KeyRound aria-hidden />}
+          />
         ) : (
           <EntityTable
             caption={`What ${person.displayName} holds`}

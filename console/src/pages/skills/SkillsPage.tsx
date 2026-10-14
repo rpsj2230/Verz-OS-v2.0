@@ -382,6 +382,8 @@ export function SkillsPage() {
         loading={LOADING_SKILLS}
         emptyTitle={NO_SKILLS}
         emptyDescription={NO_SKILLS_DESCRIPTION}
+        emptyAdds="Paste, upload or import a skill with Add a skill."
+        emptyBy={["super_admin", "department_admin"]}
         emptyIcon={<Sparkles aria-hidden />}
       />
       {page.mayAdd ? <AddDrawer open={adding} onOpenChange={setAdding} onTold={onTold} /> : null}

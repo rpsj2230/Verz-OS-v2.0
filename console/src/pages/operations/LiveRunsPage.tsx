@@ -19,7 +19,7 @@
 
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
-import { Note, type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, Note, type EntityColumn } from "../../components/kit";
 import { jobAddress } from "../jobsQuery";
 import {
   ACTING,
@@ -116,6 +116,8 @@ export function LiveRunsPage() {
               exportName="running-now"
               empty={NOTHING_RUNNING}
               emptyDescription={NOTHING_RUNNING_MORE}
+              emptyAdds="A run is listed while a scheduled job or an agent's turn is under way, and none is added by hand."
+              emptyBy={BY_THE_INSTALL}
             />
             <WholeList
               title={WAITING_HEADING}
@@ -127,6 +129,8 @@ export function LiveRunsPage() {
               exportName="waiting"
               empty={NOTHING_WAITING}
               emptyDescription={NOTHING_WAITING_MORE}
+              emptyAdds="A run waits here when it is queued behind a ceiling, and none is added by hand."
+              emptyBy={BY_THE_INSTALL}
             />
             <div className="flex flex-col gap-1.5">
               {page.requests_in_flight_are_not_recorded === false ? null : <Note>{REQUESTS_IN_FLIGHT_ARE_NOT_RECORDED}</Note>}

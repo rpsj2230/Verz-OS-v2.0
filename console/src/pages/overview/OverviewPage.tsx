@@ -37,7 +37,8 @@ import type { Resource } from "../../api/useResource";
 import { useResource } from "../../api/useResource";
 import {
   Advanced,
-  EmptyState,
+  BY_THE_INSTALL,
+  EmptyList,
   Fact,
   FactList,
   FailureState,
@@ -358,7 +359,14 @@ function NeedsYou({ overview }: { readonly overview: Resource<unknown> }) {
     // A body that is not an overview claims nothing, so nothing is drawn in its place.
     return null;
   } else if (read.needsYou.length === 0 && read.uncounted.length === 0) {
-    body = <EmptyState title={NOTHING_WAITING} description={NOTHING_WAITING_MORE} />;
+    body = (
+      <EmptyList
+        title={NOTHING_WAITING}
+        description={NOTHING_WAITING_MORE}
+        adds="A card is raised when something needs a decision from somebody who may act on it."
+        by={BY_THE_INSTALL}
+      />
+    );
   } else {
     body = (
       <ul aria-label={NEEDS_YOU} className="m-0 flex list-none flex-col p-0">
@@ -396,7 +404,14 @@ function Activity({ audit }: { readonly audit: Resource<unknown> }) {
   } else if (audit.busy) {
     body = <LoadingState label={LOADING_ACTIVITY} rows={3} />;
   } else if (rows.length === 0) {
-    body = <EmptyState title={NO_ACTIVITY} description={NO_ACTIVITY_MORE} />;
+    body = (
+      <EmptyList
+        title={NO_ACTIVITY}
+        description={NO_ACTIVITY_MORE}
+        adds="An entry is written whenever somebody changes a person, a grant, an agent or a setting."
+        by={BY_THE_INSTALL}
+      />
+    );
   } else {
     body = (
       <ol aria-label={ACTIVITY} className="m-0 flex list-none flex-col p-0">

@@ -24,7 +24,7 @@
 
 import { useId, useState } from "react";
 import { useResource } from "../../api/useResource";
-import { EmptyState, EntityTable, SectionCard, type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, EmptyList, EmptyState, EntityTable, SectionCard, type EntityColumn } from "../../components/kit";
 import { Input } from "../../components/ui/input";
 import {
   ARTIFACTS_API_PATH,
@@ -156,7 +156,14 @@ function Listed({ rows }: { readonly rows: readonly ArtifactRow[] }) {
   const [filters, setFilters] = useState<ArtifactFilters>(NO_ARTIFACT_FILTERS);
   const shown = narrowed(rows, filters);
   if (rows.length === 0) {
-    return <EmptyState title={NO_ARTIFACTS} description={NO_ARTIFACTS_MORE} />;
+    return (
+      <EmptyList
+        title={NO_ARTIFACTS}
+        description={NO_ARTIFACTS_MORE}
+        adds="An artifact is listed when an agent produces a document, a deck, a report or an image for somebody."
+        by={BY_THE_INSTALL}
+      />
+    );
   }
   return (
     <div className="flex min-w-0 flex-col gap-3">

@@ -22,6 +22,7 @@ import { KeyRound, Search } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import { useResource } from "../../api/useResource";
 import {
+  EmptyList,
   EmptyState,
   EntityTable,
   FailureState,
@@ -68,7 +69,15 @@ export function CapabilitiesPage() {
   } else if (answer.data === null) {
     body = <LoadingState label="Loading the capabilities." />;
   } else if (all.length === 0) {
-    body = <EmptyState title={NO_CAPABILITIES} description={NO_CAPABILITIES_DESCRIPTION} icon={<KeyRound aria-hidden />} />;
+    body = (
+      <EmptyList
+        title={NO_CAPABILITIES}
+        description={NO_CAPABILITIES_DESCRIPTION}
+        adds="A capability is declared by a tool or a connected source, so connect one or add a skill that registers a tool."
+        by={["connector_admin", "super_admin"]}
+        icon={<KeyRound aria-hidden />}
+      />
+    );
   } else if (shown.length === 0) {
     body = <EmptyState title="Nothing matches" description="Change the words in the search box." />;
   } else {

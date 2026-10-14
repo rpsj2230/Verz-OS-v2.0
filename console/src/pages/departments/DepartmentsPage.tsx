@@ -202,6 +202,8 @@ export function DepartmentsPage() {
         loading={LOADING_DEPARTMENTS}
         emptyTitle={NO_DEPARTMENTS}
         emptyDescription={NO_DEPARTMENTS_DESCRIPTION}
+        emptyAdds="Found a department with New department, one at a time or from the names the staff source uses."
+        emptyBy={["super_admin"]}
         emptyIcon={<Building2 aria-hidden />}
         footer={
           organisation.unplaced.length === 0 ? undefined : (

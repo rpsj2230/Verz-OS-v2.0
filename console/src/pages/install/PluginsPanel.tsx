@@ -20,7 +20,7 @@ import { useResource } from "../../api/useResource";
 import {
   Advanced,
   Chip,
-  EmptyState,
+  EmptyList,
   Fact,
   FactList,
   FailureState,
@@ -178,7 +178,14 @@ function PluginList({ body, onChanged }: { readonly body: PluginsBody; readonly 
     <>
       {body.no_plugin_is_loaded ? <Note>{NOT_LOADED}</Note> : null}
       {body.registry_is_on ? null : <Note>{SWITCHED_OFF}</Note>}
-      {body.plugins.length === 0 ? <EmptyState title={NO_PLUGINS_TITLE} description={NO_PLUGINS} /> : null}
+      {body.plugins.length === 0 ? (
+        <EmptyList
+          title={NO_PLUGINS_TITLE}
+          description={NO_PLUGINS}
+          adds="Record a plugin's manifest with the form on this screen; it arrives switched off."
+          by={["super_admin"]}
+        />
+      ) : null}
       {body.plugins.map((row) => (
         <PluginCard key={row.plugin_id} row={row} busy={busy} onAct={act} />
       ))}

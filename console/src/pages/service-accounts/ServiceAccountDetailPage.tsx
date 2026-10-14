@@ -24,7 +24,7 @@ import {
   Chip,
   DetailHeader,
   DetailPage,
-  EmptyState,
+  EmptyList,
   Fact,
   FactList,
   FailureState,
@@ -121,7 +121,13 @@ function AccountView({ account, onChanged }: { readonly account: AccountRow; rea
       <div className="flex min-w-0 flex-col gap-4">
         <SectionCard title={KEYS_HEADING} lede={KEYS_LEDE} footer={<NotOffered>{NOT_OFFERED.rotate}</NotOffered>}>
           {account.keys.length === 0 ? (
-            <EmptyState title={NO_KEYS} description={NO_KEYS_DESCRIPTION} icon={<KeyRound aria-hidden />} />
+            <EmptyList
+              title={NO_KEYS}
+              description={NO_KEYS_DESCRIPTION}
+              adds="Issue a key for this account with Issue a key."
+              by={["member"]}
+              icon={<KeyRound aria-hidden />}
+            />
           ) : (
             <Table>
               <TableHeader>

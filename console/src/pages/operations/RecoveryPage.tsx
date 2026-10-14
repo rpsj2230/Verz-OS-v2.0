@@ -29,6 +29,7 @@ import { Play } from "lucide-react";
 import { useResource } from "../../api/useResource";
 import {
   Advanced,
+  BY_THE_INSTALL,
   Fact,
   FactList,
   KpiStrip,
@@ -187,6 +188,8 @@ export function RecoveryPage() {
                 rowLabel={(row) => row.coverage}
                 empty={NO_COPIES}
                 emptyDescription={NO_COPIES_MORE}
+                emptyAdds="A copy is taken by the install's backup schedule, and none is added by hand."
+                emptyBy={BY_THE_INSTALL}
               />
             </>
           ) : (

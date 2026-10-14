@@ -31,7 +31,9 @@ import { FETCHING_MORE, NOTHING_MATCHES, SHOW_MORE } from "../../components/List
 import {
   Advanced,
   DetailHeader,
+  BY_THE_INSTALL,
   DetailPage,
+  EmptyList,
   EmptyState,
   EntityTable,
   Fact,
@@ -189,7 +191,12 @@ function RunHistory({ control }: { readonly control: string }) {
     body = narrows(listing.question) ? (
       <EmptyState title={NOTHING_MATCHES} description="Change the search or clear a filter." />
     ) : (
-      <EmptyState title={NO_RUNS} description={NO_RUNS_MORE} />
+      <EmptyList
+        title={NO_RUNS}
+        description={NO_RUNS_MORE}
+        adds="A run is recorded each time the worker starts this job."
+        by={BY_THE_INSTALL}
+      />
     );
   } else {
     body = (

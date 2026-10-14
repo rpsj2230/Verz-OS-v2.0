@@ -25,7 +25,8 @@ import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
 import {
   Chip,
-  EmptyState,
+  BY_THE_INSTALL,
+  EmptyList,
   EntityTable,
   FailureState,
   KpiStrip,
@@ -150,7 +151,13 @@ function SweepView({ report, controls, onDone }: { readonly report: Report | nul
   return (
     <div className="flex min-w-0 flex-col gap-4">
       {report === null ? (
-        <EmptyState title={NO_REPORT} description={NO_REPORT_MORE} icon={<Archive aria-hidden />} />
+        <EmptyList
+          title={NO_REPORT}
+          description={NO_REPORT_MORE}
+          adds="The daily sweep writes a report each time it runs, and none is added by hand."
+          by={BY_THE_INSTALL}
+          icon={<Archive aria-hidden />}
+        />
       ) : (
         <>
           <KpiStrip label="The newest retention report" count={4}>
@@ -227,7 +234,13 @@ function HoldsView({ report, controls, onDone }: { readonly report: Report | nul
         {controls.may_hold ? null : <Note>{HOLD_NOT_YOURS}</Note>}
         {lifting.drawn}
         {holds.length === 0 ? (
-          <EmptyState title={NO_HOLDS} description={NO_HOLDS_MORE} icon={<Gavel aria-hidden />} />
+          <EmptyList
+            title={NO_HOLDS}
+            description={NO_HOLDS_MORE}
+            adds="Place a legal hold from this screen, and it is listed once the next sweep cites it."
+            by={["super_admin"]}
+            icon={<Gavel aria-hidden />}
+          />
         ) : (
           <EntityTable
             caption={VIEW_LABELS.holds}
@@ -312,7 +325,13 @@ function ErasuresView({ retention, controls, onDone }: { readonly retention: Ret
       <div className="flex min-w-0 flex-col gap-3">
         {controls.may_erase ? null : <Note>{ERASE_NOT_YOURS}</Note>}
         {requests.length === 0 ? (
-          <EmptyState title={NO_ERASURES} description={NO_ERASURES_MORE} icon={<Trash2 aria-hidden />} />
+          <EmptyList
+            title={NO_ERASURES}
+            description={NO_ERASURES_MORE}
+            adds="File an erasure request from this screen to erase a person's data."
+            by={["super_admin"]}
+            icon={<Trash2 aria-hidden />}
+          />
         ) : (
           <EntityTable caption={VIEW_LABELS.erasures} columns={columns} rows={requests} rowId={(one) => one.request_id} rowLabel={(one) => one.reason_reference} exportName="erasure-requests" />
         )}
@@ -351,7 +370,15 @@ function ExportsView({ controls }: { readonly controls: Controls }) {
   } else if (log.data === null) {
     body = <LoadingState label="Reading the export log." rows={2} />;
   } else if (exports.length === 0) {
-    body = <EmptyState title={NO_EXPORTS} description={NO_EXPORTS_MORE} icon={<FileDown aria-hidden />} />;
+    body = (
+      <EmptyList
+        title={NO_EXPORTS}
+        description={NO_EXPORTS_MORE}
+        adds="Take an export from Import and export or from Access review."
+        by={["super_admin", "department_admin", "auditor"]}
+        icon={<FileDown aria-hidden />}
+      />
+    );
   } else {
     body = <EntityTable caption="Exports taken from this install" columns={columns} rows={exports} rowId={(one) => one.export_id} rowLabel={(one) => one.reason_reference} exportName="exports" />;
   }

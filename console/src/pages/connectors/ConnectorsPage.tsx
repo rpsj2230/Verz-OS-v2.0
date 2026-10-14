@@ -36,7 +36,7 @@ import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
 import type { FilterChoice, SortChoice } from "../../components/listing";
 import { useListing } from "../../components/useListing";
-import { Chip, Fact, FactList, ListPage, NOT_RECORDED, Note, SectionCard, type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, Chip, Fact, FactList, ListPage, NOT_RECORDED, Note, SectionCard, type EntityColumn } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import {
   DropdownMenu,
@@ -394,6 +394,8 @@ export function ConnectorsPage() {
         loading={LOADING_SOURCES}
         emptyTitle={NO_SOURCES}
         emptyDescription={NO_SOURCES_DESCRIPTION}
+        emptyAdds="Each source a release ships is listed here as it ships, and a source is connected from its own row."
+        emptyBy={BY_THE_INSTALL}
         emptyIcon={<Cable aria-hidden />}
         footer={<CopyPolicy page={page} />}
       />

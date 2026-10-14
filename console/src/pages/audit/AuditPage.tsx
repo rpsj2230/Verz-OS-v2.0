@@ -30,7 +30,7 @@
 import { ScrollText, ShieldAlert, ShieldCheck, X } from "lucide-react";
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
-import { EmptyState, Fact, FactList, FailureState, LoadingState, PageHeader, SectionCard } from "../../components/kit";
+import { BY_THE_INSTALL, EmptyList, EmptyState, Fact, FactList, FailureState, LoadingState, PageHeader, SectionCard } from "../../components/kit";
 import { useResource } from "../../api/useResource";
 import { SEARCH_LABEL } from "../../components/ListControls";
 import { Button } from "../../components/ui/button";
@@ -283,9 +283,11 @@ function Entries({ filters, search }: { readonly filters: AuditFilters; readonly
         }
       />
     ) : (
-      <EmptyState
+      <EmptyList
         title={NO_ENTRIES}
         description={NO_ENTRIES_MORE}
+        adds="An entry is written whenever somebody grants or removes access or changes a setting."
+        by={BY_THE_INSTALL}
         icon={<ScrollText aria-hidden />}
         action={
           <Button asChild variant="outline" className="text-ink no-underline">

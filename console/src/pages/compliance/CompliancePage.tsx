@@ -22,7 +22,7 @@ import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
 import {
   Chip,
-  EmptyState,
+  EmptyList,
   EntityTable,
   Fact,
   FactList,
@@ -128,7 +128,15 @@ function BreachesView({ onDone, version }: { readonly onDone: (told: string) => 
   } else if (answer.data === null) {
     body = <LoadingState label={READING_COMPLIANCE} rows={2} />;
   } else if (answer.data.cases.length === 0) {
-    body = <EmptyState title={NO_CASES} description={NO_CASES_MORE} icon={<FileWarning aria-hidden />} />;
+    body = (
+      <EmptyList
+        title={NO_CASES}
+        description={NO_CASES_MORE}
+        adds="Open a case from this screen when there is reason to believe personal data was breached."
+        by={["super_admin"]}
+        icon={<FileWarning aria-hidden />}
+      />
+    );
   } else {
     body = <EntityTable caption={VIEW_LABELS.breaches} columns={columns} rows={answer.data.cases} rowId={(one) => one.case_id} rowLabel={(one) => one.evidence_reference} exportName="breach-cases" />;
   }
@@ -254,7 +262,14 @@ function RegisterView({ version }: { readonly version: number }) {
     return <LoadingState label={READING_COMPLIANCE} rows={2} />;
   }
   if (answer.data.connectors.length === 0) {
-    return <EmptyState title={NOTHING_CONNECTED} description={NOTHING_CONNECTED_MORE} />;
+    return (
+      <EmptyList
+        title={NOTHING_CONNECTED}
+        description={NOTHING_CONNECTED_MORE}
+        adds="Connect a source on the Connectors screen, and it is listed here with what it reads and keeps."
+        by={["connector_admin", "super_admin"]}
+      />
+    );
   }
   return (
     <div className="flex min-w-0 flex-col gap-4">

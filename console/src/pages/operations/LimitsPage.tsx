@@ -29,7 +29,7 @@
  */
 
 import { useResource } from "../../api/useResource";
-import { SectionCard, type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, SectionCard, type EntityColumn } from "../../components/kit";
 import {
   LIMITS_API_PATH,
   readDeferred,
@@ -188,6 +188,8 @@ export function LimitsPage() {
                 rowLabel={(row) => row.subject}
                 empty={NOBODY_IS_BEHIND_A_CEILING}
                 emptyDescription={NOBODY_IS_BEHIND_A_CEILING_MORE}
+                emptyAdds="A row is written when a request is held at a ceiling, and none is added by hand."
+                emptyBy={BY_THE_INSTALL}
               />
             ) : (
               <SectionCard title={REFUSING_HEADING}>
@@ -205,6 +207,8 @@ export function LimitsPage() {
                 rowLabel={(row) => row.said}
                 empty={NOTHING_IS_DEFERRED}
                 emptyDescription={NOTHING_IS_DEFERRED_MORE}
+                emptyAdds="A row is written when work is deferred to stay under a ceiling, and none is added by hand."
+                emptyBy={BY_THE_INSTALL}
               />
             ) : deferred.unread ? (
               <SectionCard title={DEFERRED_HEADING}>
@@ -221,6 +225,8 @@ export function LimitsPage() {
               rowLabel={(row) => row.applies_to}
               exportName="rate-limit-windows"
               empty={NO_WINDOWS}
+              emptyAdds="A window is listed for each ceiling a release declares, and none is added by hand."
+              emptyBy={BY_THE_INSTALL}
             />
             <WholeList
               title={CEILINGS_HEADING}
@@ -231,6 +237,8 @@ export function LimitsPage() {
               rowLabel={(row) => row.name}
               empty={NO_CEILINGS}
               emptyDescription={NO_CEILINGS_MORE}
+              emptyAdds="A ceiling is declared by a release, and none is added by hand."
+              emptyBy={BY_THE_INSTALL}
             />
             {wasRead(unusual) ? (
               <WholeList
@@ -242,6 +250,8 @@ export function LimitsPage() {
                 rowLabel={(row) => row.subject}
                 empty={NOBODY_IS_UNUSUAL}
                 emptyDescription={NOBODY_IS_UNUSUAL_MORE}
+                emptyAdds="A row is written when a caller's use departs from its usual, and none is added by hand."
+                emptyBy={BY_THE_INSTALL}
               />
             ) : unusual.unread ? (
               <SectionCard title={UNUSUAL_HEADING}>

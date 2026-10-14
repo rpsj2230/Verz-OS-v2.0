@@ -30,7 +30,8 @@ import {
   Chip,
   DetailHeader,
   DetailPage,
-  EmptyState,
+  BY_THE_INSTALL,
+  EmptyList,
   EntityTable,
   Fact,
   FactList,
@@ -130,7 +131,12 @@ function Dashboard({ row, onReplay }: { readonly row: SubscriberRow; readonly on
   return (
     <SectionCard title={DELIVERIES_HEADING}>
       {row.deliveries.length === 0 ? (
-        <EmptyState title={NO_DELIVERIES} description={NO_DELIVERIES_DESCRIPTION} />
+        <EmptyList
+          title={NO_DELIVERIES}
+          description={NO_DELIVERIES_DESCRIPTION}
+          adds="A delivery is recorded each time something the subscriber is told about happens."
+          by={BY_THE_INSTALL}
+        />
       ) : (
         <EntityTable
           caption={`Recent deliveries to ${row.subscriber_id}`}

@@ -31,7 +31,7 @@ import { Plus, UserCog } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useResource } from "../../api/useResource";
 import {
-  EmptyState,
+  EmptyList,
   EntityTable,
   FailureState,
   LoadingState,
@@ -189,7 +189,15 @@ function Holders({ version, onWritten }: { readonly version: number; readonly on
   } else if (answer.data === null) {
     body = <LoadingState label="Loading who holds a role." rows={3} />;
   } else if (page.items.length === 0) {
-    body = <EmptyState title={NO_HOLDERS} description="A person holds a role once somebody appoints them here or a directory group mapped below confers it." icon={<UserCog aria-hidden />} />;
+    body = (
+      <EmptyList
+        title={NO_HOLDERS}
+        description="A person holds a role once somebody appoints them here or a directory group mapped below confers it."
+        adds="Appoint somebody to a role on this screen, or map a directory group to a role."
+        by={["super_admin", "department_admin"]}
+        icon={<UserCog aria-hidden />}
+      />
+    );
   } else {
     body = (
       <EntityTable

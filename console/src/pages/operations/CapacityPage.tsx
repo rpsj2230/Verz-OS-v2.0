@@ -29,7 +29,7 @@
  */
 
 import { useResource } from "../../api/useResource";
-import { KpiStrip, Note, SectionCard, StatCard, type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, KpiStrip, Note, SectionCard, StatCard, type EntityColumn } from "../../components/kit";
 import { CAPACITY_API_PATH, type Capacity as CapacityBody, type Connection, type ScalingMove, type Sizing } from "../installQuery";
 import { OpsPage, PLATFORM, WholeList } from "./parts";
 
@@ -164,6 +164,8 @@ export function CapacityPage() {
               rowLabel={(row) => row.database}
               empty={NO_CONNECTIONS}
               emptyDescription={NO_CONNECTIONS_MORE}
+              emptyAdds="A row is listed for each database connection the install opens, and none is added by hand."
+              emptyBy={BY_THE_INSTALL}
             />
             <WholeList
               title={SIZING_HEADING}
@@ -174,6 +176,8 @@ export function CapacityPage() {
               rowId={(row) => row.name}
               rowLabel={(row) => row.name}
               empty={NO_SIZINGS}
+              emptyAdds="A sizing is listed for each part of the install a release declares one for, and none is added by hand."
+              emptyBy={BY_THE_INSTALL}
             />
             <WholeList
               title={MOVES_HEADING}
@@ -184,6 +188,8 @@ export function CapacityPage() {
               rowId={(row) => `${row.move}:${row.observable}`}
               rowLabel={(row) => row.observable}
               empty={NO_MOVES}
+              emptyAdds="A move is listed when the install's own measurements say a part needs one, and none is added by hand."
+              emptyBy={BY_THE_INSTALL}
             />
             {page.first_limit ? (
               <SectionCard title={FIRST_LIMIT_HEADING}>

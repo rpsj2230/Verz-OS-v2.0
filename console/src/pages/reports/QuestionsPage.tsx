@@ -24,7 +24,7 @@ import { Plug } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
-import { EmptyState, EntityTable, FailureState, KpiStrip, LoadingState, SectionCard, StatCard, type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, EmptyList, EntityTable, FailureState, KpiStrip, LoadingState, SectionCard, StatCard, type EntityColumn } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { countWords } from "../agents/agentStats";
 import {
@@ -149,7 +149,14 @@ export function QuestionsPage() {
   } else if (answer.busy) {
     content = <LoadingState label={LOADING_GAPS} />;
   } else if (body === null) {
-    content = <EmptyState title={NO_GAPS} description={NO_GAPS_MORE} />;
+    content = (
+      <EmptyList
+        title={NO_GAPS}
+        description={NO_GAPS_MORE}
+        adds="A gap is recorded whenever somebody asks a question no connected source could answer."
+        by={BY_THE_INSTALL}
+      />
+    );
   } else {
     content = <Gaps body={body} />;
   }

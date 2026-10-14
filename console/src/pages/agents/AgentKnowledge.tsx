@@ -38,7 +38,7 @@ import { Link } from "react-router-dom";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
-import { Chip, EmptyState, FailureState, LoadingState, Note, SectionCard } from "../../components/kit";
+import { Chip, EmptyList, FailureState, LoadingState, Note, SectionCard } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { dayWords } from "../access/formParts";
 import { documentAddress, verifiedWords } from "../knowledge/knowledgeDocuments";
@@ -309,7 +309,13 @@ export function AgentKnowledge({
     ) : items.length === 0 ? (
       knowledge.canAdd ? (
         <div data-slot="knowledge-empty">
-          <EmptyState title={EMPTY_TITLE} description={EMPTY_BODY} action={ways} />
+          <EmptyList
+            title={EMPTY_TITLE}
+            description={EMPTY_BODY}
+            adds="Add a file or a web page here, or let the agent's rule reach documents already in the library."
+            by={["super_admin", "department_admin", "member"]}
+            action={ways}
+          />
         </div>
       ) : (
         <Note>{NOTHING_YOURS_TO_SEE}</Note>

@@ -171,6 +171,8 @@ function Body({ page, onAct }: { readonly page: WebhooksBody; readonly onAct: (a
         exportName="webhook-subscribers"
         empty={NO_SUBSCRIBERS}
         emptyDescription={NO_SUBSCRIBERS_DESCRIPTION}
+        emptyAdds="Register a subscriber with Register a subscriber, and it is listed here."
+        emptyBy={["super_admin"]}
       />
       {page.findings.length === 0 ? null : (
         <div className="flex flex-col gap-1">

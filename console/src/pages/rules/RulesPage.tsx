@@ -37,7 +37,7 @@ import { useResource } from "../../api/useResource";
 import {
   Advanced,
   ConfirmDialog,
-  EmptyState,
+  EmptyList,
   Fact,
   FactList,
   FailureState,
@@ -333,7 +333,12 @@ function RuleList({ body, onWritten }: { readonly body: RulesBody; readonly onWr
     <section data-slot="rules-live" aria-label={LIVE_HEADING} className="flex min-w-0 flex-col gap-3">
       <h2 className="m-0 text-sm font-semibold text-ink">{LIVE_HEADING}</h2>
       {body.rules.length === 0 ? (
-        <EmptyState title={NO_RULES_TITLE} description={NO_RULES} />
+        <EmptyList
+          title={NO_RULES_TITLE}
+          description={NO_RULES}
+          adds="Add a quick answer with the form below."
+          by={["super_admin", "department_admin"]}
+        />
       ) : (
         body.rules.map((rule) => (
           <RuleCard

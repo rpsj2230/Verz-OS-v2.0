@@ -21,7 +21,7 @@ import { useResource } from "../../api/useResource";
 import {
   Advanced,
   ConfirmDialog,
-  EmptyState,
+  EmptyList,
   Fact,
   FactList,
   FailureState,
@@ -278,7 +278,12 @@ function PromptList({ body, onDone }: { readonly body: PromptsBody; readonly onD
         <FailureNotice failure={failure.failure} {...(failure.edited === null ? {} : { fields: [INSTRUCTIONS_NAME] })} />
       )}
       {body.agents.length === 0 ? (
-        <EmptyState title={NO_AGENTS_TITLE} description={NO_AGENTS} />
+        <EmptyList
+          title={NO_AGENTS_TITLE}
+          description={NO_AGENTS}
+          adds="Build an agent and publish it, and its instructions are listed here."
+          by={["super_admin", "department_admin", "member"]}
+        />
       ) : (
         body.agents.map((row) => (
           <AgentCard

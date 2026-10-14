@@ -18,7 +18,7 @@ import { useState, type FormEvent } from "react";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
-import { ConfirmDialog, LoadingState, SectionCard, type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, ConfirmDialog, LoadingState, SectionCard, type EntityColumn } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { FailureNotice } from "../../ui/FailureNotice";
@@ -168,6 +168,8 @@ export function LimitSettings({ screen = LIMITS_SCREEN }: { readonly screen?: Kn
         }
         exportName={screen.exportName}
         empty={NOT_READ}
+        emptyAdds="A limit is listed for each ceiling a release declares, and none is added by hand."
+        emptyBy={BY_THE_INSTALL}
       />
       {editing === null ? null : (
         <SectionCard title={editing.label} lede={editing.bounds_because}>

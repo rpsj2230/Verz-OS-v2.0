@@ -29,7 +29,7 @@ import { useCallback, useId, useState, type FormEvent } from "react";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
-import { ConfirmDialog, Note, SectionCard, UnavailableAction, type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, ConfirmDialog, Note, SectionCard, UnavailableAction, type EntityColumn } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { FailureNotice } from "../../ui/FailureNotice";
@@ -289,6 +289,8 @@ function Transfer({ page, onTaken }: { readonly page: DataTransferBody; readonly
         rowLabel={(row) => at(row.produced_at)}
         empty={NO_EXPORTS}
         emptyDescription={NO_EXPORTS_MORE}
+        emptyAdds="Take an export with the form above, and it is listed here."
+        emptyBy={["super_admin", "department_admin", "auditor"]}
         footer={<Line>{page.own_exports_told}</Line>}
       />
       <WholeList
@@ -299,6 +301,8 @@ function Transfer({ page, onTaken }: { readonly page: DataTransferBody; readonly
         rowId={(row) => `${row.direction}:${row.key}`}
         rowLabel={(row) => row.label}
         empty={NOTHING_TO_MOVE}
+        emptyAdds="A release declares what can be moved, and none is added by hand."
+        emptyBy={BY_THE_INSTALL}
       />
     </>
   );
