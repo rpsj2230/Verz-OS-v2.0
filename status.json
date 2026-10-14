@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-14T12:02:43.498814+00:00",
-  "commit": "8af4f90d",
-  "commit_subject": "Whoever holds the operations alert is told, once, when a safety mechanism has not run, in the chat tool they last used, with an email fallback (#593)",
+  "generated_at": "2026-10-14T12:12:23.213851+00:00",
+  "commit": "5fae091c",
+  "commit_subject": "Two install checks no longer fail a correct install: vault tokens keep the vault's length, and an install can say it follows every release (#602)",
   "total": 1626,
   "done": 1113,
   "percent": 68.5,
