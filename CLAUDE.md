@@ -638,6 +638,59 @@ you cannot test a window boundary through a module that opens a socket.
 
 ---
 
+## Before you push, run what fails late
+
+A pull request runs lint, types, the invariants and the unit tests its diff reaches, and a few
+tests fail only there, after everything you ran was green, each costing about an hour of queue
+and rerun (named in the 2026-10-14 CI review). Run the ones your change can reach before you
+push. The pre-push hook does not: it runs no unit tests at all.
+
+| Run it when you changed | Test file |
+| --- | --- |
+| anything under `docs/`, the work breakdown, the requirements register | `tests/unit/test_architecture_doc.py`, `tests/unit/test_requirements_register.py` |
+| a feature switch | `tests/unit/test_features.py` |
+| a route that returns money | `tests/unit/test_money_figures.py` (walks the served OpenAPI document) |
+| an install screen's route | `tests/unit/test_install_routes.py` |
+| a console read module, route or menu entry | `tests/unit/test_console_screens.py`, `tests/unit/test_console_reads.py`, `tests/unit/test_console_design.py` (they read the console's own source tree) |
+| an acceptance check module | `tests/unit/test_acceptance.py`, below |
+
+```
+uv run python -m pytest tests/unit/test_architecture_doc.py tests/unit/test_requirements_register.py tests/unit/test_features.py tests/unit/test_money_figures.py tests/unit/test_install_routes.py tests/unit/test_console_screens.py tests/unit/test_console_reads.py tests/unit/test_console_design.py --no-header --disable-warnings
+```
+
+**A check raises one literal sentence and nothing built from data.** Every `CheckFailedError` and
+`CheckNotRunError` in an acceptance check module takes exactly one argument, and it is a string
+literal or a module-level constant bound to one: never an f-string, a `.format`, a call or a
+variable. A reason is served on a public page, so it must not be able to carry a row it read.
+`test_every_reason_a_check_raises_is_a_literal_sentence` walks every check module and needs no
+database: `uv run python -m pytest tests/unit/test_acceptance.py -k a_literal_sentence`.
+
+**The whole of `tests/unit/test_acceptance.py` needs a database and skips without one.** Its
+real-database test runs the install checks over a migrated PostgreSQL, so a local run with
+`DATABASE_URL` unset proves nothing about it, and CI is where it first ran. Start a scratch
+PostgreSQL 18 with pgvector (Homebrew has both) in your own directory, on a port nobody else is
+using (`lsof -i :55433` first):
+
+```
+export PATH=/opt/homebrew/bin:$PATH LC_ALL=en_US.UTF-8
+PGDIR=$(mktemp -d); mkdir -p /tmp/pgscratch
+initdb -D "$PGDIR" -U postgres --auth=trust -E UTF8 --locale=en_US.UTF-8
+pg_ctl -D "$PGDIR" -o "-p 55433 -k /tmp/pgscratch -c listen_addresses=127.0.0.1" -l "$PGDIR/log" -w start
+psql -h 127.0.0.1 -p 55433 -U postgres -c "create extension vector"
+export DATABASE_URL=postgresql://postgres@127.0.0.1:55433/postgres
+uv run python -m pytest tests/unit/test_acceptance.py --no-header --disable-warnings
+pg_ctl -D "$PGDIR" stop
+```
+
+`LC_ALL=en_US.UTF-8` is how earlier agents ran it: without it `initdb` takes whatever locale the
+shell holds (`en_SG` was measured here), where CI's database image is `en_US.UTF-8`, so the sort
+order a test relies on can differ. The socket directory (`-k`) must be short: macOS refuses a socket path over 103 bytes, and a path
+inside a worktree is longer, so the server will not start (`could not create any Unix-domain
+sockets`). The file took 20 minutes (25 tests passed, measured 2026-10-14 with other work
+running on the machine), so start it before the rest of your checks, not after. Never point `DATABASE_URL` at an install's database.
+
+---
+
 ## Before you say something is done
 
 - `uv run python -m pytest --no-header --disable-warnings`
@@ -672,8 +725,8 @@ exits 1 because the policy refuses the binaries it runs.
 
 **None of that policy exists on the Mac** (the development machine since 2026-09-28). The
 `python -m` habit and the named interpreter stay, because they are correct on every machine. The
-Mac has no local PostgreSQL yet, so the database tests skip locally (`DATABASE_URL` is unset) and
-run in CI, which always sets it.
+database tests skip locally while `DATABASE_URL` is unset and always run in CI, which sets it;
+"Before you push, run what fails late" says how to start a scratch PostgreSQL for them.
 
 **And anything that makes a throwaway worktree has to name its interpreter.** A fresh worktree
 has no environment, so uv goes looking for one and finds the managed copy that is blocked. Both

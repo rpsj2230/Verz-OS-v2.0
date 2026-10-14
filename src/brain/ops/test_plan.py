@@ -15,10 +15,19 @@ can go wrong ends in the full share, and the reason is printed so the log says w
 - no base commit was given, or the checkout does not hold it (a push, a shallow clone, a force
   push that moved the base);
 - the diff is empty or git could not compute it;
-- the selection says `full`: the diff touched a conftest, a fixture, the project settings, the
-  workflow or this planning code, a support module under `tests/`, or deleted a source module;
+- the selection says `full`: the diff touched the project settings or the lock file, or deleted a
+  source module;
 - anything in the selection raises. The planner is not allowed to be the reason a pull request
   cannot run its tests, and it is not allowed to be the reason it runs none either.
+
+**A merge train asks for the whole suite by name (2026-10-14).** A pull request whose branch starts
+with `train/` is several pull requests merged into one (`ops/dev/assemble_train.py`), and it is the
+one place before `main` where everything runs, so the workflow passes `--whole-suite` for it and
+this module plans each shard's full share without looking at the diff. That is what lets an
+ordinary pull request stop falling back to the whole suite when shared test infrastructure changes:
+the floor under the selection is the train and the nightly suite. The request is a command line
+flag set from the branch name by the workflow and nothing else; there is still no label or comment
+that forces it, for the reason below.
 
 **Every shard computes the plan itself rather than being handed one.** A planning job would have
 to build the environment the import graph needs (`brain.ops.guards` imports the application's
@@ -72,6 +81,13 @@ WHEN_UNSURE_RUN_THE_FULL_SHARE: Final[str] = (
 )
 
 
+#: Why a shard runs everything when it was asked to, not because it could not decide.
+WHOLE_SUITE_REQUESTED: Final[str] = (
+    "the whole suite was asked for: this is a merge train, the one run before main that carries "
+    "every file"
+)
+
+
 @dataclass(frozen=True)
 class Plan:
     """What one shard runs, whether that is the full suite's share, and why."""
@@ -101,16 +117,20 @@ def plan(
     root: Path = REPO,
     changed: Sequence[str] | None = None,
     suite: Sequence[str] | None = None,
+    whole_suite: bool = False,
 ) -> Plan:
     """The files shard `number` of `of` runs for the diff `base..head`.
 
     `changed` and `suite` are for a caller that already knows them (the tests); the workflow
-    passes neither and both are read from the checkout.
+    passes neither and both are read from the checkout. `whole_suite` is a merge train: the full
+    share, whatever the diff.
     """
 
     def whole(reason: str) -> Plan:
         return Plan(files=shard(number, of, root), full=True, reason=reason)
 
+    if whole_suite:
+        return whole(WHOLE_SUITE_REQUESTED)
     try:
         if not base and changed is None:
             return whole("no base commit was given")
@@ -152,9 +172,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--head", default="HEAD")
     parser.add_argument("--depth", type=int, default=PLAN_DEPTH)
     parser.add_argument("--mode-file", type=Path, default=None)
+    parser.add_argument(
+        "--whole-suite",
+        action="store_true",
+        help="plan the full share whatever the diff (a merge train)",
+    )
     args = parser.parse_args(argv)
     try:
-        made = plan(args.shard, args.of, base=args.base, head=args.head, depth=args.depth)
+        made = plan(
+            args.shard,
+            args.of,
+            base=args.base,
+            head=args.head,
+            depth=args.depth,
+            whole_suite=args.whole_suite,
+        )
     except ShardError as error:
         print(f"refused: {error}", file=sys.stderr)
         return 2
