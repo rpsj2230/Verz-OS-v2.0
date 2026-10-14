@@ -19,6 +19,7 @@ import yaml
 from brain.ops import dependency_policy as policy
 from brain.ops.dependency_policy import (
     ARCHIVED_ADDITION,
+    BUILD_ONLY_AWAITING_THE_OWNER,
     COPYLEFT_ADDITION,
     IMAGE_TERMS,
     NPM_LOCKS,
@@ -38,7 +39,7 @@ from brain.ops.dependency_policy import (
     repository_of,
     with_addition,
 )
-from brain.ops.sweeps import declared_licence
+from brain.ops.sweeps import declared_licence, licence_is_allowed
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -102,9 +103,11 @@ def test_an_override_to_a_real_platform_does_not_remove_the_package() -> None:
     assert "igraph" in {c.name for c in python_locked(narrowed, "uv.lock")}
 
 
-def test_an_npm_lock_carries_production_packages_with_their_recorded_licence() -> None:
-    """Development packages never reach the console bundle. Delete this and a dev-only GPL test
-    runner refuses the build, or a nested copy of a direct dependency is counted as chosen."""
+def test_an_npm_lock_carries_every_package_with_its_licence_and_marks_the_build_only_ones() -> None:
+    """**M27.15.79.** A package npm marks `dev` is read, with its licence, and flagged build-only.
+    Until this leaf it was dropped, so 240 of the console lock's 387 packages were never judged.
+    Delete this and a development package slips back out of the audit, or a nested copy of a
+    direct dependency is counted as chosen."""
     lock = {
         "packages": {
             "": {"dependencies": {"left": "1.0.0"}},
@@ -112,14 +115,159 @@ def test_an_npm_lock_carries_production_packages_with_their_recorded_licence() -
             "node_modules/left/node_modules/left": {"version": "0.9.0", "license": "MIT"},
             "node_modules/runner": {"version": "2.0.0", "license": "GPL-3.0-only", "dev": True},
             "node_modules/nameless": {"version": "1.0.0"},
+            "node_modules/linked": {"link": True, "resolved": "../linked"},
         }
     }
     found = npm_locked(json.dumps(lock), "console/package-lock.json")
-    assert [(c.name, c.version, c.licence, c.direct) for c in found] == [
-        ("left", "1.0.0", "MIT", True),
-        ("left", "0.9.0", "MIT", False),
-        ("nameless", "1.0.0", None, False),
+    assert [(c.name, c.version, c.licence, c.direct, c.build_only) for c in found] == [
+        ("left", "1.0.0", "MIT", True, False),
+        ("left", "0.9.0", "MIT", False, False),
+        ("nameless", "1.0.0", None, False, False),
+        ("runner", "2.0.0", "GPL-3.0-only", False, True),
     ]
+
+
+def _console(packages: dict[str, dict[str, Any]]) -> list[Component]:
+    """A console lock with these packages in it, read as the policy reads the real one."""
+    lock = {"packages": {"": {"dependencies": {}}, **packages}}
+    return list(npm_locked(json.dumps(lock), "console/package-lock.json"))
+
+
+@pytest.mark.parametrize(
+    ("licence", "allowed"),
+    [
+        ("MIT", True),
+        ("MIT OR Apache-2.0", True),
+        ("(MIT OR CC0-1.0)", True),
+        ("MIT AND GPL-3.0-only", False),
+        ("GPL-3.0-only OR AGPL-3.0-only", False),
+        ("SEE LICENSE IN LICENSE.md", False),
+        ("UNLICENSED", False),
+        ("Apache-2.0 WITH LLVM-exception", False),
+        ("(MIT", False),
+    ],
+)
+def test_a_console_package_is_judged_on_the_spdx_expression_its_lock_row_records(
+    licence: str, allowed: bool
+) -> None:
+    """**M27.15.79.** One shipped console package per licence expression, read through the same
+    reader the real lock goes through: OR is a choice, AND needs every term, and a licence the
+    list does not name, a pointer to a file and a broken bracket are all refusals. Delete this and
+    the console half of the audit can be satisfied by a reader that admits everything, or by one
+    that refuses `MIT OR Apache-2.0`."""
+    found = offline_findings(_console({"node_modules/p": {"version": "1.0.0", "license": licence}}))
+    assert (found.refused == []) is allowed
+    assert found.awaiting == []
+
+
+def test_a_console_package_with_no_licence_in_the_lock_is_refused_but_another_lock_only_notes() -> (
+    None
+):
+    """**M27.15.79.** The leaf is every console dependency, so a lock row naming no licence is a
+    refusal for the console's lock and stays a note for the automation piece's, which has two such
+    packages today. Delete this and a console package that records no licence passes as a note
+    nobody reads."""
+    bare = {"node_modules/p": {"version": "1.0.0"}}
+    console = offline_findings(_console(bare))
+    assert len(console.refused) == 1 and "records no licence" in console.refused[0]
+    piece = npm_locked(
+        json.dumps({"packages": {"": {}, **bare}}), "ops/automation/piece/package-lock.json"
+    )
+    found = offline_findings(piece)
+    assert found.refused == [] and len(found.notes) == 1
+    assert "console/package-lock.json" in policy.LOCKS_WHERE_NO_LICENCE_REFUSES
+
+
+def test_a_build_only_package_outside_the_list_is_refused_unless_it_waits_on_the_owner() -> None:
+    """**M27.15.79.** The failing case the leaf asks for: a development dependency under a copyleft
+    licence is refused, exactly as a shipped one is. The three that wait on the owner are listed
+    by name and by licence, and the same name under another licence is refused again. Delete this
+    and a GPL test runner is admitted because it never ships, or a waiting package is admitted
+    under any licence."""
+    copyleft = _console(
+        {"node_modules/runner": {"version": "2.0.0", "license": "GPL-3.0-only", "dev": True}}
+    )
+    refused = offline_findings(copyleft).refused
+    assert len(refused) == 1 and "'GPL-3.0-only', not on the allowlist" in refused[0]
+    waiting = _console(
+        {"node_modules/caniuse-lite": {"version": "1", "license": "CC-BY-4.0", "dev": True}}
+    )
+    found = offline_findings(waiting)
+    assert found.refused == [] and len(found.awaiting) == 1
+    relicensed = _console(
+        {"node_modules/caniuse-lite": {"version": "2", "license": "GPL-3.0-only", "dev": True}}
+    )
+    assert len(offline_findings(relicensed).refused) == 1
+    shipped = _console({"node_modules/caniuse-lite": {"version": "1", "license": "CC-BY-4.0"}})
+    assert len(offline_findings(shipped).refused) == 1, "a shipped package never waits"
+
+
+def test_a_build_only_package_is_never_judged_for_age_or_an_archived_repository() -> None:
+    """**M27.15.79.** The sibling of the refusal above: what ships is held to the liveness rules
+    and what only compiles it is not, so an archived test-runner helper does not turn the audit
+    red. Delete this and the 240 development packages add refusals nobody can act on, or the
+    exemption leaks to a shipped package."""
+    dev = Component("npm", "helper", "1.0.0", "lock", "MIT", build_only=True)
+    shipped = Component("npm", "helper", "1.0.0", "lock", "MIT")
+    archived = Liveness("MIT", FRESH, "owner/helper", archived=True)
+    assert liveness_findings([dev], {("npm", "helper"): archived}, now=NOW).refused == []
+    assert len(liveness_findings([shipped], {("npm", "helper"): archived}, now=NOW).refused) == 1
+    asked: list[str] = []
+
+    def fetch(url: str) -> Any:
+        asked.append(url)
+        return {"time": {"1": FRESH.isoformat()}, "repository": {"url": ""}}
+
+    policy.gather([dev], fetch=fetch, archived=lambda _: False)
+    assert asked == []
+    policy.gather([shipped], fetch=fetch, archived=lambda _: False)
+    assert len(asked) == 1
+
+
+def test_every_package_in_the_real_console_lock_is_judged_and_the_list_is_the_owners() -> None:
+    """**M27.15.79.** Over the real lock: every package it records is read (none dropped for being
+    development), every one carries a licence, and the licences found outside the allowed list are
+    exactly the owner's three fonts and the three build-only packages waiting on him, so the list
+    has not been widened to make the audit pass. Delete this and a widened allowlist, or a package
+    dropped from the reader, goes unseen."""
+    from brain.ops.sweeps import ALLOWED_LICENCES
+
+    text = (REPO / "console" / "package-lock.json").read_text(encoding="utf-8")
+    recorded = {
+        path.rsplit("node_modules/", 1)[-1] + "@" + str(row["version"])
+        for path, row in json.loads(text)["packages"].items()
+        if path and "version" in row
+    }
+    console = npm_locked(text, "console/package-lock.json")
+    assert {f"{one.name}@{one.version}" for one in console} == recorded
+    assert any(one.build_only for one in console) and any(not one.build_only for one in console)
+    assert all(one.licence for one in console)
+    outside = {one.name: one.licence for one in console if one.licence not in ALLOWED_LICENCES}
+    judged = offline_findings(console)
+    assert judged.refused == []
+    assert {name for name, licence in outside.items() if not licence_is_allowed(str(licence))} == {
+        "@fontsource/ibm-plex-mono",
+        "@fontsource/ibm-plex-sans",
+        "@fontsource/poppins",
+        "argparse",
+        "caniuse-lite",
+        "lru-cache",
+    }
+    assert {
+        "MIT",
+        "MIT-0",
+        "0BSD",
+        "Zlib",
+        "CC0-1.0",
+        "Apache-2.0",
+        "BSD-3-Clause",
+        "BSD-2-Clause",
+        "ISC",
+        "PSF-2.0",
+        "MPL-2.0",
+        "LGPL-3.0-only",
+        "LGPL-3.0-or-later",
+    } == ALLOWED_LICENCES
 
 
 @pytest.mark.parametrize(
@@ -274,10 +422,27 @@ def test_an_owner_allowed_component_under_a_new_licence_is_refused_again() -> No
     assert ok.refused == [] and ok.awaiting == []
 
 
-def test_the_real_tree_has_nothing_awaiting_the_owner() -> None:
-    """Item 70 decided every waiting component. Delete this and a new wait goes unnoticed."""
+def test_the_only_components_awaiting_the_owner_are_the_three_build_only_ones() -> None:
+    """Item 70 decided every shipped component, and three packages that only the build and the
+    test runner use wait on item 236. Delete this and a fourth wait, or one of these three
+    shipping, goes unnoticed."""
     assert policy.AWAITING_THE_OWNER == {}
-    assert offline_findings(locked(REPO)).awaiting == []
+    waiting = offline_findings(locked(REPO)).awaiting
+    assert sorted(one.split(" ", 1)[0] for one in waiting) == [
+        "npm:argparse",
+        "npm:caniuse-lite",
+        "npm:lru-cache",
+    ]
+    assert set(BUILD_ONLY_AWAITING_THE_OWNER) == {
+        ("npm", "argparse"),
+        ("npm", "caniuse-lite"),
+        ("npm", "lru-cache"),
+    }
+    shipped = {
+        (c.name, c.licence) for c in locked(REPO) if c.ecosystem == "npm" and not c.build_only
+    }
+    pinned = {(key[1], one.licence) for key, one in BUILD_ONLY_AWAITING_THE_OWNER.items()}
+    assert shipped.isdisjoint(pinned)
 
 
 def test_an_image_with_no_terms_or_needing_a_commercial_key_is_refused(

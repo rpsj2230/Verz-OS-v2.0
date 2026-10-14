@@ -6,6 +6,55 @@ Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
 # Open
 
+## 237. Please copy the reference screenshots into the repository, and say what the thirteenth is for
+
+**What I need from you:** copy the thirteen image files from the `_research/anygen-screenshots` folder in your
+workspace into `docs/reference-screens/` in this repository, and then tell me "237: copied". I will set each
+file's name in `docs/reference-screens/index.json`, and the check that the images are really there starts
+holding.
+
+**In plain words.** Task M27.15.83 says the reference screenshots are held in the docs and each console page
+they cover records what was adapted and what was refused. The record is built: `docs/reference-screens/index.json`
+says, for every console page the screenshots cover, what was adapted and what was refused, and a test holds it
+against the pages and against the two rejections the design keeps (no single on and off learning switch, no
+browser operator on a person's own session). The images themselves are not in the repository and never have been.
+The session that built the record is not allowed to read your workspace folder, so I could not copy them.
+
+**One more thing I cannot tell from the files.** The folder holds thirteen images and the register names twelve
+of them as the source of a requirement. The thirteenth, `image-1788498461996`, has no requirement behind it (the
+register skips ANY-046). If it shows something you wanted built, tell me what and it gets a requirement and a
+record; if it was pasted by mistake, say so and I will take it off the list.
+
+## 236. May three packages that only the console's build and tests use stay under licences the allowed list does not name?
+
+**In plain terms:** task M27.15.79 says every console dependency's licence is on the allowed list, checked in
+CI. Until now the check read only what ships and skipped the 240 packages that are used to build and test the
+console, so it was not true of every dependency. It reads all 387 now. Three of the build-time ones are under a
+licence the list does not name, and none of them is part of what an install runs:
+
+- **argparse** (Python-2.0), a helper of the YAML reader the toolchain uses. The licence is the Python
+  Software Foundation's, a close relative of PSF-2.0, which the list already allows.
+- **caniuse-lite** (CC-BY-4.0), the table of which browsers support what, read while the bundle is compiled. It
+  is a data licence: it asks that the author is credited if the table is redistributed, and the table is not.
+- **lru-cache** 11.x (BlueOak-1.0.0), a small cache inside the test runner. A permissive licence of the same
+  family as MIT.
+
+Today each is printed on every CI run as waiting on you, and nothing is refused. A fourth package outside the
+list, or one of these three under a different licence, is refused.
+
+**Option A: allow all three.** They are added to the owner-decided list by name and licence, as the three
+fonts were in item 70, so another package under the same licence is still refused until you decide on it.
+
+**Option B: allow none, and replace what brings them in.** Not worth doing: each is several steps down a
+tool the console cannot be built without, and none of them reaches an install.
+
+**Option C: leave them waiting.** The CI run keeps printing them and the check stays green.
+
+**My recommendation:** A. None is copyleft, none is part of what an install runs, and the only one with a
+condition (credit for caniuse-lite) applies to redistributing the table, which nothing does.
+
+**What I need from you:** reply "236: A", "236: B" or "236: C".
+
 ## 226. Should a question be estimated before it is answered, and refused when the estimate is more than is left?
 
 **In plain terms:** task M21.2.1 says each question's cost is estimated before it is answered, from the

@@ -597,6 +597,12 @@ jobs:
       - name: Build
         working-directory: console
         run: npm run build
+      - name: The built console names no other host, and ships its fonts with their notice
+        # M27.15.75. The sources are read by a unit test; this reads what the build emitted, which
+        # is where a hosted font would appear: no address in the entry document or a stylesheet
+        # leaves the install, every font a stylesheet names is in the bundle, and each family has
+        # its licence notice. The same rule runs on the install over the image's own bundle.
+        run: uv run python -m brain.ops.bundle_audit console/dist
 
   docs:
     name: Tracker matches the WBS

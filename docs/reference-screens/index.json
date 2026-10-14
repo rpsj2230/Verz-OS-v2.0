@@ -1,0 +1,445 @@
+{
+  "about": "The owner's reference screenshots, which console pages each covers, and for each covered page what was adapted and what was refused. Read by console/tests/reference-screens.test.ts, which fails when a covered page has no record, a record names a page the route table lacks, or a kept rejection is contradicted by the page. Compared and adapted, never copied: nothing here reproduces a reference screen's text or branding.",
+  "task_ids": [
+    "M27.15.83",
+    "M27.11.7",
+    "M27.11.12",
+    "M27.11.14"
+  ],
+  "requirement": "CONB-50",
+  "screenshots": [
+    {
+      "id": "image-1788498391599",
+      "named_by_register": true,
+      "shows": "A catalogue of skills as cards with a use count, categories and a way to try or share one, beside a task and thread history for the member application.",
+      "pages": [
+        "/skills"
+      ],
+      "file": null,
+      "why_not_held": "The image lives in the owner's workspace outside this repository; the session that built this index could not read or copy it, so it has to be copied in by the owner."
+    },
+    {
+      "id": "image-1788498409912",
+      "named_by_register": true,
+      "shows": "The ways a skill is created: by describing it, by writing its instructions, from a repository, or from an uploaded package.",
+      "pages": [
+        "/skills"
+      ],
+      "file": null,
+      "why_not_held": "The image lives in the owner's workspace outside this repository; the session that built this index could not read or copy it, so it has to be copied in by the owner."
+    },
+    {
+      "id": "image-1788498415246",
+      "named_by_register": true,
+      "shows": "The member application's agent side: a short navigation, shared and personal agents in two groups, and the composer.",
+      "pages": [],
+      "no_page_because": "A member application screen (M40). The console has no page for it yet, so there is nothing to record against; it gets a record when its page is built.",
+      "file": null,
+      "why_not_held": "The image lives in the owner's workspace outside this repository; the session that built this index could not read or copy it, so it has to be copied in by the owner."
+    },
+    {
+      "id": "image-1788498419735",
+      "named_by_register": true,
+      "shows": "A catalogue of ready agents, each card with a picture, a name, a one-line role and one hire action, with a browser agent and a computer-operator agent among them.",
+      "pages": [
+        "/agent-templates",
+        "/agent-templates/:templateId"
+      ],
+      "file": null,
+      "why_not_held": "The image lives in the owner's workspace outside this repository; the session that built this index could not read or copy it, so it has to be copied in by the owner."
+    },
+    {
+      "id": "image-1788498431882",
+      "named_by_register": true,
+      "shows": "Creating a custom agent, by describing it in conversation or by setting it up manually.",
+      "pages": [
+        "/agents/new",
+        "/agents/drafts/:draftId/:step"
+      ],
+      "file": null,
+      "why_not_held": "The image lives in the owner's workspace outside this repository; the session that built this index could not read or copy it, so it has to be copied in by the owner."
+    },
+    {
+      "id": "image-1788498436494",
+      "named_by_register": true,
+      "shows": "An opened agent: sections for conversations, automations, people, knowledge and memory, headline counts and a usage chart over a chosen period.",
+      "pages": [
+        "/agents/:agentId",
+        "/agents/:agentId/:tab"
+      ],
+      "file": null,
+      "why_not_held": "The image lives in the owner's workspace outside this repository; the session that built this index could not read or copy it, so it has to be copied in by the owner."
+    },
+    {
+      "id": "image-1788498439844",
+      "named_by_register": true,
+      "shows": "An agent's automations: an empty state and a gallery of templates named as outcomes in the first person.",
+      "pages": [
+        "/agents/:agentId/:tab"
+      ],
+      "file": null,
+      "why_not_held": "The image lives in the owner's workspace outside this repository; the session that built this index could not read or copy it, so it has to be copied in by the owner."
+    },
+    {
+      "id": "image-1788498443881",
+      "named_by_register": true,
+      "shows": "An agent's people: each person's role and the agents they own, adding members and agents, and lending a device.",
+      "pages": [],
+      "no_page_because": "The agent's People section is not a section of the agent page yet (M39.3.1.1, M27.11.13), so there is no page to record against.",
+      "file": null,
+      "why_not_held": "The image lives in the owner's workspace outside this repository; the session that built this index could not read or copy it, so it has to be copied in by the owner."
+    },
+    {
+      "id": "image-1788498446827",
+      "named_by_register": true,
+      "shows": "An agent's knowledge, added by extracting from links or uploading files, and the artifacts it produced.",
+      "pages": [
+        "/agents/:agentId/:tab"
+      ],
+      "file": null,
+      "why_not_held": "The image lives in the owner's workspace outside this repository; the session that built this index could not read or copy it, so it has to be copied in by the owner."
+    },
+    {
+      "id": "image-1788498457398",
+      "named_by_register": true,
+      "shows": "An agent's memory as readable text with its size, split into curated and extracted, each with a content view and a change history.",
+      "pages": [
+        "/agents/:agentId/:tab"
+      ],
+      "file": null,
+      "why_not_held": "The image lives in the owner's workspace outside this repository; the session that built this index could not read or copy it, so it has to be copied in by the owner."
+    },
+    {
+      "id": "image-1788498461996",
+      "named_by_register": false,
+      "shows": "No requirement in the register names this image as its source (the register has no ANY-046), so nothing here says what it shows.",
+      "pages": [],
+      "no_page_because": "Nothing in the register traces to it. If a requirement was meant to, the owner names it and it gets a row and a record.",
+      "file": null,
+      "why_not_held": "The image lives in the owner's workspace outside this repository; the session that built this index could not read or copy it, so it has to be copied in by the owner."
+    },
+    {
+      "id": "image-1788498465662",
+      "named_by_register": true,
+      "shows": "The chat with an agent: its picture, name and role before the first message, and a few suggested prompts.",
+      "pages": [],
+      "no_page_because": "A member application screen (M40). The console's Ask page has not been held against it, so there is no record to make yet.",
+      "file": null,
+      "why_not_held": "The image lives in the owner's workspace outside this repository; the session that built this index could not read or copy it, so it has to be copied in by the owner."
+    },
+    {
+      "id": "image-1788498468679",
+      "named_by_register": true,
+      "shows": "An agent's profile: spend, skill count and age in the header; the switch for learning from chats; connectors, skills and channels with add and remove and an overflow; who may find and use the agent.",
+      "pages": [
+        "/agents/:agentId",
+        "/agents/:agentId/:tab",
+        "/connectors"
+      ],
+      "file": null,
+      "why_not_held": "The image lives in the owner's workspace outside this repository; the session that built this index could not read or copy it, so it has to be copied in by the owner."
+    }
+  ],
+  "rejections": [
+    {
+      "id": "no-single-learning-toggle",
+      "words": "The reference product's adaptive learning is one on and off switch. A single switch lets anything be learnt unchecked, so this console shows four tiers of what may be learnt, ordered by how far a change would reach, and gates only the one that changes who may see what.",
+      "kept_at": [
+        {
+          "address": "/agents/:agentId/:tab",
+          "section": "profile"
+        },
+        {
+          "address": "/agents/:agentId/:tab",
+          "section": "memory"
+        }
+      ]
+    },
+    {
+      "id": "no-browser-operator-on-the-users-session",
+      "words": "The reference product's browser operator runs in the person's own signed-in session, which hands the agent everything that person holds and leaves no audit able to tell them apart. This console offers a sealed browser thrown away afterwards, and no control for operating a computer at all.",
+      "kept_at": [
+        {
+          "address": "/agents/:agentId/:tab",
+          "section": "profile"
+        }
+      ]
+    }
+  ],
+  "records": [
+    {
+      "address": "/skills",
+      "section": null,
+      "screenshots": [
+        "image-1788498391599",
+        "image-1788498409912"
+      ],
+      "requirements": [
+        "ANY-001",
+        "ANY-002",
+        "ANY-004",
+        "ANY-012",
+        "ANY-013",
+        "ANY-014",
+        "ANY-015"
+      ],
+      "adapted": [
+        "Skills are listed as one row per version with its review state, its categories and how many of the reader's own agents run it, where the reference shows a use count for everybody.",
+        "A search and category chips narrow the list on the server, so a filter changes the request and never the rows already in the browser.",
+        "Adding a skill opens in a drawer with the ways in the product has: writing it, importing it, or a written procedure, each saying what it accepts before anything is pressed."
+      ],
+      "refused": [
+        "A use count for the whole catalogue: it would be a figure about work the reader may not see, so the page counts only the reader's own agents.",
+        "A skill that works the moment it is made: a skill described, written or imported lands as an unreviewed draft and waits for review before any agent may run it."
+      ],
+      "rejections": [],
+      "reason": "A catalogue is useful because it tells a person what is safe to rely on, and the reference's popularity signal does that by disclosing other people's use. Review state and the reader's own agents say it without that."
+    },
+    {
+      "address": "/agent-templates",
+      "section": null,
+      "screenshots": [
+        "image-1788498419735"
+      ],
+      "requirements": [
+        "ANY-019",
+        "ANY-020",
+        "ANY-023"
+      ],
+      "adapted": [
+        "A template is a row with its role and where it came from (shipped with the product or published by this install), and a page of its own, where the reference has a card with one hire action.",
+        "A ready specialist is installed from the catalogue at the lowest autonomy rung, so a person can start quickly and it proves itself before it acts."
+      ],
+      "refused": [
+        "An install count and a department on the card: the agents made from a template are agents, and a count of them is a count of rows this reader may not see.",
+        "A hire action that grants anything: installing never widens anyone, and a run is still bounded by whoever called it."
+      ],
+      "rejections": [],
+      "reason": "The card shows only facts that are true for every reader of the catalogue; anything that depends on who the reader may see belongs on a page that can say it to the right people."
+    },
+    {
+      "address": "/agent-templates/:templateId",
+      "section": null,
+      "screenshots": [
+        "image-1788498419735"
+      ],
+      "requirements": [
+        "ANY-019",
+        "ANY-020"
+      ],
+      "adapted": [
+        "What a template carries is said by the template's own page in its own values, rather than in a table of what every template could carry."
+      ],
+      "refused": [
+        "The publisher's principal id on the card: it is on the page's Advanced section, where a person looking for it finds it and nobody else reads an identifier."
+      ],
+      "rejections": [],
+      "reason": "A card holds what a person needs to choose; the page holds what a person needs to check."
+    },
+    {
+      "address": "/agents/new",
+      "section": null,
+      "screenshots": [
+        "image-1788498431882"
+      ],
+      "requirements": [
+        "ANY-025",
+        "ANY-026"
+      ],
+      "adapted": [
+        "Two ways in, from scratch or from a template, each a confirmed act that makes a draft, where the reference offers describing it in conversation or setting it up by hand."
+      ],
+      "refused": [
+        "An agent that is live the moment it is made: a draft is a draft until it is checked and published, and the confirmation says so before anything is sent.",
+        "A blank agent that reaches anything: from scratch is the empty agent that reaches nothing and acts on nothing until it is given permissions."
+      ],
+      "rejections": [],
+      "reason": "Creating an agent is the one act that widens what a person can reach through a lens, so it stops at a draft that is checked, and a publish may wait for a second person."
+    },
+    {
+      "address": "/agents/drafts/:draftId/:step",
+      "section": null,
+      "screenshots": [
+        "image-1788498431882"
+      ],
+      "requirements": [
+        "ANY-025",
+        "ANY-026"
+      ],
+      "adapted": [
+        "A draft is four steps, each at its own address and in this order: write it, draw a procedure, check and rehearse it, then publish it, so the test sits after the procedure and before anyone is asked to approve.",
+        "Describing the agent in conversation is the co-author on the Write step: it proposes changes and the person takes the ones they choose, each a new saved version."
+      ],
+      "refused": [
+        "A co-author that edits by itself: nothing it proposes changes the draft until it is taken, and every write on the page is confirmed first."
+      ],
+      "rejections": [],
+      "reason": "Order is the safety property: an agent is rehearsed against what it is built from before anyone is asked to approve it."
+    },
+    {
+      "address": "/agents/:agentId",
+      "section": "dashboard",
+      "screenshots": [
+        "image-1788498436494",
+        "image-1788498468679"
+      ],
+      "requirements": [
+        "ANY-029",
+        "ANY-030",
+        "ANY-049"
+      ],
+      "adapted": [
+        "Cost is on the agent's front page: one header with spend over thirty days that opens the usage detail, the number of skills and the days since it was created, shared by the three views below it.",
+        "Usage over a chosen period sits on the Dashboard view, where the reference puts a chart on its dashboard tab."
+      ],
+      "refused": [
+        "A figure drawn as nought when it is not recorded: spend that is not recorded is left out of the header and the page says so."
+      ],
+      "rejections": [],
+      "reason": "Cost belongs where the agent is, and a missing figure drawn as nought would read as an agent that costs nothing."
+    },
+    {
+      "address": "/agents/:agentId/:tab",
+      "section": "profile",
+      "screenshots": [
+        "image-1788498468679"
+      ],
+      "requirements": [
+        "ANY-050",
+        "ANY-051",
+        "ANY-052",
+        "ANY-053",
+        "ANY-054",
+        "ANY-056",
+        "ANY-057"
+      ],
+      "adapted": [
+        "Connectors, skills and channels sit in one block on the Profile that says what the agent is built from, each a reviewed item it refers to and never a copy; a skill is attached and taken off in place after a confirmation, a connector row has an overflow chip for the sources beyond those shown, and the page says plainly where an assigned skill does not yet change an answer.",
+        "The agent is added to a chat group from its own Profile.",
+        "The Profile shows what the reference page lacks: the most the agent may ever reach, its model and autonomy, and the leash it runs under."
+      ],
+      "refused": [
+        "A single on and off switch for learning from chats: the Profile shows four tiers of what may be learnt and says there is deliberately no single switch.",
+        "A control for operating a computer: the Computer use card says it is not offered, because nothing in the product controls a screen, keyboard or mouse.",
+        "A browser that runs in the person's own session: the browsing switch is for a sealed browser thrown away afterwards, and it is not offered until the product can run one.",
+        "An attached connector as a second permission system: attaching decides what the agent may use, and who may see what is still decided in one place."
+      ],
+      "rejections": [
+        "no-single-learning-toggle",
+        "no-browser-operator-on-the-users-session"
+      ],
+      "reason": "An agent is a lens and never a principal: nothing on this page may let it see or do more than the person asking, so the switches the reference offers as conveniences are either tiers, sealed, or absent.",
+      "not_yet": [
+        "A connector is not yet added and removed in place the way a skill is (M27.11.12): its add control opens the draft that changes the agent."
+      ]
+    },
+    {
+      "address": "/agents/:agentId/:tab",
+      "section": "memory",
+      "screenshots": [
+        "image-1788498457398"
+      ],
+      "requirements": [
+        "ANY-042",
+        "ANY-043",
+        "ANY-044",
+        "ANY-045"
+      ],
+      "adapted": [
+        "Memory is readable text stated apart from what was inferred, with a diff for every change, where the reference shows a file with a content view and a change history.",
+        "What the agent keeps about the reader is shown to that reader, and a memory can be corrected or deleted after a confirmation."
+      ],
+      "refused": [
+        "A single switch for learning: the section shows learning tier by tier, with only the tier that changes who may see what held for a person to decide.",
+        "An automatic change with no way back: each row the API marks carries an Undo."
+      ],
+      "rejections": [
+        "no-single-learning-toggle"
+      ],
+      "reason": "Memory that can be read, diffed and corrected is memory a person can trust; a switch that lets anything in unchecked is the path by which a wrong sentence about a client becomes policy."
+    },
+    {
+      "address": "/agents/:agentId/:tab",
+      "section": "knowledge",
+      "screenshots": [
+        "image-1788498446827"
+      ],
+      "requirements": [
+        "ANY-039",
+        "ANY-040"
+      ],
+      "adapted": [
+        "The Knowledge section lists the documents the agent draws on, and a person adds a file or a link with the same forms the Knowledge page uses, pointed at this agent.",
+        "After an add, one sentence says whether this agent draws on what was added, and when it does not, names the clause that excludes it and offers the draft that widens the rule."
+      ],
+      "refused": [
+        "A store of the agent's own: the section keeps none and says so, because nobody reads through an agent a document they could not open anywhere else.",
+        "Adding knowledge that quietly widens an agent: nothing changes for any agent by having added a document."
+      ],
+      "rejections": [],
+      "reason": "Knowledge is the company's, and an agent draws on it only as far as its rule and its reader reach."
+    },
+    {
+      "address": "/agents/:agentId/:tab",
+      "section": "artifacts",
+      "screenshots": [
+        "image-1788498446827"
+      ],
+      "requirements": [
+        "ANY-041"
+      ],
+      "adapted": [
+        "An agent's Artifacts section lists what it produced for people, filtered by type, person and date, with what fed each one and how long each is kept."
+      ],
+      "refused": [
+        "A file offered to everybody the list names: it is offered only where the API says this reader may fetch it now, and fetching asks again.",
+        "A count of artifacts the reader may not see: the count beside the list is a count of what is shown."
+      ],
+      "rejections": [],
+      "reason": "An artifact carries the reach of the run that made it, so downloading it re-checks the person asking."
+    },
+    {
+      "address": "/agents/:agentId/:tab",
+      "section": "automations",
+      "screenshots": [
+        "image-1788498439844"
+      ],
+      "requirements": [
+        "ANY-032",
+        "ANY-033",
+        "ANY-034",
+        "ANY-035"
+      ],
+      "adapted": [
+        "An agent owns its automations: the tab lists each with when it next runs or why it does not, its last run, and a confirmed Start and Stop, and a person makes a new one from the agent.",
+        "The tab carries a gallery of automation templates to start from."
+      ],
+      "refused": [
+        "A webhook trigger written by a person: it is refused when written (needs-rupash 223).",
+        "Starting an automation in one press: each start and stop is two presses, the second being the confirmation that says it will act with nobody watching."
+      ],
+      "rejections": [],
+      "reason": "An automation acts with nobody present, so the page says what will change before it does."
+    },
+    {
+      "address": "/connectors",
+      "section": null,
+      "screenshots": [
+        "image-1788498468679"
+      ],
+      "requirements": [
+        "ANY-052"
+      ],
+      "adapted": [
+        "Every source this release ships is a row, connected or not, so what can be connected sits on the same list as what is, with how reading it is going and when it was last read.",
+        "Once Lark is connected its card replaces the Connect Lark button and says what is switched on."
+      ],
+      "refused": [
+        "A count of connected or available sources: the list draws the rows it was sent and no total.",
+        "A source the reader may not be told is connected reading differently from one that is not: both read Not connected, in the same words."
+      ],
+      "rejections": [],
+      "reason": "Which sources exist is a fact a reader may not be entitled to, so the list says the same thing about a source it will not disclose as about one that is absent."
+    }
+  ]
+}
