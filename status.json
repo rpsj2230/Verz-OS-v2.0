@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-14T09:03:08.414012+00:00",
-  "commit": "503fc3dc",
-  "commit_subject": "Nine Wave 1 tasks are proved on the install by the owner's own tests",
+  "generated_at": "2026-10-14T09:12:03.559489+00:00",
+  "commit": "d78f91a8",
+  "commit_subject": "A person's own project gets tables: agent.project and agent.project_item (migration 0233, tables only) (#595)",
   "total": 1626,
   "done": 874,
   "percent": 53.8,
-  "built": 1235,
+  "built": 1236,
   "built_percent": 76.0,
-  "built_unproven": 361,
+  "built_unproven": 362,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -333,6 +333,7 @@
     "M40.6.1.3",
     "M40.6.1.4",
     "M40.7.1",
+    "M40.7.3",
     "M42.1.2",
     "M42.1.3",
     "M42.1.4",
@@ -441,14 +442,14 @@
       "total": 232,
       "done": 5,
       "percent": 2.2,
-      "in_progress": 91,
-      "ready_for_testing": 101,
+      "in_progress": 90,
+      "ready_for_testing": 102,
       "blocked": 18,
       "open": 17,
       "acts": 0,
       "decided": 23,
-      "built": 116,
-      "built_percent": 50.0
+      "built": 117,
+      "built_percent": 50.4
     },
     {
       "wave": 5,
@@ -890,7 +891,7 @@
       "done": 0,
       "acts": 0,
       "decided": 6,
-      "built": 34
+      "built": 35
     },
     {
       "module": "M41",
@@ -4909,9 +4910,9 @@
       "updated": "2026-10-13"
     },
     "M40.7.3": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): Attach a file to the web composer is built (console/src/pages/AskAttach.tsx, thread_routes POST /threads/attachments, M12.3.6). Dictation is not: no speech tool is registered anywhere in src. NEXT: register a speech-to-text tool in the tool registry, add a record control on Ask that posts audio and fills the text; keep the transcription at the person's reach",
-      "updated": "2026-10-13"
+      "status": "READY FOR TESTING",
+      "why": "built (M40/ask-dictation, owner decision 220 B, browser-side only): Ask has a Dictate your question button that uses the speech recognition built into the person's browser (console/src/pages/AskDictation.tsx, askDictationCore.ts); no server route, vendor or key, and nothing is sent to our side, which a test asserts on requests. The language is the browser's own, finished phrases are appended after what was typed and stay editable, a browser with none is told so in a sentence, a blocked microphone is told how to allow it, and listening stops when the question is sent and when the page is left. PRIOR WORK (2026-10-13 triage): Attach a file to the web composer is built (AskAttach.tsx, POST /threads/attachments, M12.3.6). Dictation is not: no speech tool is registered anywhere in src. NEXT: register a speech-to-text tool; superseded by 220 B (browser-side only). Not proved in a real browser: tests drive a fake recogniser. PROVE ON THE INSTALL: (1) open Ask in Chrome or Edge on a phone and on a laptop, sign in as a member; (2) press Dictate your question, allow the microphone when asked, say a short question, press the button again; the words appear in the question box after anything already typed, and can be edited; (3) block the microphone for the site and press the button: the page says how to allow it; (4) press Ask while listening: listening stops; (5) in Firefox the page says dictation is not available and typing still works; (6) with the browser's network panel open, nothing is requested to this server while dictating. Note for the owner: Chrome and Safari do the listening through their own vendors' services, which is the browser's doing and not ours; the page says nothing is sent to this server.",
+      "updated": "2026-10-14"
     },
     "M40.7.4": {
       "status": "BLOCKED",
