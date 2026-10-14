@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-13T17:06:40.603116+00:00",
-  "commit": "64c91459",
-  "commit_subject": "Server overlays, deploy hook refresh, squid tag, s3 merge and worker memory (findings from the owner's install) (#581)",
+  "generated_at": "2026-10-14T02:03:47.043156+00:00",
+  "commit": "892f1f02",
+  "commit_subject": "Items 220 to 223 are decided: browser speech, chat with email fallback, a counts-free approval wait view, and schedule plus connector change (#583)",
   "total": 1625,
   "done": 864,
   "percent": 53.2,
@@ -4548,7 +4548,7 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 33,
+  "closed_today": 0,
   "next_up": [
     "M1.6.13",
     "M1.6.16",
