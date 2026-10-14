@@ -30,6 +30,25 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         plugins_have_no_loader: true,
         every_change_is_in_the_audit_trail: true,
       },
+      "/api/v1/orchestration/weighed-plans": {
+        decisions: [
+          {
+            run_id: "rehearsal-1",
+            decided_at: "2019-03-04T09:00:00Z",
+            decided_by: "u_admin",
+            branches: 4,
+            depth: 0,
+            cost_multiplier: 1,
+            speedup: 4,
+            largest_share: 0.25,
+            evaluated: ["enough_branches"],
+            failed: [],
+            verdict: "parallel",
+          },
+        ],
+        rehearsal_is_on: true,
+        weights_note: UNBROKEN,
+      },
       "/api/v1/install/plugins": {
         points: [
           {

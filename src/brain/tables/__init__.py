@@ -84,6 +84,7 @@ from brain.tables.elevation import ElevationRequestRow
 from brain.tables.entity_merge import EntityMergeRow, EntityUnmergeRow
 from brain.tables.erasure import ErasureOutcome, ErasureRequestRow
 from brain.tables.escalation import EscalationRow
+from brain.tables.fanout_gate import FanoutGateRow
 from brain.tables.fast_lane import FastPathRuleRow
 from brain.tables.gate import (
     CapabilityGrantRow,
@@ -562,6 +563,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0233_personal_project. An item points at its project; every other reference is a value.
     "agent.project",
     "agent.project_item",
+    # 0240_fanout_gate. Points at nothing: a run and an administrator are values, so a decision of
+    # the gate outlives both.
+    "ops.fanout_gate",
 )
 
 __all__ = [
@@ -635,6 +639,7 @@ __all__ = [
     "ErasureRequestRow",
     "EscalationRow",
     "EvaluationCandidateRow",
+    "FanoutGateRow",
     "FastPathRuleRow",
     "FieldPolicyRow",
     "GoldenQuestionRow",

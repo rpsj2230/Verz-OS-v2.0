@@ -46,6 +46,11 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Switching a plugin on or off and removing a disabled one change a record and nothing that runs, because no " +
     "runner exists for the points that take code; a removed plugin is a retired row that keeps every version it " +
     "ran, so recording its manifest again brings it back, which tests/unit/test_acceptance_checks_plugin_registry.py holds.",
+  "src/pages/install/OrchestrationPanel.tsx REHEARSALS_API_PATH":
+    "Weighing a plan adds one decision to the record and starts, ends and replaces nothing: " +
+    "brain.orchestration_routes.rehearse keeps the numbers and the verdict in ops.fanout_gate, which is insert-only " +
+    "(no UPDATE or DELETE is granted), and starts no agent because none exists to dispatch, which " +
+    "tests/unit/test_orchestration_routes.py and tests/unit/test_acceptance_checks_orchestration_rehearsal.py hold.",
   "src/pages/agents/AutomationAuthoring.tsx authoringPreviewApiPath(agentId)":
     "Reviewing a new automation writes nothing: brain.automation_authoring_routes.authoring_preview " +
     "returns what saving would store and what it would have done, keeps no row, and the save is a " +

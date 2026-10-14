@@ -383,6 +383,11 @@ from brain.operate_routes import router as operate_router
 # recovery sweep learnt about it, for a reader who may see that sweep. See `brain.operation_routes`.
 from brain.operation_routes import router as operation_router
 
+# Weighing a multi-agent plan before any agent runs: the fan-out gate, the subtask contracts and the
+# merge, with the decision kept, behind `admin:agent_lifecycle` over everything and the
+# `orchestration_rehearsal` switch. Starts nothing. See `brain.orchestration_routes`.
+from brain.orchestration_routes import router as orchestration_router
+
 # Plugins: the extension points, the plugins recorded on this install and the moves between their
 # states, behind `admin:plugin` over everything and the `plugin_registry` switch. A record, not a
 # loader: nothing runs a plugin. See `brain.plugin_routes`.

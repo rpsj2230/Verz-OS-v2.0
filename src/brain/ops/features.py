@@ -404,6 +404,26 @@ TWO_PERSON_APPROVAL: Final = Feature(
     read_by=("brain.gate.suspension_store:put_suspension",),
 )
 
+#: Weighing a multi-agent plan before any agent runs, and keeping how it was decided. Off because
+#: it writes a record per rehearsal and is the first place the fan-out gate is reachable at all.
+#: Nothing it records starts a run: no coordinating agent exists to dispatch children (M18.2).
+ORCHESTRATION_REHEARSAL: Final = Feature(
+    name="orchestration_rehearsal",
+    title="Weigh a multi-agent plan before it runs",
+    what=(
+        "An administrator of agents describes a plan: subtasks, what each depends on, what each "
+        "returns and how big each is. The product estimates what each would cost, weighs the plan "
+        "by its six conditions and says whether it would be split across agents or run as one "
+        "loop, keeping how it decided. Results handed in are checked against what each subtask "
+        "promised and merged, with a stated gap where one failed. No agent is started."
+    ),
+    while_off=(
+        "No plan can be weighed and the page says so. Decisions kept while this was on stay and "
+        "can still be read."
+    ),
+    read_by=("brain.orchestration_routes:rehearse", "brain.orchestration_routes:decisions"),
+)
+
 #: Recording plugins on the install and moving them between states. Off because it is a new way to
 #: put something from outside on an install, and what it records is not run: no runner exists for
 #: the points that take code, so an enabled plugin changes a row and nothing else (M29.2.3).
@@ -467,6 +487,7 @@ BUILT_IN_FEATURES: Final[tuple[Feature, ...]] = (
     AUTOMATION_AUTHORING,
     STARTER_SKILLS_SWITCH,
     PLUGIN_REGISTRY,
+    ORCHESTRATION_REHEARSAL,
     BROWSER_RUNS,
 )
 

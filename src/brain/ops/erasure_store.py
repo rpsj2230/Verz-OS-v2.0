@@ -571,6 +571,10 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # An alert acknowledgement names a source and an instant, and the person who pressed: an
         # actor and not an owner, and `0217` grants no way for a row to leave (M27.15.45).
         "ops.alert_acknowledgement",
+        # How the fan-out gate weighed a plan: five numbers, the conditions and a verdict, and the
+        # administrator who asked, an actor and not an owner. `0240` grants no way for a row to
+        # leave (M18.2.4).
+        "ops.fanout_gate",
         # What a lead flagged, what was read of answers, how golden questions scored and who agreed
         # to a change: each names an actor and a reference and is a fact about a moment, not
         # anybody's record, and `0222` grants no way for a row to leave.
