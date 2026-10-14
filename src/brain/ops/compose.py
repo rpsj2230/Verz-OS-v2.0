@@ -197,7 +197,7 @@ BASELINE_FILE: Final = "docker-compose.yml"
 #: shape `wiring.A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING` is held to.
 THE_FULL_PROFILE_IS_ONE_FILE: Final = (
     "The full profile is 23 containers across 10 compose files, merged into "
-    "docker-compose.full.yml, reserving 15232 MiB, and it needs a host with 15488 MiB to "
+    "docker-compose.full.yml, reserving 15744 MiB, and it needs a host with 16000 MiB to "
     "spare. Nothing stops it being one file: 0 components are budgeted with no service, 0 "
     "services take something they need at startup from a bind mount that a stored compose "
     "resolves to nothing, seaweedfs is described once and named twice, and the 2 services "
