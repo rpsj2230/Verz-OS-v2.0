@@ -401,6 +401,25 @@ describe("dictation on the Ask page", () => {
     expect(field(container).value).toBe("Where is the signed handover note for site four");
   });
 
+  test("a long dictation stops at the length a question may be, and the field stays askable", async () => {
+    // What breaks if this is deleted: dictation fills the field past the length the route accepts
+    // (the field's own limit does not apply to a value set from code), and Ask is then disabled
+    // with no reason the person can see.
+    install();
+    const { container } = await askScreen();
+    fireEvent.change(field(container), { target: { value: "a".repeat(3990) } });
+    press(container);
+
+    speak([{ text: "b".repeat(50), final: true }]);
+
+    // 4000 is the route's own limit (`brain.gate.caches.MAX_QUESTION_CHARS`), written out here so
+    // the test does not compare the console's copy of it against itself.
+    expect(field(container).value).toHaveLength(4000);
+    expect(field(container).value.startsWith("a".repeat(3990))).toBe(true);
+    const ask = within(container).getByRole("button", { name: ASK_LABEL });
+    expect(ask.hasAttribute("disabled")).toBe(false);
+  });
+
   test("pressing the button again stops listening and says the words are in the box", async () => {
     // What breaks if this is deleted: no way to stop listening, or a stop that leaves the button
     // pressed and the microphone's state a mystery.
