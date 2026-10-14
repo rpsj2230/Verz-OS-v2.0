@@ -69,7 +69,7 @@ from brain.ops.automation_event import (
     Window,
     allowance,
     change_key,
-    due_changes,
+    changes_to_run,
     event_run_id,
     fetch_limit,
     refusal_run_id,
@@ -321,7 +321,7 @@ async def run_changes_of(
             .scalars()
             .all()
         )
-        due = due_changes(row.automation_id, found, recorded=recorded, allowed=may_run)
+        due = changes_to_run(row.automation_id, found, recorded=recorded, allowed=may_run)
         if not due:
             return []
 

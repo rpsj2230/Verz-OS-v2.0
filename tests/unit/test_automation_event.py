@@ -45,7 +45,7 @@ from brain.ops.automation_event import (
     Change,
     allowance,
     change_key,
-    due_changes,
+    changes_to_run,
     event_run_id,
     fetch_limit,
     refusal_run_id,
@@ -239,9 +239,9 @@ def test_the_oldest_changes_without_a_run_are_due_up_to_the_allowance() -> None:
     ]
     done = {event_run_id("auto_listener", changes[1])}
 
-    due = due_changes("auto_listener", changes, recorded=done, allowed=5)
-    capped = due_changes("auto_listener", changes, recorded=set(), allowed=2)
-    none = due_changes("auto_listener", changes, recorded=set(), allowed=0)
+    due = changes_to_run("auto_listener", changes, recorded=done, allowed=5)
+    capped = changes_to_run("auto_listener", changes, recorded=set(), allowed=2)
+    none = changes_to_run("auto_listener", changes, recorded=set(), allowed=0)
 
     assert [one.source_id for one in due] == ["rec_2", "rec_3"]
     assert [one.source_id for one in capped] == ["rec_1", "rec_2"]
@@ -256,7 +256,7 @@ def test_changes_sharing_an_instant_are_ordered_by_entity_and_record_so_the_orde
     same = NOW - timedelta(minutes=5)
     changes = [a_change("b", same), a_change("a", same)]
 
-    due = due_changes("auto_listener", changes, recorded=set(), allowed=1)
+    due = changes_to_run("auto_listener", changes, recorded=set(), allowed=1)
 
     assert [one.source_id for one in due] == ["a"]
 

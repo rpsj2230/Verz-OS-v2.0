@@ -183,7 +183,7 @@ def fetch_limit(*, recorded_in_window: int) -> int:
     return EVENT_RUNS_PER_PASS + recorded_in_window
 
 
-def due_changes(
+def changes_to_run(
     automation_id: str,
     found: Sequence[Change],
     *,
