@@ -486,13 +486,16 @@ def install_facts(
     """
     # Imported here because `version_view` imports `Fact` and `Source` from this module.
     from brain.console.version_view import running_release
+    from brain.deployment.update_mode import follows_every_release
 
     assert_known_profile(profile)
     facts: list[Fact] = [
         Fact(name=INSTALL_SIZE_FACT, source=Source.DECLARED, value=profile),
     ]
     running = running_release(
-        pinned_image=pinned_image, built_commit="" if manifest is None else manifest.commit
+        pinned_image=pinned_image,
+        built_commit="" if manifest is None else manifest.commit,
+        follows_every_release=follows_every_release(env),
     )
     if running.tag:
         facts.append(

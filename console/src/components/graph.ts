@@ -332,3 +332,66 @@ export function layout(graph: Graph): ReadonlyMap<string, Placement> {
   }
   return placement;
 }
+
+/**
+ * Written down because the list beside a drawing looks like a place to say more than the drawing
+ * does, and the first thing somebody will want to add is how many steps there are.
+ */
+export const THE_LIST_SAYS_WHAT_THE_DRAWING_SAYS =
+  "The steps as a list are the drawing in words and nothing more: the same steps, in the same " +
+  "order, with the same words and the same lines. No count of steps, no 'ends here' under a step " +
+  "with nothing after it (that is a claim about steps that may have been withheld, which the " +
+  "drawing does not make, it only draws no line), and no step the drawing does not draw.";
+
+/**
+ * What a step with no words is called in the list. **Never its id.** On a trace an id is the step's
+ * number, and a list of steps numbered 2, 3, 5 says a step 4 exists, which is the gap the drawing
+ * packs its rows to avoid (`layout`). The list says what the drawing says, and the drawing shows an
+ * empty box.
+ */
+export const UNNAMED_STEP = "A step with no name";
+
+/** One step in the list: its words, its kind, and the steps a line leads to from it. */
+export interface OutlineStep {
+  readonly id: string;
+  readonly label: string;
+  readonly kind: string;
+  /** The steps a line leaves this one for, in the order the lines were drawn, each as words. */
+  readonly then: readonly string[];
+}
+
+/**
+ * The graph as a list, for a person who cannot see the drawing or cannot use it.
+ *
+ * **A text alternative with the drawing's own guarantees** (M32.5.2.3). It reads the same `Graph`
+ * the canvas is handed, so a step `readGraph` dropped is not in it, and an edge to a step that
+ * did not arrive was already dropped there. Each step names what comes next by that step's own
+ * label, so a person reading the list can follow the lines without seeing them. A labelled line
+ * (a branch's two ways out on a procedure) is read with its label first. Order is the graph's.
+ */
+export function outlineOf(graph: Graph): OutlineStep[] {
+  const label = new Map(graph.nodes.map((node) => [node.id, node.label === "" ? UNNAMED_STEP : node.label]));
+  return graph.nodes.map((node) => ({
+    id: node.id,
+    label: label.get(node.id) ?? UNNAMED_STEP,
+    kind: node.kind,
+    then: graph.edges
+      .filter((edge) => edge.from === node.id)
+      .map((edge) => {
+        const to = label.get(edge.to) ?? UNNAMED_STEP;
+        return edge.label === undefined ? to : `${edge.label}: ${to}`;
+      }),
+  }));
+}
+
+/** What a step is called to a screen reader: its words, then its kind when it has one. */
+export function stepWords(node: GraphNode): string {
+  const name = node.label === "" ? UNNAMED_STEP : node.label;
+  return node.kind === "" ? name : `${name}, ${node.kind}`;
+}
+
+/** A name for an anchor, from a caption: lower case words joined by hyphens. */
+export function anchorOf(caption: string): string {
+  const words = caption.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+  return words.length === 0 ? "steps" : words.join("-");
+}

@@ -46,8 +46,9 @@ when a verified event from that person arrives, the code that binds them or any 
 binding made before `0166` gains it the next time its person writes; nothing is backfilled, because
 nothing holds an address to backfill from. Every retirement here clears it in the same statement,
 so an unbound or replaced account keeps no address, and `brain.ops.erasure_store.CLEARED` clears it
-for an erased person. It is read by two functions, `addressed` for sending a card and `last_used`
-for telling one person something later, and selected by no read a screen serves. See
+for an erased person. It is read by three functions, `addressed` for sending a card, `last_used`
+for telling one person something later and `last_used_at` for whether somebody has written lately
+at all (`brain.control_not_run_told`), and selected by no read a screen serves. See
 `AN_ADDRESS_IS_KEPT_ONLY_WHERE_A_PERSON_IS_WRITTEN_TO_UNASKED` and
 `THE_CHANNEL_LAST_USED_IS_KEPT_TO_THE_HOUR`.
 
@@ -56,7 +57,7 @@ Task ids: M10.3.1, M10.3.2, M10.3.4, M10.3.5, M8.3.4
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Final
@@ -454,6 +455,34 @@ class StoredAddresses:
         if row is None or not row[1]:
             return None
         return Channel(row[0]), str(row[1])
+
+    async def last_used_at(self, principal_ids: Collection[str]) -> dict[str, datetime]:
+        """When each of these people last wrote on a chat channel, for those who ever did.
+
+        The newest `updated_at` among a person's live bindings on a channel `ADDRESS_KEPT_ON`
+        names that hold an address, which `remember` keeps to the hour, so an answer is right to
+        within `LAST_USE_IS_KEPT_TO`. A person with no such binding is absent from the answer
+        rather than present with nothing, so a caller cannot read "never" as an old date. The one
+        read of when, beside `last_used`'s read of where; no migration, because the mark is the
+        column `last_used` already orders by. See `THE_CHANNEL_LAST_USED_IS_KEPT_TO_THE_HOUR`.
+        """
+        wanted = sorted(set(principal_ids))
+        if not wanted:
+            return {}
+        newest = func.max(PrincipalIdentityRow.updated_at)
+        query = (
+            select(PrincipalIdentityRow.principal_id, newest)
+            .where(
+                *_LIVE_CHAT,
+                PrincipalIdentityRow.principal_id.in_(wanted),
+                PrincipalIdentityRow.channel.in_(sorted(one.value for one in ADDRESS_KEPT_ON)),
+                PrincipalIdentityRow.channel_address.is_not(None),
+            )
+            .group_by(PrincipalIdentityRow.principal_id)
+        )
+        async with self.sessions() as session, session.begin():
+            rows = (await session.execute(query)).all()
+        return {str(principal): at for principal, at in rows if at is not None}
 
     async def addressed(self, channel: Channel) -> tuple[tuple[str, str], ...]:
         """Every live binding on this channel holding an address: the person and the address.

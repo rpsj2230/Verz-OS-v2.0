@@ -3342,9 +3342,9 @@
      "updated": "2026-10-13"
     },
     "M17.7.2": {
-     "status": "IN PROGRESS",
-     "why": "TRIAGE 2026-10-13 class 2 (partly built): Scheduler built: ops/schedule.py (what is owed), schedule_runner.py with pg_advisory_xact_lock per control (schedule_store), started by ops/worker. Alert for a control with no run in its window: controls.overdue has no caller and notices.py says nothing sends control_not_run. NEXT: call controls.overdue from the worker tick and send control_not_run through tell_later to the operations alert holder; then a check",
-     "updated": "2026-10-13"
+     "status": "READY FOR TESTING",
+     "why": "built (M17/safety-alert-chat), decision 221 C: brain.control_not_run_told, started by the web process, reads each control's last success, calls controls.overdue and tells whoever holds the operations alert and may open Incidents once per episode in the chat tool they last used (the incident holders too for a mechanism that wakes somebody); when none of them has used a chat tool in seven days the address INSTALL_ALERT_EMAIL on Install, Settings is sent the same sentence through the relay. Behind the control_not_run_alerts feature, which ships off, and an install check (acceptance_checks_control_alerts) that says not run until it is on. Proved on the install when the feature is switched on and a stopped mechanism's alert reaches a reserved holder's chat once. Not covered: the sentence names the mechanism and how long, never what it guards",
+     "updated": "2026-10-14"
     },
     "M17.7.3": {
      "status": "BLOCKED",
@@ -3363,8 +3363,8 @@
     },
     "M17.7.6": {
      "status": "IN PROGRESS",
-     "why": "TRIAGE 2026-10-13 class 2 (partly built): tell_later.tell is the one sender (person's last-used channel or mail relay) and six notice kinds use it; ops/notices.py lists 14 kinds and 'no channel is chosen yet, so nothing sends it' for the rest. The Notifications screen shows sent_by but no undelivered state per notice. NEXT: give each remaining notice kind a sender through tell_later and record failed deliveries for the Notifications screen to show as undelivered",
-     "updated": "2026-10-13"
+     "why": "PARTLY BUILT 2026-10-14: control_not_run now has a sender through tell_later and the mail relay (brain.control_not_run_told), so seven of the fourteen notice kinds are sent. Still unsent: evening_digest (sent by the digest destination, not through tell_later), approval_request, budget_stopped, access_request, backup_exposure, emergency_access and self_grant. Not built: an undelivered state per notice on the Notifications screen. Delivery outcomes are already kept in ops.channel_delivery (refused and unknown included) but carry no notice kind, so showing them per notice needs the kind or the intent prefix recorded beside the outcome",
+     "updated": "2026-10-14"
     },
     "M17.7.7": {
      "status": "OPEN",
@@ -6824,9 +6824,9 @@
      "updated": "2026-10-06"
     },
     "M32.5.2.3": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in components/GraphCanvas.tsx, components/ProcedureCanvas.tsx, components/TraceGraph.tsx +4 more; NOT wired: pages/Audit.route.tsx, pages/audit/TracePage.tsx",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "built (M32/react-flow-keyboard-and-list): the trace graph on Audit then Trace and the agent builder's procedure canvas are both drawn through React Flow, each step takes a tab stop and is read aloud with its words and kind, a skip link jumps past the drawing, and the trace has the steps as a list under it; to prove on the install: sign in as a reader holding the trace reader role, open Audit then Trace, enter a trace id and a reason, press Tab and see each box take the focus ring, press Tab until the link Skip the drawing appears, press Enter and land on the list of steps, then open an agent's draft, go to its Procedure step and do the same",
+     "updated": "2026-10-14"
     },
     "M32.6.1.1": {
      "status": "OPEN",

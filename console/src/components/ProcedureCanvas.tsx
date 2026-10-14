@@ -33,9 +33,13 @@
  * still the vocabulary's. The buttons were the stylesheet's `.button` and are the kit's `Button`,
  * the control every other part of the agent builder is drawn with (2026-09-29).
  *
- * **No route takes a drawing yet.** Nothing under `/api/v1` accepts one or answers a SKILL.md, so
- * this is mounted on no page, and what is checked is this console's half of the exchange: that
- * drawing on it produces the drawing the server's own test reads.
+ * **It is mounted, and a route takes the drawing.** The agent builder's Procedure step
+ * (`pages/agents/DraftPage.tsx`) draws it, and `brain.agent_builder_routes` reads the drawing it
+ * hands up and answers the SKILL.md. What is checked in this console is its half of the exchange:
+ * that drawing on it produces the drawing the server's own test reads.
+ *
+ * **The steps and their controls are the text alternative to the drawing**, and a skip link ahead of
+ * the drawing jumps to them (`GraphCanvas.tsx` says why the drawing's steps are tab stops).
  *
  * Task ids: M20.2.2, M32.5.2.3
  */
@@ -45,6 +49,7 @@ import type { ApiFailure } from "../api/errors";
 import { Button } from "./ui/button";
 import { Chip } from "../ui/Chip";
 import { GraphCanvas } from "./GraphCanvas";
+import { anchorOf } from "./graph";
 import {
   ADDABLE_KINDS,
   AT_THE_BOUND,
@@ -71,6 +76,9 @@ import {
   type Way,
 } from "./procedure";
 import { FailureNotice } from "../ui/FailureNotice";
+
+/** The skip link ahead of the drawing, for a keyboard user who wants the steps and their controls. */
+export const SKIP_TO_THE_STEPS = "Skip the drawing, to the steps and their controls";
 
 /** What each kind of step is called, and the words on the button that adds one. */
 export const KIND_WORDS: Readonly<Record<StepKind, string>> = Object.freeze({
@@ -299,6 +307,7 @@ export function ProcedureCanvas({
   failure = null,
 }: ProcedureCanvasProps) {
   const [drawing, setDrawing] = useState<Drawing>(initial);
+  const stepsAnchor = `${anchorOf(caption)}-steps`;
 
   const change = (next: Drawing): void => {
     setDrawing(next);
@@ -309,7 +318,11 @@ export function ProcedureCanvas({
     <div className="procedure">
       <p className="procedure__caption">{caption}</p>
 
-      <GraphCanvas label={caption} graph={drawingGraph(drawing)} />
+      <GraphCanvas
+        label={caption}
+        graph={drawingGraph(drawing)}
+        skipTo={{ anchor: stepsAnchor, words: SKIP_TO_THE_STEPS }}
+      />
 
       {canAddStep(drawing) ? (
         <div className="procedure__palette" role="group" aria-label="Add a step">
@@ -329,7 +342,8 @@ export function ProcedureCanvas({
         <p className="procedure__bound">{AT_THE_BOUND}</p>
       )}
 
-      <ol className="procedure__steps">
+      {/* The text alternative to the drawing is these steps and the controls on each. */}
+      <ol id={stepsAnchor} tabIndex={-1} className="procedure__steps">
         {drawing.steps.map((step) => (
           <li key={step.id} className="procedure-step">
             <StepControls step={step} drawing={drawing} tools={tools} change={change} />
