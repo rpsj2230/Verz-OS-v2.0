@@ -1,24 +1,15 @@
 {
-  "generated_at": "2026-10-14T09:01:35.293474+00:00",
-  "commit": "157ca5b3",
-  "commit_subject": "An automation can start when a connected source reports a changed record, and a webhook is refused (M17.4.1, needs-rupash 223 option B) (#597)",
+  "generated_at": "2026-10-14T09:03:08.414012+00:00",
+  "commit": "503fc3dc",
+  "commit_subject": "Nine Wave 1 tasks are proved on the install by the owner's own tests",
   "total": 1626,
-  "done": 865,
-  "percent": 53.2,
+  "done": 874,
+  "percent": 53.8,
   "built": 1235,
   "built_percent": 76.0,
-  "built_unproven": 370,
+  "built_unproven": 361,
   "built_task_ids": [
     "M1.1.8",
-    "M1.10.1",
-    "M1.10.3",
-    "M1.10.4",
-    "M1.10.5",
-    "M1.6.13",
-    "M1.6.16",
-    "M1.6.17",
-    "M1.6.18",
-    "M1.6.19",
     "M1.8.8",
     "M10.5.1",
     "M10.5.2",
@@ -403,10 +394,10 @@
       "wave": 1,
       "name": "The gate",
       "total": 170,
-      "done": 160,
-      "percent": 94.1,
+      "done": 169,
+      "percent": 99.4,
       "in_progress": 1,
-      "ready_for_testing": 9,
+      "ready_for_testing": 0,
       "blocked": 0,
       "open": 0,
       "acts": 1,
@@ -506,7 +497,7 @@
       "name": "Identity, users, roles, permissions",
       "wave": 1,
       "total": 66,
-      "done": 53,
+      "done": 62,
       "acts": 0,
       "decided": 1,
       "built": 64
@@ -970,7 +961,11 @@
     "M1.1.5",
     "M1.1.6",
     "M1.1.7",
+    "M1.10.1",
     "M1.10.2",
+    "M1.10.3",
+    "M1.10.4",
+    "M1.10.5",
     "M1.2.1",
     "M1.2.2",
     "M1.2.3",
@@ -995,8 +990,13 @@
     "M1.6.1",
     "M1.6.10",
     "M1.6.12",
+    "M1.6.13",
     "M1.6.14",
     "M1.6.15",
+    "M1.6.16",
+    "M1.6.17",
+    "M1.6.18",
+    "M1.6.19",
     "M1.6.2",
     "M1.6.20",
     "M1.6.21",
@@ -1808,31 +1808,6 @@
       "why": "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
       "updated": "2026-10-13"
     },
-    "M1.6.13": {
-      "status": "READY FOR TESTING",
-      "why": "built (M1/people-status): People shows where the staff list puts each person and their employment type, with filters; proved on the install with M1.6.15. PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (directory_routes, pages/people/PersonOverview.tsx, pages/people/peopleQuery.ts); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #295's branch M1/departments-from (may be replayed already)",
-      "updated": "2026-09-30"
-    },
-    "M1.6.16": {
-      "status": "READY FOR TESTING",
-      "why": "built (M1/staff-accounts): the staff sync makes each active person's sign-in account and sends nobody anything; proved when a release has set up the accounts client and a reserved person's Forgot password sets their password and second factor (M1.6.18). PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (connectors.sign_in_accounts, identity.staff_accounts, ops.acceptance_checks_accounts +5 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #295's branch M1/departments-from (may be replayed already)",
-      "updated": "2026-09-30"
-    },
-    "M1.6.17": {
-      "status": "READY FOR TESTING",
-      "why": "built (M1/staff-accounts): a leaver's or suspended person's account the sync made is closed on the next sync and their Brain sessions ended; proved on the install with a reserved leaver (M1.6.18). PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (connectors.sign_in_accounts, identity.staff_accounts, ops.acceptance_checks_accounts +1 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #295's branch M1/departments-from (may be replayed already)",
-      "updated": "2026-09-30"
-    },
-    "M1.6.18": {
-      "status": "READY FOR TESTING",
-      "why": "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
-      "updated": "2026-10-13"
-    },
-    "M1.6.19": {
-      "status": "READY FOR TESTING",
-      "why": "built (M1/departments-from): Settings, under Staff, chooses where departments come from; managed on People the staff sync places and moves nobody; proved on the install with M1.6.21. PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (directory_routes, identity.departments_from, pages/people/PersonPlacements.tsx +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #295's branch M1/departments-from (may be replayed already)",
-      "updated": "2026-09-30"
-    },
     "M1.8.5": {
       "status": "BLOCKED",
       "why": "moved to Wave 2 (needs-rupash 97): the web part is the owner's sign-in check (needs-rupash 91, check 1); the chat part needs Wave 2's Lark chat channel. PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (channel_routes, channels.inbound, chat_answer); open for proof on the install or a decision, not for code",
@@ -1842,26 +1817,6 @@
       "status": "READY FOR TESTING",
       "why": "moved to Wave 4 (needs-rupash 112): closes when every permissions requirement row has its proof on the install. PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (requirement_check_routes, tables.requirement_check, pages/RequirementChecks.tsx +4 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-w1-8",
       "updated": "2026-09-29"
-    },
-    "M1.10.1": {
-      "status": "READY FOR TESTING",
-      "why": "built (M1/staff-are-people): every active person on the staff list is made a Brain person by the staff sync without the sign-in service, joined by their address's digest; proved on the install with M1.10.3. PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_accounts, ops.staff_people_run); open for proof on the install or a decision, not for code",
-      "updated": "2026-09-30"
-    },
-    "M1.10.3": {
-      "status": "READY FOR TESTING",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_accounts); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
-    },
-    "M1.10.4": {
-      "status": "READY FOR TESTING",
-      "why": "built (M1/add-work-email): Add work email on a hand-made person's page binds their address and joins the staff list's person for it; proved on the install with M1.10.5. PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (directory_routes, identity.work_email, pages/people/PersonOverview.tsx +2 more); open for proof on the install or a decision, not for code",
-      "updated": "2026-09-30"
-    },
-    "M1.10.5": {
-      "status": "READY FOR TESTING",
-      "why": "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
-      "updated": "2026-10-13"
     },
     "M2.3.2": {
       "status": "READY FOR TESTING",
@@ -5251,15 +5206,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 1,
+  "closed_today": 10,
   "next_up": [
-    "M1.6.13",
-    "M1.6.16",
-    "M1.6.17",
-    "M1.6.18",
-    "M1.6.19"
+    "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "503fc3d",
+      "at": "2026-10-14T09:01:43+00:00",
+      "subject": "Nine Wave 1 tasks are proved on the install by the owner's own tests",
+      "closed": "M1.10.1,M1.10.3,M1.10.4,M1.10.5,M1.6.13,M1.6.16,M1.6.17,M1.6.18,M1.6.19"
+    },
     {
       "sha": "157ca5b",
       "at": "2026-10-14T08:52:11+00:00",
@@ -5373,12 +5330,6 @@
       "at": "2026-09-29T09:42:35+00:00",
       "subject": "Twenty-five Wave 2 tasks close on the install's acceptance run: price lists, citations and scope statements, the connector framework and rate limits (#223)",
       "closed": "M11.1.1,M11.1.3,M11.2.1,M11.2.2,M11.2.3,M11.2.5,M11.2.6,M11.3.1,M11.3.2,M11.3.3,M11.3.5,M11.5.1,M11.5.4,M11.5.5,M22.1.2,M22.4.1,M7.4.7,M7.5.2,M7.5.3,M8.1.1,M8.1.2,M8.1.4,M8.2.1,M8.2.2,M9.2.1"
-    },
-    {
-      "sha": "3cbb087",
-      "at": "2026-09-29T08:30:41+00:00",
-      "subject": "Two Wave 0 tasks close on the first staff sync: the worker borrows the source's key for one run and hands it back (#213)",
-      "closed": "M31.3.2.3,M31.3.2.4"
     }
   ]
 }
