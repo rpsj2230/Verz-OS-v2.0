@@ -320,6 +320,9 @@ OVERLAYS: Final[tuple[Overlay, ...]] = (
         joins=(("tool-api", ("app",)),),
         joined_as_service=("tool-api",),
         prepare=("automation.prepare.sh",),
+        # What only the host can see of the running canvas, handed to the application for its
+        # checks to judge (`brain.ops.automation_report`, M32.6.1.2).
+        after=("automation.observe.sh",),
     ),
 )
 
