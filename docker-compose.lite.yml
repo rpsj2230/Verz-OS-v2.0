@@ -152,6 +152,7 @@ services:
       INSTALL_DIGEST_TIME: ${INSTALL_DIGEST_TIME:-}
       INSTALL_ALERT_EMAIL: ${INSTALL_ALERT_EMAIL:-}
       INSTALL_SERVICES: ${INSTALL_SERVICES:-}
+      INSTALL_UPDATE_MODE: ${INSTALL_UPDATE_MODE:-}
     deploy:
       resources:
         limits:

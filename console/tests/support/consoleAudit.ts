@@ -950,7 +950,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     screens: ["/updates", "/install"],
     routes: ["/api/v1/install/updates"],
     tables: ["ops.deployment_record"],
-    installation: [],
+    installation: ["INSTALL_UPDATE_MODE"],
     gaps: [],
   },
 };
