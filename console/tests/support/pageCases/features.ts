@@ -30,6 +30,28 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         plugins_have_no_loader: true,
         every_change_is_in_the_audit_trail: true,
       },
+      "/api/v1/migration": {
+        inventory: { saved: null, document: null, agreed: false, gaps: [] },
+        parallel: {
+          saved: null,
+          document: null,
+          may_cut_over: false,
+          gaps: [],
+          disagreements: [],
+          unreviewed: [],
+          only_one_answered: [],
+        },
+        cutover: {
+          saved: null,
+          document: null,
+          gaps: [],
+          acts_outstanding: [],
+          may_report_complete: false,
+          reported_complete: null,
+        },
+        workspace_is_on: true,
+        nothing_reaches_the_old_system: true,
+      },
       "/api/v1/orchestration/weighed-plans": {
         decisions: [
           {
