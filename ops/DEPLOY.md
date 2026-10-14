@@ -119,6 +119,19 @@ After that, every merge to `main` that passes CI is live within a few minutes, a
 `Deploy` workflow goes red if it is not. `journalctl -u brain-autodeploy.service -n 50` is
 the history, and `/var/lib/brain-deploy/heartbeat.json` says what the last check decided.
 
+**The worker is not restarted by a merge that changes nothing it runs.** The application is
+recreated by every deploy, because it serves the console and the build documents out of its
+image. The worker is recreated only when the image it would move to has a different
+`worker_fingerprint` in its `RELEASE.json` from the image it is running: a hash of every committed
+file except those under `docs/`, `tests/`, `console/`, `e2e/`, `matcher/` and `.github/`
+(`brain.ops.restart_scope`). So a merge of documents, tests, the console's source or workflows
+leaves an acceptance run in progress alone. Any doubt (an image from before the fingerprint
+existed, one that cannot be opened) restarts it as before, and the journal says which services
+were left running (`services left running:`). To restart everything anyway, for instance to give
+the worker newer documents, run `BRAIN_DEPLOY_RECREATE_ALL=1 /usr/local/bin/brain-deploy` once.
+The first deploy after this ships restarts the worker once, because the image it is running has no
+fingerprint to compare.
+
 `brain-deploy` prefers to ask Coolify to deploy, on `127.0.0.1` with a token in
 `/root/.coolify-deploy-token`, so the panel's own record stays true; with no token it
 recreates the app with compose from Coolify's own directory. Either way the call is made on
