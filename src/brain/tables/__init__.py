@@ -128,6 +128,7 @@ from brain.tables.manifest_draft import (
 from brain.tables.member_preference import MemberPreferenceRow
 from brain.tables.member_share import AgentRequestRow, ArtifactShareRow
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
+from brain.tables.migration_record import MigrationRecordRow
 from brain.tables.model_health import (
     ChainDepthAlertRow,
     ProviderHealthRow,
@@ -570,6 +571,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0250_model_server. Points at nothing: a peak is a fact about a machine and names no request,
     # person or passage.
     "ops.model_server_peak",
+    # 0241_migration_record. Points at nothing: a person is a value, so a saved version outlives the
+    # person who saved it.
+    "ops.migration_record",
 )
 
 __all__ = [
@@ -666,6 +670,7 @@ __all__ = [
     "MemberPreferenceRow",
     "MessageRole",
     "MessageRow",
+    "MigrationRecordRow",
     "ModelAttemptRow",
     "ModelProviderRow",
     "ModelServerPeakRow",

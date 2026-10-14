@@ -579,6 +579,10 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # counts and three memory figures. `0250` keeps no request, person or passage, and grants
         # no way for a row to leave but the ring overwriting it.
         "ops.model_server_peak",
+        # A saved version of a migration document: the register, the comparison period or the
+        # cutover. The person who saved it is an actor, and what it holds is the old system's
+        # catalogue, never anybody's record, and `0241` grants no way for a row to leave (M37).
+        "ops.migration_record",
         # What a lead flagged, what was read of answers, how golden questions scored and who agreed
         # to a change: each names an actor and a reference and is a fact about a moment, not
         # anybody's record, and `0222` grants no way for a row to leave.

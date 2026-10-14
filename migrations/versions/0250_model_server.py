@@ -28,7 +28,7 @@ only the record of how they were read, which is what the columns were.
 Task ids: M7.2.1, M7.3.3, M7.7.9, M7.7.10
 
 Revision ID: 0250
-Revises: 0240
+Revises: 0241
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0250"
-down_revision = "0240"
+down_revision = "0241"
 branch_labels = None
 depends_on = None
 

@@ -447,6 +447,26 @@ PLUGIN_REGISTRY: Final = Feature(
     ),
 )
 
+#: Keeping the documents a migration from another system is run on. Off because it writes a version
+#: of a register, a comparison period or a cutover record per save, and because what it keeps is
+#: only as true as the person who typed it: nothing here reaches the old system (M37).
+MIGRATION_WORKSPACE: Final = Feature(
+    name="migration_workspace",
+    title="Keep the records of a migration from another system",
+    what=(
+        "An administrator of settings may save the register of what the old system holds and "
+        "what happens to each of it, the comparison period with the criteria agreed before it "
+        "began, and the cutover record. Each is checked as it is saved and what is outstanding "
+        "is shown. A cutover is reported complete only once every act with a security "
+        "consequence is recorded. Nothing reaches the old system."
+    ),
+    while_off=(
+        "No migration record can be saved and the page says so. Versions saved while this was on "
+        "stay and can still be read."
+    ),
+    read_by=("brain.migration_routes:_page", "brain.migration_routes:_switched_on"),
+)
+
 #: Letting an agent run a browser. Off because it starts a container that opens pages on the
 #: install's behalf: the sandbox, the launcher and the runner image have been specified and tested
 #: as decisions and have not run on a host, and `brain.browsing.driver` is the first thing that
@@ -488,6 +508,7 @@ BUILT_IN_FEATURES: Final[tuple[Feature, ...]] = (
     STARTER_SKILLS_SWITCH,
     PLUGIN_REGISTRY,
     ORCHESTRATION_REHEARSAL,
+    MIGRATION_WORKSPACE,
     BROWSER_RUNS,
 )
 

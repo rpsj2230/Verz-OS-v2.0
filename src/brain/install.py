@@ -572,6 +572,19 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         ),
         default="none",
     ),
+    # --- how this install updates, M42.1.3 (brain.deployment.update_mode)
+    Setting(
+        name="INSTALL_UPDATE_MODE",
+        belongs=Belongs.STORAGE,
+        meaning=(
+            "How this install updates: `release`, the default, stays on a release tag somebody "
+            "chose, and is what a client's production install wants; `continuous` follows every "
+            "release as it is published, as a staging server does, and the install check for a "
+            "named release is then recorded as not run, with the reason, rather than failed. "
+            "Changed on Install, Settings."
+        ),
+        default="release",
+    ),
     # --- the skill import acceptance check, M38.5.1 (brain.ops.acceptance_checks_skills)
     # --- the evening digest, M38.3.3 (brain.ops.digest_destination)
     Setting(
@@ -592,6 +605,18 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
             "install's time zone. Changed on Install, Settings."
         ),
         default="18:00",
+    ),
+    # --- a safety mechanism that has not run, M17.7.2 (brain.control_not_run_told)
+    Setting(
+        name="INSTALL_ALERT_EMAIL",
+        belongs=Belongs.CONNECTORS,
+        meaning=(
+            "One email address told that a safety mechanism has not run when nobody who holds the "
+            "operations alert has used a chat tool in the last seven days. Changed on Install, "
+            "Settings. `unset` tells nobody by email, and the people who hold the alert are told "
+            "in the chat tool each last used."
+        ),
+        default="unset",
     ),
     Setting(
         name="INSTALL_ACCEPTANCE_SKILL_SOURCE",
