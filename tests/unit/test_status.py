@@ -772,9 +772,14 @@ def test_the_real_document_reports_what_its_own_first_paragraph_says() -> None:
     did, for as long as the count was a running total."""
     import re
 
+    from brain.docs_derived import render_needs
     from brain.docs_routes import DOCS, NEEDS_FILE, _needs_count
 
-    text = (DOCS / NEEDS_FILE).read_text(encoding="utf-8")
+    # As served. The file carries a marker and no number since 2026-10-14, because the typed
+    # sentence was the line every pull request that opened an item edited; the sentence this
+    # test reads is the one the route generates from the headings, which is the one a person
+    # is shown.
+    text = render_needs((DOCS / NEEDS_FILE).read_text(encoding="utf-8"))
     # Singular as well as plural. The pattern was `(\d+) items are open`, which quietly
     # required the document to be ungrammatical the day exactly one item was left, and that
     # day arrived: the sentence read "1 item is open" and the test reported that the
