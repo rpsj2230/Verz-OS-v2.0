@@ -715,7 +715,9 @@ def parse_cause_for(outcome: CallOutcome) -> ParseCause | None:
 # ------------------------------------------------------------------ the deployment checks
 
 
-def is_switched_on() -> bool:
+def is_switched_on(
+    env: Mapping[str, str] | None = None, saved: Mapping[str, str] | None = None
+) -> bool:
     """Whether this install's optional services name the model server, read as settings are.
 
     False for a value that cannot be read, because this is asked by the worker's start-up check
@@ -725,7 +727,7 @@ def is_switched_on() -> bool:
     from brain.ops.overlays import OverlayError, components_switched_on, switched_on_here
 
     try:
-        return INFERENCE_COMPONENT in components_switched_on(switched_on_here())
+        return INFERENCE_COMPONENT in components_switched_on(switched_on_here(env, saved))
     except OverlayError:
         return False
 

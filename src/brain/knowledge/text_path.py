@@ -162,6 +162,66 @@ Judged = tuple[ScanVerdict, ScanCause | None]
 _CLEAN: Final[Judged] = (ScanVerdict.CLEAN, None)
 
 
+#: The most pixels one image may have: a photograph of a page is a few million, and the scanned-page
+#: reader refuses a page of more than this (`inference_server.parts.ocr.MAX_PAGE_PIXELS`, which a
+#: test holds equal). An image whose header claims more is how a small file is built to take a
+#: reader's memory, the bomb a zip's expansion ratio is for.
+MAX_IMAGE_PIXELS: Final = 100_000_000
+
+#: The start-of-frame markers of a JPEG, which are where its size is written. `0xC4`, `0xC8` and
+#: `0xCC` sit among them and are not frames.
+_JPEG_FRAMES: Final = frozenset(range(0xC0, 0xD0)) - {0xC4, 0xC8, 0xCC}
+
+#: The markers that stand alone in a JPEG, with no length after them.
+_JPEG_STANDALONE: Final = frozenset({0x01, *range(0xD0, 0xDA)})
+
+
+def _png_size(content: bytes) -> tuple[int, int] | None:
+    """The width and height a PNG's first chunk declares, or None if it does not begin as one."""
+    if len(content) < 24 or content[12:16] != b"IHDR":
+        return None
+    return int.from_bytes(content[16:20], "big"), int.from_bytes(content[20:24], "big")
+
+
+def _jpeg_size(content: bytes) -> tuple[int, int] | None:
+    """The width and height a JPEG's frame header declares, or None if none is found."""
+    at = 2
+    while at + 4 <= len(content):
+        if content[at] != 0xFF:
+            return None
+        marker = content[at + 1]
+        if marker == 0xFF:
+            at += 1
+            continue
+        if marker in _JPEG_STANDALONE:
+            at += 2
+            continue
+        if marker in _JPEG_FRAMES:
+            if at + 9 > len(content):
+                return None
+            return (
+                int.from_bytes(content[at + 7 : at + 9], "big"),
+                int.from_bytes(content[at + 5 : at + 7], "big"),
+            )
+        at += 2 + int.from_bytes(content[at + 2 : at + 4], "big")
+    return None
+
+
+def _image_verdict(content: bytes, container: Container) -> Judged:
+    """A photograph or scan is judged by what its header claims, because that is what a reader pays.
+
+    Nothing here decodes a pixel. A header that cannot be read is an image that is damaged or not
+    one, and one that claims more pixels than any page has is built to exhaust whatever decodes it.
+    The residue is the same as for a PDF and is `A_STRUCTURAL_CHECK_IS_NOT_AN_ANTIVIRUS`'s.
+    """
+    size = _png_size(content) if container is Container.PNG else _jpeg_size(content)
+    if size is None or size[0] < 1 or size[1] < 1:
+        return ScanVerdict.UNSCANNABLE, ScanCause.UNOPENABLE
+    if size[0] * size[1] > MAX_IMAGE_PIXELS:
+        return ScanVerdict.INFECTED, ScanCause.EXPANDS_WITHOUT_BOUND
+    return _CLEAN
+
+
 def _archive_verdict(content: bytes) -> Judged:
     try:
         with zipfile.ZipFile(io.BytesIO(content)) as archive:
@@ -211,20 +271,24 @@ class StructuralCheck:
     """The scanner this path clears a file with. See `A_STRUCTURAL_CHECK_IS_NOT_AN_ANTIVIRUS`.
 
     It is told nothing but the bytes, as `brain.knowledge.scanning.Scanner` requires, and reads
-    the container from them itself. A container this path does not read is unscannable here,
-    which the gate refuses: an image reaching this check is a caller that skipped the type
-    question, and the safe answer to it is no.
+    the container from them itself. A container it cannot judge is unscannable here, which the
+    gate refuses. A photograph or a scan is judged by what its header claims (`_image_verdict`),
+    because the scanned-page reader is handed them; before that reader existed an image reaching
+    this check was a caller that had skipped the type question, and the answer was no.
     """
 
     def scan(self, content: bytes) -> ScanReport:
-        match sniff(content[:SNIFF_BYTES]):
+        container = sniff(content[:SNIFF_BYTES])
+        match container:
             case Container.ZIP:
                 verdict, cause = _archive_verdict(content)
             case Container.PDF:
                 verdict, cause = _pdf_verdict(content)
             case Container.TEXT:
                 verdict, cause = _text_verdict(content)
-            case Container.PNG | Container.JPEG | Container.UNKNOWN:
+            case Container.PNG | Container.JPEG:
+                verdict, cause = _image_verdict(content, container)
+            case Container.UNKNOWN:
                 verdict, cause = ScanVerdict.UNSCANNABLE, ScanCause.NOT_CHECKABLE
         return ScanReport(verdict=verdict, scanner=STRUCTURAL_CHECK, cause=cause)
 

@@ -457,6 +457,10 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.identity.staff_source:StaffSource.roster": Repeat.READS,
         # Knowledge: parsing, embedding and reading rows.
         "brain.knowledge.embed_queue:EmbeddingService.embed": Repeat.NO_EFFECT_AT_THE_FAR_END,
+        # A document or a text sent to a part of the model server, which answers what it read and
+        # keeps nothing of it: the part writes the document to a file of its own and deletes it
+        # before it answers.
+        "brain.knowledge.model_server_parsers:Caller.ask": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.knowledge.parse_layout:LayoutService.layout": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.knowledge.parse_ocr:OcrEngine.read": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.knowledge.rows:RowSource.rows": Repeat.READS,
