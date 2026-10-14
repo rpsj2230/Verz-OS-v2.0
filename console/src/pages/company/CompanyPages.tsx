@@ -9,7 +9,7 @@
  * filter with no values offered is not drawn, and a figure the API withheld is said to be withheld
  * rather than drawn as nought.
  *
- * Task ids: M33.1.1.1, M33.1.1.2, M33.1.1.3
+ * Task ids: M33.1.1.1, M33.1.1.2, M33.1.1.3, M27.16.3, M27.16.2
  */
 
 import { useId, useState, type ReactNode } from "react";
@@ -26,6 +26,8 @@ import {
   StatsStrip,
   type EntityColumn,
 } from "../../components/kit";
+import { SavedFilters } from "../../components/kit/SavedFilters";
+import { addressFor } from "../../components/kit/savedFilterStore";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { actorWords, subjectWords, whatWords } from "../audit/auditWords";
@@ -239,6 +241,27 @@ function Filters({
           <Link to={base}>{CLEAR_FILTERS}</Link>
         </Button>
       ) : null}
+      <SavedFilters
+        label={FILTERS_LABEL}
+        question={{ search: words, filters: { department, person, kind }, sort: order }}
+        columns={[...(kinds === undefined ? [] : ["kind"]), "department", "person"]}
+        sorts={searchable ? [...ORDERS] : []}
+        onApply={(question) => {
+          navigate(
+            addressFor(
+              base,
+              question,
+              {
+                search: PARAMETERS.search,
+                filters: { department: PARAMETERS.department, person: PARAMETERS.person, kind: PARAMETERS.kind },
+                sort: PARAMETERS.order,
+                reset: [PARAMETERS.cursor],
+              },
+              search,
+            ),
+          );
+        }}
+      />
     </form>
   );
 }
@@ -285,7 +308,7 @@ export function EstatePage() {
   }
   return (
     <Frame title={ESTATE_HEADING} lede={ESTATE_LEDE}>
-      <SectionCard title={ESTATE_HEADING}>
+      <SectionCard title={ESTATE_HEADING} hideTitle>
         <div className="flex min-w-0 flex-col gap-3">
           {body === null ? null : (
             <Filters base={ESTATE_PATH} departments={body.departments} people={body.people} names={body.names ?? {}} kinds={body.kinds} />
@@ -347,7 +370,7 @@ export function ActivityPage() {
   const next = body?.next_cursor ?? null;
   return (
     <Frame title={ACTIVITY_HEADING} lede={ACTIVITY_LEDE}>
-      <SectionCard title={ACTIVITY_HEADING}>
+      <SectionCard title={ACTIVITY_HEADING} hideTitle>
         <div className="flex min-w-0 flex-col gap-3">
           {body === null ? null : (
             <Filters base={ACTIVITY_PATH} departments={body.departments} people={body.actors} names={people} searchable />

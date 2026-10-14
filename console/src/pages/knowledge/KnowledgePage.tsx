@@ -25,7 +25,7 @@
  * controls; and the lifecycle, intake and solutions cards stacked above the list, which are now a
  * document's own page, the Add menu, and the Solutions and Corrections tabs.
  *
- * Task ids: M27.15.40, M27.16.1, M7.6.3, M7.1.2, M7.1.5
+ * Task ids: M27.15.40, M27.16.1, M7.6.3, M7.1.2, M7.1.5, M27.16.3
  */
 
 import { BookOpen, ChevronDown, Download, MoreHorizontal, Plus } from "lucide-react";
@@ -375,6 +375,7 @@ export function KnowledgePage() {
   return (
     <>
       <ListPage
+        exportName="knowledge"
         crumbs={[{ label: KNOWLEDGE_HEADING }]}
         title={KNOWLEDGE_HEADING}
         lede={KNOWLEDGE_LEDE}

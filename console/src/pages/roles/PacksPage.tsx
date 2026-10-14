@@ -18,7 +18,7 @@
  * **The catalogue is whole or empty**: the Capabilities screen's read decides, because a pack's
  * contents are capability names. There is no count of anything.
  *
- * Task ids: M27.15.24, M27.11.3, M27.16.1
+ * Task ids: M27.15.24, M27.11.3, M27.16.1, M27.16.2
  */
 
 import { Copy, MoreHorizontal, Package, Plus } from "lucide-react";
@@ -516,7 +516,7 @@ export function PacksPage() {
           ) : undefined
         }
       />
-      <SectionCard title="Packs" lede="Assign a pack from a person's Grants view, where the scope it is bounded by is chosen.">
+      <SectionCard title="Packs" hideTitle lede="Assign a pack from a person's Grants view, where the scope it is bounded by is chosen.">
         {body}
       </SectionCard>
       {editing === null ? null : (

@@ -25,7 +25,7 @@
  * used, in the order the kinds give way. No figure for what is in use, and none is sent; a process
  * with no cache is the API's sentence under the heading, never an empty table.
  *
- * Task ids: M27.7.27, M23.1.1, M23.2.1, M27.16.1, M22.4.1, M22.1.5
+ * Task ids: M27.7.27, M23.1.1, M23.2.1, M27.16.1, M22.4.1, M22.1.5, M27.16.3
  */
 
 import { useResource } from "../../api/useResource";
@@ -180,6 +180,7 @@ export function LimitsPage() {
           <>
             {wasRead(throttled) ? (
               <WholeList
+                exportName="refusing"
                 title={REFUSING_HEADING}
                 caption={REFUSING_HEADING}
                 columns={THROTTLE_COLUMNS}
@@ -197,6 +198,7 @@ export function LimitsPage() {
             )}
             {wasRead(deferred) ? (
               <WholeList
+                exportName="deferred"
                 title={DEFERRED_HEADING}
                 caption={DEFERRED_HEADING}
                 columns={DEFERRED_COLUMNS}
@@ -223,6 +225,7 @@ export function LimitsPage() {
               empty={NO_WINDOWS}
             />
             <WholeList
+              exportName="ceilings"
               title={CEILINGS_HEADING}
               caption={CEILINGS_HEADING}
               columns={CEILING_COLUMNS}
@@ -234,6 +237,7 @@ export function LimitsPage() {
             />
             {wasRead(unusual) ? (
               <WholeList
+                exportName="unusual"
                 title={UNUSUAL_HEADING}
                 caption={UNUSUAL_HEADING}
                 columns={UNUSUAL_COLUMNS}

@@ -13,7 +13,7 @@
  * registry names a control; "Spend report refresh" is how a person reads it. The words are made from
  * the identifier by one rule, so two jobs can never be shown under the same name.
  *
- * Task ids: M27.16.1, M27.10.2
+ * Task ids: M27.16.1, M27.10.2, M27.16.2
  */
 
 import type { ReactNode } from "react";
@@ -147,6 +147,7 @@ export function OpsPage<Body>({
 /** A list answered whole, in a headed card: the table, or one sentence saying there is nothing. */
 export function WholeList<Row>({
   title,
+  hideTitle,
   lede,
   action,
   caption,
@@ -156,11 +157,15 @@ export function WholeList<Row>({
   rowLabel,
   rowActions,
   exportName,
+  detail,
+  withoutDetail,
   empty,
   emptyDescription,
   footer,
 }: {
   readonly title: string;
+  /** The title is the page's own, so the card keeps it for a screen reader and does not draw it. */
+  readonly hideTitle?: boolean | undefined;
   readonly lede?: ReactNode | undefined;
   readonly action?: ReactNode | undefined;
   readonly caption: string;
@@ -170,13 +175,17 @@ export function WholeList<Row>({
   readonly rowLabel: (row: Row) => string;
   readonly rowActions?: ((row: Row) => ReactNode) | undefined;
   readonly exportName?: string | undefined;
+  /** What a row's detail drawer holds when the page has more to say than its cells. */
+  readonly detail?: ((row: Row) => ReactNode) | undefined;
+  /** Why this list has no detail drawer. */
+  readonly withoutDetail?: string | undefined;
   /** The empty sentence, whichever reason the list is empty for. */
   readonly empty: string;
   readonly emptyDescription?: ReactNode | undefined;
   readonly footer?: ReactNode | undefined;
 }) {
   return (
-    <SectionCard title={title} lede={lede} action={action} footer={footer}>
+    <SectionCard title={title} hideTitle={hideTitle} lede={lede} action={action} footer={footer}>
       {rows.length === 0 ? (
         <EmptyState title={empty} description={emptyDescription ?? ""} />
       ) : (
@@ -188,6 +197,8 @@ export function WholeList<Row>({
           rowLabel={rowLabel}
           rowActions={rowActions}
           exportName={exportName}
+          detail={detail}
+          withoutDetail={withoutDetail}
         />
       )}
     </SectionCard>

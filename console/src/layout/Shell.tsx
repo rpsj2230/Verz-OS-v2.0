@@ -58,14 +58,16 @@
  * every page and not only the two that used to, and it is cleared when the address changes
  * (M36.1.2.3).
  *
- * Task ids: M27.10.1, M27.7.29, M36.1.2.3
+ * Task ids: M27.10.1, M27.7.29, M36.1.2.3, M27.16.3
  */
 
 import { Suspense } from "react";
 import { useEffect } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { clearStaleness } from "../api/staleness";
-import { useResource } from "../api/useResource";
+import { useResource, type Resource } from "../api/useResource";
+import { CallerProvider, readCallerId } from "../components/kit/caller";
+import { forgetAllFlows } from "../components/kit/flowMemory";
 import { SidebarProvider } from "../components/ui/sidebar";
 import { ThemeControl } from "../theme/ThemeControl";
 import { signOut } from "../auth/session";
@@ -77,11 +79,26 @@ import { GlobalSearch } from "./GlobalSearch";
 import { ModuleTabs } from "./ModuleTabs";
 import { NAVIGATION_API_PATH, menuFor, readNavigation } from "./navigationQuery";
 import { SignInStrength } from "./SignInStrength";
+import { ME_API_PATH } from "./signInStrengthQuery";
 import { StalenessBanner } from "./StalenessBanner";
 
 export { MENU_LOADING, MENU_UNAVAILABLE } from "./ConsoleSidebar";
 
+/**
+ * The shell reads `GET /me` once. The banner is drawn from the answer, and the principal it names is
+ * handed to everything under the shell (`components/kit/caller.tsx`), so a thing a person keeps for
+ * themselves in their own browser is kept under them and nobody else.
+ */
 export function Shell() {
+  const me = useResource<unknown>(ME_API_PATH);
+  return (
+    <CallerProvider value={readCallerId(me.data)}>
+      <ShellFrame me={me} />
+    </CallerProvider>
+  );
+}
+
+function ShellFrame({ me }: { readonly me: Resource<unknown> }) {
   const location = useLocation();
   useEffect(() => {
     clearStaleness();
@@ -114,6 +131,8 @@ export function Shell() {
               type="button"
               className="button"
               onClick={() => {
+                // What somebody half typed into a flow is theirs: gone before the next person sits down.
+                forgetAllFlows();
                 void signOut();
               }}
             >
@@ -122,7 +141,7 @@ export function Shell() {
           </div>
         </header>
 
-        <SignInStrength />
+        <SignInStrength answer={me} />
 
         <main id="main" className="shell__main">
           <StalenessBanner />

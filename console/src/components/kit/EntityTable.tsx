@@ -1,6 +1,6 @@
 /**
  * The table on every module list: rows as the API sent them, with row selection, a bulk bar,
- * column choice and export of what the reader may see.
+ * column choice, export of what the reader may see and a detail drawer for one row.
  *
  * **It cannot page, filter, sort or count, and that is `components/DataTable.tsx`'s argument kept.**
  * The rows are exactly what the list contract returned for the question on screen (`useListing`),
@@ -26,11 +26,19 @@
  * column they hid is left out. A cell that begins with a formula character is prefixed so a
  * spreadsheet opens it as text, because a value from the API is data and never a formula.
  *
- * Task ids: M27.10.2
+ * **A row opens in a detail drawer without leaving the list.** The control is on every row, and the
+ * drawer's body is the row's own cells for every column, including the ones the reader hid from the
+ * list, so a list too wide for a phone is still readable one row at a time. It draws what the table
+ * already holds and asks for nothing more, so it can show nothing a row did not already carry, and it
+ * has no count in it. A page with a fuller view of its own row passes `detail`; a table for which a
+ * drawer would say nothing passes `withoutDetail` with the reason, and that reason is on the table
+ * for the sweep that holds every list to the five tools (`tests/list-tools.test.tsx`).
+ *
+ * Task ids: M27.10.2, M27.16.3
  */
 
-import { Columns3, Download, X } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { Columns3, Download, PanelRightOpen, X } from "lucide-react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
@@ -43,6 +51,7 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+import { Drawer } from "./Drawer";
 
 export const COLUMNS_LABEL = "Columns";
 export const SHOW_COLUMNS = "Show columns";
@@ -51,6 +60,13 @@ export const EXPORT_SELECTED = "Export selected";
 export const CLEAR_SELECTION = "Clear the selection";
 export const BULK_ACTIONS_LABEL = "Bulk actions";
 export const SELECT_PAGE = "Select every row shown";
+
+export const DETAILS_DESCRIPTION = "Everything this list holds about it, including the columns hidden from the list.";
+
+/** The row's detail control's name, for a screen reader and for a test. */
+export function detailsLabel(rowLabel: string): string {
+  return `Details of ${rowLabel}`;
+}
 
 /** Said beside the export button, so nobody reads the file as everything that exists. */
 export const EXPORT_SAYS_WHAT_IT_HOLDS = "Exports the rows shown here, in the columns shown.";
@@ -124,6 +140,10 @@ interface EntityTableProps<Row> {
   readonly exportName?: string | undefined;
   /** An actions cell at the end of each row, such as a menu. */
   readonly rowActions?: ((row: Row) => ReactNode) | undefined;
+  /** What the detail drawer holds, when the page has more to say about one row than its cells. */
+  readonly detail?: ((row: Row) => ReactNode) | undefined;
+  /** Why this table has no detail drawer. Never absent without it: see the module note. */
+  readonly withoutDetail?: string | undefined;
 }
 
 export function EntityTable<Row>({
@@ -135,11 +155,20 @@ export function EntityTable<Row>({
   bulkActions,
   exportName,
   rowActions,
+  detail,
+  withoutDetail,
 }: EntityTableProps<Row>) {
   const [hidden, setHidden] = useState<ReadonlySet<string>>(
     () => new Set(columns.filter((column) => column.hidden === true).map((column) => column.id)),
   );
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
+  // Which row the drawer is about, and whether it is open. The row is kept after the drawer closes, so
+  // the drawer is not unmounted before Radix has given focus back to the control that opened it.
+  const [opened, setOpened] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const opener = useRef<HTMLElement | null>(null);
+  const hasDetail = withoutDetail === undefined;
+  const openedRow = opened === null ? undefined : rows.find((row) => rowId(row) === opened);
 
   // A tick on a row no longer drawn is dropped, so a changed question never acts on rows the
   // reader can no longer see.
@@ -161,7 +190,11 @@ export function EntityTable<Row>({
   };
 
   return (
-    <div data-slot="entity-table" className="flex min-w-0 flex-col gap-2">
+    <div
+      data-slot="entity-table"
+      data-without-detail={withoutDetail}
+      className="flex min-w-0 flex-col gap-2"
+    >
       <div className="flex min-h-9 flex-wrap items-center gap-2">
         {selectedIds.size > 0 ? (
           <div
@@ -272,7 +305,7 @@ export function EntityTable<Row>({
                   {column.header}
                 </TableHead>
               ))}
-              {rowActions === undefined ? null : (
+              {rowActions === undefined && !hasDetail ? null : (
                 <TableHead className="w-12">
                   <span className="sr-only">Actions</span>
                 </TableHead>
@@ -310,13 +343,58 @@ export function EntityTable<Row>({
                       {column.cell(row)}
                     </TableCell>
                   ))}
-                  {rowActions === undefined ? null : <TableCell className="w-12 py-1.5">{rowActions(row)}</TableCell>}
+                  {rowActions === undefined && !hasDetail ? null : (
+                    <TableCell className="w-12 py-1.5">
+                      <div className="flex items-center justify-end gap-1">
+                        {hasDetail ? (
+                          <Button
+                            type="button"
+                            variant="quiet"
+                            size="icon-sm"
+                            data-slot="row-details"
+                            className="size-11 sm:size-8"
+                            aria-label={detailsLabel(rowLabel(row))}
+                            onClick={(event) => {
+                              opener.current = event.currentTarget;
+                              setOpened(id);
+                              setDrawerOpen(true);
+                            }}
+                          >
+                            <PanelRightOpen aria-hidden />
+                          </Button>
+                        ) : null}
+                        {rowActions?.(row)}
+                      </div>
+                    </TableCell>
+                  )}
                 </TableRow>
               );
             })}
           </TableBody>
         </Table>
       </div>
+      {hasDetail && openedRow !== undefined ? (
+        <Drawer
+          open={drawerOpen}
+          onOpenChange={setDrawerOpen}
+          title={rowLabel(openedRow)}
+          description={DETAILS_DESCRIPTION}
+          returnFocusTo={opener.current}
+        >
+          {detail === undefined ? (
+            <dl data-slot="row-detail" className="m-0 flex flex-col gap-3">
+              {columns.map((column) => (
+                <div key={column.id} className="flex min-w-0 flex-col gap-0.5">
+                  <dt className="font-mono text-[10px] tracking-[0.09em] text-dim uppercase">{column.header}</dt>
+                  <dd className="m-0 min-w-0 text-[13px] text-ink [overflow-wrap:anywhere]">{column.cell(openedRow)}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : (
+            detail(openedRow)
+          )}
+        </Drawer>
+      ) : null}
     </div>
   );
 }

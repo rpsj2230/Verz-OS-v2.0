@@ -2,11 +2,11 @@
  * What the wizard keeps as it goes and what it reads back (M42.5.12): the body cut at the screen
  * just finished, and the screen a kept draft resumes at.
  *
- * Task ids: M42.5.12
+ * Task ids: M42.5.12, M27.15.68
  */
 
 import { describe, expect, test } from "vitest";
-import { SCREENS, draftBody, readDraft, type DraftView } from "../src/setup/wizard";
+import { SCREENS, appointmentBody, draftBody, readDraft, type DraftView } from "../src/setup/wizard";
 
 const answers = {
   company: { company_name: "A company", web_address: "https://company.example.invalid" },
@@ -24,6 +24,27 @@ describe("the body that keeps the draft", () => {
     const skipped = new Set(["connections" as const]);
     expect(draftBody("code", answers, skipped, "company").skipped).toEqual([]);
     expect(draftBody("code", answers, skipped, "connections").skipped).toEqual(["connections"]);
+  });
+});
+
+describe("what the draft never carries", () => {
+  test("a secret answer is blanked in the body that keeps the draft and kept in the one that appoints", () => {
+    // What breaks if this is deleted: a provider key sent to a route whose only job is to remember
+    // the person's place. The server drops a credential on the way in, and this holds that the console
+    // does not send it, while the appointment, which has to carry it, still does.
+    const typed = {
+      ...answers,
+      model_provider: { model_profile: "hosted", model_provider: "anthropic", provider_key: "sk-SENTINEL-1" },
+    };
+    const kept = draftBody("code", typed, new Set(), "model_provider");
+    expect(kept.answers?.["model_provider"]).toEqual({
+      model_profile: "hosted",
+      model_provider: "anthropic",
+      provider_key: "",
+    });
+    expect(JSON.stringify(kept)).not.toContain("sk-SENTINEL-1");
+    const appointed = appointmentBody("code", typed, new Set());
+    expect(appointed.answers?.["model_provider"]).toMatchObject({ provider_key: "sk-SENTINEL-1" });
   });
 });
 

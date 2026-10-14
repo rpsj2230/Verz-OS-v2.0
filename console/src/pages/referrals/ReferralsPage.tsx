@@ -15,7 +15,7 @@
  * **Marking one handled is confirmed**, because it cannot be undone from here, and the route answers
  * with the list as it now stands, which the page draws.
  *
- * Task ids: M24.2.2, M27.16.1
+ * Task ids: M24.2.2, M27.16.1, M27.16.3
  */
 
 import { HeartHandshake, MoreHorizontal } from "lucide-react";
@@ -125,6 +125,7 @@ export function ReferralsPage() {
   } else {
     body = (
       <EntityTable
+        exportName="referrals"
         caption={REFERRALS_CAPTION}
         columns={columns}
         rows={referrals}

@@ -15,7 +15,7 @@
  * **A store that cannot be read is said, not drawn as an empty list**, because in that moment every
  * request is being refused.
  *
- * Task ids: M27.2.8, M27.12.4, M27.15.10, M27.15.15, M27.15.16
+ * Task ids: M27.2.8, M27.12.4, M27.15.10, M27.15.15, M27.15.16, M27.16.2
  */
 
 import { useState, type FormEvent } from "react";
@@ -104,7 +104,7 @@ function ResumeCard({ row, onResumed }: { readonly row: HaltRow; readonly onResu
       title={haltTitle(row)}
       footer={
         <p className="m-0 text-[12px] text-dim">
-          Stopped by {row.declared_by} {whenWords(row.at)}. {row.reason}
+          Stopped {whenWords(row.at)}. {row.reason}
         </p>
       }
     >
@@ -131,7 +131,7 @@ function ResumeCard({ row, onResumed }: { readonly row: HaltRow; readonly onResu
       <ConfirmDialog
         open={confirming}
         question={resumeQuestion(row)}
-        consequence={resumeConsequence(row)}
+        consequence={resumeConsequence()}
         details={failure === null ? undefined : <FailureState failure={failure} title={NOT_RESUMED} />}
         confirmLabel={RESUME_LABEL}
         cancelLabel={KEEP_IT_STOPPED}

@@ -19,7 +19,7 @@
  * **What was removed.** The breadcrumb as text, the identifiers as the rows' names, and the paragraph
  * about downloads (one line now).
  *
- * Task ids: M27.7.23, M27.16.1
+ * Task ids: M27.7.23, M27.16.1, M27.16.2
  */
 
 import { useId, useState } from "react";
@@ -194,7 +194,7 @@ export function ArtifactsPage() {
         const read = readArtifacts(page);
         return (
           <>
-            <SectionCard title={ARTIFACTS_HEADING} footer={<Line>{CARRIES_ITS_RUN}</Line>}>
+            <SectionCard title={ARTIFACTS_HEADING} hideTitle footer={<Line>{CARRIES_ITS_RUN}</Line>}>
               {wasRead(read) ? (
                 <Listed rows={read.panel} />
               ) : (

@@ -14,7 +14,7 @@
  * **The break-glass notices addressed to the reader are listed under the requests (M1.2.5)**, and
  * only when there are some: they are the reader's own, so an empty section would say nothing.
  *
- * Task ids: M27.7.8, M27.8.6, M1.2.5, M27.16.1
+ * Task ids: M27.7.8, M27.8.6, M1.2.5, M27.16.1, M27.16.3
  */
 
 import { KeyRound, MoreHorizontal, Plus } from "lucide-react";
@@ -117,7 +117,7 @@ function ToldAbout({ version }: { readonly version: number }) {
   ];
   return (
     <SectionCard title={TOLD_HEADING} lede={TOLD_LEDE}>
-      <EntityTable caption={TOLD_LABEL} columns={columns} rows={told} rowId={(one) => one.session_id} rowLabel={(one) => nameOf(people, one.principal_id)} />
+      <EntityTable exportName="elevation-told" caption={TOLD_LABEL} columns={columns} rows={told} rowId={(one) => one.session_id} rowLabel={(one) => nameOf(people, one.principal_id)} />
     </SectionCard>
   );
 }
