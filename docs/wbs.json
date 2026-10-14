@@ -6824,9 +6824,9 @@
      "updated": "2026-10-06"
     },
     "M32.5.2.3": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in components/GraphCanvas.tsx, components/ProcedureCanvas.tsx, components/TraceGraph.tsx +4 more; NOT wired: pages/Audit.route.tsx, pages/audit/TracePage.tsx",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "built (M32/react-flow-keyboard-and-list): the trace graph on Audit then Trace and the agent builder's procedure canvas are both drawn through React Flow, each step takes a tab stop and is read aloud with its words and kind, a skip link jumps past the drawing, and the trace has the steps as a list under it; to prove on the install: sign in as a reader holding the trace reader role, open Audit then Trace, enter a trace id and a reason, press Tab and see each box take the focus ring, press Tab until the link Skip the drawing appears, press Enter and land on the list of steps, then open an agent's draft, go to its Procedure step and do the same",
+     "updated": "2026-10-14"
     },
     "M32.6.1.1": {
      "status": "OPEN",
