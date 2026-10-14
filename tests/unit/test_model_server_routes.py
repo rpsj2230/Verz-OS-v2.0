@@ -99,6 +99,28 @@ def nothing_saved() -> Iterator[None]:
     hold_saved(before)
 
 
+class Server:
+    """What the model server's readiness route says, and how often it was asked."""
+
+    def __init__(self) -> None:
+        self.answer: tuple[int, dict[str, object]] | None = None
+        self.asked = 0
+
+    async def readiness(self, *args: Any, **kwargs: Any) -> Any:
+        self.asked += 1
+        return self.answer
+
+
+@pytest.fixture(autouse=True)
+def the_server(monkeypatch: pytest.MonkeyPatch) -> Server:
+    """The readiness route is answered by this and never by a network the test does not have."""
+    from brain import settings_routes
+
+    server = Server()
+    monkeypatch.setattr(settings_routes, "server_readiness", server.readiness)
+    return server
+
+
 @pytest.fixture
 def held() -> tuple[InstallRows, SettingRows, Ring]:
     return InstallRows(), SettingRows(), Ring()
@@ -253,3 +275,70 @@ def test_with_no_measurement_a_model_setting_is_saved_and_the_deploy_decides(
 
     assert saved.status_code == 200, saved.text
     assert [one["key"] for one in installed.writes] == ["install.model_parts"]
+
+
+# ------------------------------------------------------------------ the revision the server holds
+def test_the_revision_the_server_holds_is_shown_and_the_page_says_what_to_set(
+    served: TestClient, the_server: Server
+) -> None:
+    """With the embedding part chosen the page asks the server what weights it holds and, where
+    the install has declared none, says the setting to set to it.
+
+    Delete this and the owner has no way to learn the value `INSTALL_EMBEDDING_REVISION` must be,
+    and nothing is embedded."""
+    the_server.answer = (200, {"revisions": {"embedding": "abc123def456"}})
+
+    page = get(served, "u_admin", PAGE).json()
+
+    assert (page["held_revision"], page["declared_revision"]) == ("abc123def456", None)
+    assert "INSTALL_EMBEDDING_REVISION to it" in page["revision_note"]
+    assert the_server.asked == 1
+
+
+def test_a_declared_revision_that_is_not_the_held_one_is_called_out_with_both(
+    served: TestClient, the_server: Server
+) -> None:
+    """The two named in one sentence when they part, and a plain statement when they agree.
+
+    Delete this and a revision that does not match is found only by every vector being refused."""
+    the_server.answer = (200, {"revisions": {"embedding": "abc123def456"}})
+    before = hold_saved({"INSTALL_EMBEDDING_REVISION": "000000000000"})
+    try:
+        parted = get(served, "u_admin", PAGE).json()
+        hold_saved({"INSTALL_EMBEDDING_REVISION": "abc123def456"})
+        agreed = get(served, "u_admin", PAGE).json()
+    finally:
+        hold_saved(before)
+
+    assert "000000000000" in parted["revision_note"] and "abc123def456" in parted["revision_note"]
+    assert "every vector it returns is refused" in parted["revision_note"]
+    assert "is the one the model server holds" in agreed["revision_note"]
+
+
+def test_a_server_that_does_not_answer_gives_a_page_with_no_held_revision_and_no_note(
+    served: TestClient, the_server: Server
+) -> None:
+    """Silent means unknown: the held revision is empty, the note is empty and the page draws.
+
+    Delete this and a server that is down is a page that is an error, for the person who has come
+    to find out why."""
+    the_server.answer = None
+
+    page = get(served, "u_admin", PAGE).json()
+
+    assert page["held_revision"] is None and page["revision_note"] == ""
+
+
+def test_the_server_is_not_asked_for_a_revision_when_the_embedding_part_is_not_chosen(
+    served: TestClient, the_server: Server
+) -> None:
+    """Nothing is asked of a server for a part nobody chose.
+
+    Delete this and an install that only reads documents is asked about weights it never loads."""
+    before = hold_saved({"INSTALL_MODEL_PARTS": "ocr"})
+    try:
+        page = get(served, "u_admin", PAGE).json()
+    finally:
+        hold_saved(before)
+
+    assert page["held_revision"] is None and the_server.asked == 0

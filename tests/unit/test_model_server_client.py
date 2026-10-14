@@ -228,3 +228,92 @@ def test_this_side_waits_longer_than_the_servers_own_request_clock() -> None:
     its refusal is never heard and the document is sent again."""
     assert SERVER_REQUEST_SECONDS == supervisor.REQUEST_SECONDS
     assert DOCUMENT_TIMEOUT_SECONDS > SERVER_REQUEST_SECONDS
+
+
+# ------------------------------------------------------------------ the readiness route
+def _mock(handler: Any) -> Any:
+    import httpx
+
+    real = httpx.AsyncClient
+
+    def client(*args: Any, **kwargs: Any) -> httpx.AsyncClient:
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real(*args, **kwargs)
+
+    return client
+
+
+def test_readiness_gives_the_status_and_the_body_whatever_the_status_is(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A server that is not ready says why in the body of a 503, and that body is returned with
+    its status; the revision it states is read out of it.
+
+    Delete this and a server that is not ready is a server that said nothing."""
+    import asyncio
+
+    import httpx
+
+    from brain.ops.model_server_client import held_embedding_revision, server_readiness
+
+    body = {"ready": False, "gaps": ["a"], "revisions": {"embedding": "abc123def456"}}
+    monkeypatch.setattr(httpx, "AsyncClient", _mock(lambda request: httpx.Response(503, json=body)))
+
+    answered = asyncio.run(server_readiness({"INSTALL_MODEL_ENDPOINT": BASE}))
+
+    assert answered is not None and answered[0] == 503 and dict(answered[1]) == body
+    assert held_embedding_revision(answered[1]) == "abc123def456"
+    assert held_embedding_revision({"revisions": {"embedding": 12}}) is None
+    assert held_embedding_revision({"revisions": ["embedding"]}) is None
+    assert held_embedding_revision({}) is None
+
+
+@pytest.mark.parametrize("kind", ["silent", "array", "not-json"])
+def test_readiness_says_nothing_for_a_server_that_is_silent_or_answers_nonsense(
+    monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    """None, and never an exception, for a refused connection, an answer that is not an object and
+    one that is not JSON: the callers are a page that must still draw and a check with a sentence
+    for each.
+
+    Delete this and a server that is down makes the model server screen an error."""
+    import asyncio
+
+    import httpx
+
+    from brain.ops.model_server_client import server_readiness
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if kind == "silent":
+            raise httpx.ConnectError("refused", request=request)
+        if kind == "array":
+            return httpx.Response(200, json=["not", "an", "object"])
+        return httpx.Response(200, content=b"<html>")
+
+    monkeypatch.setattr(httpx, "AsyncClient", _mock(handler))
+
+    assert asyncio.run(server_readiness({"INSTALL_MODEL_ENDPOINT": BASE})) is None
+
+
+def test_an_address_that_is_not_an_origin_is_no_answer_and_nothing_is_sent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A setting that names no origin gets None and no request at all.
+
+    Delete this and a bad address is dialled, or the page that shows it is an error."""
+    import asyncio
+
+    import httpx
+
+    from brain.ops.model_server_client import server_readiness
+
+    sent: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(str(request.url))
+        return httpx.Response(200, json={})
+
+    monkeypatch.setattr(httpx, "AsyncClient", _mock(handler))
+
+    assert asyncio.run(server_readiness({"INSTALL_MODEL_ENDPOINT": "ftp://nowhere"})) is None
+    assert sent == []

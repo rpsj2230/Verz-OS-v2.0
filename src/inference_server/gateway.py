@@ -34,6 +34,7 @@ from inference_server.admit import mem_available_mib
 from inference_server.config import ServerConfig
 from inference_server.meter import read_sample
 from inference_server.parts import readiness_gaps
+from inference_server.parts.embedding import recorded_revision
 from inference_server.supervisor import Supervisor
 
 #: Which part answers each path. Spelled as `brain.ops.model_server_client.PATH_OF_PART`.
@@ -61,8 +62,19 @@ def ready_body(config: ServerConfig, supervisor: Supervisor) -> tuple[int, dict[
         "parts": list(config.parts),
         "loaded": supervisor.loaded,
         "gaps": list(gaps),
+        # The weights each part holds, as the revision the application records beside a vector
+        # (`INSTALL_EMBEDDING_REVISION`). Read from the fetch's record and never computed here, so
+        # the health check stays free; None until the weights have been fetched.
+        "revisions": revisions_of(config),
     }
     return (200 if not gaps else 503), body
+
+
+def revisions_of(config: ServerConfig) -> dict[str, str | None]:
+    """The revision of every chosen part that has one: today the embedding part's weights."""
+    if "embedding" not in config.parts or not config.embedding_file:
+        return {}
+    return {"embedding": recorded_revision(config.model_dir, config.embedding_file)}
 
 
 def memory_body() -> dict[str, object]:

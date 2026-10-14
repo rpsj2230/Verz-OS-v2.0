@@ -343,6 +343,7 @@ def test_words_are_grouped_into_paragraphs_of_lines_in_the_order_the_engine_foun
         _word("1042", 96, 1, 1, 1),
         _word("Total", 92, 1, 1, 2),
         _word("", -1, 1, 1, 2),
+        _word("ghost", -1, 1, 1, 2),
         _word("Pay", 88, 2, 1, 1),
         _word("now", 89, 2, 1, 1),
     )
@@ -528,11 +529,18 @@ def test_the_three_document_parts_are_in_this_image_and_named_as_the_supervisor_
 
 # ------------------------------------------------------------------ nothing is left running
 _GRANDCHILD = r"""
-import json, subprocess, sys
+import json, os, subprocess, sys, time
 sys.path.insert(0, {src!r})
 from inference_server.framing import read_frame, write_frame
-sleeper = "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(120)"
-child = subprocess.Popen([sys.executable, "-c", sleeper])
+# The grandchild ignores SIGTERM, and says so by writing a file once it does: the part says it has
+# loaded only after that, so the test never stops it in the moment before it could ignore anything.
+sleeper = (
+    "import signal, sys, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+    "open(sys.argv[1], 'w').write('x'); time.sleep(120)"
+)
+child = subprocess.Popen([sys.executable, "-c", sleeper, {pidfile!r} + ".ignoring"])
+while not os.path.exists({pidfile!r} + ".ignoring"):
+    time.sleep(0.01)
 open({pidfile!r}, "w").write(str(child.pid))
 write_frame(sys.stdout.buffer, json.dumps({{"ready": True, "model": "stand-in"}}).encode())
 while read_frame(sys.stdin.buffer, ceiling=1 << 20) is not None:

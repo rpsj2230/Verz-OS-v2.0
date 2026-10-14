@@ -260,6 +260,8 @@ def test_the_worker_prints_the_finding_only_for_an_install_whose_server_reads_do
     assert model_server_advisory("rev-1", embeds, {}) == ()
     run_without_a_revision = {"INSTALL_SERVICES": "modelserver", "INSTALL_MODEL_PARTS": "ocr"}
     assert model_server_advisory(None, run_without_a_revision, {}) == expected
+    # Parts chosen and nowhere run, and no revision declared: there is no server to be told about.
+    assert model_server_advisory(None, {"INSTALL_MODEL_PARTS": "layout"}, {}) == ()
     assert model_server_advisory("rev-1", {"INSTALL_MODEL_PARTS": "telepathy"}, {}) == ()
     undeclared = advisories({}, worker_component="brain-parse-worker")
     assert not set(expected) & set(undeclared)
