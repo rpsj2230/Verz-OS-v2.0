@@ -7,6 +7,8 @@
 | `/ask/documents/:documentId` | The document a citation on Ask opens, read at the asker's own reach; a person checking an answer, not an administrator managing anything. |
 | `/auth/callback` | The end of a sign-in, drawn by the session module rather than by any screen. |
 | `/signed-out` | The page a person lands on after signing out, which asks nothing and manages nothing. |
+| `agent.project` | A person's own project, its name and owner, put away and never deleted; the table exists and nothing reads or writes it yet (no route, no page), so no administrator manages a row of it, and the screen that does lands with the code on top. |
+| `agent.project_item` | The threads and files a person listed in their own project, by reference and never as a copy; the table exists and nothing reads or writes it yet, so no administrator manages a row of it. |
 | `agent.skill_personal` | Whose a skill a person added for themselves is, and when they offered it to the department; the table exists and nothing reads or writes it yet (no route, no page), so no administrator manages a row of it, and the screen that does is the one that lands with the code on top. |
 | `chat.conversation` | What a person asked and was answered belongs to them: kept by brain.chat.thread_store, listed, searched and reopened on Ask for that person alone, and never managed by anybody else. |
 | `chat.message` | The same as chat.conversation: a person's own words, reported on and never managed. |

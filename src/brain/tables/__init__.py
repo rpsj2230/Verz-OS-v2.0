@@ -138,6 +138,7 @@ from brain.tables.operation import OperationRow
 from brain.tables.organisation import DepartmentLeadRow, TeamMembershipRow
 from brain.tables.outbox import OutboxDeliveryRow, OutboxEventRow, WebhookSubscriberRow
 from brain.tables.plugin import PluginInstallRow, PluginVersionRow
+from brain.tables.project import ProjectItemRow, ProjectRow
 from brain.tables.projection import ProjectedRecordRow, RetiredRecordRow, SourceEpochRow
 from brain.tables.quality import (
     AnswerFlagRow,
@@ -558,6 +559,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "ops.acceptance_run",
     # 0232_skill_personal. Points at nothing: the digest and the person are values.
     "agent.skill_personal",
+    # 0233_personal_project. An item points at its project; every other reference is a value.
+    "agent.project",
+    "agent.project_item",
 )
 
 __all__ = [
@@ -667,6 +671,8 @@ __all__ = [
     "PositiveExampleRow",
     "PrincipalIdentityRow",
     "PrincipalRow",
+    "ProjectItemRow",
+    "ProjectRow",
     "ProjectedRecordRow",
     "ProviderHealthRow",
     "QualityAnnotationRow",
