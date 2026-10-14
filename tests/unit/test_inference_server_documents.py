@@ -313,9 +313,13 @@ def _word(text: str, confidence: float, block: int = 1, paragraph: int = 1, line
 class _Recogniser:
     def __init__(self, pages: list[ocr.PageReading]) -> None:
         self.pages_to_give = pages
+        self.asked_for: list[frozenset[int] | None] = []
 
-    def pages(self, path: Path, media_type: str) -> Iterator[ocr.PageReading]:
+    def pages(
+        self, path: Path, media_type: str, only: frozenset[int] | None = None
+    ) -> Iterator[ocr.PageReading]:
         assert path.exists()
+        self.asked_for.append(only)
         yield from self.pages_to_give
 
 
@@ -873,3 +877,65 @@ def test_a_pdf_that_wants_a_password_is_encrypted_and_any_other_failure_is_unsup
 
     assert refused.value.cause == "encrypted"
     assert (other.value.cause, other.value.stage) == ("unsupported", "ocr")
+
+
+# ------------------------------------------------------------------ naming the pages to read
+def _request_naming(pages: object) -> bytes:
+    request = json.loads(request_body())
+    request["pages"] = pages
+    return json.dumps(request).encode("utf-8")
+
+
+def test_a_request_may_name_the_pages_to_read_and_the_recogniser_is_told_which() -> None:
+    """The pages named reach the recogniser as a set, and a request that names none reaches it as
+    None, which means every page.
+
+    Delete this and filling in the blank pages of a layout read recognises every page of the
+    document, which costs minutes and replaces text that was read with text that was guessed."""
+    recogniser = _Recogniser([ocr.PageReading(2, (_word("x", 90),))])
+    backend = ocr.OcrBackend(recogniser)
+
+    backend.handle(_request_naming([2, 5, 2]))
+    backend.handle(request_body())
+
+    assert recogniser.asked_for == [frozenset({2, 5}), None]
+
+
+@pytest.mark.parametrize(
+    "named", [[], [0], [-1], [True], ["1"], "1", 3, [1.5], list(range(1, 10_002))]
+)
+def test_pages_that_are_not_a_list_of_page_numbers_are_a_bad_request(named: object) -> None:
+    """Nothing, zero, a negative, a boolean, a string, a number that is not a list, a fraction and
+    more than the most a request may name are the application's mistake.
+
+    Delete this and a page named `true` is page one."""
+    answer = ocr.OcrBackend(_Recogniser([])).handle(_request_naming(named))
+
+    assert answer.status == 400
+
+
+def test_the_key_a_request_may_carry_beside_the_document_is_spelled_as_the_applications() -> None:
+    """The optional key is read from both programs and compared, and the application writes it
+    only when pages are named.
+
+    Delete this and the key is renamed on one side and every fill-in reads every page."""
+    from brain.knowledge.parse_layout import OPTIONAL_REQUEST_KEYS
+
+    assert documents.OPTIONAL_REQUEST_KEYS == OPTIONAL_REQUEST_KEYS
+    assert "pages" not in json.loads(request_body())
+    named = layout_request(_cleared(), pages=[2, 3])
+    assert tuple(named) == (*REQUEST_KEYS, "pages") and named["pages"] == (2, 3)
+
+
+def test_only_the_pages_named_are_rendered_and_a_photograph_is_page_one(tmp_path: Path) -> None:
+    """Of a three-page PDF, naming page 2 renders page 2 alone; a photograph is read when page 1 is
+    named or nothing is, and not when only another page is.
+
+    Delete this and every page is rendered whatever was asked, which is minutes of recognising
+    pages the layout part had read."""
+    pdfium = _Pdfium(pages=3)
+    recogniser = _tesseract(pdfium)
+
+    named = list(recogniser.pages(tmp_path / "x.pdf", "application/pdf", frozenset({2})))
+
+    assert [one.page for one in named] == [2]

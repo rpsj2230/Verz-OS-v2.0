@@ -300,6 +300,8 @@ def row_values(item: KnowledgeItem) -> dict[str, object]:
         # neither, which is what every earlier row holds and what a rewrite of one keeps.
         "arrived_as": item.arrived_as or None,
         "source_url": item.source_url or None,
+        # Which pages of a scan were left out and why, or NULL for an item read whole (`0250`).
+        "parse_notice": item.parse_notice or None,
     }
 
 
