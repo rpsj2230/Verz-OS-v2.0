@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-14T17:02:28.875818+00:00",
-  "commit": "4ca27bf6",
-  "commit_subject": "CI shards are balanced on recorded durations and the registry tests stop collecting garbage 2,300 times (shards of 50 to 90 minutes) (#609)",
+  "generated_at": "2026-10-14T17:12:01.810713+00:00",
+  "commit": "94bcd7ca",
+  "commit_subject": "The application's memory limit is 1536 MiB, held equal to the budget in every place that costs it (#608)",
   "total": 1626,
   "done": 1134,
   "percent": 69.7,
