@@ -57,7 +57,8 @@ def test_a_notice_said_to_be_sent_names_a_sender_that_asks_the_switch_about_it()
     question to a person is sent by the answer path itself as the question is handed on (M8.3.2),
     its asker is told it expired by a loop the application starts (M8.3.4), each person's week
     of learning is told by another (M16.5.1), and an automation's steward is told that it was
-    paused for failing by a third (M39.6.2.3), all four because the channel's secret is the
+    paused for failing by a third (M39.6.2.3), and whoever holds the operations alert is told that
+    a mechanism has not run by a fourth (M17.7.2), all five because the channel's secret is the
     application's and not the worker's.
 
     Delete this and a sender added for a notice can skip the switch, so the screen offers to stop
@@ -72,6 +73,7 @@ def test_a_notice_said_to_be_sent_names_a_sender_that_asks_the_switch_about_it()
         NoticeKind.HANDED_TO_A_PERSON,
         NoticeKind.QUESTION_NOT_PICKED_UP,
         NoticeKind.LEARNING_DIGEST,
+        NoticeKind.CONTROL_NOT_RUN,
         NoticeKind.AUTOMATION_PAUSED,
     ]
     for one in sent:
@@ -138,6 +140,15 @@ def test_a_notice_said_to_be_sent_names_a_sender_that_asks_the_switch_about_it()
         and node.func.id == "keep_telling_paused_stewards"
     ]
     assert pausing, "nothing starts the loop that tells a paused automation's steward"
+    # The holders of the operations alert are told by a fourth, behind its own feature switch.
+    lateness = [
+        node
+        for node in ast.walk(ast.parse(inspect.getsource(application)))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "keep_telling_overdue_controls"
+    ]
+    assert lateness, "nothing starts the loop that tells the holders of a mechanism not running"
 
 
 def test_a_notice_said_to_be_unsent_has_a_composer_nothing_the_schedule_starts_calls() -> None:

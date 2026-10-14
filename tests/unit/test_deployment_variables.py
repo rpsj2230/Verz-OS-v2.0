@@ -20,6 +20,7 @@ import pytest
 
 from brain.deployment.variables import (
     ENV_FILE_SUFFIX,
+    ISSUED_BY_THE_VAULT,
     PERMITTED_BESIDE,
     VariablesError,
     install_file,
@@ -392,6 +393,98 @@ def test_the_minimum_length_is_the_one_first_run_already_decided() -> None:
     just_short = "a" * (MIN_SECRET_CHARS - 1)
     assert unminted_secrets({"POSTGRES_PASSWORD": just_short})
     assert unminted_secrets({"POSTGRES_PASSWORD": "a" * MIN_SECRET_CHARS}) == ()
+
+
+# --- a token the vault issued (M42.1.2, M42.5.2) ----------------------------------------
+
+#: A made-up token the length OpenBao issues, twenty-six characters, which is not a real one.
+VAULT_SIZED_TOKEN = "s." + "a1B2c3D4" * 3
+
+VAULT_TOKEN_NAMES = ("BRAIN_VAULT_TOKEN", "BRAIN_WORKER_VAULT_TOKEN")
+
+
+def test_the_exempt_variables_are_the_tokens_the_installer_asks_the_vault_to_mint() -> None:
+    """The exemption is derived from the two names the application's environment owns and held
+    equal to what the installer mints through the vault, which is a source outside this module.
+    A set typed here and compared with itself would stay green if the installer began minting a
+    third token under another name, and that token would then be held to a length it cannot meet.
+
+    Delete this and `ISSUED_BY_THE_VAULT` can drift from `vault_setup`, so a token the vault
+    issues fails the length test, or one the installer generates escapes it."""
+    from brain.deployment.vault_setup import APPLICATION_TOKEN, WORKER_TOKEN
+
+    assert {APPLICATION_TOKEN[1], WORKER_TOKEN[1]} == ISSUED_BY_THE_VAULT
+    assert set(VAULT_TOKEN_NAMES) == ISSUED_BY_THE_VAULT
+    assert all(is_secret_name(one) for one in ISSUED_BY_THE_VAULT)
+    assert len(VAULT_SIZED_TOKEN) < MIN_SECRET_CHARS
+
+
+@pytest.mark.parametrize("name", VAULT_TOKEN_NAMES)
+def test_a_token_of_the_length_the_vault_issues_is_not_reported_as_too_short(name: str) -> None:
+    """The positive case, and the fault found on a staging install: the vault's own token, minted
+    by the vault at about twenty-six characters, was reported as short enough to be guessed, and
+    no install could pass the check short of a token the vault did not mint.
+
+    Delete this and the length test applies to what the vault issued again, which fails every
+    correct install on every run, with the install check page red for a reason nobody can fix."""
+    assert unminted_secrets({name: VAULT_SIZED_TOKEN}) == ()
+    assert (
+        unminted_secrets(
+            {
+                "BRAIN_VAULT_TOKEN": VAULT_SIZED_TOKEN,
+                "BRAIN_WORKER_VAULT_TOKEN": VAULT_SIZED_TOKEN[::-1],
+                "POSTGRES_PASSWORD": "a" * MIN_SECRET_CHARS,
+            }
+        )
+        == ()
+    )
+
+
+def test_a_short_generated_credential_is_still_reported_beside_a_vault_token() -> None:
+    """The exemption is for the vault's tokens and for nothing near them: a short database
+    password reported next to a correct vault token is still reported, and only it is.
+
+    Delete this and the exemption can be widened to every name ending in TOKEN or to the whole
+    function, and a guessable password passes."""
+    found = unminted_secrets({"BRAIN_VAULT_TOKEN": VAULT_SIZED_TOKEN, "POSTGRES_PASSWORD": "short"})
+
+    assert len(found) == 1
+    assert "POSTGRES_PASSWORD is shorter" in found[0]
+    assert unminted_secrets({"LANGFUSE_SECRET_KEY": VAULT_SIZED_TOKEN})
+    assert unminted_secrets({"SOME_OTHER_TOKEN": VAULT_SIZED_TOKEN})
+
+
+@pytest.mark.parametrize("name", VAULT_TOKEN_NAMES)
+def test_an_empty_vault_token_is_still_reported_as_unminted(name: str) -> None:
+    """An empty token is a vault nobody can reach, whoever issues it, so only the length test is
+    exempt.
+
+    Delete this and the exemption can swallow the blank case too, and an install whose vault
+    token was never written passes the secrets check."""
+    found = unminted_secrets({name: ""})
+
+    assert len(found) == 1
+    assert f"{name} is empty" in found[0]
+
+
+def test_two_vault_tokens_holding_one_value_are_still_reported() -> None:
+    """The application's token and the worker's are minted against different policies, so one
+    value doing for both means the process nobody watches holds the application's keys. A token
+    of the vault's length is still compared, and the finding names the settings and never the
+    value.
+
+    Delete this and the exemption can swallow the sharing test too, which is the one fault here
+    with a security consequence."""
+    found = unminted_secrets(
+        {"BRAIN_VAULT_TOKEN": VAULT_SIZED_TOKEN, "BRAIN_WORKER_VAULT_TOKEN": VAULT_SIZED_TOKEN}
+    )
+
+    assert len(found) == 1
+    assert "BRAIN_VAULT_TOKEN and BRAIN_WORKER_VAULT_TOKEN hold one value" in found[0]
+    assert VAULT_SIZED_TOKEN not in found[0]
+    assert unminted_secrets(
+        {"BRAIN_VAULT_TOKEN": VAULT_SIZED_TOKEN, "APP_ROLE_PASSWORD": VAULT_SIZED_TOKEN}
+    )
 
 
 # --- the command line (M42.1.1, M42.3.2) ------------------------------------------------
