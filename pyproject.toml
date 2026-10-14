@@ -94,7 +94,7 @@ disallow_untyped_defs = false
 # part that uses them and held behind a stand-in in every test, which is what the part modules say
 # about themselves: written from the libraries' documented interfaces and never run against them.
 [[tool.mypy.overrides]]
-module = ["docling.*", "pypdfium2", "pytesseract", "PIL", "PIL.*", "llama_cpp", "gliner"]
+module = ["docling.*", "pypdfium2", "pytesseract", "PIL", "PIL.*", "llama_cpp", "gliner", "huggingface_hub"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------- pytest
