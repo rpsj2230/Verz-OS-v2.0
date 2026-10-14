@@ -744,7 +744,8 @@ def test_the_notice_row_names_this_sender_and_keeps_no_switch_of_its_own() -> No
 def test_the_feature_ships_off_and_names_the_function_that_asks() -> None:
     """The feature is declared with its reader and no default. Delete this and the loop is gated by
     a switch the Features screen does not list."""
-    from brain.ops.features import CONTROL_NOT_RUN_ALERTS, FEATURES
+    from brain.ops.features import FEATURES
+    from brain.ops.features_declared.control_not_run_alerts import CONTROL_NOT_RUN_ALERTS
 
     assert CONTROL_NOT_RUN_ALERTS in FEATURES
     assert CONTROL_NOT_RUN_ALERTS.read_by == ("brain.control_not_run_told:control_alerts_are_on",)

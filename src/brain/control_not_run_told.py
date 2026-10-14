@@ -86,7 +86,8 @@ from brain.install import value_of
 from brain.ops.alerting import OPERATIONS_ALERT, Severity, route_for
 from brain.ops.binding_store import ADDRESS_KEPT_ON
 from brain.ops.controls import Control, Missed, Overdue, overdue
-from brain.ops.features import CONTROL_NOT_RUN_ALERTS, is_on
+from brain.ops.features import is_on
+from brain.ops.features_declared.control_not_run_alerts import CONTROL_NOT_RUN_ALERTS
 from brain.ops.mail import Message, alert_operation, send_alert
 from brain.ops.notices import NoticeKind, notice_is_on
 from brain.ops.schedule import schedulable
