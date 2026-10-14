@@ -68,9 +68,9 @@ if test -z "$BRAIN_CONSOLE_ADDRESS" && test -t 0; then
 fi
 
 case "$BRAIN_PROFILE" in
-  lite) BRAIN_COMPOSE_FILES="-f /opt/brain/docker-compose.lite.yml"; BRAIN_WORKER_VAULT_FILES=""; BRAIN_SERVICES="4"; BRAIN_MEMORY_MIB="3968" ;;
-  standard) BRAIN_COMPOSE_FILES="-f /opt/brain/docker-compose.yml -f /opt/brain/docker-compose.worker.yml -f /opt/brain/docker-compose.parse-worker.yml -f /opt/brain/docker-compose.objectstore.yml -f /opt/brain/docker-compose.keycloak.yml -f /opt/brain/docker-compose.inference.yml -f /opt/brain/docker-compose.presidio.yml"; BRAIN_WORKER_VAULT_FILES="-f /opt/brain/docker-compose.vault.worker.yml"; BRAIN_SERVICES="15"; BRAIN_MEMORY_MIB="11520" ;;
-  full) BRAIN_COMPOSE_FILES="-f /opt/brain/docker-compose.yml -f /opt/brain/docker-compose.worker.yml -f /opt/brain/docker-compose.parse-worker.yml -f /opt/brain/docker-compose.objectstore.yml -f /opt/brain/docker-compose.keycloak.yml -f /opt/brain/docker-compose.langfuse.yml -f /opt/brain/docker-compose.inference.yml -f /opt/brain/docker-compose.automation.yml -f /opt/brain/docker-compose.matcher.yml -f /opt/brain/docker-compose.presidio.yml"; BRAIN_WORKER_VAULT_FILES="-f /opt/brain/docker-compose.vault.worker.yml"; BRAIN_SERVICES="23"; BRAIN_MEMORY_MIB="15488" ;;
+  lite) BRAIN_COMPOSE_FILES="-f /opt/brain/docker-compose.lite.yml"; BRAIN_WORKER_VAULT_FILES=""; BRAIN_SERVICES="4"; BRAIN_MEMORY_MIB="4480" ;;
+  standard) BRAIN_COMPOSE_FILES="-f /opt/brain/docker-compose.yml -f /opt/brain/docker-compose.worker.yml -f /opt/brain/docker-compose.parse-worker.yml -f /opt/brain/docker-compose.objectstore.yml -f /opt/brain/docker-compose.keycloak.yml -f /opt/brain/docker-compose.inference.yml -f /opt/brain/docker-compose.presidio.yml"; BRAIN_WORKER_VAULT_FILES="-f /opt/brain/docker-compose.vault.worker.yml"; BRAIN_SERVICES="15"; BRAIN_MEMORY_MIB="12032" ;;
+  full) BRAIN_COMPOSE_FILES="-f /opt/brain/docker-compose.yml -f /opt/brain/docker-compose.worker.yml -f /opt/brain/docker-compose.parse-worker.yml -f /opt/brain/docker-compose.objectstore.yml -f /opt/brain/docker-compose.keycloak.yml -f /opt/brain/docker-compose.langfuse.yml -f /opt/brain/docker-compose.inference.yml -f /opt/brain/docker-compose.automation.yml -f /opt/brain/docker-compose.matcher.yml -f /opt/brain/docker-compose.presidio.yml"; BRAIN_WORKER_VAULT_FILES="-f /opt/brain/docker-compose.vault.worker.yml"; BRAIN_SERVICES="23"; BRAIN_MEMORY_MIB="16000" ;;
   *) fail "unknown profile: $BRAIN_PROFILE. One of: lite standard full" ;;
 esac
 if test "$BRAIN_VAULT" = "no"; then

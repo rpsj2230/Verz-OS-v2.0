@@ -117,7 +117,13 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1024M
+          # 1536M since 2026-10-14, held equal to `brain.knowledge.app_parse_budget.APP_MEMORY_MIB`
+          # and to the baseline in `brain.ops.wiring` by test, and the same in
+          # `docker-compose.lite.yml`. Measured on the owner's install: 705 MB in use of 1024
+          # MB, with the process count the old limit allowed. The runtime sizes the number of
+          # web workers from this limit (`brain.runtime`), so the room is spent as more workers
+          # and not only as headroom; a boot of six workers peaks at 82 + 6 x 218 = 1390 MiB.
+          memory: 1536M
     networks:
       # `default` is listed because naming any network here stops Compose adding it, and
       # dropping it would cut the application off from its own database and cache. It is
