@@ -49,6 +49,25 @@ jobs:
     # A red CI must never reach the server. workflow_run fires regardless of outcome,
     # so the conclusion is checked explicitly rather than assumed.
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    # ONE BUILD MOVES `:latest` AT A TIME, AND A BURST PUBLISHES ONLY ITS NEWEST COMMIT.
+    #
+    # Every green CI run on main starts a Deploy of its own commit, and until 2026-10-14 nothing
+    # ordered them. CI runs on main are serialised (see ci.yml), but a build takes a couple of
+    # minutes and a task-list-only CI run takes under one, so a code commit followed straight by a
+    # task-list commit started two builds together and `:latest` ended on whichever finished
+    # last, which is not always the newer commit. The server pulls `:latest`, so that is an older
+    # image on the server while main's tip is newer, and the tip's own live check fails.
+    #
+    # The same group for every run, so the builds queue. `cancel-in-progress` is false so that a
+    # build already pushing an image is never killed half way: a build stopped between the push
+    # and the signature leaves an unsigned image under `:latest`. GitHub still keeps one running
+    # and only the newest waiting, so a burst of N merges publishes the running commit and then
+    # the newest, and the ones between show as cancelled before they built anything. The newest
+    # commit's CI is never skipped (ci.yml never cancels a run on main), so its build arrives last
+    # and `:latest` ends on main's tip. `test_ci_duplicate_work.py` holds each part.
+    concurrency:
+      group: deploy-publish
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     outputs:
       sha: ${{ steps.meta.outputs.sha }}
