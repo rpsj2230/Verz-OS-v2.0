@@ -35,6 +35,13 @@ ceiling on every capability the tool registry does not re-check. See
 People screen's read, because previewing a person's run is reading what that person holds; a
 reader without it is answered as an agent that does not exist.
 
+**Two things the page used to type for itself are sent from what decides them** (M27.11.12,
+M27.15.32). Each skill chip says whether anything about the agent stops every run from using it,
+by `brain.console.agent_behaviour.skill_standing`, so the page no longer says an assignment
+"changes no answer today" about a skill `brain.gate.model_lane.skills_offered` has offered since
+M27.12.1. And the Profile's computer-use sentence is `agent_behaviour.computer_use`, which asks
+whether an isolated desktop runner is part of the product.
+
 **What is still absent, and why.** A connector's attach and detach, and a channel's enablement,
 write the agent's install and need a ledger row nothing yet appends (the next package). The items
 an agent retrieved most and never touched (M39.2.3.5) need a per-item retrieval record, and nothing
@@ -43,6 +50,7 @@ on an install writes one: `brain.knowledge.quality.RetrievalEvent` carries no it
 Task ids: M39.2.1.1, M39.2.1.3, M39.2.1.4, M39.2.1.5, M39.2.2.1, M39.2.2.2, M39.2.2.3
 Task ids: M39.2.2.4, M39.2.2.5, M39.2.3.1, M39.2.3.2, M39.2.3.3, M39.2.3.4
 Task ids: M39.3.1.1, M39.3.1.2, M39.3.1.3, M39.3.1.4
+Task ids: M27.11.12, M27.15.32
 """
 
 from __future__ import annotations
@@ -78,6 +86,7 @@ from brain.agents.model import AgentRecord, AgentViewer
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked, sources_at
 from brain.connector_routes import manifest_or_none, records_of, sync_records_of
+from brain.console.agent_behaviour import ComputerUse, computer_use, skill_standing, usable_tools
 from brain.console.agent_tabs import (
     SKILL_SCREEN,
     Control,
@@ -206,6 +215,9 @@ class SkillChipView(BaseModel):
     review: str | None = None
     runs: int
     detachable: bool = False
+    #: Why no run of this agent could use the skill, or null when nothing about the agent stops
+    #: it (M27.11.12). It is never a promise that a run will, which the person asking decides.
+    not_used_because: str | None = None
 
 
 class SkillOfferView(BaseModel):
@@ -256,6 +268,20 @@ class KnowledgeSliceView(BaseModel):
     at_least: bool = False
 
 
+class ComputerUseView(BaseModel):
+    """Whether the Profile offers computer use, and the sentence it says either way (M27.15.32).
+
+    `offered` is false until an isolated desktop runner is part of the product and a per-agent
+    switch exists beside it, so a page draws a switch only for something that has somewhere to
+    write. `sentence` is `brain.console.agent_behaviour.computer_use`'s, never the page's own.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    offered: bool
+    sentence: str
+
+
 class AgentCapabilitiesView(BaseModel):
     """An agent's capabilities and availability, as this reader may be told them.
 
@@ -278,6 +304,7 @@ class AgentCapabilitiesView(BaseModel):
     skills_editable: bool = False
     offers: list[SkillOfferView] = []
     knowledge: KnowledgeSliceView | None = None
+    computer_use: ComputerUseView
 
 
 class PreviewAsked(BaseModel):
@@ -436,6 +463,7 @@ def skill_blocks(
     listed: bool,
     editable: bool,
     now: datetime,
+    registry: ToolRegistry | None = None,
 ) -> tuple[list[SkillChipView], list[str], list[SkillOfferView]]:
     """The agent's skill chips, the pinned ones nobody used, and the library's offers.
 
@@ -459,10 +487,17 @@ def skill_blocks(
         until=until,
     )
     runs = {one.skill_name: one.invocations for one in usage.used}
+    # Every tool a run of this agent could call: the ceiling's comparison, over the registry here.
+    usable = usable_tools(record.authority, () if registry is None else registry.definitions())
     chips: list[SkillChipView] = []
     for pin in install.skills:
         row = by_digest.get(pin.digest)
         chip = None if row is None else chip_for(row.imported)
+        standing = skill_standing(
+            review=None if chip is None else chip.review,
+            tools=() if row is None else row.imported.skill.tools,
+            usable=usable,
+        )
         chips.append(
             SkillChipView(
                 name=pin.name,
@@ -472,6 +507,7 @@ def skill_blocks(
                 review=None if chip is None else chip.review.value,
                 runs=runs.get(pin.name, 0),
                 detachable=editable and row is not None,
+                not_used_because=standing.because,
             )
         )
     offers: list[SkillOfferView] = []
@@ -639,6 +675,7 @@ async def agent_capabilities(
             listed=listed,
             editable=editable,
             now=asked.now,
+            registry=registry,
         )
 
     knowledge: KnowledgeSliceView | None = None
@@ -657,7 +694,13 @@ async def agent_capabilities(
         skills_editable=editable,
         offers=offers,
         knowledge=knowledge,
+        computer_use=computer_use_view(computer_use()),
     )
+
+
+def computer_use_view(said: ComputerUse) -> ComputerUseView:
+    """`brain.console.agent_behaviour.computer_use`, sent whole (M27.15.32)."""
+    return ComputerUseView(offered=said.offered, sentence=said.sentence)
 
 
 async def _connections(request: Request) -> tuple[Connection, ...]:

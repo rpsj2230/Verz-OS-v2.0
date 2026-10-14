@@ -19,7 +19,12 @@
  * open to the lifecycle authority only, and a steward who may switch channels and nothing else would
  * have found a menu of refusals with one live item.
  *
- * Task ids: M13.7.4
+ * **Each channel is drawn with its state** (M27.11.12): the ones it answers on as plain chips and every
+ * other channel the product could answer on as a dashed chip saying off, so a steward sees what they
+ * could switch on and not only what is on. A long list keeps its first five and the rest behind "N
+ * more", as the Capabilities card does.
+ *
+ * Task ids: M13.7.4, M27.11.12
  */
 
 import { Radio } from "lucide-react";
@@ -28,6 +33,7 @@ import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
 import { Chip, ConfirmDialog, Note, SectionCard } from "../../components/kit";
+import { useOverflow } from "./AgentCapabilities";
 import { Button } from "../../components/ui/button";
 import { FailureNotice } from "../../ui/FailureNotice";
 import { Notice } from "../../ui/Notice";
@@ -44,6 +50,7 @@ import { ChannelChoices, WHERE_IT_ANSWERS } from "./ChannelChoices";
 
 export const CHANGE_CHANNELS = "Change where it answers";
 export const CHANNELS_LEDE = "The channels people can ask this agent on. Who can find it and what it may reach do not change here.";
+export const OFF = "off";
 export const ANSWERS_NOWHERE = "No channel is switched on, so nobody can ask this agent anything.";
 export const CHANNELS_QUESTION = (name: string): string => `Change where ${name} answers?`;
 export const CHANNELS_CONSEQUENCE =
@@ -56,6 +63,34 @@ export const KEEP_CHANNELS = "Not now";
 interface Refused {
   readonly failure: ApiFailure;
   readonly sentence?: string;
+}
+
+/** Every channel the card names, the ones it answers on first, each with whether it is on. */
+export function channelStates(shown: AgentLifecycle): readonly { readonly label: string; readonly on: boolean }[] {
+  const on = new Set(shown.channels);
+  return [
+    ...channelLabels(shown).map((label) => ({ label, on: true })),
+    ...shown.channelChoices.filter((one) => !on.has(one.name)).map((one) => ({ label: one.label, on: false })),
+  ];
+}
+
+function Channels({ shown }: { readonly shown: AgentLifecycle }) {
+  const states = channelStates(shown);
+  const { shown: first, toggle } = useOverflow(states);
+  return (
+    <div data-slot="agent-channels" className="flex min-w-0 flex-wrap items-center gap-1.5">
+      <Radio aria-hidden className="size-4 text-dim" />
+      {first.map((one) =>
+        // The word says it and the dashed edge repeats it, so the state is never colour alone.
+        one.on ? (
+          <Chip key={one.label}>{one.label}</Chip>
+        ) : (
+          <Chip key={one.label} tone="requested">{`${one.label} · ${OFF}`}</Chip>
+        ),
+      )}
+      {toggle}
+    </div>
+  );
 }
 
 export function AgentChannels({ agentId }: { readonly agentId: string }) {
@@ -95,7 +130,7 @@ export function AgentChannels({ agentId }: { readonly agentId: string }) {
     })();
   };
 
-  const labels = channelLabels(shown);
+  const states = channelStates(shown);
   return (
     <SectionCard
       title={WHERE_IT_ANSWERS}
@@ -128,16 +163,8 @@ export function AgentChannels({ agentId }: { readonly agentId: string }) {
           />
         )}
         {done ? <Notice title={CHANNELS_DONE}>{shown.displayName}</Notice> : null}
-        {labels.length === 0 ? (
-          <Note>{ANSWERS_NOWHERE}</Note>
-        ) : (
-          <div data-slot="agent-channels" className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <Radio aria-hidden className="size-4 text-dim" />
-            {labels.map((label) => (
-              <Chip key={label}>{label}</Chip>
-            ))}
-          </div>
-        )}
+        {shown.channels.length === 0 ? <Note>{ANSWERS_NOWHERE}</Note> : null}
+        {states.length === 0 ? null : <Channels shown={shown} />}
       </div>
       <ConfirmDialog
         open={editing !== null}
