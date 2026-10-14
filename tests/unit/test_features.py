@@ -123,6 +123,7 @@ def test_every_declared_reader_asks_about_its_feature_and_nothing_else_asks() ->
         "brain.plugin_routes",
         "brain.migration_routes",
         "brain.browsing.driver",
+        "brain.tools.document_generation",
         "brain.control_not_run_told",
     }
 
@@ -250,6 +251,7 @@ def test_switching_a_feature_on_writes_its_row_and_the_next_read_sees_it(
         "skill_drafting": False,
         "automation_authoring": False,
         "automation_events": False,
+        "document_generation": False,
         "starter_skills": False,
         "plugin_registry": False,
         "orchestration_rehearsal": False,

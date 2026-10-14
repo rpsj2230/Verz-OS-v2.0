@@ -116,16 +116,18 @@
 # only while real connections stay far below the ceiling: at 50 the worst case is 1312 MiB,
 # and the two Prisma pools here are 160 MiB of that.
 #
-# **Not claimed: M32.1.1.1.** The service set is written here and has never been started
-# anywhere, because there is no host it fits on. A compose file that has never run is a
-# design, not a deployment, and claiming the leaf would put a tick on something nobody
-# has seen work. That refusal is arithmetic rather than a sentence:
-# `brain.ops.wiring.set_breaches` costs the five services below against the whole of what
-# wave 2 may spend with nothing else of ours deployed, and answers 2304 MiB against 1720,
-# over by 584. See `A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING`, which is why
-# the answer is not "move the inference server". What is claimed is the sizing, which
-# `tests/unit/test_wiring.py` checks against `brain.ops.wiring.COMPONENTS` on every run, so
-# the numbers here and the numbers the budget is computed from cannot drift apart.
+# **Not claimed: M32.1.1.1, until an install shows it running.** A compose file that has
+# never run is a design, not a deployment, so the leaf is claimed by an install check that
+# sees the five services running and healthy (`brain.ops.acceptance_checks_services`), never
+# by this file. Until 2026-10-05 the set also had no host it fitted on: costed by
+# `brain.ops.wiring.set_breaches` against what wave 2 could spend beside the other project's
+# containers it answered 2304 MiB against 1720, over by 584. Item 120 of
+# `docs/needs-rupash.md` took those containers down and the same call now answers 2304 against
+# 6200, so the set is started by a release where `INSTALL_SERVICES` names `langfuse` and the
+# server has the room (`brain.ops.overlays`), and never otherwise. See
+# `A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING`. What this file claims is the
+# sizing, which `tests/unit/test_wiring.py` checks against `brain.ops.wiring.COMPONENTS` on
+# every run, so the numbers here and the numbers the budget is computed from cannot drift apart.
 #
 # Task ids: M32.1.1.2
 

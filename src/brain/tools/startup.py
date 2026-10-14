@@ -141,7 +141,7 @@ What this module does fix is the thing that was actually broken: a registry now 
 builder makes it, the application calls that builder at startup, and every rule runs on the
 way in. Registering the first real tool is a `records=` argument, not an afternoon.
 
-Task ids: M12.1.5, M15.4.2, M12.4.4, M11.7.8, M13.7.6
+Task ids: M12.1.5, M15.4.2, M12.4.4, M11.7.8, M13.7.6, M12.3.5
 """
 
 from __future__ import annotations
@@ -166,6 +166,7 @@ from brain.knowledge.document_tools import (
 from brain.knowledge.embed_policy import embedding_revision
 from brain.knowledge.rows import RowSource, RowTool
 from brain.ops.connector_catalogue import Derived, declarations
+from brain.tools.document_generation import DocumentTools, register_document_generation
 from brain.tools.proposed_writes import register_proposed_writes
 from brain.tools.registry import ResultContract, ToolRegistry
 from brain.tools.skill_tools import SkillTools, register_skill_tools
@@ -347,6 +348,7 @@ def build_registry(
     website: WebsiteCheckTool | None = None,
     caches: KnowledgeCaches | None = None,
     skills: SkillTools | None = None,
+    documents: DocumentTools | None = None,
 ) -> ToolRegistry:
     """Every tool this application offers, checked and frozen (M12.1.5).
 
@@ -378,6 +380,11 @@ def build_registry(
     `skills` binds the two tools a run reads a skill with (`brain.tools.skill_tools`): the
     instructions of an offered skill, and its scripts where the install runs a sandbox. Absent,
     neither is registered, for the reason the website check is not.
+
+    `documents` binds the tool that fills an approved template and keeps the Word file it makes
+    (`brain.tools.document_generation`, M12.3.5). Absent, it is not registered, for the reason the
+    website check is not: it reads templates and keeps files, and a tool bound to neither would be
+    in the catalogue and unable to answer.
 
     Returns frozen. A caller receiving an unfrozen registry could register into it after the
     whole-registry checks had run, which is the same as not running them.
@@ -449,5 +456,10 @@ def build_registry(
     # there is a sandbox (M12.2.8, M12.2.9). Not tied to a row source either.
     if skills is not None:
         register_skill_tools(registry, skills)
+
+    # The one tool that fills an approved template and keeps a Word file for the person asking
+    # (M12.3.5). Switched off until an administrator turns it on, and asked at every call.
+    if documents is not None:
+        register_document_generation(registry, documents)
 
     return registry.freeze()
