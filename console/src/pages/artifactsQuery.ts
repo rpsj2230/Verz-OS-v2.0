@@ -1,11 +1,12 @@
 /**
- * What the Artifacts screen asks the API for, what a row is, and how the rows it holds are
- * narrowed. No React.
+ * What the Artifacts screen asks the API for, what a row is, and what it may narrow by. No React.
  *
  * `brain.artifact_routes` answers, and `brain.console.govern_estate.artifact_estate` has already
- * decided which artifacts this reader may know exist before anything reaches this module. So the
- * search, the kind filter and the order below act on the rows the page holds and on nothing else,
- * and the page says so beside them.
+ * decided which artifacts this reader may know exist before anything reaches this module. **The
+ * search, the kind filter and the order are the route's, sent as parameters** (`brain.listing`,
+ * M32.5.2.1), and the rows drawn are its answer to the question asked. They were narrowed in the
+ * browser over one whole answer until 2026-10-14, which narrows only what arrived and looks
+ * identical to the server's answer, and the whole estate in one body does not page.
  *
  * **An answer carries a list or a sentence, and never both.** Nothing on an install records an
  * artifact today, and `ArtifactsView` then carries no list and a sentence saying why. `readArtifacts`
@@ -16,10 +17,11 @@
  * **No count of anything withheld.** The page may count the rows it holds, which are the reader's
  * own answer. Nothing here subtracts.
  *
- * Task ids: none
+ * Task ids: M27.7.23, M32.5.2.1
  */
 
 import type { components } from "../api/schema";
+import type { FilterChoice, SortChoice } from "../components/listing";
 import { wasRead, type Read } from "./installQuery";
 
 export type ArtifactsView = components["schemas"]["ArtifactsView"];
@@ -38,49 +40,31 @@ export function readArtifacts(payload: ArtifactsView | null): Read<readonly Arti
 
 export { wasRead };
 
-/** The two orders a person reads a list of produced things in. */
-export const ORDERS = ["newest", "oldest"] as const;
-export type Order = (typeof ORDERS)[number];
-export const ORDER_LABELS: Readonly<Record<Order, string>> = {
-  newest: "Newest first",
-  oldest: "Oldest first",
-};
+/**
+ * The filters the artifacts route declares that this screen offers: the kind. The values offered
+ * are those on rows already drawn (`listing.ts`' `A_FILTER_OFFERS_ONLY_WHAT_WAS_SHOWN`), so no
+ * dropdown names a kind this reader was not shown an artifact of.
+ */
+export const ARTIFACT_FILTERS: readonly FilterChoice<ArtifactRow>[] = [
+  {
+    column: "kind",
+    label: "Kind",
+    everything: "Every kind",
+    read: (row) => row.kind,
+    describe: kindWords,
+  },
+];
 
-export interface ArtifactFilters {
-  /** Matched against the artifact, the agent and the person it was produced for. */
-  readonly search: string;
-  /** One kind, or empty for every kind the page holds. */
-  readonly kind: string;
-  readonly order: Order;
-}
+/** The orders the route declares that a person reads a list of produced things in. */
+export const ARTIFACT_SORTS: readonly SortChoice[] = [
+  { value: "", label: "Newest first" },
+  { value: "produced_at", label: "Oldest first" },
+];
 
-export const NO_ARTIFACT_FILTERS: ArtifactFilters = { search: "", kind: "", order: "newest" };
-
-/** The kinds the page holds, so the filter never offers a kind nothing on the page is. */
-export function offeredKinds(rows: readonly ArtifactRow[]): readonly string[] {
-  return [...new Set(rows.map((one) => one.kind))].sort();
-}
-
-/** The rows the page holds that match, in the order asked for. */
-export function narrowed(
-  rows: readonly ArtifactRow[],
-  filters: ArtifactFilters,
-): readonly ArtifactRow[] {
-  const needle = filters.search.trim().toLowerCase();
-  const kept = rows.filter(
-    (one) =>
-      (filters.kind === "" || one.kind === filters.kind) &&
-      (needle === "" ||
-        [one.artifact_id, one.agent_id, one.produced_for].some((value) =>
-          value.toLowerCase().includes(needle),
-        )),
-  );
-  const sorted = [...kept].sort((a, b) =>
-    a.produced_at === b.produced_at
-      ? a.artifact_id.localeCompare(b.artifact_id)
-      : a.produced_at.localeCompare(b.produced_at),
-  );
-  return filters.order === "oldest" ? sorted : sorted.reverse();
+/** A kind as a person reads it: `quarterly_report` as "Quarterly report". */
+export function kindWords(kind: string): string {
+  const words = kind.replace(/_/g, " ").trim();
+  return words === "" ? kind : `${words.slice(0, 1).toLocaleUpperCase("en-GB")}${words.slice(1)}`;
 }
 
 /** An instant as a row shows it: the reader's own locale and zone, to the minute. */

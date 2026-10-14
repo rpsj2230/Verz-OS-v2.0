@@ -2,7 +2,7 @@
  * The page cases for `/artifacts`: the address each is mounted at and what the stand-in API answers
  * it with. `support/pageCases.ts` collects this file by its name and says what a case is for.
  *
- * Task ids: none
+ * Task ids: M32.5.2.1
  */
 
 import { type PageCase, UNBROKEN } from "../pageFixtures";
@@ -33,6 +33,7 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
             kept_because: UNBROKEN,
           },
         ],
+        next_cursor: null,
         unread: "",
         kept_rule: UNBROKEN,
       },
