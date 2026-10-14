@@ -97,8 +97,12 @@
  * searches their own questions, and reopens one at the reach they hold now. A person with no
  * conversations sees no panel.
  *
+ * **A question can be spoken (M40.7.3).** The control after the field uses the recogniser in the
+ * person's own browser and sends nothing to our side; what it hears is appended to the field as
+ * ordinary text. Listening stops when the question is sent. See `askDictationCore.ts`.
+ *
  * Task ids: M42.6.3, M35.2.1.3, M27.8.5, M3.9.8, M8.1.1, M8.1.2, M8.1.3, M7.4.7, M11.4.9, M7.6.1
- * Task ids: M9.1.1, M9.1.2, M9.1.3, M12.3.6, M16.2.2
+ * Task ids: M9.1.1, M9.1.2, M9.1.3, M12.3.6, M16.2.2, M40.7.3
  */
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
@@ -110,6 +114,8 @@ import { Badge } from "../ui/Badge";
 import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import { Notice } from "../ui/Notice";
 import { AskAttach, AttachedFiles } from "./AskAttach";
+import { appendSpoken } from "./askDictationCore";
+import { AskDictation } from "./AskDictation";
 import { AskWelcome } from "./AskWelcome";
 import { SOMETHING_DID_NOT_WORK } from "./Overview";
 import {
@@ -566,6 +572,10 @@ export function Ask() {
           onChange={(changed) => setQuestion(changed.target.value)}
         />
         <FieldProblems problems={problems} form={QUESTION_FIELD_ID} names={QUESTION_NAME} />
+        <AskDictation
+          disabled={busy}
+          onSpoken={(words) => setQuestion((before) => appendSpoken(before, words, MAX_QUESTION_CHARS))}
+        />
         {agents.length > 0 ? (
           <>
             <label className="ask__label" htmlFor={AGENT_FIELD_ID}>

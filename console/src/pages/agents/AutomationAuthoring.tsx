@@ -69,7 +69,7 @@ export const SAVED_TITLE = "Saved";
 export const NOT_SAVED = "Nothing was saved";
 export const FROM_WORDS = "From my own words";
 export const NO_CONDITION = "No condition: it runs every time";
-export const NOTHING_FIRES_HERE = "Nothing on this install fires this yet, so it is saved and cannot be started.";
+export const NOTHING_FIRES_HERE = "Starting on a change is switched off on this install, so it is saved and cannot be started until an administrator switches it on.";
 export const NO_CONNECTORS = "No connected source is bound to this agent, so there is nothing to listen to.";
 export const NO_TOOLS = "This agent's ceiling allows no tools, so this automation can use none.";
 export const PREVIEW_UNREADABLE =
@@ -129,8 +129,8 @@ function TriggerFields({
             }}
           >
             {options.triggers.map((one) => (
-              <option key={one.kind} value={one.kind}>
-                {one.label}
+              <option key={one.kind} value={one.kind} disabled={one.notOffered !== null}>
+                {one.notOffered === null ? one.label : `${one.label} (not offered)`}
               </option>
             ))}
           </select>
@@ -238,7 +238,11 @@ function TriggerFields({
           )}
         </Field>
       )}
-      {options.triggers.find((one) => one.kind === draft.kind)?.fires === false ? <Status>{NOTHING_FIRES_HERE}</Status> : null}
+      {options.triggers.find((one) => one.kind === draft.kind)?.notOffered ? (
+        <Status>{options.triggers.find((one) => one.kind === draft.kind)?.notOffered}</Status>
+      ) : options.triggers.find((one) => one.kind === draft.kind)?.fires === false ? (
+        <Status>{NOTHING_FIRES_HERE}</Status>
+      ) : null}
     </>
   );
 }

@@ -3,23 +3,34 @@
 A task in this repository closes when a commit names it and carries the proof
 (`brain.status.PROOF_REQUIRED_FROM`), and for a task that lives on an install the proof is the
 install's own acceptance run (`ops.acceptance_result`, written by the worker after every deploy).
-Reading two runs, deciding which tasks they prove, and writing the evidence rows and `Closes:`
+Reading the runs, deciding which tasks they prove, and writing the evidence rows and `Closes:`
 lines was done by hand twice (#394, #422), and the second time 66 commits had merged since the
 first with no task closed, because the step depended on somebody remembering it. This is that
 step as a command anybody can run after a deploy.
 
-**What closes is the rule both sweeps used, and nothing looser.** A task closes only when every
-check naming it passed on both of the two newest runs
-(`A_TASK_CLOSES_ONLY_WHEN_EVERY_CHECK_PASSED_ON_TWO_RUNS`). A check that did not run, failed, or
-appears on only the newest run holds every task it names, and the report says which and why,
-because those are the real blockers.
+**What closes is one complete clean run, and nothing looser.** A task closes only when every
+check naming it passed on the install's newest complete run
+(`A_TASK_CLOSES_ONLY_WHEN_EVERY_CHECK_PASSED_ON_ONE_COMPLETE_RUN`). A check that did not run or
+failed holds every task it names, and the report says which and why, because those are the real
+blockers. **This was two runs until 2026-10-14**, when the owner decided one complete clean run is
+the gate: a run takes thirty-five minutes and more and every merge redeploys, so the second run
+was the slower half of the proof for no evidence the first did not already hold. What a second run
+bought was a result seen twice, and what it cost was a wait the install could not shorten. The
+safeguard that made a run mean anything is kept and is now the whole of the gate: a run counts
+only when every registered check recorded a result
+(`brain.ops.acceptance_resume.A_RUN_IS_COMPLETE_ONLY_WHEN_EVERY_REGISTERED_CHECK_RECORDED`), never
+when it was cut short by a restart. A task that closed on one run and fails the next is taken back
+the way every closure is, with a `Reopens:` line. Rejected: keeping two runs and adding a flag to
+skip the second, which leaves the slow rule as the default and the fast one as an exception nobody
+can tell from a mistake.
 
 **A pass on something made up for the check is held, by a list a person keeps.** Most checks
 prove the product on the install's own database with reserved people, which is the install doing
 the work. Some pass against a vendor account, channel secret or stand-in the check made itself,
 which shows the code and not that the install can reach the real thing. Telling the two apart is a
 judgement about each check, not something a row says, so it lives in
-`docs/proof-sweep-holds.json`, each held task with its reason
+`docs/proof-sweep-holds.json` and the files of `docs/proof-sweep-holds.d/` (a new hold goes in a
+file of its own, see `holds_at`), each held task with its reason
 (`A_RESULT_ON_SOMETHING_MADE_UP_IS_HELD`). Rejected: inferring it from the check's sentence,
 which would hold or release a task because of a word in a description.
 
@@ -28,7 +39,7 @@ each check as it finishes and finishes a run a restart interrupted
 (`brain.ops.acceptance_resume`), so a run that is still going, or was abandoned because a newer
 release replaced it, has some rows and is not a run that was seen
 (`brain.ops.acceptance_resume.ONLY_A_COMPLETE_RUN_COUNTS`). `ROWS_QUERY` reads complete runs only
-and says each row's run status, `runs_from_rows` ignores any row whose status is not complete as a
+and says each row's run status, `run_from_rows` ignores any row whose status is not complete as a
 second line, and a run whose rows name two commits is refused (`A_RUN_NAMES_ONE_RELEASE`), because
 a resumed run is of the commit that began it and anything else is a mistake that would close a task
 on a mixture.
@@ -40,7 +51,7 @@ because it knows no registry.
 from a file it reads the rows a read-only query printed as JSON lines. It knows no install: the
 URL or file is the caller's, and nothing about an install is in this repository.
 
-Task ids: none
+Task ids: M38.5.4
 """
 
 from __future__ import annotations
@@ -57,11 +68,15 @@ from itertools import groupby
 from pathlib import Path
 from typing import Any, Final
 
-#: Why a task closes on two runs and every check, and not on one check passing once.
-A_TASK_CLOSES_ONLY_WHEN_EVERY_CHECK_PASSED_ON_TWO_RUNS: Final = (
-    "A task closes only when every acceptance check naming it passed on both of the install's "
-    "two newest runs. One check of several, or one run, is a result that has not yet been seen "
-    "twice, and a task closed on it is reopened by the next run that disagrees."
+from brain.ops.acceptance import CARRIED_FORWARD_FROM
+
+#: Why a task closes on one complete run and every check, and not on one check passing.
+#: Owner-approved on 2026-10-14, replacing the rule of two runs.
+A_TASK_CLOSES_ONLY_WHEN_EVERY_CHECK_PASSED_ON_ONE_COMPLETE_RUN: Final = (
+    "A task closes only when every acceptance check naming it passed on the install's newest "
+    "complete run, one run in which every registered check recorded a result. One check of "
+    "several is not enough, and a run cut short is not a run; a task closed on one complete "
+    "run that the next run disagrees with is taken back with a Reopens: line."
 )
 
 #: Why a pass is not always proof the install can do the thing.
@@ -86,8 +101,8 @@ FAILED: Final = "failed"
 
 HOLDS_PATH: Final = Path("docs/proof-sweep-holds.json")
 
-#: The read-only query whose output `rows_from_lines` reads: the two newest runs, one JSON object
-#: per row. Written so a look that refuses any statement but a SELECT can run it as it is.
+#: The read-only query whose output `rows_from_lines` reads: the newest complete run, one JSON
+#: object per row. Written so a look that refuses any statement but a SELECT can run it as it is.
 ROWS_QUERY: Final = (
     "select (to_jsonb(r) - 'id') || "
     "jsonb_build_object('run_status', coalesce(u.status, 'complete')) "
@@ -96,13 +111,13 @@ ROWS_QUERY: Final = (
     "select x.run_id from ops.acceptance_result x "
     "left join ops.acceptance_run y on y.run_id = x.run_id "
     "where coalesce(y.status, 'complete') = 'complete' "
-    "group by x.run_id order by max(x.started_at) desc limit 2) "
+    "group by x.run_id order by max(x.started_at) desc limit 1) "
     "order by r.started_at, r.check_name"
 )
 
 
 class SweepError(Exception):
-    """The rows cannot be read as two runs."""
+    """The rows cannot be read as one complete run."""
 
 
 @dataclass(frozen=True)
@@ -127,16 +142,13 @@ class Run:
 
 @dataclass(frozen=True)
 class Sweep:
-    """What two runs prove, and every task they leave open with the reason."""
+    """What one complete run proves, and every task it leaves open with the reason."""
 
-    latest: Run
-    previous: Run
+    run: Run
     #: Task to the checks that proved it.
     closes: Mapping[str, tuple[str, ...]]
-    #: Task to (check, outcome on the newest run, reason) for every check that held it.
+    #: Task to (check, outcome, reason) for every check of the run that held it.
     blocked: Mapping[str, tuple[tuple[str, str, str], ...]]
-    #: Task to the check seen on the newest run only.
-    one_run: Mapping[str, tuple[str, ...]]
     #: Task to the reason a person gave for holding it.
     held: Mapping[str, str]
     #: Proved, and already closed by an earlier commit.
@@ -148,11 +160,13 @@ def leaf_key(leaf: str) -> tuple[int, ...]:
     return tuple(int(part) for part in leaf.lstrip("M").split("."))
 
 
-def runs_from_rows(rows: Iterable[Mapping[str, Any]]) -> tuple[Run, Run]:
-    """The newest run and the one before it, from rows of `ops.acceptance_result`.
+def run_from_rows(rows: Iterable[Mapping[str, Any]]) -> Run:
+    """The newest complete run, from rows of `ops.acceptance_result`.
 
     Rows of a run that is not complete are skipped, and a run naming two commits is refused. See
     `brain.ops.acceptance_resume.ONLY_A_COMPLETE_RUN_COUNTS` and `A_RUN_NAMES_ONE_RELEASE`.
+    Rows of older complete runs, which a file printed by the old query holds, are read and then
+    ignored: only the newest run is judged.
     """
     by_run: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for row in rows:
@@ -175,11 +189,10 @@ def runs_from_rows(rows: Iterable[Mapping[str, Any]]) -> tuple[Run, Run]:
             for one in its
         }
         runs.append(Run(run_id, str(its[0]["commit"]), started, results))
-    if len(runs) < 2:
-        msg = f"two runs are needed and the rows hold {len(runs)}"
+    if not runs:
+        msg = "one complete run is needed and the rows hold none"
         raise SweepError(msg)
-    runs.sort(key=lambda one: one.started_at, reverse=True)
-    return runs[0], runs[1]
+    return max(runs, key=lambda one: one.started_at)
 
 
 def _instant(value: Any) -> datetime:
@@ -187,21 +200,19 @@ def _instant(value: Any) -> datetime:
 
 
 def judge(
-    latest: Run,
-    previous: Run,
+    run: Run,
     *,
     closed: set[str],
     decided: set[str],
     holds: Mapping[str, str],
 ) -> Sweep:
-    """Apply `A_TASK_CLOSES_ONLY_WHEN_EVERY_CHECK_PASSED_ON_TWO_RUNS` and the held list."""
+    """Apply `A_TASK_CLOSES_ONLY_WHEN_EVERY_CHECK_PASSED_ON_ONE_COMPLETE_RUN` and the held list."""
     naming: dict[str, list[str]] = defaultdict(list)
-    for result in latest.results.values():
+    for result in run.results.values():
         for leaf in result.leaves:
             naming[leaf].append(result.check)
     closes: dict[str, tuple[str, ...]] = {}
     blocked: dict[str, tuple[tuple[str, str, str], ...]] = {}
-    one_run: dict[str, tuple[str, ...]] = {}
     held: dict[str, str] = {}
     already: list[str] = []
     for leaf in sorted(naming, key=leaf_key):
@@ -209,17 +220,12 @@ def judge(
             continue
         checks = tuple(sorted(naming[leaf]))
         stopped = tuple(
-            (check, latest.results[check].outcome, latest.results[check].reason)
+            (check, run.results[check].outcome, run.results[check].reason)
             for check in checks
-            if latest.results[check].outcome != PASSED
-            or (check in previous.results and previous.results[check].outcome != PASSED)
+            if run.results[check].outcome != PASSED
         )
         if stopped:
             blocked[leaf] = stopped
-            continue
-        new = tuple(check for check in checks if check not in previous.results)
-        if new:
-            one_run[leaf] = new
             continue
         if leaf in holds:
             held[leaf] = holds[leaf]
@@ -228,7 +234,7 @@ def judge(
             already.append(leaf)
             continue
         closes[leaf] = checks
-    return Sweep(latest, previous, closes, blocked, one_run, held, tuple(already))
+    return Sweep(run, closes, blocked, held, tuple(already))
 
 
 def closes_lines(leaves: Iterable[str]) -> list[str]:
@@ -242,12 +248,11 @@ def closes_lines(leaves: Iterable[str]) -> list[str]:
 
 def evidence_row(leaf: str, checks: Sequence[str], sweep: Sweep, day: str) -> str:
     """The row `docs/tracker-audit-2026-09-28.md` keeps for one closed task."""
-    latest, previous = sweep.latest, sweep.previous
+    run = sweep.run
     return (
         f"| {leaf} | install and CI | Read-only on the install on {day}: the worker's acceptance "
-        f"run on {latest.commit[:7]} (run at {latest.started_at:%H:%M} UTC) passed "
-        f"{', '.join(checks)}, and the run on {previous.commit[:7]} "
-        f"({previous.started_at:%H:%M} UTC) passed the same. CI: tests/unit/test_acceptance*.py "
+        f"run on {run.commit[:7]} (run at {run.started_at:%H:%M} UTC, complete, every registered "
+        f"check recorded) passed {', '.join(checks)}. CI: tests/unit/test_acceptance*.py "
         'in "Unit tests" run each of these checks against PostgreSQL at head and the breaks '
         "that fail them |"
     )
@@ -255,22 +260,35 @@ def evidence_row(leaf: str, checks: Sequence[str], sweep: Sweep, day: str) -> st
 
 def proof_line(sweep: Sweep) -> str:
     """The commit's `Proved-on-install:` line."""
-    latest, previous = sweep.latest, sweep.previous
+    run = sweep.run
     return (
-        f"Proved-on-install: acceptance runs at {latest.commit[:7]} "
-        f"({latest.started_at:%Y-%m-%d %H:%M} UTC) and {previous.commit[:7]} "
-        f"({previous.started_at:%H:%M} UTC) passed every install check naming each of these "
-        "tasks; evidence rows in docs/tracker-audit-2026-09-28.md"
+        f"Proved-on-install: the acceptance run at {run.commit[:7]} "
+        f"({run.started_at:%Y-%m-%d %H:%M} UTC), complete with every registered check recorded, "
+        "passed every install check naming each of these tasks; evidence rows in "
+        "docs/tracker-audit-2026-09-28.md"
+    )
+
+
+def carried(run: Run) -> tuple[str, ...]:
+    """The checks of a run that were copied from the run it repeats, and not run again.
+
+    A repeat of a run (`brain.ops.acceptance_run.repeat_unsettled`) carries the checks that passed
+    and runs the rest. The sweep prints them, so a person writing the commit can see which results
+    were seen on the earlier run of the same commit.
+    """
+    return tuple(
+        sorted(
+            name for name, one in run.results.items() if one.reason.startswith(CARRIED_FORWARD_FROM)
+        )
     )
 
 
 def report(sweep: Sweep) -> str:
     """Everything a person needs to write the sweep's commit, and the blockers it leaves."""
     out = [
-        f"newest run {sweep.latest.commit[:7]} at {sweep.latest.started_at:%Y-%m-%d %H:%M} UTC: "
-        + _tally(sweep.latest),
-        f"run before {sweep.previous.commit[:7]} at {sweep.previous.started_at:%H:%M} UTC: "
-        + _tally(sweep.previous),
+        f"newest complete run {sweep.run.commit[:7]} at {sweep.run.started_at:%Y-%m-%d %H:%M} UTC: "
+        + _tally(sweep.run),
+        f"checks carried forward from an earlier run of the same commit: {len(carried(sweep.run))}",
         "",
         f"closes {len(sweep.closes)}:",
     ]
@@ -285,9 +303,6 @@ def report(sweep: Sweep) -> str:
     for leaf, stops in sweep.blocked.items():
         for check, outcome, reason in stops:
             out.append(f"  {leaf}: {check} {outcome}: {reason}")
-    out.append(f"seen on the newest run only ({len(sweep.one_run)}):")
-    for leaf, checks in sweep.one_run.items():
-        out.append(f"  {leaf}: {', '.join(checks)}")
     out.append(f"held ({len(sweep.held)}):")
     for leaf, reason in sweep.held.items():
         out.append(f"  {leaf}: {reason}")
@@ -329,9 +344,35 @@ async def rows_from_database(database_url: str) -> list[dict[str, Any]]:
 
 
 def holds_at(path: Path) -> dict[str, str]:
-    """The held tasks and their reasons. See `A_RESULT_ON_SOMETHING_MADE_UP_IS_HELD`."""
-    loaded: dict[str, str] = json.loads(path.read_text(encoding="utf-8"))["held"]
-    return loaded
+    """The held tasks and their reasons. See `A_RESULT_ON_SOMETHING_MADE_UP_IS_HELD`.
+
+    **The list is the file and every `*.json` in the directory beside it named like it with `.d`
+    (`docs/proof-sweep-holds.d/`), read in name order, each holding `{"held": {leaf: reason}}`.**
+    A pull request that adds a hold writes a file of its own there, so two of them cannot conflict:
+    the single file was a JSON object whose last entry carries no comma, so appending a hold edited
+    the line above it as well, and two pull requests appending at the end conflicted every time, on
+    a file a conflicted pull request cannot be merged for. A hold released by a proof still deletes
+    its line from the file or the directory, which conflicts only with a neighbouring line.
+
+    **A leaf held in two places is refused rather than merged**, because the two reasons cannot both
+    be the reason and the later one silently winning would hide the first. Rejected: a union merge
+    attribute on the single file, which on a JSON object can join two appended entries into text
+    that does not parse, and whose effect on the hosting service's own mergeability check cannot be
+    shown from here.
+    """
+    held: dict[str, str] = {}
+    origin: dict[str, Path] = {}
+    directory = path.with_suffix(".d")
+    extra = sorted(directory.glob("*.json")) if directory.is_dir() else []
+    for source in (path, *extra):
+        loaded: dict[str, str] = json.loads(source.read_text(encoding="utf-8"))["held"]
+        for leaf, reason in loaded.items():
+            if leaf in held:
+                msg = f"{leaf} is held in both {origin[leaf]} and {source}"
+                raise ValueError(msg)
+            held[leaf] = reason
+            origin[leaf] = source
+    return held
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -356,7 +397,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         rows = asyncio.run(rows_from_database(sys.stdin.readline().strip()))
     try:
-        latest, previous = runs_from_rows(rows)
+        run = run_from_rows(rows)
     except SweepError as error:
         print(f"proof sweep: {error}", file=sys.stderr)
         return 1
@@ -364,10 +405,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     decided: set[str] = set()
     for module in load_wbs(repo / "docs" / "wbs.json").get("modules", []):
         decided |= set(decided_of(module))
-    sweep = judge(latest, previous, closed=closed, decided=decided, holds=holds_at(HOLDS_PATH))
+    sweep = judge(run, closed=closed, decided=decided, holds=holds_at(HOLDS_PATH))
     print(report(sweep))
     if args.evidence:
-        day = args.day or f"{latest.started_at:%Y-%m-%d}"
+        day = args.day or f"{run.started_at:%Y-%m-%d}"
         rows_out = [evidence_row(leaf, checks, sweep, day) for leaf, checks in sweep.closes.items()]
         with args.evidence.open("a", encoding="utf-8", newline="\n") as handle:
             handle.writelines(row + "\n" for row in rows_out)

@@ -59,11 +59,14 @@ to yet. A condition it cannot decide without a live read says so. See
 `A_REHEARSAL_WRITES_AND_SENDS_NOTHING`. A trigger that is not a schedule has no earlier triggers to
 replay on this install, and the rehearsal says that instead of inventing them.
 
-**What a trigger of each kind does today is said on the card.** A schedule runs when the worker's
-cadence says. A connector event and a webhook can be chosen, stored, shown and rehearsed, and
-nothing on this install fires one yet, so the card says so and the automation cannot be started: a
+**What a trigger of each kind does is said on the card.** A schedule runs when the worker's cadence
+says. A connector event runs when the connected source's index reports a changed record, once the
+install has switched `automation_events` on, and says so until then. **A webhook is refused when it
+is written**, in `WEBHOOKS_ARE_NOT_OFFERED`' words, and the form lists it as not offered: the owner
+decided on 2026-10-13 (needs-rupash 223, option B) that nothing starts work from outside the
+install. A webhook stored before that decision still reads back and says it cannot be started. A
 control that looks live and reaches nothing is the defect this repository keeps finding. See
-`A_TRIGGER_NOTHING_FIRES_IS_SAID_TO_BE_ONE` and needs-rupash 209.
+`A_TRIGGER_NOTHING_FIRES_IS_SAID_TO_BE_ONE`.
 
 **The confirmation covers the terms, not the rehearsal.** The digest is over everything the person
 agrees to: the name, the instruction, the trigger, the condition, the tools, who it runs as, the
@@ -81,7 +84,7 @@ import hashlib
 import json
 import re
 import secrets
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Final, Protocol
@@ -112,6 +115,7 @@ from brain.core.entitlement import EntitlementSet
 from brain.core.principal import Principal
 from brain.gate.admission import admit
 from brain.gate.runtime import RUNTIME_WRITES_ALWAYS_WAIT_FOR_A_PERSON
+from brain.ops.automation_event import STARTABLE_KINDS, WEBHOOKS_ARE_NOT_OFFERED
 from brain.ops.automation_owner import AUTOMATION_ASSURANCE, AUTOMATION_CHANNEL
 from brain.ops.automation_run import INSTRUCTION_TASK, slots_before
 from brain.orchestration.unattended import TriggerKind
@@ -149,9 +153,9 @@ A_REHEARSAL_WRITES_AND_SENDS_NOTHING: Final = (
 
 #: Why a trigger nothing fires is said to be one.
 A_TRIGGER_NOTHING_FIRES_IS_SAID_TO_BE_ONE: Final = (
-    "A connector event or a webhook can be chosen and is kept and shown, and nothing on this "
-    "install fires one yet. The card says so and the automation cannot be started, so no control "
-    "looks live and reaches nothing."
+    "A trigger that nothing on this install fires is said to be one and its automation cannot be "
+    "started, so no control looks live and reaches nothing. A change fires only while the install "
+    "has switched it on, and a webhook is never fired."
 )
 
 # ------------------------------------------------------------------ the figures
@@ -199,8 +203,14 @@ WRITES_WAIT_FOR_A_PERSON: Final = RUNTIME_WRITES_ALWAYS_WAIT_FOR_A_PERSON
 
 #: What the card says about a trigger nothing fires.
 NOTHING_FIRES_THIS_YET: Final = (
-    "Nothing on this install fires this kind of trigger yet, so it is saved and shown and cannot "
-    "be started."
+    "Nothing on this install starts work from outside it, so this kind of trigger is shown and "
+    "cannot be started."
+)
+
+#: What the card says about a change trigger while the install has not switched changes on.
+EVENTS_ARE_OFF: Final = (
+    "Starting an automation when a source changes is switched off on this install, so it is saved "
+    "and cannot be started until an administrator switches it on."
 )
 
 #: What the card says about starting.
@@ -455,8 +465,12 @@ class TriggerChoice:
 
     @property
     def fires(self) -> bool:
-        """Whether anything on this install fires this kind today. Only a schedule."""
-        return self.kind is TriggerKind.SCHEDULE
+        """Whether this kind of trigger can start anything: a schedule, or a change. Not a webhook.
+
+        Whether the install has switched changes on is configuration, so it is asked by the route,
+        which reads the switch, and not here.
+        """
+        return self.kind in STARTABLE_KINDS
 
     def words(self) -> str:
         """The trigger as the card says it."""
@@ -537,6 +551,7 @@ def compose(
     condition: Condition | None,
     fields: Mapping[str, ConditionField],
     template: AutomationTemplate | None = None,
+    listenable: Collection[str] | None = None,
 ) -> Authored:
     """What a person wrote, checked against this agent and this install, or every reason it is not.
 
@@ -544,8 +559,25 @@ def compose(
     wants all of what is wrong at once, and the three checks that depend on the agent and the
     install (the tools, the condition's field and the template's task) run beside the ones the
     value checks itself.
+
+    `listenable` is the sources a change may be listened to for this agent, which the caller works
+    out from the agent's connectors and what is serving: **this module does not read an agent's
+    connector list**, because `tests/unit/test_agent_binding.py` holds that access is decided in the
+    ceiling alone and a form that draws the list is the one place beside it that may read it. None
+    means the caller did not ask, as the install check does not.
     """
     findings: list[str] = []
+    if trigger.kind is TriggerKind.WEBHOOK:
+        findings.append(WEBHOOKS_ARE_NOT_OFFERED)
+    if (
+        trigger.kind is TriggerKind.CONNECTOR_EVENT
+        and listenable is not None
+        and trigger.source not in listenable
+    ):
+        findings.append(
+            "This agent is not bound to that source, so a change in it could never be read by a "
+            "run of this automation."
+        )
     findings.extend(tool_gaps(tools, agent))
     if condition is not None:
         findings.extend(condition_gaps(condition, fields))

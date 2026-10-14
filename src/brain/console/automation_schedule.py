@@ -72,6 +72,18 @@ THIS_OUTCOME_CANNOT_RUN_ON_THIS_INSTALL: Final = (
 )
 
 
+#: What a confirmation says for the instant an automation a change starts begins listening.
+ARMED: Final = "armed"
+
+#: Why that instant is not in the digest.
+A_CHANGE_IS_ARMED_AT_THE_WRITE: Final = (
+    "A schedule's start is confirmed against the cadence's next instant, which is the same for "
+    "everybody for an hour. An automation a change starts has no next instant, only the moment it "
+    "begins listening, and that moment is whenever the write happens, so confirming it would "
+    "refuse every start. What a person confirms is that it listens, to what, and as whom."
+)
+
+
 class ScheduleControlError(Exception):
     """A start or a stop was asked for in a shape that cannot be written."""
 
@@ -157,14 +169,27 @@ class ScheduleShown:
 
     direction: Direction
     automation: Automation
-    cadence: Cadence
-    #: The next run the change leaves: the cadence's next instant for a start, None for a stop.
+    #: The cadence of an automation a clock starts, or None for one a change starts.
+    cadence: Cadence | None
+    #: The next run the change leaves: the cadence's next instant for a start, None for a stop. For
+    #: an automation a change starts, the instant it begins listening, and not a run.
     becomes: datetime | None
+    #: The connected source an automation a change starts listens to, or empty for a schedule.
+    listens_to: str = ""
 
     def __post_init__(self) -> None:
         if (self.direction is Direction.START) != (self.becomes is not None):
             msg = "a start leaves a next run and a stop leaves none"
             raise ScheduleControlError(msg)
+        if (self.cadence is None) == (not self.listens_to):
+            msg = "an automation is started by a cadence or by a source's changes, and not both"
+            raise ScheduleControlError(msg)
+
+    def trigger_words(self) -> str:
+        """What starts it, as the confirmation and the card say it."""
+        if self.cadence is not None:
+            return self.cadence.words()
+        return f"when something changes in {self.listens_to.replace('_', ' ')}"
 
     @property
     def confirmation(self) -> str:
@@ -176,9 +201,17 @@ class ScheduleShown:
             "name": one.name,
             "runs_as": one.runs_as.id,
             "task": one.task,
-            "cadence": self.cadence.words(),
+            "cadence": self.trigger_words(),
             "next_run_at": None if one.next_run_at is None else one.next_run_at.isoformat(),
-            "becomes": None if self.becomes is None else self.becomes.isoformat(),
+            # An instant a request carries would never match the one the write computes, so a
+            # change's arming is confirmed as the word: see `A_CHANGE_IS_ARMED_AT_THE_WRITE`.
+            "becomes": (
+                None
+                if self.becomes is None
+                else ARMED
+                if self.listens_to
+                else self.becomes.isoformat()
+            ),
         }
         encoded = json.dumps(shown, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -194,9 +227,24 @@ def shown_start(one: Automation, cadence: Cadence, *, now: datetime) -> Schedule
     )
 
 
-def shown_stop(one: Automation, cadence: Cadence) -> ScheduleShown:
+def shown_start_on_change(one: Automation, source: str, *, now: datetime) -> ScheduleShown:
+    """What starting this automation would leave: it listening to `source` from `now`."""
+    return ScheduleShown(
+        direction=Direction.START, automation=one, cadence=None, becomes=now, listens_to=source
+    )
+
+
+def shown_stop(
+    one: Automation, cadence: Cadence | None = None, *, listens_to: str = ""
+) -> ScheduleShown:
     """What stopping this automation would leave: no next run."""
-    return ScheduleShown(direction=Direction.STOP, automation=one, cadence=cadence, becomes=None)
+    return ScheduleShown(
+        direction=Direction.STOP,
+        automation=one,
+        cadence=cadence,
+        becomes=None,
+        listens_to=listens_to,
+    )
 
 
 def changed(shown: ScheduleShown, *, confirmation: str, guards: str) -> SchedulerChange:

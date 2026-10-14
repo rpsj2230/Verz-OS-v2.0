@@ -33,7 +33,7 @@ from tests.unit.test_acceptance import at_head, checks_in, counts
 
 MODULE = "brain.ops.acceptance_checks_automation_authoring"
 WRITES = "a_person_writes_changes_and_runs_an_automation_as_themselves"
-KINDS = "each_kind_of_trigger_is_saved_and_only_a_schedule_can_be_started"
+KINDS = "each_kind_of_trigger_is_saved_and_a_webhook_is_refused"
 
 
 # ------------------------------------------------------------------------ the figures
@@ -166,13 +166,16 @@ def test_a_run_that_ignores_the_writers_reach_fails_the_first_check(
 
 
 @pytest.mark.needs_db
-def test_a_trigger_nothing_fires_that_is_run_fails_the_second_check(
+def test_a_clock_that_claims_an_automation_a_change_starts_fails_the_second_check(
     install: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The worker treating a row with no cadence as one that can run. Delete this and M17.4.1 closes
-    on a webhook that looks live and runs nothing, or runs something."""
+    """The worker's clock treating a row a change starts as one it may run. Delete this and M17.4.1
+    closes on a listener the clock claims as a schedule with no cadence and refuses on its first
+    minute."""
+    from sqlalchemy import true
+
     from brain.ops import automation_run_store
 
-    monkeypatch.setattr(automation_run_store, "_has_a_source", lambda row, cadence: True)
+    monkeypatch.setattr(automation_run_store, "_started_by_the_clock", lambda: true())
 
-    _failed(install, KINDS)
+    assert A_KIND_RAN in _failed(install, KINDS)

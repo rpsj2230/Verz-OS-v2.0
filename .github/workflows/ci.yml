@@ -17,8 +17,9 @@ env:
   UV_VERSION: "0.12.9"
 
 jobs:
-  # Main runs only what guards the deploy. Every pull request has already passed the whole suite
-  # before it merges, and the next pull request's run is on top of the newest main, so running
+  # Main runs only what guards the deploy. Every pull request has already passed its tests before
+  # it merges (the files its diff reaches, or the whole suite for a merge train, see the unit
+  # shards below), and the next pull request's run is on top of the newest main, so running
   # the unit shards, console, coverage, handover, analyser and the two supply-chain scans again
   # on main doubled CI for nothing a deploy needs. On the free plan's 20 concurrent jobs that
   # second run queued every deploy (measured 2026-09-28: 22 jobs a run, deploys waiting behind
@@ -127,10 +128,19 @@ jobs:
   # both real failures in those runs) and splits them across the same eight shards. Measured over
   # the last 34 merges to main it runs 31% of the files the full shards ran. **Anything it cannot
   # establish runs the shard's whole share**: no base commit, a diff git cannot compute, a
-  # conftest, fixture, workflow or lock file, a deleted source module, or an error in the
-  # planner itself. Every file still runs every night (`nightly-suite.yml`), which is the floor
-  # under the selection and the measurement of it: a red nightly on a file a pull request did not
-  # select is the signal to widen the selection, not to trust it.
+  # `pyproject.toml` or lock file, a deleted source module, or an error in the planner itself.
+  #
+  # **Shared test infrastructure no longer runs the whole suite on an ordinary pull request
+  # (2026-10-14).** A conftest, a fixture, a test helper, a workflow or the planner's own code used
+  # to, and a pull request that fell back cost 127 to 222 job-minutes and 45 to 50 minutes against
+  # 56 and 12 for a selected one. They are selected by what reads them now
+  # (`brain.ops.test_selection`), and **the whole suite runs in three places instead: on a merge
+  # train, which is a pull request whose branch starts with `train/` (`WHOLE_SUITE` below,
+  # assembled by `ops/dev/assemble_train.py`), every night (`nightly-suite.yml`), and on demand
+  # (that workflow's `workflow_dispatch`)**. They are the floor under the selection and the
+  # measurement of it: a red nightly on a file a pull request did not select is the signal to
+  # widen the selection, not to trust it. `ops/DEPLOY.md` says what an ordinary pull request no
+  # longer proves.
   #
   # **No shard enforces the coverage floor, and that is deliberate.** A quarter of the suite
   # covers a fraction of the code, so each shard passes `--cov-fail-under=0` and keeps its data
@@ -173,6 +183,13 @@ jobs:
       # What the selection is measured against. The nightly suite runs this same step with no
       # base, which `brain.ops.test_plan` reads as "run everything".
       TEST_SELECTION_BASE: ${{ github.event.pull_request.base.sha }}
+      # A merge train (`ops/dev/assemble_train.py`) is a pull request whose branch starts with
+      # `train/`, and it runs the whole suite whatever its diff: it is the one run before main
+      # that carries every file, and an ordinary pull request no longer falls back to the whole
+      # suite for shared test infrastructure (`ops/DEPLOY.md`). Read by the step below as the
+      # string "true" or "false"; the nightly suite sets nothing and plans from no base, which is
+      # the whole suite too. Nothing but the branch name sets it: no label and no comment.
+      WHOLE_SUITE: ${{ startsWith(github.head_ref, 'train/') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -211,7 +228,9 @@ jobs:
         # suite. An empty share of a selection is a pass, with the reason printed.
         run: |
           mode_file="$GITHUB_WORKSPACE/plan-shard-${{ matrix.shard }}.txt"
-          files=$(uv run python -m brain.ops.test_plan --shard ${{ matrix.shard }} --of ${{ strategy.job-total }} --base "$TEST_SELECTION_BASE" --head "$GITHUB_SHA" --mode-file "$mode_file") || {
+          whole_flag=""
+          if [ "${WHOLE_SUITE:-false}" = "true" ]; then whole_flag="--whole-suite"; fi
+          files=$(uv run python -m brain.ops.test_plan --shard ${{ matrix.shard }} --of ${{ strategy.job-total }} --base "$TEST_SELECTION_BASE" --head "$GITHUB_SHA" --mode-file "$mode_file" $whole_flag) || {
             echo "::warning::the test selection failed, so shard ${{ matrix.shard }} runs its whole share of the suite"
             echo "mode=full" > "$mode_file"
             files=$(uv run python -m brain.ops.test_shards --shard ${{ matrix.shard }} --of ${{ strategy.job-total }})

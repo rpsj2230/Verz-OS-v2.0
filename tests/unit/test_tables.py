@@ -178,6 +178,8 @@ MIGRATION_TEMPLATES_AUDIENCE = VERSIONS / "0223_templates_and_audience.py"
 MIGRATION_MEMBER_PREFERENCE = VERSIONS / "0229_member_preference.py"
 MIGRATION_MEMBER_SHARE = VERSIONS / "0230_member_share_and_agent_request.py"
 MIGRATION_ACCEPTANCE_RUN = VERSIONS / "0231_acceptance_run_record.py"
+MIGRATION_SKILL_PERSONAL = VERSIONS / "0232_skill_personal.py"
+MIGRATION_PERSONAL_PROJECT = VERSIONS / "0233_personal_project.py"
 MIGRATION_FANOUT_GATE = VERSIONS / "0240_fanout_gate.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
@@ -525,6 +527,8 @@ MEMBER_PREFERENCE_TABLES: tuple[str, ...] = ("auth.member_preference",)
 MEMBER_SHARE_TABLES: tuple[str, ...] = ("agent.artifact_share", "agent.agent_request")
 #: And the one 0231 adds: a run of the acceptance checks, so it can be finished after a restart.
 ACCEPTANCE_RUN_TABLES: tuple[str, ...] = ("ops.acceptance_run",)
+SKILL_PERSONAL_TABLES: tuple[str, ...] = ("agent.skill_personal",)
+PERSONAL_PROJECT_TABLES: tuple[str, ...] = ("agent.project", "agent.project_item")
 
 #: And the one 0240 adds: what the fan-out gate decided for a plan.
 FANOUT_GATE_TABLES: tuple[str, ...] = ("ops.fanout_gate",)
@@ -629,6 +633,8 @@ ALL_TABLES = (
     + MEMBER_PREFERENCE_TABLES
     + MEMBER_SHARE_TABLES
     + ACCEPTANCE_RUN_TABLES
+    + SKILL_PERSONAL_TABLES
+    + PERSONAL_PROJECT_TABLES
     + FANOUT_GATE_TABLES
 )
 
@@ -1516,6 +1522,10 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert member_share.TABLES == MEMBER_SHARE_TABLES
     acceptance_run = migration_module(MIGRATION_ACCEPTANCE_RUN)
     assert acceptance_run.TABLES == ACCEPTANCE_RUN_TABLES
+    skill_personal = migration_module(MIGRATION_SKILL_PERSONAL)
+    assert skill_personal.TABLES == SKILL_PERSONAL_TABLES
+    personal_project = migration_module(MIGRATION_PERSONAL_PROJECT)
+    assert personal_project.TABLES == PERSONAL_PROJECT_TABLES
     fanout_gate = migration_module(MIGRATION_FANOUT_GATE)
     assert fanout_gate.TABLES == FANOUT_GATE_TABLES
     assert core.TABLES == CORE_TABLES
@@ -1641,6 +1651,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(member_preference.TABLES)
         + tuple(member_share.TABLES)
         + tuple(acceptance_run.TABLES)
+        + tuple(skill_personal.TABLES)
+        + tuple(personal_project.TABLES)
         + tuple(fanout_gate.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
@@ -1746,6 +1758,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(member_preference.TABLES),
         set(member_share.TABLES),
         set(acceptance_run.TABLES),
+        set(skill_personal.TABLES),
+        set(personal_project.TABLES),
         set(fanout_gate.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)

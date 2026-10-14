@@ -21,8 +21,8 @@ from typing import Any
 import pytest
 import yaml
 
-from brain.ops import test_plan
-from brain.ops.test_plan import PLAN_DEPTH, plan
+from brain.ops import test_plan, test_selection
+from brain.ops.test_plan import PLAN_DEPTH, WHOLE_SUITE_REQUESTED, plan
 from brain.ops.test_selection import (
     ALWAYS,
     DEPTHS,
@@ -33,7 +33,9 @@ from brain.ops.test_selection import (
     readers_of,
     record,
     scanners,
+    scoped_tests,
     select,
+    support_readers,
 )
 from brain.ops.test_shards import ShardError, collected, partition
 
@@ -66,29 +68,136 @@ def test_a_changed_test_file_is_selected_itself() -> None:
     assert "tests/unit/test_ci_workflow.py" in chosen.files and not chosen.full
 
 
-@pytest.mark.parametrize(
-    "path",
-    [
-        "pyproject.toml",
-        "uv.lock",
-        "tests/conftest.py",
-        "tests/fixtures/company.py",
-        ".github/workflows/ci.yml",
-    ],
-)
-def test_what_the_graph_cannot_see_runs_the_full_suite(path: str) -> None:
-    """A conftest, a fixture, the project settings or the workflow reach every test at once.
-    Delete this and a changed conftest would select the handful of files that import it."""
+@pytest.mark.parametrize("path", ["pyproject.toml", "uv.lock"])
+def test_the_dependencies_every_test_runs_on_run_the_full_suite(path: str) -> None:
+    """A changed dependency reaches every test at once and no import says so. Delete this and a
+    lock-file change selects the handful of files that name the lock file. The sibling tests
+    below show the shared test infrastructure, which used to be here, no longer does."""
     assert select([path], depth=2, suite=SUITE).full
 
 
-def test_a_support_module_under_tests_and_an_unknown_diff_run_the_full_suite() -> None:
-    """A helper module a test imports is not followed by the source graph, and a diff nobody
-    computed is not a small one. Delete this and either reads as a change reaching nothing."""
-    # Every helper today is a fixture, which `FULL_SUITE` names; a package marker is the one
-    # Python file under tests/ the suite does not collect and no pattern names.
-    helper = "tests/unit/__init__.py"
-    assert select([helper], depth=0, suite=SUITE).full
+def test_the_full_suite_list_is_the_dependencies_and_nothing_else() -> None:
+    """**This is the line the lighter pull request gate is drawn on.** Delete this and a conftest,
+    a fixture, a helper or a workflow can be added back to `FULL_SUITE` and every pull request that
+    touches one costs the whole suite again (127 to 222 job-minutes), with every other test
+    green."""
+    assert set(FULL_SUITE) == {"pyproject.toml", "uv.lock"}
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "tests/fixtures/company.py",
+        "tests/fixtures/scratch_postgres.py",
+        "tests/fixtures/cassettes/cloudflare.py",
+        ".github/workflows/ci.yml",
+        ".github/workflows/nightly-suite.yml",
+        "src/brain/ops/test_selection.py",
+        "src/brain/ops/test_plan.py",
+        "src/brain/ops/test_shards.py",
+        "src/brain/ops/guards.py",
+    ],
+)
+def test_shared_test_infrastructure_selects_what_reads_it_and_no_longer_the_whole_suite(
+    path: str,
+) -> None:
+    """A fixture, a workflow and the planner's own code used to run everything. Delete this and
+    they do again, or they select nothing: the sibling assertions are that the selection is a
+    strict subset of the suite and still holds the invariants and the readers."""
+    chosen = select([path], depth=PLAN_DEPTH, suite=SUITE)
+    assert not chosen.full
+    assert 0 < len(chosen.files) < len(SUITE)
+    assert {one for one in SUITE if one.startswith(ALWAYS)} <= set(chosen.files)
+
+
+def test_a_support_module_selects_the_tests_that_import_it_directly_or_through_another() -> None:
+    """The source graph does not follow `tests/`, so support modules are followed by text, to a
+    fixed point. Delete this and a changed fixture selects nothing that uses it, or only the files
+    naming it and not the ones reaching it through a second fixture."""
+    direct = support_readers("tests/fixtures/company.py", SUITE)
+    assert direct and direct <= set(SUITE)
+    assert all("tests.fixtures" in (REPO / one).read_text(encoding="utf-8") for one in direct)
+    chosen = select(["tests/fixtures/company.py"], depth=PLAN_DEPTH, suite=SUITE)
+    assert direct <= set(chosen.files)
+
+
+def test_a_test_reaching_a_fixture_only_through_another_fixture_is_selected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**The fixed point, on a tree small enough to see.** `outer` imports `inner` and `deep`
+    imports `outer`, so a test that imports only `deep` is reached by a change to `inner`, and one
+    that imports none of them is not. Delete this and the closure is never exercised: a real tree
+    has so many direct importers that a closure which does nothing still looks right."""
+    texts = {
+        "tests/fixtures/inner.py": "x = 1\n",
+        "tests/fixtures/outer.py": "from tests.fixtures.inner import x\n",
+        "tests/fixtures/deep.py": "from tests.fixtures import outer\n",
+        "tests/fixtures/alone.py": "import os\n",
+        "tests/unit/test_direct.py": "import tests.fixtures.inner\n",
+        "tests/unit/test_via_outer.py": "from tests.fixtures.outer import y\n",
+        "tests/unit/test_via_deep.py": "from tests.fixtures.deep import z\n",
+        "tests/unit/test_via_alone.py": "from tests.fixtures.alone import w\n",
+    }
+    suite = [name for name in texts if "/test_" in name]
+    monkeypatch.setattr(test_selection, "_text", texts.__getitem__)
+    monkeypatch.setattr(
+        test_selection, "_support_modules", lambda: tuple(n for n in texts if n not in suite)
+    )
+    assert support_readers("tests/fixtures/inner.py", suite) == {
+        "tests/unit/test_direct.py",
+        "tests/unit/test_via_outer.py",
+        "tests/unit/test_via_deep.py",
+    }
+    assert support_readers("tests/fixtures/alone.py", suite) == {"tests/unit/test_via_alone.py"}
+
+
+def test_an_import_is_recognised_in_each_way_it_can_be_written() -> None:
+    """`import a.b.c`, `from a.b.c import x`, `from a.b import c` (one line or parenthesised) and
+    `from a.b import c as d` all import `a.b.c`; `from a.b import other` does not. Delete this and
+    the second form of import is never exercised, so a fixture imported as `from tests.fixtures
+    import company` selects nothing, which no test over a real fixture would notice."""
+    module = "tests.fixtures.company"
+    for written in (
+        "import tests.fixtures.company as c",
+        "from tests.fixtures.company import make",
+        "from tests.fixtures import company",
+        "from tests.fixtures import company as c",
+        "from tests.fixtures import (\n    other,\n    company,\n)",
+    ):
+        assert test_selection._imports(written, module), written
+    assert not test_selection._imports("from tests.fixtures import other", module)
+    assert not test_selection._imports("from tests.fixtures import company_two", module)
+    assert not test_selection._imports("import tests.unit.helpers", module)
+
+
+def test_a_support_module_that_nothing_imports_selects_no_test_by_import() -> None:
+    """The positive sibling: the match is on the module and not on the word `tests`. Delete this
+    and `support_readers` returns every test for every module, which satisfies the tests above."""
+    assert support_readers("tests/fixtures/no_such_fixture_anywhere.py", SUITE) == set()
+
+
+def test_a_conftest_or_package_marker_selects_every_test_beneath_its_directory_and_no_more() -> (
+    None
+):
+    """A `conftest.py` applies to the tests under it and an `__init__.py` is the package they are
+    imported through. Delete this and a conftest in one directory runs another's tests, or a
+    root conftest, which really does reach everything, runs only some."""
+    unit = [one for one in SUITE if one.startswith("tests/unit/")]
+    other = [one for one in SUITE if not one.startswith("tests/unit/")]
+    assert other, "the suite has tests outside tests/unit for this to tell apart"
+    assert scoped_tests("tests/unit/conftest.py", SUITE) == set(unit)
+    assert scoped_tests("tests/unit/__init__.py", SUITE) == set(unit)
+    assert scoped_tests("tests/conftest.py", SUITE) == set(SUITE)
+    assert scoped_tests("conftest.py", SUITE) == set(SUITE)
+    chosen = select(["tests/unit/conftest.py"], depth=PLAN_DEPTH, suite=SUITE)
+    assert not chosen.full and set(unit) <= set(chosen.files)
+    outside = set(other) - {one for one in SUITE if one.startswith(ALWAYS)}
+    assert outside and not outside <= set(chosen.files)
+
+
+def test_an_unknown_diff_still_runs_the_full_suite() -> None:
+    """A diff nobody computed is not a small one. Delete this and an empty diff reads as a change
+    reaching nothing."""
     assert select([], depth=0, suite=SUITE).full
 
 
@@ -334,10 +443,11 @@ def test_the_nightly_suite_is_the_pull_requests_shards_with_no_base_and_holds_th
     ours, theirs = nightly["jobs"]["tests"], ci["jobs"]["tests"]
     assert ours["steps"] == theirs["steps"]
     assert ours["strategy"] == theirs["strategy"] and ours["services"] == theirs["services"]
-    assert "TEST_SELECTION_BASE" in theirs["env"] and "TEST_SELECTION_BASE" not in ours["env"]
-    assert {k: v for k, v in theirs["env"].items() if k != "TEST_SELECTION_BASE"} == ours["env"]
+    only_here = {"TEST_SELECTION_BASE", "WHOLE_SUITE"}
+    assert only_here <= set(theirs["env"]) and not only_here & set(ours["env"])
+    assert {k: v for k, v in theirs["env"].items() if k not in only_here} == ours["env"]
     assert "needs" not in ours and "if" not in ours
-    assert nightly[True]["schedule"]
+    assert nightly[True]["schedule"] and "workflow_dispatch" in nightly[True]
     floor = nightly["jobs"]["coverage"]
     assert floor["name"] == "Unit tests and coverage" and floor["needs"] == "tests"
     body = "\n".join(str(one.get("run", "")) for one in floor["steps"])
@@ -406,3 +516,147 @@ def test_the_plan_files_are_downloaded_where_the_checkout_cannot_delete_them() -
             and str(one["with"]["pattern"]).startswith("plan-shard")
         )
         assert plans["with"]["path"].startswith("${{ runner.temp }}/"), name
+
+
+# ------------------------------------------------------------------ the lighter pull request gate
+
+
+def test_a_merge_train_plans_every_shards_full_share_whatever_the_diff() -> None:
+    """**The whole suite on a train, decided in Python and not in YAML.** With `whole_suite` every
+    shard's plan is its full share, the shares between them are every file once, and the reason
+    says the suite was asked for. Delete this and a train runs the selection like any pull request,
+    which makes the train no more than a larger selected run. The sibling is the same diff without
+    the request, which is selected."""
+    changed = ["src/brain/ops/limits.py"]
+    asked = [
+        plan(n, SHARDS, base="x", head="HEAD", changed=changed, whole_suite=True)
+        for n in range(1, SHARDS + 1)
+    ]
+    assert all(one.full and one.reason == WHOLE_SUITE_REQUESTED for one in asked)
+    assert sorted(name for one in asked for name in one.files) == sorted(SUITE)
+    plain = [plan(n, SHARDS, base="x", head="HEAD", changed=changed) for n in range(1, SHARDS + 1)]
+    assert not any(one.full for one in plain)
+    assert sum(len(one.files) for one in plain) < len(SUITE)
+
+
+def test_the_planner_takes_the_whole_suite_request_from_a_flag_and_defaults_to_selecting(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The command line is how the workflow asks. Delete this and the flag is parsed and dropped,
+    so a train selects, or the flag becomes the default and every pull request runs the suite."""
+    seen: list[bool] = []
+
+    def spy(*args: object, **kwargs: Any) -> test_plan.Plan:
+        seen.append(bool(kwargs["whole_suite"]))
+        return test_plan.Plan(files=("tests/unit/test_x.py",), full=False, reason="spy")
+
+    monkeypatch.setattr(test_plan, "plan", spy)
+    common = ["--shard", "1", "--of", "8", "--base", "b", "--mode-file", str(tmp_path / "m")]
+    assert test_plan.main(common) == 0
+    assert test_plan.main([*common, "--whole-suite"]) == 0
+    assert seen == [False, True]
+
+
+def run_shard_step(tmp_path: Path, whole: str | None) -> list[str]:
+    """Run the shard job's test step under bash with a stand-in `uv` that logs its commands, and
+    return the commands. `whole` is the value of `WHOLE_SUITE`, or None for unset (the nightly)."""
+    step = _shard_step(workflow("ci.yml")["jobs"]["tests"])
+    script = (
+        str(step["run"])
+        .replace("${{ matrix.shard }}", "3")
+        .replace("${{ strategy.job-total }}", "8")
+    )
+    tools = tmp_path / "bin"
+    tools.mkdir()
+    log = tmp_path / "uv.log"
+    fake = tools / "uv"
+    fake.write_text(
+        '#!/bin/sh\necho "$*" >> "$UV_LOG"\n'
+        'case "$*" in *brain.ops.test_plan*) echo tests/unit/test_x.py;; esac\n',
+        encoding="utf-8",
+    )
+    fake.chmod(0o755)
+    env = {
+        "PATH": f"{tools}:/usr/bin:/bin",
+        "GITHUB_WORKSPACE": str(tmp_path),
+        "GITHUB_OUTPUT": str(tmp_path / "out"),
+        "GITHUB_SHA": "head",
+        "TEST_SELECTION_BASE": "base",
+        "UV_LOG": str(log),
+    }
+    if whole is not None:
+        env["WHOLE_SUITE"] = whole
+    done = subprocess.run(
+        ["bash", "-eo", "pipefail", "-c", script], env=env, capture_output=True, text=True
+    )
+    assert done.returncode == 0, done.stderr
+    return log.read_text(encoding="utf-8").splitlines()
+
+
+@pytest.mark.parametrize(
+    ("whole", "flagged"),
+    [("true", True), ("false", False), (None, False), ("", False)],
+)
+def test_the_shard_step_asks_for_the_whole_suite_only_when_the_branch_says_it_is_a_train(
+    tmp_path: Path, whole: str | None, flagged: bool
+) -> None:
+    """**The step, run as the runner's bash would.** `WHOLE_SUITE=true` adds `--whole-suite` to the
+    planning command, and anything else, unset included (the nightly suite), does not. Delete this
+    and the flag is passed always (every pull request runs everything), never (a train selects), or
+    on any non-empty value, `false` included, which is how shell tests of a string usually go
+    wrong."""
+    commands = run_shard_step(tmp_path, whole)
+    planned = next(one for one in commands if "brain.ops.test_plan" in one)
+    assert ("--whole-suite" in planned.split()) is flagged
+    assert "--base base" in planned and "--head head" in planned
+    assert commands[-1].startswith("run pytest ") and commands[-1].endswith("tests/unit/test_x.py")
+
+
+def test_only_a_branch_starting_with_train_slash_sets_the_whole_suite_request() -> None:
+    """**The condition, parsed.** The job's `WHOLE_SUITE` is exactly `startsWith` over the head
+    branch and the prefix `train/`, with no label, comment or input in it, and it is read by the
+    step that plans. Delete this and a looser expression (`contains`, a label) lets a pull request
+    ask for, or avoid, the whole suite by wording. The nightly sets none of it."""
+    job = workflow("ci.yml")["jobs"]["tests"]
+    assert job["env"]["WHOLE_SUITE"] == "${{ startsWith(github.head_ref, 'train/') }}"
+    assert "WHOLE_SUITE" in str(_shard_step(job)["run"])
+    assert "WHOLE_SUITE" not in workflow("nightly-suite.yml")["jobs"]["tests"]["env"]
+    assert "train/" in str(workflow("ci.yml")["jobs"]["tests"]["env"]["WHOLE_SUITE"])
+    assert not [k for k in job["env"] if "LABEL" in k.upper()]
+
+
+def test_the_whole_suite_runs_on_a_train_every_night_and_on_demand_and_main_is_left_alone() -> None:
+    """**Where the whole suite runs now, and what did not move.** A pull request, a push to main
+    (the deploy gates), a train (via the pull request trigger and the branch name), the nightly
+    schedule and a manual dispatch of the nightly suite. CI itself is not dispatchable, and Deploy
+    still listens for CI completing on main. Delete this and a `workflow_dispatch` on CI, or an
+    edit to Deploy's trigger, changes what reaches the server with every other test green."""
+    ci, nightly = workflow("ci.yml"), workflow("nightly-suite.yml")
+    assert ci[True] == {"push": {"branches": ["main"]}, "pull_request": None}
+    assert set(nightly[True]) == {"schedule", "workflow_dispatch"}
+    deploy = workflow("deploy.yml")[True]["workflow_run"]
+    assert deploy == {"workflows": ["CI"], "branches": ["main"], "types": ["completed"]}
+    shard_job = ci["jobs"]["tests"]
+    assert "github.event_name == 'pull_request'" in shard_job["if"]
+    assert "needs" not in nightly["jobs"]["tests"] and "if" not in nightly["jobs"]["tests"]
+
+
+def test_what_an_ordinary_pull_request_no_longer_proves_is_written_down_where_the_deploy_is() -> (
+    None
+):
+    """The reader who decides what to trust before a merge needs the trade written next to the
+    deploy chain: which kinds of change are now selected rather than run whole, and where the whole
+    suite runs. Delete this and the guarantee changes in the workflow and nowhere a person looks."""
+    text = (REPO / "ops" / "DEPLOY.md").read_text(encoding="utf-8")
+    sections: dict[str, str] = {}
+    current = ""
+    for line in text.splitlines():
+        if line.startswith("#"):
+            current = line.lstrip("# ").strip()
+            sections[current] = ""
+        elif current:
+            sections[current] += line + "\n"
+    body = sections["What a normal pull request no longer proves"]
+    for needed in ("train/", "nightly-suite.yml", "workflow_dispatch", "conftest", "fixture"):
+        assert needed in body, needed
+    assert "ops/dev/assemble_train.py" in body

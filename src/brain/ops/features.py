@@ -9,7 +9,11 @@ browser. None of them was a place a new feature could be declared and turned on 
 administrator without a shell. The release check is now a feature here as well (`RELEASE_CHECK`),
 beside the environment's value rather than instead of it (M27.15.51).
 
-**A feature is declared in this file, with the functions that read it, and nowhere else.**
+**A feature is declared in source, with the functions that read it, and nowhere else.** The first
+seventeen are constants in this file (`BUILT_IN_FEATURES`); **every later one is a module of its
+own in `brain.ops.features_declared`**, found by listing that directory (`declared_in`), so adding
+one edits no line another pull request edits. It was a constant and a tuple line appended at the
+end of this file, which two pull requests could not both do and merge.
 `FEATURES` is closed and compiled, for the reason `brain.ops.controls.CONTROLS` is: what the
 product can switch on is a fact about the product, identical on every install, and a table of
 features would be a list any operator could extend with a switch nothing reads. The install's
@@ -26,7 +30,8 @@ checked in both directions.** `Feature.read_by` names each function that asks `i
 feature, and `feature_gaps` parses those functions and every other function under `src/brain`:
 a declared reader that does not ask, and a function that asks and is not declared, are both
 findings. A feature whose switch reaches nothing is the control `docs/admin-console.md` calls
-worse than no control. See `A_SWITCH_NOTHING_READS_IS_A_CONTROL_THAT_REACHES_NOTHING`.
+worse than no control. See `A_SWITCH_NOTHING_READS_IS_A_CONTROL_THAT_REACHES_NOTHING`, which
+lives in `brain.ops.feature_model` beside the class that enforces it.
 
 **A switch gates the door and never traps what it opened.** Turning `schedule_control` off
 stops anybody pausing a control or asking for a run; it does not resume a control somebody
@@ -62,15 +67,20 @@ from __future__ import annotations
 import ast
 import importlib
 import inspect
-import re
+import pkgutil
 import textwrap
 from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 from typing import Final
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# Re-exported under their own names (the `as` form), because every reader imports them from here
+# and the declaration lives in `feature_model` only so a feature can be declared in its own file.
+from brain.ops.feature_model import FEATURE_NAMESPACE as FEATURE_NAMESPACE
+from brain.ops.feature_model import Feature as Feature
+from brain.ops.feature_model import FeatureError as FeatureError
 from brain.ops.setting_store import SettingState, put, read_namespace, values_under
 from brain.tables.config import SettingType
 
@@ -83,14 +93,6 @@ EVERY_FEATURE_SHIPS_SWITCHED_OFF: Final = (
     "true is off, and switching one on is a person's recorded act."
 )
 
-#: Why the readers are checked against the source.
-A_SWITCH_NOTHING_READS_IS_A_CONTROL_THAT_REACHES_NOTHING: Final = (
-    "A feature switch is pressed in a browser and read by a route. If the route stops asking, "
-    "the switch goes on rendering and changing a row, and the feature is either always on or "
-    "never on whatever the screen says. So the functions that ask are named on the feature, and "
-    "the source is parsed to hold the names to the calls in both directions."
-)
-
 #: Why switching a feature off does not undo what it did.
 A_SWITCH_TURNED_OFF_DOES_NOT_TRAP_WHAT_IT_OPENED: Final = (
     "A switch decides whether the door is open. A control paused while the switch was on is "
@@ -100,67 +102,11 @@ A_SWITCH_TURNED_OFF_DOES_NOT_TRAP_WHAT_IT_OPENED: Final = (
 )
 
 # ------------------------------------------------------------------------ the figures
-#: The `ops.setting` namespace every switch sits under: `feature.<name>`.
-FEATURE_NAMESPACE: Final = "feature"
-
-#: A feature's name, and the last segment of its key. The key grammar's own segment shape.
-FEATURE_NAME_PATTERN: Final = r"^[a-z][a-z0-9_]*$"
-
-#: `module:function`, both dotted identifiers, as `brain.ops.controls` spells a symbol.
-_READER_RE: Final = re.compile(r"^[a-z_][a-z0-9_.]*:[a-z_][a-z0-9_]*$")
-
 #: The package `feature_gaps` reads. A parameter everywhere below.
 SRC: Final[Path] = Path(__file__).resolve().parents[1]
 
 #: The name every reader calls. A literal the source check looks for.
 READER_CALL: Final = "is_on"
-
-
-class FeatureError(Exception):
-    """Raised for a feature this product does not declare, or one declared wrongly."""
-
-
-@dataclass(frozen=True)
-class Feature:
-    """One switch an administrator can turn, and every function that reads it.
-
-    `what` and `while_off` are product text a person reads beside the switch: what turning it
-    on lets somebody do, and what stays true while it is off.
-    """
-
-    name: str
-    title: str
-    what: str
-    while_off: str
-    #: Every function that asks `is_on` about this feature, as `module:function`: the ones it gates
-    #: and the ones that only say on a screen whether it is on, because both stop being true
-    #: together if the switch stops reaching them.
-    read_by: tuple[str, ...]
-
-    def __post_init__(self) -> None:
-        if not re.fullmatch(FEATURE_NAME_PATTERN, self.name):
-            msg = f"{self.name!r} is not a feature name: lowercase, digits and underscores"
-            raise FeatureError(msg)
-        named = ((self.title, "title"), (self.what, "what"), (self.while_off, "while_off"))
-        for sentence, field in named:
-            if not sentence.strip():
-                msg = f"feature {self.name!r} has no {field}, so its switch explains nothing"
-                raise FeatureError(msg)
-        if not self.read_by:
-            msg = (
-                f"feature {self.name!r} names no reader. "
-                f"{A_SWITCH_NOTHING_READS_IS_A_CONTROL_THAT_REACHES_NOTHING}"
-            )
-            raise FeatureError(msg)
-        for reader in self.read_by:
-            if not _READER_RE.match(reader):
-                msg = f"feature {self.name!r} names {reader!r}, which is not module:function"
-                raise FeatureError(msg)
-
-    @property
-    def key(self) -> str:
-        """The `ops.setting` key this feature's switch is kept under."""
-        return f"{FEATURE_NAMESPACE}.{self.name}"
 
 
 #: Editing an agent's instructions from the console.
@@ -520,8 +466,11 @@ BROWSER_RUNS: Final = Feature(
     read_by=("brain.browsing.driver:browser_runs_are_on",),
 )
 
-#: Every feature this product can switch on, in the order the screen lists them.
-FEATURES: Final[tuple[Feature, ...]] = (
+#: The features declared in this file, in the order the screen lists them, before the declared
+#: package's. **Closed: a new feature is not added here.** It is a module of its own under
+#: `brain.ops.features_declared`, found by `declared_in`, so adding one touches no line another
+#: pull request touches. See that package's docstring for why.
+BUILT_IN_FEATURES: Final[tuple[Feature, ...]] = (
     PROMPT_EDITING,
     SCHEDULE_CONTROL,
     RELEASE_CHECK,
@@ -541,6 +490,65 @@ FEATURES: Final[tuple[Feature, ...]] = (
     ORCHESTRATION_REHEARSAL,
     BROWSER_RUNS,
 )
+
+#: The package whose modules each declare features. Imported by name rather than by a path, so a
+#: test can point `declared_in` at a package of its own.
+DECLARED_PACKAGE: Final = "brain.ops.features_declared"
+
+
+def declared_modules(package: str = DECLARED_PACKAGE) -> tuple[ModuleType, ...]:
+    """Every module of a declaring package, imported, in name order.
+
+    A name that starts with an underscore is a helper and not a declaration, so it is skipped.
+    Name order and not discovery order, because the order the screen lists features in must not
+    depend on the file system, and a reviewer reading the directory sees the same order.
+    """
+    root = importlib.import_module(package)
+    names = sorted(
+        one.name
+        for one in pkgutil.iter_modules(getattr(root, "__path__", ()))
+        if not one.name.startswith("_")
+    )
+    return tuple(importlib.import_module(f"{package}.{name}") for name in names)
+
+
+def declared_in(package: str = DECLARED_PACKAGE) -> tuple[Feature, ...]:
+    """The features declared in a package: every `Feature` bound at the top level of each module.
+
+    **A module that binds two is fine and one that binds the same object twice is counted once**,
+    which is what happens when a module imports another's feature to name it in a docstring or a
+    reader list. Two *different* features with one name are refused, here and not on the screen,
+    because the screen would show two switches over one row.
+    """
+    found: list[Feature] = []
+    for module in declared_modules(package):
+        for name, value in vars(module).items():
+            if name.startswith("_") or not isinstance(value, Feature):
+                continue
+            if any(value is already for already in found):
+                continue
+            found.append(value)
+    return tuple(found)
+
+
+def _checked_unique(features: Sequence[Feature]) -> tuple[Feature, ...]:
+    seen: set[str] = set()
+    for one in features:
+        if one.name in seen:
+            msg = f"two features are declared with the name {one.name!r}"
+            raise FeatureError(msg)
+        seen.add(one.name)
+    return tuple(features)
+
+
+def all_features(package: str = DECLARED_PACKAGE) -> tuple[Feature, ...]:
+    """The built-in features, then every one a package declares, refusing a name used twice."""
+    return _checked_unique((*BUILT_IN_FEATURES, *declared_in(package)))
+
+
+#: Every feature this product can switch on, in the order the screen lists them: the ones declared
+#: in this file, then each module of `DECLARED_PACKAGE` in name order.
+FEATURES: Final[tuple[Feature, ...]] = all_features()
 
 
 def feature(name: str, features: Sequence[Feature] = FEATURES) -> Feature:
@@ -620,10 +628,14 @@ def _asks(function: ast.AST) -> tuple[str, ...]:
 
 
 def _constant_name(one: Feature) -> str:
-    """The module-level name this file binds the feature to."""
+    """The module-level name this file, or a module of the declared package, binds it to."""
     for name, value in globals().items():
         if value is one:
             return name
+    for module in declared_modules(DECLARED_PACKAGE):
+        for name, value in vars(module).items():
+            if value is one:
+                return name
     return ""
 
 

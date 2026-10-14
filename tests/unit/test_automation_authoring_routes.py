@@ -28,13 +28,14 @@ from brain.connectors.manifest import manifest_digest
 from brain.connectors.registry import ConnectorRegistry, ConnectorState, RegisteredConnector
 from brain.console.automation_authoring import (
     AUTHORED_TASK,
+    EVENTS_ARE_OFF,
     IT_STARTS_PAUSED,
-    NOTHING_FIRES_THIS_YET,
     Authoring,
 )
 from brain.console.automation_gallery import BUILT_IN
 from brain.core.entitlement import Capability
 from brain.knowledge.visibility import Visibility
+from brain.ops.automation_event import WEBHOOK_NOT_OFFERED_ON_THE_FORM, WEBHOOKS_ARE_NOT_OFFERED
 from tests.fixtures.http_client import Response
 from tests.unit import test_freshdesk
 from tests.unit.test_automation_gallery_routes import (
@@ -124,6 +125,7 @@ def client(authors: Authors) -> Iterator[TestClient]:
         app.state.automation_authors = authors
         app.state.connector_registry = connected()
         app.state.automation_authoring_on = True
+        app.state.automation_events_on = False
         yield c
 
 
@@ -157,7 +159,8 @@ def test_the_options_offer_templates_triggers_this_agents_fields_and_its_own_too
     client: TestClient,
 ) -> None:
     """The form's whole vocabulary: every product template, all three trigger kinds with only the
-    schedule marked as firing, the fields of the connectors this agent is bound to by shape, and
+    schedule marked as firing while changes are switched off and the webhook marked as never
+    offered, the fields of the connectors this agent is bound to by shape, and
     exactly the tools its ceiling allows. Delete this and the form offers a field the agent could
     never read or a tool it may not use."""
     body = options_of(client, "u_admin").json()
@@ -170,6 +173,11 @@ def test_the_options_offer_templates_triggers_this_agents_fields_and_its_own_too
         ("schedule", True),
         ("connector_event", False),
         ("webhook", False),
+    }
+    assert {one["kind"]: one["not_offered"] for one in body["triggers"]} == {
+        "schedule": None,
+        "connector_event": None,
+        "webhook": WEBHOOK_NOT_OFFERED_ON_THE_FORM,
     }
     fields = {one["key"]: one for one in body["fields"]}
     assert DUE in fields
@@ -256,26 +264,59 @@ def test_the_preview_shows_the_terms_the_rehearsal_and_a_digest_and_writes_nothi
     assert authors.written == []
 
 
-def test_a_condition_is_said_in_words_and_a_trigger_nothing_fires_says_so(
+def test_a_condition_is_said_in_words_and_a_change_trigger_says_it_is_switched_off_until_it_is(
     client: TestClient,
 ) -> None:
-    """The card's two sentences from the leaf: the condition and the trigger. Delete this and a
-    webhook looks live, or the condition is a field key."""
-    body = preview_of(
+    """The card's two sentences from the leaf: the condition and the trigger. A change trigger says
+    it cannot start while the install has not switched changes on, and says nothing of the sort once
+    it has. Delete this and a change trigger looks live on an install where it is not, or the
+    condition is a field key."""
+    asked = {
+        **WORDS,
+        "trigger": {"kind": "connector_event", "source": "freshdesk"},
+        "condition": {"field": DUE, "op": "is_over", "value": "7"},
+    }
+    off = preview_of(client, "u_admin", asked).json()
+    client.app.state.automation_events_on = True  # type: ignore[attr-defined]
+    on = preview_of(client, "u_admin", asked).json()
+
+    assert (off["fires"], off["nothing_fires"]) == (False, EVENTS_ARE_OFF)
+    assert (on["fires"], on["nothing_fires"]) == (True, None)
+    assert off["condition"] == "only when the ticket due by (freshdesk) is more than 7 days ago"
+    assert off["trigger"].startswith("Runs when something changes in freshdesk")
+    assert len(off["rehearsal"]) == 1
+
+
+def test_a_webhook_is_refused_in_words_when_it_is_written_and_nothing_is_stored(
+    client: TestClient, authors: Authors
+) -> None:
+    """The owner decided (needs-rupash 223) that nothing starts work from outside, so a webhook
+    does not reach a preview, let alone a row. Delete this and the one door the owner closed can
+    be saved through the form again."""
+    answer = preview_of(
         client,
         "u_admin",
-        {
-            **WORDS,
-            "trigger": {"kind": "webhook", "source": "ticket_closed"},
-            "condition": {"field": DUE, "op": "is_over", "value": "7"},
-        },
-    ).json()
+        {**WORDS, "trigger": {"kind": "webhook", "source": "ticket_closed"}},
+    )
 
-    assert body["fires"] is False
-    assert body["nothing_fires"] == NOTHING_FIRES_THIS_YET
-    assert body["condition"] == "only when the ticket due by (freshdesk) is more than 7 days ago"
-    assert body["trigger"].startswith("Runs when ticket closed is called")
-    assert len(body["rehearsal"]) == 1
+    assert answer.status_code == 422
+    assert WEBHOOKS_ARE_NOT_OFFERED in answer.json()["sentences"]
+    assert authors.written == []
+
+
+def test_a_change_trigger_names_a_source_the_agent_is_bound_to_or_is_refused(
+    client: TestClient,
+) -> None:
+    """Delete this and an automation can listen to a source its agent could never read, which
+    would start runs about records nobody in it may see."""
+    answer = preview_of(
+        client,
+        "u_admin",
+        {**WORDS, "trigger": {"kind": "connector_event", "source": "xero"}},
+    )
+
+    assert answer.status_code == 422
+    assert any("not bound to that source" in one for one in answer.json()["sentences"])
 
 
 def test_unfit_words_are_refused_with_every_finding_and_nothing_is_written(

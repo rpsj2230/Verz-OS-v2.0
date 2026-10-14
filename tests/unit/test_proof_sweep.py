@@ -1,11 +1,12 @@
-"""The proof sweep closes exactly what two install runs proved, and says why it left the rest.
+"""The proof sweep closes what one complete install run proved, and says why it left the rest.
 
-Every run here is a fixture: two runs of made-up rows in the shape `ops.acceptance_result` holds,
-read the way the command reads the output of `ROWS_QUERY`. The rule under test is
-`A_TASK_CLOSES_ONLY_WHEN_EVERY_CHECK_PASSED_ON_TWO_RUNS`, with the held list
-(`A_RESULT_ON_SOMETHING_MADE_UP_IS_HELD`), decided tasks and closed tasks applied after it.
+Every run here is a fixture: made-up rows in the shape `ops.acceptance_result` holds, read the way
+the command reads the output of `ROWS_QUERY`. The rule under test is
+`A_TASK_CLOSES_ONLY_WHEN_EVERY_CHECK_PASSED_ON_ONE_COMPLETE_RUN`, which the owner set on 2026-10-14
+in place of two runs, with the held list (`A_RESULT_ON_SOMETHING_MADE_UP_IS_HELD`), decided tasks
+and closed tasks applied after it.
 
-Task ids: none
+Task ids: M38.5.4
 """
 
 from __future__ import annotations
@@ -17,18 +18,22 @@ from typing import Any
 
 import pytest
 
+from brain.ops.acceptance import CARRIED_FORWARD_FROM
 from brain.ops.proof_sweep import (
-    A_TASK_CLOSES_ONLY_WHEN_EVERY_CHECK_PASSED_ON_TWO_RUNS,
+    A_TASK_CLOSES_ONLY_WHEN_EVERY_CHECK_PASSED_ON_ONE_COMPLETE_RUN,
     HOLDS_PATH,
     ROWS_QUERY,
     SweepError,
+    carried,
     closes_lines,
     evidence_row,
     holds_at,
     judge,
     main,
+    proof_line,
+    report,
     rows_from_lines,
-    runs_from_rows,
+    run_from_rows,
 )
 
 REPO = Path(__file__).resolve().parents[2]
@@ -57,76 +62,77 @@ def row(
     }
 
 
-def fixture(
-    latest: list[tuple[str, str, str]], previous: list[tuple[str, str, str]]
-) -> list[dict[str, Any]]:
-    """Two runs from (check, leaves, outcome) triples, the newer one second in the rows."""
-    rows = [row("r1", OLD, "2999-01-01T01:00:00+00:00", *one) for one in previous]
-    rows += [row("r2", NEW, "2999-01-01T02:00:00+00:00", *one) for one in latest]
-    return rows
+def one_run(checks: list[tuple[str, str, str]]) -> list[dict[str, Any]]:
+    """One run from (check, leaves, outcome) triples."""
+    return [row("r2", NEW, "2999-01-01T02:00:00+00:00", *one) for one in checks]
+
+
+def older_run(checks: list[tuple[str, str, str]]) -> list[dict[str, Any]]:
+    """An older complete run, as a file printed by the query this replaced still holds."""
+    return [row("r1", OLD, "2999-01-01T01:00:00+00:00", *one) for one in checks]
 
 
 def sweep_of(rows: list[dict[str, Any]], **over: Any) -> Any:
-    latest, previous = runs_from_rows(rows)
     options: dict[str, Any] = {"closed": set(), "decided": set(), "holds": {}}
     options.update(over)
-    return judge(latest, previous, **options)
+    return judge(run_from_rows(rows), **options)
 
 
-def test_a_task_every_check_of_which_passed_on_both_runs_closes() -> None:
-    """Two checks name M1.1.1 and both passed twice, so it closes on both checks.
+def test_a_task_every_check_of_which_passed_on_the_complete_run_closes() -> None:
+    """Two checks name M1.1.1 and both passed on the one run, so it closes on both checks, and
+    M1.1.2 closes on the one check that names it. The rule's words say one complete run.
 
     Delete this and the positive half of the rule goes unwatched: a judge that closes nothing
     passes every refusal test below.
     """
-    rows = fixture(
-        [("one", "M1.1.1", "passed"), ("two", "M1.1.1 M1.1.2", "passed")],
-        [("one", "M1.1.1", "passed"), ("two", "M1.1.1 M1.1.2", "passed")],
-    )
-    sweep = sweep_of(rows)
+    sweep = sweep_of(one_run([("one", "M1.1.1", "passed"), ("two", "M1.1.1 M1.1.2", "passed")]))
+
     assert dict(sweep.closes) == {"M1.1.1": ("one", "two"), "M1.1.2": ("two",)}
-    assert (
-        "both of the install's two newest runs"
-        in A_TASK_CLOSES_ONLY_WHEN_EVERY_CHECK_PASSED_ON_TWO_RUNS
-    )
+    assert "newest complete run" in A_TASK_CLOSES_ONLY_WHEN_EVERY_CHECK_PASSED_ON_ONE_COMPLETE_RUN
+    assert "two" not in A_TASK_CLOSES_ONLY_WHEN_EVERY_CHECK_PASSED_ON_ONE_COMPLETE_RUN.split()
 
 
-@pytest.mark.parametrize(
-    ("latest", "previous"),
-    [
-        ("not run", "passed"),
-        ("passed", "not run"),
-        ("failed", "passed"),
-        ("passed", "failed"),
-    ],
-)
-def test_one_check_that_did_not_pass_on_either_run_holds_every_task_it_names(
-    latest: str, previous: str
-) -> None:
-    """A second check naming the task did not pass on one of the runs, so the task stays open.
+def test_one_run_is_enough_where_two_were_once_needed() -> None:
+    """**The owner's decision of 2026-10-14.** A check seen on one run only closed nothing under
+    the old rule, which waited for a second run. It closes now, on one complete clean run.
+
+    Delete this and the sweep can go back to demanding a previous run that the owner no longer
+    wants and the install no longer waits for."""
+    sweep = sweep_of(one_run([("fresh", "M1.1.1", "passed")]))
+
+    assert dict(sweep.closes) == {"M1.1.1": ("fresh",)}
+    assert not hasattr(sweep, "one_run")
+    assert not hasattr(sweep, "previous")
+
+
+@pytest.mark.parametrize("outcome", ["not run", "failed"])
+def test_one_check_that_did_not_pass_holds_every_task_it_names(outcome: str) -> None:
+    """A second check naming the task did not pass on the run, so the task stays open and the
+    blocker names that check and what it came to.
 
     Delete this and a task can close on the one check of two that happened to pass.
     """
-    rows = fixture(
-        [("one", "M1.1.1", "passed"), ("two", "M1.1.1", latest)],
-        [("one", "M1.1.1", "passed"), ("two", "M1.1.1", previous)],
-    )
+    rows = one_run([("one", "M1.1.1", "passed"), ("two", "M1.1.1", outcome)])
+
     sweep = sweep_of(rows)
+
     assert "M1.1.1" not in sweep.closes
-    assert [check for check, _, _ in sweep.blocked["M1.1.1"]] == ["two"]
+    assert [(check, came_to) for check, came_to, _ in sweep.blocked["M1.1.1"]] == [("two", outcome)]
 
 
-def test_a_check_seen_only_on_the_newest_run_waits_for_a_second() -> None:
-    """A check new on the newest run has been seen once, so its task waits.
+def test_an_older_runs_failure_does_not_hold_what_the_newest_run_passed() -> None:
+    """Only the newest complete run is judged. A rows file from the old query holds an older run
+    too, and a check that failed there and passed on the newest is not a blocker.
 
-    Delete this and a task closes on a single run, the case the rule exists to refuse.
-    """
-    rows = fixture(
-        [("one", "M1.1.1", "passed"), ("new", "M1.1.1", "passed")], [("one", "M1.1.1", "passed")]
-    )
+    Delete this and the old two-run reading survives by accident, holding tasks on a run nobody
+    is asking about."""
+    rows = older_run([("x", "M1.1.1", "failed")]) + one_run([("x", "M1.1.1", "passed")])
+
     sweep = sweep_of(rows)
-    assert "M1.1.1" not in sweep.closes
-    assert dict(sweep.one_run) == {"M1.1.1": ("new",)}
+
+    assert dict(sweep.closes) == {"M1.1.1": ("x",)}
+    assert sweep.blocked == {}
+    assert sweep.run.commit == NEW
 
 
 def test_a_held_a_decided_and_an_already_closed_task_are_not_claimed() -> None:
@@ -142,7 +148,7 @@ def test_a_held_a_decided_and_an_already_closed_task_are_not_claimed() -> None:
         ("d", "M1.1.4", "passed"),
     ]
     sweep = sweep_of(
-        fixture(passed, passed),
+        one_run(passed),
         holds={"M1.1.1": "made up"},
         decided={"M1.1.2"},
         closed={"M1.1.3"},
@@ -155,18 +161,20 @@ def test_a_held_a_decided_and_an_already_closed_task_are_not_claimed() -> None:
 def test_the_newest_run_is_the_later_one_whichever_order_the_rows_come_in() -> None:
     """Runs are told apart by when they started, not by the order the rows arrived in.
 
-    Delete this and a query ordered differently swaps the runs, and a check new on the newest
-    run reads as one the newest run dropped.
+    Delete this and a query ordered differently judges the older run, and a task closes on a
+    result the install has since replaced.
     """
-    rows = fixture([("x", "M1.1.1", "passed")], [("x", "M1.1.1", "passed")])
-    latest, previous = runs_from_rows(list(reversed(rows)))
-    assert (latest.commit, previous.commit) == (NEW, OLD)
+    rows = older_run([("x", "M1.1.1", "passed")]) + one_run([("x", "M1.1.1", "passed")])
+
+    assert run_from_rows(rows).commit == NEW
+    assert run_from_rows(list(reversed(rows))).commit == NEW
 
 
-def test_fewer_than_two_runs_is_refused() -> None:
-    """One run cannot be judged against the rule, so it is refused rather than half-judged."""
-    with pytest.raises(SweepError, match="two runs"):
-        runs_from_rows([row("r1", OLD, "2999-01-01T01:00:00+00:00", "x", "M1.1.1")])
+def test_rows_of_no_run_at_all_are_refused() -> None:
+    """With nothing to judge the sweep says so rather than closing nothing in silence. Delete
+    this and an empty query result reads as a clean sweep that closed no task."""
+    with pytest.raises(SweepError, match="one complete run is needed"):
+        run_from_rows([])
 
 
 def with_status(rows: list[dict[str, Any]], status: str) -> list[dict[str, Any]]:
@@ -182,69 +190,68 @@ def test_a_resumed_run_is_read_as_one_run_whenever_its_rows_were_written() -> No
     late = [
         {**row("r2", NEW, "2999-01-01T02:00:00+00:00", "two", "M1.1.2"), "checked_at": "2999-01-02"}
     ]
-    previous = [row("r1", OLD, "2999-01-01T01:00:00+00:00", "one", "M1.1.1")]
-    previous += [row("r1", OLD, "2999-01-01T01:00:00+00:00", "two", "M1.1.2")]
-    rows = with_status(early + previous + late, "complete")
-    latest, before = runs_from_rows(rows)
-    assert (latest.run_id, latest.commit) == ("r2", NEW)
-    assert sorted(latest.results) == ["one", "two"]
-    assert before.run_id == "r1"
+    rows = with_status(early + late, "complete")
+
+    run = run_from_rows(rows)
+
+    assert (run.run_id, run.commit) == ("r2", NEW)
+    assert sorted(run.results) == ["one", "two"]
     assert dict(sweep_of(rows).closes) == {"M1.1.1": ("one",), "M1.1.2": ("two",)}
 
 
 def test_a_run_that_is_not_complete_is_ignored_whatever_it_says() -> None:
     """A run still going, or abandoned for a newer release, has rows and is not a run that was
-    seen: the newest *complete* two are judged. Delete this and a half-written newest run, with
-    most checks missing, makes every task they proved read as seen on one run only."""
-    complete = fixture([("x", "M1.1.1", "passed")], [("x", "M1.1.1", "passed")])
+    seen: the newest *complete* one is judged. Delete this and a half-written newest run, with
+    most checks missing, is the one that decides which tasks close."""
+    complete = one_run([("x", "M1.1.1", "passed")])
     partial = [row("r3", "c" * 40, "2999-01-01T03:00:00+00:00", "x", "M1.1.1", "failed")]
     gone = [row("r4", "d" * 40, "2999-01-01T04:00:00+00:00", "x", "M1.1.1", "failed")]
     rows = with_status(complete, "complete")
     rows += with_status(partial, "running") + with_status(gone, "abandoned")
-    latest, before = runs_from_rows(rows)
-    assert (latest.commit, before.commit) == (NEW, OLD)
+
+    assert run_from_rows(rows).commit == NEW
     assert dict(sweep_of(rows).closes) == {"M1.1.1": ("x",)}
 
 
-def test_only_runs_that_are_not_complete_leave_too_few_runs() -> None:
-    """With one complete run and one that is not, there are not two runs: refused, not judged on
-    the incomplete one. Delete this and the sweep closes a task on a run nobody finished."""
-    rows = with_status(
-        [row("r1", OLD, "2999-01-01T01:00:00+00:00", "x", "M1.1.1")], "complete"
-    ) + with_status([row("r2", NEW, "2999-01-01T02:00:00+00:00", "x", "M1.1.1")], "running")
-    with pytest.raises(SweepError, match="two runs"):
-        runs_from_rows(rows)
+def test_only_runs_that_are_not_complete_leave_nothing_to_judge() -> None:
+    """With a run that is still going and no complete one there is no run: refused, not judged on
+    the incomplete one. Delete this and the sweep closes a task on a run nobody finished, which is
+    the failure the single-run gate has no second run to catch."""
+    rows = with_status(one_run([("x", "M1.1.1", "passed")]), "running")
+
+    with pytest.raises(SweepError, match="one complete run is needed"):
+        run_from_rows(rows)
 
 
 def test_rows_with_no_status_are_complete_runs_as_every_run_was_before_the_status_existed() -> None:
     """A file printed by an older query, or a run written whole before `ops.acceptance_run`, has
     no status and is complete. Delete this and every saved file and every old run is ignored."""
-    latest, before = runs_from_rows(
-        fixture([("x", "M1.1.1", "passed")], [("x", "M1.1.1", "passed")])
-    )
-    assert (latest.commit, before.commit) == (NEW, OLD)
+    assert run_from_rows(one_run([("x", "M1.1.1", "passed")])).commit == NEW
 
 
 def test_a_run_whose_rows_name_two_releases_is_refused() -> None:
     """A_RUN_NAMES_ONE_RELEASE. Results of two builds under one run id would close a task on a
     mixture, so the sweep stops and says so. Delete this and a resume that crossed releases goes
     through as a run."""
-    rows = fixture([("x", "M1.1.1", "passed")], [("x", "M1.1.1", "passed")])
+    rows = one_run([("x", "M1.1.1", "passed")])
     rows.append(row("r2", OLD, "2999-01-01T02:00:00+00:00", "y", "M1.1.2"))
+
     with pytest.raises(SweepError, match="more than one commit"):
-        runs_from_rows(rows)
+        run_from_rows(rows)
 
 
-def test_the_query_asks_for_complete_runs_only_and_says_each_rows_status() -> None:
+def test_the_query_asks_for_one_complete_run_and_says_each_rows_status() -> None:
     """Structure of `ROWS_QUERY`: it joins the run record, filters the choice of runs to complete
-    ones with a missing record counting as complete, and returns the status as a key. Delete this
-    and the query can be edited back to every run without the database test noticing on a machine
-    that skips it."""
+    ones with a missing record counting as complete, takes the newest one only, and returns the
+    status as a key. Delete this and the query can be edited back to two runs, or to every run,
+    without the database test noticing on a machine that skips it."""
     query = " ".join(ROWS_QUERY.split())
+
     assert "left join ops.acceptance_run y on y.run_id = x.run_id" in query
     assert "where coalesce(y.status, 'complete') = 'complete'" in query
     assert "jsonb_build_object('run_status', coalesce(u.status, 'complete'))" in query
-    assert query.index("coalesce(y.status") < query.index("limit 2")
+    assert query.index("coalesce(y.status") < query.index("limit 1")
+    assert "limit 2" not in query
 
 
 def test_closes_lines_group_by_module_in_the_work_breakdowns_order() -> None:
@@ -259,21 +266,58 @@ def test_closes_lines_group_by_module_in_the_work_breakdowns_order() -> None:
     ]
 
 
-def test_the_evidence_row_names_both_runs_and_every_check() -> None:
-    """The row the audit document keeps carries the task, both commits and every check.
+def test_the_evidence_row_names_the_run_and_every_check() -> None:
+    """The row the audit document keeps carries the task, the commit, the run's start and every
+    check, and says the run was complete. It names no second run, because there is none.
 
-    Delete this and a row can drop the older run, which is the half that makes it proof.
-    """
-    rows = fixture(
-        [("one", "M1.1.1", "passed"), ("two", "M1.1.1", "passed")],
-        [("one", "M1.1.1", "passed"), ("two", "M1.1.1", "passed")],
-    )
-    sweep = sweep_of(rows)
+    Delete this and a row can drop a check, or keep telling a reader that a second run saw the
+    same."""
+    sweep = sweep_of(one_run([("one", "M1.1.1", "passed"), ("two", "M1.1.1", "passed")]))
+
     text = evidence_row("M1.1.1", sweep.closes["M1.1.1"], sweep, "2999-01-01")
+
     cells = [cell.strip() for cell in text.strip("|").split("|")]
     assert cells[0] == "M1.1.1"
-    assert re.search(r"run on bbbbbbb \(run at 02:00 UTC\) passed one, two", cells[2])
-    assert "the run on aaaaaaa (01:00 UTC) passed the same" in cells[2]
+    assert re.search(r"run on bbbbbbb \(run at 02:00 UTC, complete, every registered", cells[2])
+    assert "passed one, two" in cells[2]
+    assert "the run on" not in cells[2]
+    assert "passed the same" not in cells[2]
+
+
+def test_the_proof_line_names_one_complete_run() -> None:
+    """The `Proved-on-install:` line a commit carries says one run, complete with every registered
+    check recorded. Delete this and the line can go back to naming two runs the sweep no longer
+    reads, which a reader would take for evidence that was never gathered."""
+    line = proof_line(sweep_of(one_run([("x", "M1.1.1", "passed")])))
+
+    assert line.startswith(
+        "Proved-on-install: the acceptance run at bbbbbbb (2999-01-01 02:00 UTC)"
+    )
+    assert "complete with every registered check recorded" in line
+    assert " and " not in line
+
+
+def test_a_check_carried_from_an_earlier_run_of_the_same_commit_is_reported_as_carried() -> None:
+    """A repeat copies the passes of the run it repeats and says so in each reason. The sweep
+    counts them and the report prints how many, so a person writing the commit sees which results
+    were not run again. Delete this and a repeat is indistinguishable from a first run."""
+    rows = one_run(
+        [("one", "M1.1.1", "passed"), ("two", "M1.1.1", "passed"), ("three", "M1.1.2", "passed")]
+    )
+    rows[0]["reason"] = f"{CARRIED_FORWARD_FROM}00000000-0000-4000-8000-000000000001 of this commit"
+    sweep = sweep_of(rows)
+
+    assert carried(sweep.run) == ("one",)
+    assert "checks carried forward from an earlier run of the same commit: 1" in report(sweep)
+
+
+def test_a_run_with_nothing_carried_reports_none() -> None:
+    """The positive sibling: a first run reports zero carried, not the count of its passes. Delete
+    this and `carried` can claim every pass was carried forward."""
+    sweep = sweep_of(one_run([("one", "M1.1.1", "passed")]))
+
+    assert carried(sweep.run) == ()
+    assert "checks carried forward from an earlier run of the same commit: 0" in report(sweep)
 
 
 def test_rows_are_read_from_the_query_output_and_nothing_else() -> None:
@@ -306,31 +350,53 @@ def test_the_held_list_names_only_tasks_and_a_reason_for_each() -> None:
 def test_the_command_prints_the_closes_and_appends_the_rows(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """From a rows file, the command prints the Closes and proof lines and appends evidence rows.
+    """From a rows file of one run, the command prints the Closes and proof lines and appends
+    evidence rows.
 
-    Delete this and the command can stop writing the rows it exists to write, with every function
-    above still green.
+    Delete this and the command can stop writing the rows it exists to write, or start refusing a
+    single run, with every function above still green.
     """
     monkeypatch.chdir(REPO)
-    passed = [("x", "M999.1.1", "passed")]
     rows_file = tmp_path / "rows.jsonl"
     rows_file.write_text(
-        "\n".join(json.dumps(one) for one in fixture(passed, passed)), encoding="utf-8"
+        "\n".join(json.dumps(one) for one in one_run([("x", "M999.1.1", "passed")])),
+        encoding="utf-8",
     )
     evidence = tmp_path / "evidence.md"
+
     assert main(["--rows", str(rows_file), "--evidence", str(evidence)]) == 0
+
     printed = capsys.readouterr().out
     assert "Closes: M999.1.1" in printed.splitlines()
     assert any(
-        line.startswith("Proved-on-install: acceptance runs at bbbbbbb")
+        line.startswith("Proved-on-install: the acceptance run at bbbbbbb")
         for line in printed.splitlines()
     )
     assert evidence.read_text(encoding="utf-8").startswith("| M999.1.1 | install and CI |")
 
 
+def test_the_command_refuses_rows_of_no_complete_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A rows file holding only a run that is still going is refused with a message and a failing
+    exit, never a clean sweep that closed nothing. Delete this and the command exits 0 on a file
+    it could not read as a run."""
+    monkeypatch.chdir(REPO)
+    rows_file = tmp_path / "rows.jsonl"
+    rows_file.write_text(
+        "\n".join(
+            json.dumps(one) for one in with_status(one_run([("x", "M1.1.1", "passed")]), "running")
+        ),
+        encoding="utf-8",
+    )
+
+    assert main(["--rows", str(rows_file)]) == 1
+    assert "one complete run is needed" in capsys.readouterr().err
+
+
 @pytest.mark.needs_db
-def test_the_two_newest_runs_are_read_from_a_real_database() -> None:
-    """Three runs written to `ops.acceptance_result`, and `ROWS_QUERY` reads back the newest two.
+def test_the_newest_complete_run_is_read_from_a_real_database() -> None:
+    """Three runs written to `ops.acceptance_result`, and `ROWS_QUERY` reads back the newest one.
 
     Delete this and the query can read the oldest runs, every run, or nothing, and only a sweep
     on an install would find out, by closing what a newer run disagreed with.
@@ -360,17 +426,16 @@ def test_the_two_newest_runs_are_read_from_a_real_database() -> None:
                 f"2999-01-01T0{hour}:00:01+00:00",
             )
         rows = asyncio.run(rows_from_database(normalise_database_url(url)))
-    latest, previous = runs_from_rows(rows)
-    assert (latest.commit, previous.commit) == (NEW, OLD)
-    assert {str(one["commit"]) for one in rows} == {NEW, OLD}
+    assert run_from_rows(rows).commit == NEW
+    assert {str(one["commit"]) for one in rows} == {NEW}
 
 
 @pytest.mark.needs_db
-def test_the_query_reads_two_complete_runs_and_never_a_running_or_abandoned_one() -> None:
-    """Six runs: two complete with a record, one complete with none (written whole before the
-    record existed), one running, one abandoned and one older complete. `ROWS_QUERY` returns the
-    newest two *complete* ones, however new the unfinished runs are, each row saying `complete`.
-    Delete this and the newest unfinished run is judged, or an old run with no record is dropped."""
+def test_the_query_reads_the_newest_complete_run_and_never_a_running_or_abandoned_one() -> None:
+    """Five runs: two complete with a record, one complete with none (written whole before the
+    record existed), one running and one abandoned. `ROWS_QUERY` returns the newest *complete*
+    one, however new the unfinished runs are, each row saying `complete`. Delete this and the
+    newest unfinished run is judged, or an old run with no record is dropped."""
     import asyncio
 
     from brain.db import normalise_database_url
@@ -413,7 +478,6 @@ def test_the_query_reads_two_complete_runs_and_never_a_running_or_abandoned_one(
                     None if status == "running" else started,
                 )
         rows = asyncio.run(rows_from_database(normalise_database_url(url)))
-    latest, previous = runs_from_rows(rows)
-    assert (latest.commit, previous.commit) == ("3" * 40, "2" * 40)
+    assert run_from_rows(rows).commit == "3" * 40
     assert {str(one["run_status"]) for one in rows} == {"complete"}
-    assert len(rows) == 2
+    assert len(rows) == 1

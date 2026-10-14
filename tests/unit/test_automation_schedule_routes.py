@@ -360,6 +360,7 @@ def client(schedules: Schedules) -> Iterator[TestClient]:
         )
         app.state.agent_records = Agents()
         app.state.automation_schedules = schedules
+        app.state.automation_events_on = False
         yield c
 
 
@@ -640,6 +641,70 @@ def test_a_trigger_nothing_fires_is_listed_saying_so_and_cannot_be_started(
     assert pressed.status_code == 404
     assert pressed.json()["message"] == missing["message"]
     assert schedules.calls == []
+
+
+def a_change_trigger(*, armed: bool = False) -> tuple[Automation, Any]:
+    from brain.console.automation_authoring import TriggerChoice
+    from brain.orchestration.unattended import TriggerKind
+
+    armed_at = datetime(2998, 12, 31, 8, tzinfo=UTC) if armed else None
+    one = written(
+        TriggerChoice(kind=TriggerKind.CONNECTOR_EVENT, source="ticket_source"),
+        task=QUESTIONS.task,
+    )
+    return an_automation("auto_change", next_run_at=armed_at), one
+
+
+def test_a_change_trigger_is_offered_a_start_only_while_changes_are_switched_on(
+    client: TestClient, schedules: Schedules
+) -> None:
+    """Off, the card says why and a start pressed anyway is the one 404; on, the start is offered
+    with a digest that does not move between two requests, because the instant it arms at is the
+    write's, and the confirmed start arms it. Delete this and a control that reaches nothing is
+    drawn on an install that has not switched changes on, or every start of a listener is refused
+    as stale."""
+    from brain.console.automation_authoring import EVENTS_ARE_OFF
+
+    one, authored = a_change_trigger()
+    schedules.rows["auto_change"] = listed_authored(one, authored)
+
+    off = items(client, "u_admin")["auto_change"]
+    assert off["start_confirmation"] is None
+    assert off["cannot_start"] == EVENTS_ARE_OFF
+    assert off["schedule"] == "Runs when something changes in ticket source"
+    assert change(client, "u_admin", START, "auto_change", "0" * 64).status_code == 404
+
+    client.app.state.automation_events_on = True  # type: ignore[attr-defined]
+    first = items(client, "u_admin")["auto_change"]
+    second = items(client, "u_admin")["auto_change"]
+    assert first["start_confirmation"] is not None
+    assert first["start_confirmation"] == second["start_confirmation"]
+    assert first["cannot_start"] is None
+
+    done = change(client, "u_admin", START, "auto_change", first["start_confirmation"])
+    assert done.status_code == 200, done.text
+    [call] = schedules.calls
+    assert (call["reason"], call["actor"]) == (STARTED, "u_admin")
+    assert call["change"].after.next_run_at is not None
+    assert done.json()["next_run_at"] is not None
+
+
+def test_an_armed_change_trigger_is_stopped_with_the_switch_off_as_with_it_on(
+    client: TestClient, schedules: Schedules
+) -> None:
+    """The switch gates the door and never traps what it opened. Delete this and turning changes off
+    leaves a listener running that nobody can stop from its own page."""
+    one, authored = a_change_trigger(armed=True)
+    schedules.rows["auto_change"] = listed_authored(one, authored)
+
+    shown = items(client, "u_narrow")["auto_change"]
+    assert shown["stop_confirmation"] is not None
+    assert shown["start_confirmation"] is None
+
+    done = change(client, "u_narrow", STOP, "auto_change", shown["stop_confirmation"])
+    assert done.status_code == 200, done.text
+    [call] = schedules.calls
+    assert call["change"].after.next_run_at is None
 
 
 def test_an_instruction_is_listed_and_says_what_it_still_needs_before_it_can_be_started(

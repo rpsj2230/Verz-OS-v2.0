@@ -1,14 +1,36 @@
-"""A run of the acceptance checks survives the restart that every deploy causes.
+"""A run of the acceptance checks survives a restart of the worker that serves the same commit.
 
 **Found on the owner's staging install, and the same on every install.** The worker starts a run
 after each deploy. A run takes thirty-five minutes and more (364 checks and growing), every merge
 to main redeploys, and a redeploy restarts the worker, which killed the run in progress. Rows were
 written only when the run ended, so on a day of frequent merges no run was recorded at all, and a
-task closes only when the install's two newest *complete* runs both passed every check naming it
-(`brain.ops.proof_sweep`). No leaf could close however many checks were written. The deploy cadence
+task closes only when the install's newest *complete* run passed every check naming it
+(`brain.ops.proof_sweep`; two runs until the owner decided on 2026-10-14 that one complete clean
+run is the gate). No leaf could close however many checks were written. The deploy cadence
 cannot be much slower than the merge cadence, so the run has to survive the restart instead.
 
-**Four rules, each with a name and a test.**
+**What that fixed and what it did not, measured on 2026-10-14.** Resuming is keyed on the commit
+the restarted worker serves, so it covers a restart that leaves the commit alone (a crash, the
+host's memory killer, a reboot, a recreate by hand) and **not a deploy of a new commit**: that
+worker serves another release, `A_RUN_OF_ANOTHER_RELEASE_IS_ABANDONED_AND_NEVER_COMPLETED` applies
+and the run starts again from nothing. That is the right answer for a deploy that changed what the
+worker runs, because the rows already written are about code that is gone, and it is why the
+runs were still killed all night after this module existed: the title above used to say a run
+survived the restart every deploy causes, and no deploy of a new commit ever resumed anything. The
+repair is not to resume across commits but to stop restarting the worker for merges that change
+nothing it runs: the server's deploy script leaves a worker alone when the fingerprint of what a
+worker runs is unchanged (`brain.ops.restart_scope`). A merge that does change it still ends a run
+in progress; narrowing that further would mean holding the worker's replacement back until the
+run ends, which needs the timer to retry a worker that lags the app and is not built.
+
+**A worker left running on the previous release still reports that release's commit.** Its runs
+are recorded under that commit and the Install page, which asks for the commit the application
+serves, shows no run for the newer one until a merge that changes what the worker runs replaces it.
+Rejected here: labelling a run with the commit that last changed what the worker runs, which would
+let both processes name one release but changes what every run's `commit` means, which is the
+owner's to decide and is not decided here.
+
+**Six rules, each with a name and a test.**
 
 `A_CHECK_IS_RECORDED_WHEN_IT_FINISHES`: a run is opened in `ops.acceptance_run` under an id fixed at
 its start, and each check's row is appended to `ops.acceptance_result` in the same transaction that
@@ -27,6 +49,23 @@ must be of the same commit and the sweep refuses rows of one run that name two.
 `ONLY_A_COMPLETE_RUN_COUNTS`: the sweep, the page that says whether this commit is owed a run and
 `ROWS_QUERY` read only complete runs. A run is marked `complete` after its last check is recorded
 and not before, so a half-written run is never a run that has been seen.
+
+`A_RUN_IS_COMPLETE_ONLY_WHEN_EVERY_REGISTERED_CHECK_RECORDED`: with one run as the whole gate,
+"complete" has to mean something a reader can rely on without a second run to catch it. A run is
+marked complete only after the store itself is read back and holds a result for every check the
+suite registers (`finish_if_whole`), not because the loop that wrote them returned. A run that
+ended with a registered check unrecorded stays `running`, so it is taken over and finished or
+abandoned like any run a restart cut short, and the sweep never sees it.
+
+`A_REPEAT_RUNS_ONLY_THE_UNSETTLED_AND_SAYS_WHAT_IT_CARRIED`: a run that came back with a failed
+or not-run check is repeated for only those checks (`brain.ops.acceptance_run.repeat_unsettled`,
+`--repeat-unsettled` on the command). The repeat is a **new run of the same commit** that copies
+the earlier run's passes, each marked with where it came from (`CARRIED_FORWARD_FROM`), and runs
+the rest, so it is complete only by the rule above and the earlier run stays as the fact it was.
+It is never a run of another commit, because a repeat that carried passes across releases would be
+the mixture `A_RUN_NAMES_ONE_RELEASE` refuses. Rejected: editing the failed rows in place (the
+table is append-only, and the first failure is what somebody reading a regression needs), and
+resuming the complete run (it is finished; a finished run is a fact).
 
 **Why a heartbeat and not a lock.** The obvious way to stop two workers running one run is an
 advisory lock held for the run's life. The application engine runs through PgBouncer in transaction
@@ -51,14 +90,14 @@ tasks on the same evidence and hide the checks that fail); **marking a run compl
 count** (the sweep reads a JSON file as well as a database and knows no registry, so completeness
 has to be something the run said, not something a reader infers).
 
-Task ids: M38.5.1
+Task ids: M38.5.1, M38.5.4
 """
 
 from __future__ import annotations
 
 import re
 import uuid
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Final
@@ -66,7 +105,7 @@ from typing import Final
 from sqlalchemy import func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from brain.ops.acceptance import Occasion, Result
+from brain.ops.acceptance import CARRIED_FORWARD_FROM, PASSED, Occasion, Result
 from brain.tables.acceptance import AcceptanceResultRow, AcceptanceRunRow
 
 # ------------------------------------------------------------------ written-down reasons
@@ -95,6 +134,21 @@ ONLY_A_COMPLETE_RUN_COUNTS: Final = (
     "A run counts when it was marked complete after its last check was recorded, and not when "
     "some of its rows exist. The sweep, the owed-run question and the sweep's query all read "
     "complete runs only."
+)
+
+#: Why a run is marked complete only after its record is read back.
+A_RUN_IS_COMPLETE_ONLY_WHEN_EVERY_REGISTERED_CHECK_RECORDED: Final = (
+    "A run is marked complete only when the store holds a result for every check the suite "
+    "registers, read back after the last one was written. A run that ended short of that stays "
+    "running and is settled like any run a restart cut short, so the one complete run the proof "
+    "sweep now reads is never a partial one."
+)
+
+#: Why a repeat is a new run of the same commit that says what it carried.
+A_REPEAT_RUNS_ONLY_THE_UNSETTLED_AND_SAYS_WHAT_IT_CARRIED: Final = (
+    "A repeat runs only the checks that failed or came back not run, in a new run of the same "
+    "commit that copies the earlier run's passes with the run they came from, so the result is "
+    "one complete run and a reader can tell which results were not run again."
 )
 
 # ----------------------------------------------------------------------------- the figures
@@ -166,6 +220,40 @@ def remaining(names: Sequence[str], recorded: Sequence[Result]) -> tuple[str, ..
     """The checks of `names` with no result yet, in suite order, each once."""
     done = {one.name for one in recorded}
     return tuple(dict.fromkeys(one for one in names if one not in done))
+
+
+def unsettled(names: Sequence[str], recorded: Sequence[Result]) -> tuple[str, ...]:
+    """The checks of `names` a repeat must run: no result, or one that is not a pass.
+
+    In suite order, each once. A check with no result is included although the run it came from
+    was complete, because a repeat that skipped it would carry nothing for it and the new run
+    would be short of a registered check.
+    """
+    passed = {one.name for one in recorded if one.outcome == PASSED}
+    return tuple(dict.fromkeys(one for one in names if one not in passed))
+
+
+def carried_forward(
+    names: Sequence[str], recorded: Sequence[Result], from_run: uuid.UUID
+) -> tuple[Result, ...]:
+    """The passes of `recorded` a repeat copies, for the checks of `names`, each saying where from.
+
+    A check not in `names` is not carried, so a build that dropped a check does not record a
+    result for it, and a failed or not-run result is never carried. See
+    `A_REPEAT_RUNS_ONLY_THE_UNSETTLED_AND_SAYS_WHAT_IT_CARRIED`.
+    """
+    wanted = set(names)
+    return tuple(
+        Result(
+            one.name,
+            one.leaves,
+            PASSED,
+            one.checked_at,
+            f"{CARRIED_FORWARD_FROM}{from_run} of this commit, where it passed",
+        )
+        for one in recorded
+        if one.outcome == PASSED and one.name in wanted
+    )
 
 
 # ------------------------------------------------------------------------------ the store
@@ -361,3 +449,63 @@ async def checked_commits(engine: AsyncEngine, serving: str) -> tuple[str, ...]:
         names = tuple(found)
         await connection.rollback()
     return names
+
+
+@dataclass(frozen=True)
+class CompleteRun:
+    """A run recorded as `complete`, which is the only kind a repeat may start from."""
+
+    run_id: uuid.UUID
+    commit: str
+    occasion: Occasion
+    started_at: datetime
+
+
+async def newest_complete_run(engine: AsyncEngine, commit: str) -> CompleteRun | None:
+    """The newest run of `commit` marked complete, or none.
+
+    A run with no record in `ops.acceptance_run` was written whole before that table existed and
+    is complete for the sweep (`ONLY_A_COMPLETE_RUN_COUNTS`), but it has no run row to repeat from
+    and its commit has long been replaced, so it is not offered here.
+    """
+    async with engine.connect() as connection:
+        found = (
+            await connection.execute(
+                select(
+                    AcceptanceRunRow.run_id,
+                    AcceptanceRunRow.commit,
+                    AcceptanceRunRow.occasion,
+                    AcceptanceRunRow.started_at,
+                )
+                .where(AcceptanceRunRow.commit == commit, AcceptanceRunRow.status == COMPLETE)
+                .order_by(AcceptanceRunRow.started_at.desc())
+                .limit(1)
+            )
+        ).first()
+        await connection.rollback()
+    if found is None:
+        return None
+    return CompleteRun(found.run_id, found.commit, Occasion(found.occasion), found.started_at)
+
+
+async def finish_if_whole(
+    engine: AsyncEngine,
+    run_id: uuid.UUID,
+    names: Sequence[str],
+    *,
+    read: Callable[[AsyncEngine, uuid.UUID], Awaitable[Sequence[Result]]] | None = None,
+    close: Callable[[AsyncEngine, uuid.UUID], Awaitable[bool]] | None = None,
+) -> tuple[bool, tuple[str, ...]]:
+    """Mark the run complete only if the store holds a result for every one of `names`.
+
+    Returns whether it was marked (false also when somebody abandoned the run meanwhile) and the
+    checks the store lacked, which are empty exactly when the run was whole. The store is read
+    back rather than trusted to have been written, for
+    `A_RUN_IS_COMPLETE_ONLY_WHEN_EVERY_REGISTERED_CHECK_RECORDED`. `read` and `close` default to
+    the store's own `recorded` and `finish`, looked up when called, and are parameters so the
+    decision is tested without a database.
+    """
+    lacking = remaining(names, await (read or recorded)(engine, run_id))
+    if lacking:
+        return False, lacking
+    return await (close or finish)(engine, run_id), ()
