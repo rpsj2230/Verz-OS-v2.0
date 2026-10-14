@@ -85,13 +85,23 @@ from brain.console.govern import NOWHERE, _in_reach
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.install import hold_saved, value_of
+from brain.knowledge.embed_policy import REVISION_SETTING, embedding_revision
+from brain.knowledge.embedding import EmbeddingError
 from brain.ops.features import is_on
 from brain.ops.features_declared.model_server import MODEL_SERVER
 from brain.ops.handover import Residue
 from brain.ops.handover_run import preview_steps
 from brain.ops.install_settings import load, retire, save
 from brain.ops.model_server import SETTINGS as MODEL_SERVER_SETTINGS
-from brain.ops.model_server import ModelServerError, config_from, read_config, requirement
+from brain.ops.model_server import (
+    ModelServerConfig,
+    ModelServerError,
+    Part,
+    config_from,
+    read_config,
+    requirement,
+)
+from brain.ops.model_server_client import held_embedding_revision, server_readiness
 from brain.ops.model_server_peaks import PeakSummary, suggested_overall_mib, summarise
 from brain.ops.model_server_store import recorded_peaks
 from brain.ops.overlays import SERVICES_SETTING, memory_problem, runtime_problem
@@ -413,6 +423,12 @@ class ModelServerPage(BaseModel):
     measured: list[MeasuredPartView]
     #: The limit the measurements suggest, never applied by itself. None before any measurement.
     suggested_limit_mib: int | None
+    #: The embedding revision this install declares (`INSTALL_EMBEDDING_REVISION`), the one the
+    #: server's own weights have, and what to do about it. The held one is None when the server was
+    #: not asked (the embedding part is not chosen) or did not say.
+    declared_revision: str | None
+    held_revision: str | None
+    revision_note: str
     #: Non-empty when the four settings are not a configuration, and then the figures are the
     #: product's defaults and say nothing about this install.
     problem: str
@@ -446,6 +462,7 @@ async def model_server(request: Request, asked: Asked) -> ModelServerPage:
     needs = requirement(config)
     switched = False
     summaries: tuple[PeakSummary, ...] = ()
+    declared, held = await _revisions(config)
     factory = sessions_of(request)
     if factory is not None:
         async with factory() as session:
@@ -471,9 +488,48 @@ async def model_server(request: Request, asked: Asked) -> ModelServerPage:
             for one in summaries
         ],
         suggested_limit_mib=suggested_overall_mib(summaries),
+        declared_revision=declared,
+        held_revision=held,
+        revision_note=revision_note(declared, held),
         problem=problem,
         note=THE_FIGURES_ARE_JUDGEMENTS_UNTIL_MEASURED,
     )
+
+
+def revision_note(declared: str | None, held: str | None) -> str:
+    """What a person should do about the embedding revision, in words, or nothing to do.
+
+    **The held revision is the server's own statement of its weights and the declared one is the
+    install's claim about them.** A vector is recorded under the declared one and refused if the
+    server states another, so the two have to be one, and the person who has to make them one is
+    the person who reads this.
+    """
+    if held is None:
+        return ""
+    if declared is None:
+        return (
+            f"The model server holds embedding weights with the revision {held}. Set "
+            f"{REVISION_SETTING} to it and nothing is embedded until you do."
+        )
+    if declared == held:
+        return "The revision declared for this install is the one the model server holds."
+    return (
+        f"{REVISION_SETTING} says {declared} and the model server holds {held}, so every vector it "
+        "returns is refused. Set the setting to the one the server holds, or fetch the weights "
+        "the setting names."
+    )
+
+
+async def _revisions(config: ModelServerConfig) -> tuple[str | None, str | None]:
+    """The revision this install declares and the one its server says it holds, each if known."""
+    try:
+        declared = embedding_revision()
+    except EmbeddingError:
+        declared = None
+    if Part.EMBEDDING not in config.parts:
+        return declared, None
+    answered = await server_readiness()
+    return declared, None if answered is None else held_embedding_revision(answered[1])
 
 
 @router.put(f"{SETTINGS_PATH}/{{name}}", response_model=SettingsPage, responses=COMMON_RESPONSES)

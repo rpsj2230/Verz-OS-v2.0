@@ -220,6 +220,7 @@ from brain.ops.install_settings import refresh_changed
 from brain.ops.model_server import ModelServerError
 from brain.ops.model_server import read_config as read_server_config
 from brain.ops.model_server import request_ceiling_bytes as server_request_ceiling
+from brain.ops.model_server_store import PeakKeeper
 from brain.ops.queue import (
     DEPLOY_PLAN,
     DRIVER_SCHEMA,
@@ -1425,6 +1426,11 @@ def register_tasks(
     nothing, leaves every job on the URL it was given.
     """
     held: list[EmbeddingService] = [] if embedding_service is None else [embedding_service]
+    #: What the model server says of its own memory for each request, kept between a client's
+    #: thread and the job's session. One for the worker: the ingest task and the embedding task
+    #: both hand it their reports and both flush it, so a statistic is written by whichever job
+    #: finishes next. See `brain.ops.model_server_store.PeakKeeper`.
+    peaks = PeakKeeper()
 
     def moved() -> bool:
         return routing is not None and routing.running
@@ -1436,10 +1442,11 @@ def register_tasks(
         document_id: str, first_ordinal: int, last_ordinal: int, model: str, owner_id: str
     ) -> str:
         if not held:
-            held.append(make_client(env=env))
+            held.append(make_client(env=env, observer=peaks.keep))
         engine = make_app_engine(
             routed_url(database_url, queued_class(EMBED_TRAFFIC_CLASS), running=moved())
         )
+        sessions = make_application_sessions(engine)
         try:
             return await run_embed_job(
                 document_id=document_id,
@@ -1447,12 +1454,15 @@ def register_tasks(
                 last_ordinal=last_ordinal,
                 model=model,
                 owner_id=owner_id,
-                sessions=make_application_sessions(engine),
+                sessions=sessions,
                 service=held[0],
                 revision=embedding_revision(env),
                 now=_utc_now(),
             )
         finally:
+            # In a `finally`: the batch that ran the server out of memory is the one whose peak is
+            # wanted, and a job that failed has still told the server's account of itself.
+            await peaks.flush(sessions, at=_utc_now())
             await engine.dispose()
 
     async def run_reembed(after_chunk_id: str, size: int, model: str) -> str:
@@ -1481,7 +1491,7 @@ def register_tasks(
     register_task(app, EMBED_TASK, run_embed, traffic_class=EMBED_TRAFFIC_CLASS)
     register_task(app, REEMBED_TASK, run_reembed, traffic_class=EMBED_TRAFFIC_CLASS)
     # Queued uploads (M7.1.5): a standard-slot task and a parse-worker task, each read here.
-    register_ingest_tasks(app, database_url=database_url, env=env, routing=routing)
+    register_ingest_tasks(app, database_url=database_url, env=env, routing=routing, peaks=peaks)
 
 
 async def enqueue_control(app: Any, name: str) -> int:

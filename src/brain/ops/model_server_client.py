@@ -149,11 +149,60 @@ class ModelServerClient:
             log.warning("the model server's peak was not kept", error=type(error).__name__)
 
 
-def make_model_server_client(env: Mapping[str, str] | None = None) -> ModelServerClient:
+def make_model_server_client(
+    env: Mapping[str, str] | None = None,
+    observer: Callable[[PeakReport], None] | None = None,
+) -> ModelServerClient:
     """A client pointed at this install's model server, at the one address it is given.
 
     There is no address parameter, for the reason `inference_client.make_client` has none: a second
     answer to where a client's documents go, beside the declared one, is the failure
     `INSTALL_MODEL_ENDPOINT` being read in one place exists to prevent.
     """
-    return ModelServerClient(transport=http_transport(), base_url=embedding_endpoint(env))
+    return ModelServerClient(
+        transport=http_transport(), base_url=embedding_endpoint(env), observer=observer
+    )
+
+
+#: How long the readiness route may take from here. It reads the disk and answers.
+READY_TIMEOUT_SECONDS: Final = 5.0
+
+#: The route the server answers readiness on. Spelled as `inference_server.gateway.READY_PATH`.
+READY_PATH: Final = "/ready"
+
+
+async def server_readiness(
+    env: Mapping[str, str] | None = None, *, timeout_seconds: float = READY_TIMEOUT_SECONDS
+) -> tuple[int, Mapping[str, object]] | None:
+    """What the server's readiness route says, with its status, or None when it said nothing usable.
+
+    The body is read whatever the status is, because a server that is not ready says why in it.
+    None for an address that is not an origin, a server that did not answer, and an answer that is
+    not an object: nothing here raises, because the callers are a screen that must still draw and a
+    check that has its own sentence for each.
+    """
+    import httpx
+
+    try:
+        address = embedding_endpoint(env).rstrip("/")
+    except Exception:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=timeout_seconds) as client:
+            answer = await client.get(f"{address}{READY_PATH}")
+            body = answer.json()
+            status = answer.status_code
+    except (httpx.HTTPError, ValueError):
+        return None
+    if not isinstance(body, Mapping):
+        return None
+    return status, body
+
+
+def held_embedding_revision(body: Mapping[str, object]) -> str | None:
+    """The revision of the embedding weights a readiness answer says the server holds, or None."""
+    revisions = body.get("revisions")
+    if not isinstance(revisions, Mapping):
+        return None
+    held = revisions.get("embedding")
+    return held if isinstance(held, str) and held else None

@@ -114,6 +114,7 @@ from brain.knowledge.visibility import KnowledgeVisibility, Visibility, Visibili
 from brain.ops.admission import QueuePlacement, Resource, budget_for
 from brain.ops.capacity_ledger import CapacityLedger, Hold, make_ledger
 from brain.ops.limits import wait_in_words
+from brain.ops.model_server_store import PeakKeeper
 from brain.ops.queue import MIB_PER_SLOT, Job, Redrive
 from brain.ops.storage import StorageBackend
 from brain.ops.tuning import configured_budgets
@@ -617,7 +618,10 @@ def _store_from_settings(env: Mapping[str, str] | None) -> StoreMaker:
 
 
 async def _services_now(
-    sessions: async_sessionmaker[AsyncSession], servers: list[Caller], env: Mapping[str, str] | None
+    sessions: async_sessionmaker[AsyncSession],
+    servers: list[Caller],
+    env: Mapping[str, str] | None,
+    peaks: PeakKeeper | None = None,
 ) -> DocumentServices | None:
     """The readers this install has right now, over a client built once, or None when it has none.
 
@@ -630,7 +634,7 @@ async def _services_now(
         if not servers:
             from brain.ops.model_server_client import make_model_server_client
 
-            servers.append(make_model_server_client(env))
+            servers.append(make_model_server_client(env, None if peaks is None else peaks.keep))
         return servers[0]
 
     return await document_services(sessions, server, env)
@@ -644,6 +648,7 @@ def register_ingest_tasks(
     make_store: StoreMaker | None = None,
     make_ledger_for: LedgerMaker | None = None,
     routing: Routing | None = None,
+    peaks: PeakKeeper | None = None,
 ) -> None:
     """Put the ingestion task on the queue driver, on the queue its class derives.
 
@@ -687,8 +692,8 @@ def register_ingest_tasks(
         engine = make_app_engine(
             routed_url(database_url, queued_class(INGEST_TRAFFIC_CLASS), running=running)
         )
+        sessions = make_application_sessions(engine)
         try:
-            sessions = make_application_sessions(engine)
             outcome = await run_ingest_job(
                 ticket,
                 IngestRun(
@@ -698,10 +703,14 @@ def register_ingest_tasks(
                     enqueue=enqueue,
                     now=now,
                     env=env,
-                    services=await _services_now(sessions, servers, env),
+                    services=await _services_now(sessions, servers, env, peaks),
                 ),
             )
         finally:
+            if peaks is not None:
+                # In a `finally` for the reason the embedding task does it: the file that ran a part
+                # out of memory is the one whose figure is wanted.
+                await peaks.flush(sessions, at=datetime.now(tz=UTC))
             await engine.dispose()
             if ledger is not None and reading is not None:
                 await asyncio.to_thread(ledger.give_back, reading)

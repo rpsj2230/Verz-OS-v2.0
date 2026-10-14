@@ -948,6 +948,7 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         "the_model_server_reports_ready_for_exactly_the_parts_chosen",
         "each_document_part_chosen_reads_a_printed_line",
         "no_recorded_model_server_peak_exceeds_its_costed_limit",
+        "the_declared_embedding_revision_is_the_one_the_server_holds",
     ):
         assert outcomes.pop(server_check) == (
             NOT_RUN,
