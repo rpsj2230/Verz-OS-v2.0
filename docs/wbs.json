@@ -2175,6 +2175,11 @@
      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit.record, ops.skill_store, skill_routes +6 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; +6 more",
      "updated": "2026-10-06"
     },
+    "M12.3.7": {
+     "status": "IN PROGRESS",
+     "why": "PARTLY BUILT, 2026-10-14; NO PRIOR WORK existed (no note, no branch, no code). BUILT: an outside AI service (image generation, speech to text) an install declares is registered as a tool behind a switch that ships off (brain.tools.external_ai, brain.ops.external_ai_store); its permission is its own (invoke:external_ai.<service>), it counts as sending something out and is capped at Assisted, and an agent whose ceiling does not name it is offered nothing; an install check proves that. NOT BUILT, WAITING ON THE OWNER (needs-rupash 184, open): the call itself, which needs the first service, its provider account and its key in the vault, and whether speech to text counts as a read and image generation as a draft (a loosening, not built). NEXT: when 184 is answered, build the held call and the worker's run of the approved one for that service, then flip this to READY FOR TESTING.",
+     "updated": "2026-10-14"
+    },
     "M12.3.8": {
      "status": "READY FOR TESTING",
      "why": "built in the tool catalogue and switch (T1, merged 1d2566c8); proved when a side-effecting tool whose name reads as a sensitive effect and declares none is refused at registration",

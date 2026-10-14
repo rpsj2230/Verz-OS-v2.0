@@ -102,6 +102,7 @@ def test_every_declared_reader_asks_about_its_feature_and_nothing_else_asks() ->
     assert feature_gaps() == ()
     assert {reader.partition(":")[0] for one in FEATURES for reader in one.read_by} == {
         "brain.prompt_routes",
+        "brain.ops.external_ai_store",
         "brain.jobs_routes",
         "brain.install_routes",
         "brain.staff_source_routes",
@@ -234,6 +235,7 @@ def test_switching_a_feature_on_writes_its_row_and_the_next_read_sees_it(
     on = {one["name"]: one["on"] for one in listed["features"]}
     assert on == {
         "prompt_editing": False,
+        "external_ai_services": False,
         "schedule_control": True,
         "release_check": False,
         "unattended_entity_merge": False,

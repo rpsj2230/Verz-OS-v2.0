@@ -141,7 +141,7 @@ What this module does fix is the thing that was actually broken: a registry now 
 builder makes it, the application calls that builder at startup, and every rule runs on the
 way in. Registering the first real tool is a `records=` argument, not an afternoon.
 
-Task ids: M12.1.5, M15.4.2, M12.4.4, M11.7.8, M13.7.6
+Task ids: M12.1.5, M15.4.2, M12.4.4, M11.7.8, M13.7.6, M12.3.7
 """
 
 from __future__ import annotations
@@ -166,6 +166,7 @@ from brain.knowledge.document_tools import (
 from brain.knowledge.embed_policy import embedding_revision
 from brain.knowledge.rows import RowSource, RowTool
 from brain.ops.connector_catalogue import Derived, declarations
+from brain.tools.external_ai import ExternalAiService, register_external_ai
 from brain.tools.proposed_writes import register_proposed_writes
 from brain.tools.registry import ResultContract, ToolRegistry
 from brain.tools.skill_tools import SkillTools, register_skill_tools
@@ -345,6 +346,7 @@ def build_registry(
     sources: Iterable[str] | None = None,
     figures: LiveFigures | None = None,
     website: WebsiteCheckTool | None = None,
+    external_ai: Iterable[ExternalAiService] = (),
     caches: KnowledgeCaches | None = None,
     skills: SkillTools | None = None,
 ) -> ToolRegistry:
@@ -374,6 +376,11 @@ def build_registry(
     `website` is the website check bound to its transport (`brain.ops.website_probe`). Absent,
     the check is not registered, for the reason a row tool is not registered without a row
     source: a tool in the catalogue that cannot reach a site would tell a person it is down.
+
+    `external_ai` is every outside AI service the install declared while its switch was on
+    (`brain.ops.external_ai_store.declared_if_on`), each registered as a tool its own permission
+    opens and that counts as sending something out (`brain.tools.external_ai`, M12.3.7). None
+    declared registers none, which is every install until an administrator declares one.
 
     `skills` binds the two tools a run reads a skill with (`brain.tools.skill_tools`): the
     instructions of an offered skill, and its scripts where the install runs a sandbox. Absent,
@@ -439,6 +446,10 @@ def build_registry(
         # A connector's write a model may ask for, beside the row tool that reads its record. It
         # can never be called: see `brain.tools.proposed_writes`.
         register_proposed_writes(registry, declarations())
+
+    # The outside AI services an install declared, each a name and a permission and no way to call
+    # (M12.3.7). Not tied to a row source: they read nothing.
+    register_external_ai(registry, external_ai)
 
     # The website check, where the caller handed it a transport (M12.4.4). Not tied to a row
     # source: it reads a site, not a table.

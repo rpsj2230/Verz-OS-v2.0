@@ -4889,6 +4889,11 @@ const PROGRESS = {
     why: "TRIAGE 2026-10-13 class 2 (partly built): docs/install/network.md and threat-model.md describe public ports, TLS and the allowlist, and ops/security exists; no probe from outside the allowlist and no alert on the install's own certificate within fourteen days exists (ops/website_probe.py reads other sites' certificates only). NEXT: Build an external probe job and a certificate-expiry alert to a named person, then a check that reads the alert configuration; the outside-address probe itself is a person step.",
     updated: "2026-10-13",
   },
+  "M12.3.7": {
+    status: "IN PROGRESS",
+    why: "PARTLY BUILT, 2026-10-14; NO PRIOR WORK existed (no note, no branch, no code). BUILT: an outside AI service (image generation, speech to text) an install declares is registered as a tool behind a switch that ships off (brain.tools.external_ai, brain.ops.external_ai_store); its permission is its own (invoke:external_ai.<service>), it counts as sending something out and is capped at Assisted, and an agent whose ceiling does not name it is offered nothing; an install check proves that. NOT BUILT, WAITING ON THE OWNER (needs-rupash 184, open): the call itself, which needs the first service, its provider account and its key in the vault, and whether speech to text counts as a read and image generation as a draft (a loosening, not built). NEXT: when 184 is answered, build the held call and the worker's run of the approved one for that service, then flip this to READY FOR TESTING.",
+    updated: "2026-10-14",
+  },
 };
 
 //: Wave number to the deployed commit it closed at: {commit, recorded, note}. Empty until a
