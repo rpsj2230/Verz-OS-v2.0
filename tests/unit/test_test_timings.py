@@ -269,8 +269,7 @@ def test_a_shard_is_no_heavier_than_the_lightest_plus_the_heaviest_file() -> Non
     """The balance claim, in the unit the split now has (recorded milliseconds). Delete this and a
     record can be read for the weights and a partition written that ignores them, so the slowest
     shard is as slow as before."""
-    files = collected()
-    made = weights(files)
+    made = weights(units(collected()))
     totals = [sum(made[name] for name in one) for one in partition(made, 8)]
 
     assert max(totals) - min(totals) <= max(made.values())
@@ -342,7 +341,7 @@ def test_no_test_file_costs_more_than_one_shards_share_and_the_refresh_knows_how
     shards = len(ci["jobs"]["tests"]["strategy"]["matrix"]["shard"])
 
     assert shards == test_timings.SHARDS
-    assert oversized(weights(collected()), shards) == {}
+    assert oversized(weights(units(collected())), shards) == {}
 
 
 def test_the_record_is_written_sorted_rounded_and_with_unix_line_endings(tmp_path: Path) -> None:
