@@ -77,6 +77,8 @@ from brain.knowledge.embed_policy import (
 from brain.knowledge.embed_queue import Embedded, EmbeddingBatch
 from brain.models.routing import CircuitBreaker
 from brain.ops.inference import InferenceRefused, decode_embeddings, embedding_request
+from brain.ops.model_server import Part
+from brain.ops.model_server_peaks import PeakReport, read_report
 
 log = structlog.get_logger()
 
@@ -193,6 +195,9 @@ class InferenceEmbeddingClient:
     timeout_seconds: float = EMBED_TIMEOUT_SECONDS
     breaker: CircuitBreaker = field(default_factory=lambda: connector_breaker(BREAKER_NAME))
     clock: Callable[[], datetime] = _utc_now
+    #: Told what the server measured of itself for a batch, when its answer carried one. Never a
+    #: reason to lose the answer: see `_observed`.
+    observer: Callable[[PeakReport], None] | None = None
 
     def embed(self, batch: EmbeddingBatch) -> tuple[Embedded, ...]:
         """One batch, sent and read back, or one of two refusals. Never a partial answer.
@@ -259,7 +264,26 @@ class InferenceEmbeddingClient:
                 "one, and neither may be recorded as a batch that wrote something"
             )
             raise InferenceRefused(msg)
+        self._observed(payload)
         return accept_vectors(decode_embeddings(batch, payload))
+
+    def _observed(self, payload: Mapping[str, object]) -> None:
+        """Hand the server's own account of its memory to whoever keeps it, never failing the batch.
+
+        **A statistic is never a reason to lose a vector.** The report is read by
+        `brain.ops.model_server_peaks.read_report`, which returns nothing for one it cannot use, and
+        the observer is called inside a guard: a database that refused a row of memory figures must
+        not undo fifty passages that were embedded. The failure is logged by type and nothing else.
+        """
+        if self.observer is None:
+            return
+        report = read_report(payload, part=Part.EMBEDDING)
+        if report is None:
+            return
+        try:
+            self.observer(report)
+        except Exception as error:
+            log.warning("the model server's peak was not kept", error=type(error).__name__)
 
 
 @dataclass(frozen=True)

@@ -6,6 +6,37 @@ Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
 # Open
 
+## 235. The model server is built to fit your server; three things only you can do or decide
+
+**In plain terms:** you asked that the model server not need more memory than your server has, with the
+kernel's cache counted. It is built that way (see the note at the end of item 120): one optional service,
+off until you name it, that holds one part in memory at a time, starts a part when work arrives and ends
+it after a time you set, measures its own memory for every batch, and says in words when your server
+cannot hold what you chose. None of it has run on a real server, because it needs an image that nobody
+has built and files nobody has fetched. Three things are yours:
+
+1. **Where the image is built and published.** The server's own program is in the repository
+   (`modelserver/Dockerfile`), and the release looks for it next to the application's image, with
+   `-modelserver` on the end of its name and the same tag.
+   - **Option A: a manual build job in the repository's own workflows**, run by you or by me when a
+     release changes it, pushing to the same registry. What I recommend: nothing about the deploy of the
+     application itself changes, and the image is built from the commit it is run with.
+   - **Option B: you build it once on your server** and tell the overlays which image to use. Nothing in
+     the repository changes; each release then needs the same by hand.
+2. **Pinning the model files.** The first install fetches Qwen3's 8-bit file from its public address and
+   records the checksum it received; nobody on this project has downloaded it to read one, so the product
+   cannot yet hold a second install to it.
+   - **Option A: after your first install, I pin the recorded checksum in the product.** What I
+     recommend.
+   - **Option B: leave it unpinned**, so each install trusts what it first receives.
+3. **What to switch on first.** The embedding part is the smallest and does the most: it is what search by
+   meaning waits on. I recommend `modelserver` alone with the default parts, then reading what it measured
+   (`/api/v1/install/model-server`) before adding layout, scanned pages or the entity finder, whose sizes
+   are the least certain.
+
+**What I need from you:** reply "235: A A" for both recommendations, or the letters you prefer; the third
+is a suggestion for when you switch it on and needs no reply.
+
 ## 226. Should a question be estimated before it is answered, and refused when the estimate is more than is left?
 
 **In plain terms:** task M21.2.1 says each question's cost is estimated before it is answered, from the
@@ -2914,6 +2945,19 @@ For B:
 4. Confirm. The server restarts, and the Brain is offline for those few minutes.
 5. Tell me "120: B done". I measure the server again, as for A.
 
+**Redrawn 2026-10-14, after you said the system should not need more memory than your server has, and
+that the kernel's cache has to be counted.** Row 2 no longer asks for 3,840 MB as one block. The model
+server is now an optional service (named `modelserver` in the optional services setting) that holds one
+part in memory at a time: embedding, layout, scanned pages, the general reader and the entity finder are
+chosen one by one, and its memory is the largest part chosen and not their sum. The default choice, the
+embedding part alone, asks for **1,088 MiB**; all five parts together ask for **1,408 MiB**. It starts a
+part when work arrives and ends it after a time you set, and it measures its own memory for every batch
+so the limit can be tuned from figures that ran. **Every one of these sizes is arithmetic or a judgement
+and none has been measured**: there is no server running yet, and each part says where its figure came
+from. The cache is counted twice on purpose: the container's limit covers the model files it maps, and the
+check on your server counts only what the kernel cannot give back. Item 235 is what is left for you to
+decide.
+
 ## 119. How large a file may people upload - DECIDED 2026-10-05: C now, then A once row 2 of item 120 runs
 
 **Your answer, 2026-10-05:** "My recommendation: C now, then A once row 2 of item 120 runs."
@@ -2990,6 +3034,14 @@ ordinary files.
 
 **What I need from you:** reply "119: C, 25", or your choice for each question (A, B or C, and a size
 in MB). Nothing on your server changes for either answer.
+
+**Built 2026-10-14: the second question's 25 MB is the model server's default, as a setting.** Your
+answer was "my recommendation", which for question 2 is 25 MB for every document type, so the model
+server is sized for documents up to 25 MB and the setting `INSTALL_MODEL_UPLOAD_MB` carries it. It is
+a setting and not a constant because another company's documents are a different size, and a larger
+figure makes the server larger (the page says by how much). The upload door itself still admits what
+it admitted (PDFs to 50 MB); until the door is lowered to match, the worker says at start (the parsing
+piece of this work) that the door admits a file the model server would refuse. Tell me if you meant the door to come down to 25 MB too.
 
 ## 168. What a brand-new install ships with - DECIDED 2026-10-06: A, accept both
 

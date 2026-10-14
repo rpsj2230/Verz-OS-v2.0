@@ -118,7 +118,7 @@ for is a port nobody decided about. The third column is prose.
 | `automation-egress` | `3128` | The automation canvas alone. This is the proxy that stops an assembled flow reaching anything it was not allowed to, so it is the one container here whose reachability is a security control rather than a convenience. |
 | `cache` | `6379` | The application alone. Never from outside. |
 | `db` | `5432` | The two poolers. Never from outside, and never from the application or the workers directly. |
-| `inference-server` | `8080` | The application alone. It is handed the text of documents that have already passed the permission layer, so anything that can reach it can ask it to read them. `standard` and `full`. |
+| `inference-server` | `8080` | The application alone. It is handed the text of documents that have already passed the permission layer, so anything that can reach it can ask it to read them. Only where `INSTALL_SERVICES` names `modelserver`. |
 | `keycloak` | `8080` | Staff browsers, through your proxy, on the identity provider's own address. `standard` and `full`. |
 | `langfuse-cache` | `6379` | The trace ledger alone. `full` only. |
 | `langfuse-clickhouse` | `8123` | The trace ledger alone. `full` only. |
@@ -299,7 +299,7 @@ compose them in whenever `/opt/brain/.env` holds the tunnel token. See
    On `standard`, the profile's own files, then both tunnel files:
 
    ```
-   docker compose -f /opt/brain/docker-compose.yml -f /opt/brain/docker-compose.worker.yml -f /opt/brain/docker-compose.parse-worker.yml -f /opt/brain/docker-compose.objectstore.yml -f /opt/brain/docker-compose.keycloak.yml -f /opt/brain/docker-compose.inference.yml -f /opt/brain/docker-compose.tunnel.yml -f /opt/brain/docker-compose.tunnel.identity.yml up -d
+   docker compose -f /opt/brain/docker-compose.yml -f /opt/brain/docker-compose.worker.yml -f /opt/brain/docker-compose.parse-worker.yml -f /opt/brain/docker-compose.objectstore.yml -f /opt/brain/docker-compose.keycloak.yml -f /opt/brain/docker-compose.tunnel.yml -f /opt/brain/docker-compose.tunnel.identity.yml up -d
    ```
 
    On `full`, the same two tunnel files after the `full` profile's own files, which the line

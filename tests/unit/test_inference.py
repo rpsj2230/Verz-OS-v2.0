@@ -67,8 +67,8 @@ from brain.ops.inference import (
     request_ceiling_bytes,
     runs_inference_server,
     served_model,
-    weights_mib,
 )
+from brain.ops.model_server import Part, config_from, effective_limit_mib, requirement
 from brain.ops.wiring import Wiring, WiringError, component
 from brain.ops.worker import preflight
 
@@ -81,8 +81,10 @@ OTHER = EmbeddingModel(name="qwen3-embedding", revision="e4f5g6h", dimensions=EM
 #: reading `weights_mib` back out of `SERVED_MODELS` would compare the figure with itself.
 #: Docling is deliberately absent, because it publishes no single parameter count and its
 #: entry says so.
-PUBLISHED_PARAMETERS: dict[str, tuple[int, int]] = {
-    "qwen3-embedding-0.6b": (600_000_000, 2),
+PUBLISHED_PARAMETERS: dict[str, tuple[int, float]] = {
+    # 1.0625 bytes a weight: the 8-bit format stores a 16-bit scale for every 32 weights, which is
+    # 8.5 bits each. The model is published at 2 bytes a weight and the install runs the 8-bit file.
+    "qwen3-embedding-0.6b": (600_000_000, 1.0625),
     "gliner": (210_000_000, 4),
 }
 
@@ -468,45 +470,60 @@ def test_a_declared_footprint_matches_the_parameter_count_its_basis_claims(name:
     assert model.weights_mib - floor_mib < 128, f"{name} claims more than its basis explains"
 
 
-def test_the_request_ceiling_sits_strictly_below_what_is_left_after_the_weights() -> None:
-    """`INFERENCE_RUNTIME_RESERVE_MIB` asserted through the property it exists for rather than
-    against itself. The cgroup counts the interpreter, torch, the tokenisers, the HTTP server
-    and the allocator's arenas, and none of those is weights; a ceiling equal to the
-    remainder is a process told it may use memory the runtime has already taken.
+def test_the_request_ceiling_is_derived_from_what_the_install_chose_and_sits_below_its_limit() -> (
+    None
+):
+    """The ceiling is no longer what is left of one fixed container after three models: it is the
+    larger of the document the install is sized for, encoded, and the most a batch may cost. Both
+    come from the same configuration as the container's limit, so the cap and the limit cannot be
+    moved apart by editing one of them, and the ceiling stays strictly under the limit it lives in.
 
-    Delete this and the reserve can be set to zero, which makes every arithmetic check in
-    this file pass and the container die on its first request."""
-    limit_mib = component(INFERENCE_COMPONENT).memory_mib
+    Asserted through the property rather than against itself: for each choice of parts, the
+    ceiling is at least what its largest request needs and under the memory the container holds.
 
-    assert request_ceiling_bytes() < (limit_mib - weights_mib()) * MIB
-    assert request_ceiling_bytes() > 0
+    Delete this and the ceiling can be set to the container's whole limit, so the process is told
+    it may spend on one request memory the model it is holding already uses."""
+    for parts in ("embedding", "layout", "embedding,layout,ocr,tika,entities"):
+        config = config_from(parts=parts)
+        ceiling = request_ceiling_bytes(config)
+
+        assert 0 < ceiling < effective_limit_mib(config) * MIB, parts
+        if config.has(Part.EMBEDDING):
+            assert ceiling >= batch_budget_bytes(), parts
+        if config.reads_documents:
+            assert ceiling >= ((config.upload_mb * MIB + 2) // 3) * 4, parts
 
 
-def test_the_ceiling_is_the_whole_remainder_because_one_request_is_served_at_a_time() -> None:
-    """`REQUESTS_AT_ONCE` asserted through what it means rather than by reading it back.
-    The claim the module makes is that the ceiling is the whole of what is left, which is
-    also why only one request fits; a second concurrent request would be allowed all of it
-    again and the container has no second copy.
+def test_a_larger_document_makes_a_larger_ceiling_and_a_larger_server() -> None:
+    """The upload size is configuration, and the ceiling and the limit follow it together.
+    Without this a larger limit could be read as a promise the ceiling does not keep.
 
-    The reserve is passed explicitly rather than left to its default, so this pins the
-    concurrency and nothing else: with the reserve on both sides of the comparison it cannot
-    quietly stand in for the thing under test.
+    Delete this and the upload setting can change the number the server accepts without changing
+    the memory it is given."""
+    small = config_from(parts="layout", upload="10")
+    large = config_from(parts="layout", upload="40")
 
-    Delete this and the concurrency can be raised to two, every finding stays empty because
-    the halved ceiling still just clears the batch budget, and the container is quietly
-    promised twice what it has."""
-    reserve_on_both_sides = 512
-    limit_mib = component(INFERENCE_COMPONENT).memory_mib
-    remainder_mib = limit_mib - weights_mib() - reserve_on_both_sides
+    assert request_ceiling_bytes(large) > request_ceiling_bytes(small)
+    assert effective_limit_mib(large) > effective_limit_mib(small)
 
+
+def test_one_request_is_served_at_a_time_because_one_part_is_resident() -> None:
+    """`REQUESTS_AT_ONCE` asserted through what it means rather than by reading it back: the
+    supervisor holds one part and a second concurrent request would need a second part loaded
+    beside the first, which is the sum the design exists to avoid.
+
+    Delete this and the concurrency can be raised to two with every arithmetic test here green,
+    and the container is quietly promised twice the part it was sized for."""
     assert REQUESTS_AT_ONCE == 1
-    assert request_ceiling_bytes(reserve_mib=reserve_on_both_sides) == remainder_mib * MIB
+    findings = inference_gaps(requests_at_once=2, switched=True, config=config_from())
+
+    assert any("would serve 2 requests at once" in one for one in findings), findings
 
 
 def test_the_largest_batch_the_planner_builds_fits_the_largest_request_the_server_takes() -> None:
     """The two ends of one number, edited in two files for two reasons. `batch_budget_bytes`
-    descends from `MIB_PER_SLOT` and knows nothing about models; the ceiling descends from a
-    container limit and knows nothing about queues.
+    descends from `MIB_PER_SLOT` and knows nothing about models; the ceiling descends from the
+    install's configuration and knows nothing about queues.
 
     If the ceiling were the smaller, every full batch would be refused by the server after
     the planner had built it, which presents as an embedding leg that works on small
@@ -514,7 +531,7 @@ def test_the_largest_batch_the_planner_builds_fits_the_largest_request_the_serve
 
     Delete this and the slot can grow or the container can shrink with nothing comparing
     them."""
-    assert batch_budget_bytes() <= request_ceiling_bytes()
+    assert batch_budget_bytes() <= request_ceiling_bytes(config_from(parts="embedding"))
 
 
 def test_every_task_this_service_is_asked_to_do_has_a_model_serving_it() -> None:
@@ -576,27 +593,46 @@ def test_the_declared_deployment_has_nothing_wrong_with_it() -> None:
     """The positive case, and it is load-bearing rather than decorative: `inference_gaps` is
     called by `brain.ops.worker.preflight`, so anything it reports stops every worker in the
     estate from starting. A check that refuses the deployment we actually declare is a check
-    somebody deletes."""
-    assert inference_gaps() == ()
+    somebody deletes. Asked of the default choice, and of every part chosen together, with the
+    server switched on, so it is shown to say nothing where nothing is wrong and not only
+    where the server is off."""
+    assert inference_gaps(switched=True, config=config_from()) == ()
+    everything = config_from(parts="embedding,layout,ocr,tika,entities")
+    assert inference_gaps(switched=True, config=everything) == ()
 
 
-def test_a_container_that_cannot_hold_its_own_weights_is_refused() -> None:
-    """The check that fires when a fourth model is added or one moves to fp32. The container
-    then dies during startup with three models half loaded rather than under load, which on a
+def test_an_install_that_has_not_switched_the_model_server_on_is_told_nothing_about_it() -> None:
+    """A finding about a server that is not there would be printed at every worker start and read
+    past by everyone, which is how a real finding gets read past. Asked with a configuration that
+    would otherwise produce findings, so the silence is the switch's and not the default's.
+
+    Delete this and every worker of an install with no model server prints sentences about one."""
+    broken = config_from(parts="layout", memory="100")
+
+    assert inference_gaps(switched=False, config=broken) == ()
+    assert inference_gaps(switched=True, config=broken)
+
+
+def test_a_limit_set_under_what_the_chosen_part_needs_is_refused() -> None:
+    """The check that fires when a limit is set by hand under the largest part. The container then
+    dies on its first large request or during start rather than under ordinary load, which on a
     shared host is a neighbour's outage.
 
-    Asked through a parameter rather than by editing the constant, so the refusal can be seen
-    to fire; a check nobody has watched fail is a check nobody knows works."""
-    findings = inference_gaps(reserve_mib=4096)
+    Asked through the configuration rather than by editing a constant, so the refusal can be seen
+    to fire; a check nobody has watched fail is a check nobody knows works. The configuration
+    itself refuses a limit under the base, so this one is under the part and over the base."""
+    needed = requirement(config_from(parts="layout")).limit_mib
+    findings = inference_gaps(
+        switched=True, config=config_from(parts="layout", memory=str(needed - 64))
+    )
 
-    assert any("cannot load what it is meant to serve" in f for f in findings)
+    assert any("cannot load what it is meant to serve" in f for f in findings), findings
 
 
 def test_serving_more_than_one_request_at_a_time_is_refused() -> None:
-    """The ceiling is the whole remainder, so two concurrent requests is twice the
-    container's memory promised out of one container's worth. `PARSES_AT_ONCE` makes the
-    identical argument about the parse worker."""
-    findings = inference_gaps(requests_at_once=4)
+    """The container holds one part at a time, so two concurrent requests is a second part loaded
+    beside the first. `PARSES_AT_ONCE` makes the identical argument about the parse worker."""
+    findings = inference_gaps(requests_at_once=4, switched=True, config=config_from())
 
     assert any("would serve 4 requests at once" in f for f in findings)
 
@@ -604,7 +640,7 @@ def test_serving_more_than_one_request_at_a_time_is_refused() -> None:
 def test_a_server_that_answers_no_requests_at_all_is_refused() -> None:
     """Zero is not a smaller number of requests, it is a service that presents a listening
     socket and answers nothing, which every metric reads as a queue that is merely slow."""
-    findings = inference_gaps(requests_at_once=0)
+    findings = inference_gaps(requests_at_once=0, switched=True, config=config_from())
 
     assert any("answers nothing" in f for f in findings)
 
@@ -616,22 +652,33 @@ def test_a_task_nothing_is_declared_to_serve_is_reported_as_a_deployment_gap() -
     wrong thing.
 
     Driven through the `models` parameter, because the declared table is complete and a check
-    that can only be run against complete data cannot be shown to fire.
+    that can only be run against complete data cannot be shown to fire. Asked only of the parts
+    the install chose: an install that runs the embedding part has no use for a missing entity
+    model, and a finding about it would be noise.
 
     Delete this and the branch can be removed with every other deployment test here green,
     since none of the others makes it fire."""
-    findings = inference_gaps(models=(SERVED_MODELS[0],))
-
+    only_entities = tuple(m for m in SERVED_MODELS if m.task is InferenceTask.ENTITY_RECOGNITION)
+    findings = inference_gaps(
+        models=only_entities, switched=True, config=config_from(parts="embedding")
+    )
     assert any("no model is declared" in f for f in findings), findings
+
+    assert not inference_gaps(
+        models=only_entities, switched=True, config=config_from(parts="entities")
+    )
 
 
 def test_a_batch_larger_than_the_server_will_accept_is_refused_before_anybody_sends_one() -> None:
     """The two-ended check, seen failing. A ceiling below the batch budget means every full
     batch is refused after the planner has built it.
 
-    Driven by shrinking the container rather than by growing the batch, because the batch
-    budget belongs to `brain.ops.queue` and this file has no business reaching into it."""
-    findings = inference_gaps(reserve_mib=555)
+    Driven by shrinking the ceiling rather than by growing the batch, because the batch budget
+    belongs to `brain.ops.queue` and this file has no business reaching into it."""
+    from unittest import mock
+
+    with mock.patch("brain.ops.inference.model_server_ceiling", return_value=MIB):
+        findings = inference_gaps(switched=True, config=config_from())
 
     assert any("after the planner had built it" in f for f in findings)
 
@@ -652,19 +699,22 @@ def test_the_inference_server_holds_no_connection_string_to_our_database() -> No
     the only thing left saying the service must not reach the database is a comment."""
     assert component(INFERENCE_COMPONENT).wiring is Wiring.NONE
 
-    findings = inference_gaps(server_component="brain-worker")
+    findings = inference_gaps(server_component="brain-worker", switched=True, config=config_from())
 
     assert any("is wired 'direct'" in f for f in findings), findings
 
 
 # ------------------------------------------------------------------ the profile flag refuses
-def test_lite_deploys_no_inference_server_and_standard_does() -> None:
-    """The flag's meaning in both directions. A test that only checks lite is satisfied by a
-    function returning False for everything, which would then also refuse the address on the
-    profile that exists to have one."""
-    assert runs_inference_server("lite") is False
-    assert runs_inference_server("standard") is True
-    assert runs_inference_server("full") is True
+def test_no_profile_deploys_the_inference_server_and_an_install_that_names_it_does() -> None:
+    """The flag's meaning in both directions. A test that only checks the profiles is satisfied by
+    a function returning False for everything, which would then also refuse the address on the
+    install that exists to have one. Since 2026-10-14 the model server is an optional service, so
+    no profile runs it and `INSTALL_SERVICES` naming it is the only way it runs.
+
+    Delete this and a profile can start deploying it again, or the setting stop being enough."""
+    for profile in ("lite", "standard", "full"):
+        assert runs_inference_server(profile) is False
+        assert runs_inference_server(profile, {INFERENCE_COMPONENT}) is True
 
 
 def test_a_lite_install_pointed_at_an_inference_server_is_refused() -> None:
@@ -695,7 +745,10 @@ def test_a_profile_that_deploys_an_inference_server_may_be_pointed_at_one() -> N
     """The positive case. A guard tested only by its refusals is satisfied by a function that
     refuses everything, and that function would make the standard profile unconfigurable
     while every refusal test here stayed green."""
-    assert inference_config_conflicts("standard", {"inference_url": "http://inference:8080"}) == ()
+    values = {"inference_url": "http://inference:8080"}
+
+    assert inference_config_conflicts("standard", values, {INFERENCE_COMPONENT}) == ()
+    assert inference_config_conflicts("standard", values), "named by no setting, it is refused"
 
 
 def test_startup_refuses_an_install_that_would_ship_documents_to_a_server_it_does_not_run() -> None:

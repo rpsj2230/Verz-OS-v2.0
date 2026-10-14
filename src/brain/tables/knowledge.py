@@ -59,6 +59,9 @@ from brain.knowledge.search import (
 from brain.knowledge.visibility import Visibility
 from brain.tables.identity import one_of
 
+#: The widest the one sentence about a document read in part may be. Held equal to `0250`.
+PARSE_NOTICE_CHARS = 400
+
 
 class KnowledgeItemRow(TimestampMixin, Base):
     """`know.item`. One document's stewardship: who answers for it, who vouched, when to look again.
@@ -94,6 +97,9 @@ class KnowledgeItemRow(TimestampMixin, Base):
     #: backfilled: an old row's way of arriving is unknown, and a list says so.
     arrived_as: Mapped[str | None] = mapped_column(String(8), nullable=True)
     source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: One sentence about a document that was read in part, naming the page and nothing from the
+    #: document (M7.7.10). Added by `0250`, null for every item read whole.
+    parse_notice: Mapped[str | None] = mapped_column(String(PARSE_NOTICE_CHARS), nullable=True)
 
     __table_args__ = (
         CheckConstraint(f"item_id ~ '{REFERENCE_SQL_PATTERN}'", name="item_id_is_a_reference"),

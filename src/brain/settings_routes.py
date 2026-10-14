@@ -85,9 +85,15 @@ from brain.console.govern import NOWHERE, _in_reach
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.install import hold_saved, value_of
+from brain.ops.features import is_on
+from brain.ops.features_declared.model_server import MODEL_SERVER
 from brain.ops.handover import Residue
 from brain.ops.handover_run import preview_steps
 from brain.ops.install_settings import load, retire, save
+from brain.ops.model_server import SETTINGS as MODEL_SERVER_SETTINGS
+from brain.ops.model_server import ModelServerError, config_from, read_config, requirement
+from brain.ops.model_server_peaks import PeakSummary, suggested_overall_mib, summarise
+from brain.ops.model_server_store import recorded_peaks
 from brain.ops.overlays import SERVICES_SETTING, memory_problem, runtime_problem
 from brain.ops.retention import BACKUP_RETENTION_DAYS, facts_for
 from brain.ops.setting_store import read_namespace
@@ -375,6 +381,101 @@ async def settings(request: Request, asked: Asked) -> SettingsPage:
     return settings_page(furnished=furnished)
 
 
+class MeasuredPartView(BaseModel):
+    """What the ring says about one part of the model server: its largest batch and the limit it
+    suggests. A measurement of something that ran, and never a figure somebody reckoned."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    part: str
+    batches: int
+    largest_anonymous_mib: int
+    largest_total_mib: int
+    suggested_limit_mib: int | None
+
+
+class ModelServerPage(BaseModel):
+    """The model server as this install chose it, what that costs, and what has been measured."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    #: The `model_server` feature, which says whether documents and passages are sent at all.
+    switched_on: bool
+    parts: list[str]
+    idle_seconds: int
+    upload_mb: int
+    #: The limit the plan costs and the container starts with, and whether it is worked out.
+    limit_mib: int
+    worked_out: bool
+    worked_out_limit_mib: int
+    #: What the host must be able to give and cannot take back, for the largest part chosen.
+    non_reclaimable_mib: int
+    measured: list[MeasuredPartView]
+    #: The limit the measurements suggest, never applied by itself. None before any measurement.
+    suggested_limit_mib: int | None
+    #: Non-empty when the four settings are not a configuration, and then the figures are the
+    #: product's defaults and say nothing about this install.
+    problem: str
+    note: str
+
+
+#: Said beside every page, so a figure is never read as more than it is.
+THE_FIGURES_ARE_JUDGEMENTS_UNTIL_MEASURED: Final = (
+    "Every limit here is worked out from judgements (brain.ops.model_server.SIZING) until the "
+    "server has measured itself; the measured rows are the only figures about its memory that "
+    "describe something that ran. A suggested limit is a measurement with a margin and is never "
+    "applied by itself: change INSTALL_MODEL_MEMORY_MIB to follow it, or leave it on auto."
+)
+
+
+@router.get("/install/model-server", response_model=ModelServerPage, responses=COMMON_RESPONSES)
+async def model_server(request: Request, asked: Asked) -> ModelServerPage:
+    """The model server as chosen, what it costs and what it measured, for who may change settings.
+
+    The same authority as the screen it sits beside, asked first. A configuration that cannot be
+    read is a page that says so and shows the defaults, not an error: the person is here to fix it.
+    """
+    if not may_configure(asked.reach, asked.now):
+        log.info("model server page not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    problem = ""
+    try:
+        config = read_config()
+    except ModelServerError as error:
+        problem, config = str(error), config_from()
+    needs = requirement(config)
+    switched = False
+    summaries: tuple[PeakSummary, ...] = ()
+    factory = sessions_of(request)
+    if factory is not None:
+        async with factory() as session:
+            switched = await is_on(session, MODEL_SERVER)
+            summaries = summarise(await recorded_peaks(session))
+    return ModelServerPage(
+        switched_on=switched,
+        parts=[one.value for one in config.parts],
+        idle_seconds=config.idle_seconds,
+        upload_mb=config.upload_mb,
+        limit_mib=config.memory_override_mib or needs.limit_mib,
+        worked_out=config.memory_override_mib is None,
+        worked_out_limit_mib=needs.limit_mib,
+        non_reclaimable_mib=needs.non_reclaimable_mib,
+        measured=[
+            MeasuredPartView(
+                part=one.part.value,
+                batches=one.batches,
+                largest_anonymous_mib=one.largest_anon_mib,
+                largest_total_mib=one.largest_total_mib,
+                suggested_limit_mib=one.suggested_limit_mib,
+            )
+            for one in summaries
+        ],
+        suggested_limit_mib=suggested_overall_mib(summaries),
+        problem=problem,
+        note=THE_FIGURES_ARE_JUDGEMENTS_UNTIL_MEASURED,
+    )
+
+
 @router.put(f"{SETTINGS_PATH}/{{name}}", response_model=SettingsPage, responses=COMMON_RESPONSES)
 async def save_setting(request: Request, name: str, body: SaveAsked, asked: Asked) -> JSONResponse:
     """Save one setting, hold it for this process, and answer with the screen as it now is.
@@ -395,10 +496,17 @@ async def save_setting(request: Request, name: str, body: SaveAsked, asked: Aske
         # deploy step's last report of the server (brain.ops.overlays.runtime_problem).
         # And one that would not all fit in the memory the server last measured, by the same
         # costing the deploy uses (brain.ops.overlays.memory_problem).
-        if name == SERVICES_SETTING:
-            lacking = await runtime_problem(
-                session, normalised(name, body.value)
-            ) or await memory_problem(session, normalised(name, body.value))
+        #
+        # **The model server's four settings go through the same costing**, with the setting as it
+        # would be saved: choosing larger parts or a larger document changes what the server costs
+        # and so whether the services named would all fit, and that is judged by the one costing
+        # the deploy uses (`brain.ops.overlays.plan_in_room`) and not by a second sum.
+        if name == SERVICES_SETTING or name in MODEL_SERVER_SETTINGS:
+            candidate = {**await load(session), name: normalised(name, body.value)}
+            services = value_of(SERVICES_SETTING, saved=candidate)
+            lacking = (
+                await runtime_problem(session, services) if name == SERVICES_SETTING else ""
+            ) or await memory_problem(session, services, saved=candidate)
             if lacking:
                 told = ErrorBody(message=lacking, trace_id=_trace_id())
                 return JSONResponse(status_code=422, content=told.model_dump())
