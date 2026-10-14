@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-14T10:49:08.591230+00:00",
-  "commit": "725ae499",
-  "commit_subject": "A multi-agent plan can be weighed by the fan-out gate before any agent runs, with the decision kept (M18.2.1, M18.2.2, M18.2.3, M18.2.4, M18.4.3) (#586)",
+  "generated_at": "2026-10-14T11:56:00.347229+00:00",
+  "commit": "0305c635",
+  "commit_subject": "A migration from another system is kept and checked: the register, the comparison period and the cutover, behind a switch that ships off (M37.1.1.1, M37.1.1.2, M37.1.1.3, M37.1.3.2, M37.1.3.3, M37.1.4.1, M37.1.4.2, M37.1.4.3) (#587)",
   "total": 1626,
   "done": 1113,
   "percent": 68.5,
-  "built": 1263,
-  "built_percent": 77.7,
-  "built_unproven": 150,
+  "built": 1271,
+  "built_percent": 78.2,
+  "built_unproven": 158,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -109,6 +109,14 @@
     "M35.2.2.4",
     "M35.3.1.1",
     "M36.2.4.1",
+    "M37.1.1.1",
+    "M37.1.1.2",
+    "M37.1.1.3",
+    "M37.1.3.2",
+    "M37.1.3.3",
+    "M37.1.4.1",
+    "M37.1.4.2",
+    "M37.1.4.3",
     "M37.5.1.2",
     "M37.5.1.4",
     "M38.2.2.3",
@@ -251,8 +259,8 @@
       "open": 12,
       "acts": 42,
       "decided": 18,
-      "built": 87,
-      "built_percent": 40.1
+      "built": 95,
+      "built_percent": 43.8
     },
     {
       "wave": 6,
@@ -649,7 +657,7 @@
       "done": 10,
       "acts": 41,
       "decided": 4,
-      "built": 12
+      "built": 20
     },
     {
       "module": "M38",
