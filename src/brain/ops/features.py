@@ -323,6 +323,44 @@ SHARED_TOOL_START: Final = Feature(
     read_by=("brain.ops.shared_start:universal_when_on",),
 )
 
+#: The website widget's answers written by the model. Off until its owner has seen it on his
+#: install: every visitor question then costs a model call, paid by the install, asked by strangers
+#: with no budget of their own (needs-rupash 139, option B). The cap is `widget_daily_spend`.
+WIDGET_MODEL_ANSWERS: Final = Feature(
+    name="widget_model_answers",
+    title="Let the website widget write its answers with the model",
+    what=(
+        "A visitor's question is answered by a short reply the model writes from the passages you "
+        "have marked public and from nothing else, with those passages shown beside it. What the "
+        "replies cost a day is capped by the figure on the Rate limits screen, and once it is used "
+        "up the widget answers with the passages themselves until midnight UTC."
+    ),
+    while_off=(
+        "The widget answers with the published passages, word for word, and no model is called "
+        "for a visitor."
+    ),
+    read_by=("brain.widget_answers:model_answers_on",),
+)
+
+#: A person making their own agent. Off until the owner has watched it on his install: it widens who
+#: may start the builder from the holders of the install authority to anybody signed in, though only
+#: for an agent that nobody but its maker can find (needs-rupash 173 and 189, requirement ANY-060).
+PERSONAL_AGENTS: Final = Feature(
+    name="personal_agents",
+    title="Let each person make their own agent",
+    what=(
+        "Any signed-in person may make an agent that only they can find and use, from the "
+        "builder, without asking anybody. It can reach nothing its maker cannot reach. "
+        "Administrators who may make agents already make both kinds, and a team agent is "
+        "still made only by them."
+    ),
+    while_off=(
+        "Only people who hold the authority to make agents may start the builder, as before. "
+        "A personal agent somebody already has stays theirs and keeps working."
+    ),
+    read_by=("brain.agents.kinds:personal_agents_on",),
+)
+
 #: Counting which documents an agent's answers cite, for the Knowledge section's figures. Off
 #: because it is a new record kept on every answer: `brain.ops.agent_item_use` keeps an agent, a
 #: document, a day and a count, and no question, person or passage. While off, the section shows no
@@ -463,6 +501,25 @@ PLUGIN_REGISTRY: Final = Feature(
     ),
 )
 
+#: Letting an agent run a browser. Off because it starts a container that opens pages on the
+#: install's behalf: the sandbox, the launcher and the runner image have been specified and tested
+#: as decisions and have not run on a host, and `brain.browsing.driver` is the first thing that
+#: sends a run to one. A run that needs a person's approval still waits for it with this on.
+BROWSER_RUNS: Final = Feature(
+    name="browser_runs",
+    title="Let agents run a browser",
+    what=(
+        "An agent whose ceiling holds the browser tools may have a page opened for it in a "
+        "sandbox of its own, on the websites its target declares and nowhere else. A write "
+        "waits for a person to approve the whole run first, and every run is recorded."
+    ),
+    while_off=(
+        "No browser is started. A website check still reads a page over a plain request, as "
+        "before. A run that started while this was on is stopped by the halt, not by this."
+    ),
+    read_by=("brain.browsing.driver:browser_runs_are_on",),
+)
+
 #: Every feature this product can switch on, in the order the screen lists them.
 FEATURES: Final[tuple[Feature, ...]] = (
     PROMPT_EDITING,
@@ -473,6 +530,8 @@ FEATURES: Final[tuple[Feature, ...]] = (
     TWO_PERSON_APPROVAL,
     SUPERVISION_REVIEW,
     SHARED_TOOL_START,
+    WIDGET_MODEL_ANSWERS,
+    PERSONAL_AGENTS,
     AGENT_ITEM_COUNTS,
     SKILL_NEEDS,
     SKILL_DRAFTING,
@@ -480,6 +539,7 @@ FEATURES: Final[tuple[Feature, ...]] = (
     STARTER_SKILLS_SWITCH,
     PLUGIN_REGISTRY,
     ORCHESTRATION_REHEARSAL,
+    BROWSER_RUNS,
 )
 
 

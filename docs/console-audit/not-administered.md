@@ -15,6 +15,7 @@
 | `GET /api/v1/threads` | A person's own conversations on Ask, for them alone and never anybody else's; nothing in it for an administrator to manage. |
 | `GET /api/v1/threads/{thread_id}` | One of a person's own conversations reopened on Ask at the reach they hold now; nothing in it for an administrator to manage. |
 | `GET /api/v1/threads/search` | A search of a person's own questions on Ask, for them alone; nothing in it for an administrator to manage. |
+| `GET /api/v1/welcome` | The starter questions a person is offered on their first visit to Ask, for their own department and kept to what they may ask; it reads nothing an administrator manages and writes nothing. |
 | `mem.mark` | The marks people put on their own answers, counted and read by nothing that decides an answer; no administrator manages a person's mark. |
 | `mem.signal` | What the system noticed about each answer a person was given, re-asked, corrected or handed to a person, by message id and never a word; read by that person and counted by kind, and no administrator manages one. |
 | `ops.retrieval_event` | What a person was answered from, as the learning signal reads it: which retrievers ran, how many passages were shown and where a citation was followed, with no document, question or person; written by the answer route and the cited page, and nothing in it for an administrator to manage. |

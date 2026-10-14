@@ -247,17 +247,22 @@ def test_the_standard_profile_is_over_by_the_identity_provider_and_the_inference
     went from 768 to 1024 MiB, measured: the browser harness found the kernel killing its first
     start at 768 on every fresh install (`docker-compose.keycloak.yml` says how).
 
+    **And a sixth time on 2026-10-13, by a component, from 904 to 1288.** The worker went from 384
+    to 768 MiB because it was OOM-killed about every half hour on the owner's install, with one
+    process at about 339 MB of anonymous memory (`brain-worker` in `COMPONENTS` says how that was
+    read).
+
     Delete this and the overrun stops being visible anywhere, which means it is discovered by
     deploying it."""
     breaches = budget_breaches("standard")
 
     assert len(breaches) == 1, breaches
     assert "inference-server" in breaches[0]
-    assert "over by 904 MiB" in breaches[0], (
+    assert "over by 1288 MiB" in breaches[0], (
         "the standard overrun has moved; something has grown or shrunk and this test is the "
         "only place that would have said so"
     )
-    assert wave_two_mib("standard") - spendable_mib() == 904
+    assert wave_two_mib("standard") - spendable_mib() == 1288
 
 
 def test_the_full_profile_does_not_fit_and_names_the_component_that_does_not() -> None:
@@ -700,16 +705,22 @@ def test_the_trace_ledger_service_set_did_not_fit_beside_the_old_neighbours() ->
     )
 
 
-def test_rows_one_and_three_of_item_120_fit_beside_what_the_install_already_runs() -> None:
+def test_rows_one_and_three_of_item_120_are_eight_mib_over_the_static_cap() -> None:
     """**The arithmetic item 120 rests on, against the host as re-measured on 2026-10-05.**
 
     The install already runs four wave 2 containers (the worker, its session pooler, the
     identity provider and its database) and the secrets vault, which no profile here budgets
     and whose limit is read from its own compose file. Beside them, row 1 (the personal data
-    detector) and row 3 (the trace ledger's five services) fit inside the 6,200 MiB wave 2 may
-    spend, and row 2 (the model server and the document worker) does not fit beside row 1,
-    which is why it waits. The spare was 632 MiB until 2026-10-06 and is 376 since the identity
-    provider's limit went from 768 to 1024 MiB, measured; rows 1 and 3 still fit.
+    detector) and row 3 (the trace ledger's five services) fitted inside the 6,200 MiB wave 2
+    may spend until 2026-10-13, and row 2 (the model server and the document worker) does not
+    fit beside row 1, which is why it waits. The spare was 632 MiB until 2026-10-06, 376 after
+    the identity provider's limit went from 768 to 1024 MiB, measured, and is **minus 8 since
+    2026-10-13**, when the worker went from 384 to 768 MiB because it was being OOM-killed: rows
+    1 and 3 together are now 8 MiB over this static cap. The cap is one fixed figure for a
+    machine this repository measured. Whether the two still start on a given server is decided
+    at every deploy from that server's own facts (`brain.ops.overlays.plan`), and on the host
+    these figures were measured on the plan still has room, so this is a finding to read and
+    not a refusal.
 
     Exact on purpose, for the reason the standard overrun is: a figure that moves is the
     finding. Delete this and the room item 120 hands out is a paragraph in a document that
@@ -724,8 +735,8 @@ def test_rows_one_and_three_of_item_120_fit_beside_what_the_install_already_runs
     row_two = set_cost_mib(("inference-server", "brain-parse-worker"))
 
     assert spendable_mib() == 6200
-    assert running + vault_mib == 1984
-    assert spendable_mib() - running - vault_mib - row_one - row_three == 376
+    assert running + vault_mib == 2368
+    assert spendable_mib() - running - vault_mib - row_one - row_three == -8
     assert row_two > spendable_mib() - running - vault_mib - row_one
 
 

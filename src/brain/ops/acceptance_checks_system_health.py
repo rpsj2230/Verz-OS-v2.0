@@ -25,10 +25,15 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Final
 
-from sqlalchemy import insert
+from sqlalchemy import insert, select
 
 from brain.core.scope import Clause, Op, Scope
-from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, check
+from brain.ops.acceptance import (
+    RESERVED_DEPARTMENTS,
+    CheckFailedError,
+    CheckNotRunError,
+    check,
+)
 from brain.ops.acceptance_operations_console import (
     asking_as,
     console_for,
@@ -48,9 +53,19 @@ A, B = RESERVED_DEPARTMENTS
 LONG_AGO: Final = timedelta(days=100)
 
 
-def _controls_to_press() -> tuple[str, str, str]:
+#: Said when the install's own worker has already run too many of the controls to leave two for the
+#: check to describe from nothing.
+EVERY_CONTROL_HAS_RUN_HERE: Final = (
+    "this install's worker has already run every control the scheduler may run but one, so no "
+    "control is left that has never run and one that last ran long ago can be described"
+)
+
+
+def _controls_to_press(already_run: frozenset[str]) -> tuple[str, str, str]:
     """Three scheduled controls that delete nothing and that something calls, by the registry's
-    order. A control nothing calls is `unreachable` whatever it last did, which is its own case."""
+    order: one to say ran a minute ago, and two the install's own worker has never run, so that a
+    real run does not turn the stale one into a held one or the never-run one into a run one. A
+    control nothing calls is `unreachable` whatever it last did, which is its own case."""
     from brain.ops.controls import Invocation
     from brain.ops.schedule import DESTRUCTIVE, schedulable
 
@@ -61,7 +76,12 @@ def _controls_to_press() -> tuple[str, str, str]:
     ]
     if len(names) < 3:
         raise CheckFailedError("fewer than three controls can be run by the scheduler")
-    return names[0], names[1], names[2]
+    unrun = [name for name in names if name not in already_run]
+    if len(unrun) < 2:
+        raise CheckNotRunError(EVERY_CONTROL_HAS_RUN_HERE)
+    stale, never = unrun[0], unrun[1]
+    running = next(name for name in names if name not in (stale, never))
+    return running, stale, never
 
 
 @check(
@@ -85,7 +105,10 @@ async def system_health_shows_a_guarantee_held_only_while_its_control_runs(h: Ha
     await h.person(narrow, department=A, grants=screen_grants("incidents", in_a))
     await h.person(other, department=A)
 
-    running, stale, never = _controls_to_press()
+    already_run = frozenset(
+        (await h.connection.execute(select(ControlRunRow.name).distinct())).scalars().all()
+    )
+    running, stale, never = _controls_to_press(already_run)
     now = datetime.now(UTC)
     await as_login(
         h,

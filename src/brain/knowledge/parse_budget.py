@@ -33,8 +33,9 @@ container costs to open. See `A_DECLARED_COST_IS_A_CLAIM_THE_FILE_MAKES_ABOUT_IT
 what that can and cannot know, because it is not much.
 
 **A parse worker is a container of its own, and that is arithmetic rather than taste.** The
-general worker is budgeted 384 MiB and runs seven slots at `MIB_PER_SLOT`, which leaves
-48 MiB of slot for a job. The door admits a 50 MiB PDF, so a parse in that container cannot
+general worker is budgeted 768 MiB (384 until 2026-10-13, raised for headroom and with the
+slot count unchanged) and runs seven slots at `MIB_PER_SLOT`, which leaves 48 MiB of slot
+for a job. The door admits a 50 MiB PDF, so a parse in that container cannot
 hold the file it was given, never mind what reading it costs. Two ways to close that: shrink
 the door's ceilings, or size a container for the parse. Shrinking the door was rejected,
 because `TYPE_LIMITS` is a reviewed decision and 50 MiB of PDF is an ordinary scanned book,
@@ -165,8 +166,9 @@ A_REFUSAL_NAMES_THE_FILE_AND_NEVER_THE_QUEUE = (
 
 # ------------------------------------------------------------------ the container's sizing
 #: The component that runs parses. Named rather than assumed, because the whole argument
-#: above is that it is not the general worker: `brain-worker` is 384 MiB across seven slots
-#: and the door admits a 50 MiB PDF, so a parse there cannot hold its own input.
+#: above is that it is not the general worker: `brain-worker` runs seven 48 MiB slots (inside
+#: 768 MiB since 2026-10-13) and the door admits a 50 MiB PDF, so a parse there cannot hold
+#: its own input.
 PARSE_WORKER_COMPONENT: Final = "brain-parse-worker"
 
 #: What the cgroup counts and the parse budget does not: the interpreter, the imports, the

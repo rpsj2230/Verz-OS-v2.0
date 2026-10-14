@@ -25,8 +25,10 @@ knowledge rows here, and `subject_memory` by the formation's principal.
 
 **Asked.** The questions this person asked this month, counted from `ops.question_asked`, which
 the answer lane writes. A count of one's own questions discloses nothing about anybody else.
-Corrections are not counted, because nothing records one: `brain.member_activity.
-activity_this_month` counts them from chat turns, and no store writes a turn.
+Corrections are counted from the person's own threads (M40.2.1.1): `POST /threads/{id}/
+corrections` keeps one as a note in the thread, `brain.chat.thread_store.StoredThreads.
+corrections` reads them back as the learning signal does, and the page says how many this month.
+Until 2026-10-13 this said nothing records one, which stopped being true when that route landed.
 
 **Kept.** The knowledge items this person stewards, from `know.item`, with how widely each
 reaches; and the memories formed from their own conversations that they may still read back,
@@ -53,7 +55,7 @@ reads as headroom somebody does not have, which is
 bound. So the budget is withheld with a sentence rather than shown short. See
 `A_SPEND_LOAD_THAT_CAME_BACK_FULL_UNDERSTATES_WHAT_WAS_SPENT`.
 
-**What nothing records is said on the page.** Corrections, an undo, which accounts are connected,
+**What nothing records is said on the page.** An undo, which accounts are connected,
 and when an item was verified or how often it was used: each has a sentence, so a card with
 nothing under it is never read as nothing having happened.
 
@@ -95,10 +97,12 @@ from brain.agent_routes import (
 )
 from brain.api import API_PREFIX, COMMON_RESPONSES, bound_trace_id
 from brain.api_routes import Asked
+from brain.chat.thread_store import StoredThreads
 from brain.console.govern_estate import subject_memory
 from brain.console.own_things import OwnThingsError, delete_own_memory, edit_own_memory, is_own
 from brain.console.read_replica import StalenessBanner
 from brain.console.reads import permitted
+from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.estate_routes import (
     MAX_MEMORIES_CONSIDERED,
@@ -110,7 +114,7 @@ from brain.estate_routes import (
 from brain.knowledge.search import PRINCIPAL_SETTING
 from brain.locale import currency_or_unset
 from brain.member.shell import disclosure_line, member_screen
-from brain.member_activity import my_agents, personal_budget
+from brain.member_activity import MemberError, my_agents, personal_budget, undo_all
 from brain.memory.digest import Learning
 from brain.memory.signals import Signal
 from brain.memory.turn import MAX_STATEMENT_CHARS, MEMORY_ID_DIGEST_CHARS, MEMORY_ID_PREFIX
@@ -162,11 +166,19 @@ MORE_SPEND_THAN_THIS_PAGE_READS: Final = (
     "can read the full figure."
 )
 
-#: What the questions figure does not include.
-CORRECTIONS_ARE_NOT_RECORDED: Final = (
-    "Corrections are not counted: nothing on this install records when you told it an answer was "
-    "wrong."
-)
+#: What the questions figure says of the answers this person marked wrong this month.
+NO_CORRECTIONS_THIS_MONTH: Final = "You have not marked an answer wrong this month."
+
+
+def corrections_said(made: int) -> str:
+    """The sentence beside the questions figure: how many answers this person marked wrong.
+
+    Their own count of their own acts, so it names nothing of anybody else's and nothing hidden.
+    """
+    if made <= 0:
+        return NO_CORRECTIONS_THIS_MONTH
+    return f"You marked {made} answer{'' if made == 1 else 's'} wrong this month."
+
 
 #: What the learned card says beside its controls.
 FORGET_AND_EDIT_SAY: Final = (
@@ -300,6 +312,15 @@ class MineMemoryChangedView(BaseModel):
     took_effect: bool
     told: str
     replacement_id: str | None = None
+
+
+class MineMemoriesChangedView(BaseModel):
+    """What undoing everything learned about a person did, one answer per memory, in the order the
+    page lists them. Only their own memories, so only a count of their own acts."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    changed: list[MineMemoryChangedView]
 
 
 class MineWorkspaceView(BaseModel):
@@ -459,6 +480,9 @@ async def workspace(request: Request, asked: Asked) -> MineWorkspaceView:
 
     served = await _console_reads(request).read(load, now=now)
     questions, runs, agent_rows, item_rows, stored, ceilings = served.value
+    sessions = sessions_of(request)
+    marked = () if sessions is None else await StoredThreads(sessions).corrections(me)
+    corrected = sum(1 for one in marked if this_month <= one.at <= now)
 
     actuals = [one for one in (actual_of(row) for row in runs) if one is not None]
     records = [one for one in (record_of(row) for row in agent_rows) if one is not None]
@@ -515,7 +539,7 @@ async def workspace(request: Request, asked: Asked) -> MineWorkspaceView:
         principal_id=me,
         display_name=asked.caller.principal.display_name,
         asked=MineAskedView(
-            since=this_month, questions=questions, corrections=CORRECTIONS_ARE_NOT_RECORDED
+            since=this_month, questions=questions, corrections=corrections_said(corrected)
         ),
         agents=[
             MineAgentView(
@@ -628,6 +652,63 @@ async def forgotten(
     )
 
 
+async def forgotten_all(
+    sessions: async_sessionmaker[AsyncSession],
+    records: MemoryRecords,
+    *,
+    reach: EntitlementSet,
+    ent_hash: str,
+    trace_id: str,
+    now: datetime,
+) -> MineMemoriesChangedView | None:
+    """Forget every memory this person's page shows, or None when the batch is refused (M40.4.1.2).
+
+    **The batch is the page's own list and nothing else.** The ids are read the way the page reads
+    them, through `subject_memory` at the person's own reach, so a memory they may no longer recall
+    is not forgotten behind their back and one they are shown always is. `brain.member_activity.
+    undo_all` then refuses the whole batch if any memory is not theirs or one appears twice, which
+    a list built from their own subject cannot do and a list built any other way would, and each
+    mark is written by the store a single forget writes through, so an undo-all is exactly as many
+    undos and each is a mark and never a removal.
+
+    Not one transaction: a failure part way leaves the earlier marks written, which is safe, since
+    each is a person's own undo that stands on its own, and a second press forgets the rest.
+    """
+    me = reach.principal_id
+    async with sessions() as session, session.begin():
+        await session.execute(principal_setting(me))
+        stored = await remembered_about(session, me, MAX_MEMORIES_CONSIDERED)
+    shown = subject_memory(
+        subject_id=me,
+        entries=stored.entries,
+        reader=reach,
+        now=now,
+        supersessions=stored.corrections.supersessions,
+        demotions=stored.corrections.demotions,
+    )
+    ids = [one.memory_id for one in (*shown.memory.curated, *shown.memory.extracted)]
+    found = [one for one in [await stored_learning(sessions, each) for each in ids] if one]
+    try:
+        undo_all(
+            found,
+            principal_id=me,
+            at=now,
+            supersessions=stored.corrections.supersessions,
+            demotions=stored.corrections.demotions,
+        )
+    except (MemberError, OwnThingsError):
+        return None
+    changed = []
+    for one in found:
+        decided = await records.undo(one, actor=me, trace_id=trace_id, ent_hash=ent_hash)
+        changed.append(
+            MineMemoryChangedView(
+                memory_id=one.memory_id, took_effect=decided.took_effect, told=decided.reason
+            )
+        )
+    return MineMemoriesChangedView(changed=changed)
+
+
 async def edited(
     sessions: async_sessionmaker[AsyncSession],
     records: MemoryRecords,
@@ -709,6 +790,32 @@ async def forget_my_memory(
         log.info("own memory not answerable", principal=asked.caller.principal.id)
         raise _not_answerable()
     log.info("own memory forgotten", principal=asked.caller.principal.id, took=done.took_effect)
+    return done
+
+
+@router.post(
+    "/me/memory/forget-all", response_model=MineMemoriesChangedView, responses=COMMON_RESPONSES
+)
+async def forget_all_my_memories(request: Request, asked: Asked) -> MineMemoriesChangedView:
+    """Forget everything the page shows this person has been learnt about them, in one press.
+
+    The member grant first, as Forget asks it. A second press answers 200 with each memory's
+    `took_effect` false, and a person with nothing learnt gets an empty list, which is a real
+    answer. See `forgotten_all`.
+    """
+    sessions, records = _stores(request, asked)
+    done = await forgotten_all(
+        sessions,
+        records,
+        reach=asked.reach,
+        ent_hash=asked.reach.ent_hash(),
+        trace_id=bound_trace_id(request),
+        now=asked.now,
+    )
+    if done is None:
+        log.info("own memories not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    log.info("own memories forgotten", principal=asked.caller.principal.id, count=len(done.changed))
     return done
 
 

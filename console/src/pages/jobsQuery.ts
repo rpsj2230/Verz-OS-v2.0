@@ -26,9 +26,12 @@ export type JobRow = components["schemas"]["JobView"];
 export type JobDetailBody = components["schemas"]["JobDetail"];
 export type JobPeriod = components["schemas"]["JobPeriodView"];
 export type JobRun = components["schemas"]["JobRunView"];
+export type DeadLettersBody = components["schemas"]["DeadLettersPage"];
+export type DeadLetterRow = components["schemas"]["DeadLetterView"];
 
 export const JOBS_API_PATH = "/jobs";
 export const JOBS_PATH = "/jobs";
+export const DEAD_LETTERS_API_PATH = "/jobs/dead";
 export const JOBS_LABEL = "Background jobs";
 export const JOBS_LEDE = "Every job the worker runs on a schedule, how it last went, and what has been done to it.";
 
@@ -36,6 +39,38 @@ export const READING_JOBS = "Loading the schedule.";
 export const NO_JOBS = "No background jobs to show";
 export const NO_JOBS_MORE = "A job appears here once the worker's schedule starts it and it is offered to you.";
 export const JOBS_CAPTION = "Background jobs";
+
+export const DEAD_LETTERS_LABEL = "Jobs set aside for a person";
+export const DEAD_LETTERS_CAPTION = "Jobs set aside for a person";
+export const NO_DEAD_LETTERS = "No job has been set aside for you";
+export const NO_DEAD_LETTERS_MORE =
+  "A job appears here when its worker stopped under it and it was not safe to run twice, or it failed for good.";
+export const REFERENCES_OUTLIVED =
+  "What this job referred to is no longer kept, so it can be seen here and not investigated.";
+
+/** Why a job was set aside, in the words a person acts on. From `brain.ops.jobs.DeadLetterReason`. */
+export const DEAD_LETTER_REASON_WORDS: Readonly<Record<string, string>> = {
+  attempts_exhausted: "It failed every time it was tried. Look at the task.",
+  timed_out_every_attempt: "It ran out of time every time. Look at what it waits on.",
+  re_driven_too_often: "It took its worker down again and again. Look at the host or the size of the job.",
+  quarantined_after_a_stop:
+    "Its worker stopped while it ran and it is not safe to run twice. Check what it had done before it is repeated.",
+};
+
+export function deadLetterReasonWords(reason: string): string {
+  return DEAD_LETTER_REASON_WORDS[reason] ?? "It was set aside for a person.";
+}
+
+export function readDeadLetters(payload: unknown): DeadLettersBody | null {
+  if (typeof payload !== "object" || payload === null) {
+    return null;
+  }
+  const body = payload as { items?: unknown; as_of?: unknown };
+  if (!Array.isArray(body.items) || typeof body.as_of !== "string") {
+    return null;
+  }
+  return payload as DeadLettersBody;
+}
 
 export const PAUSE = "Pause";
 export const RESUME = "Resume";

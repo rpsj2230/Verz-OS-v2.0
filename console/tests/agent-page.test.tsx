@@ -430,6 +430,7 @@ describe("where the page is reachable", () => {
     ]);
     expect(declaredPropertyNames(declaredProperty(workspace, "agent"))).toEqual([
       "agent_id",
+      "agent_kind",
       "created_at",
       "created_by",
       "department",
@@ -957,6 +958,7 @@ function lifecycleWire(overrides: Readonly<Record<string, unknown>> = {}): Recor
     may_duplicate: false,
     duplicate_unavailable: null,
     level: "department",
+    agent_kind: "team",
     may_publish: false,
     channels: ["console", "lark"],
     channel_choices: [

@@ -5,6 +5,14 @@ opens a connection. The worker's schedule starts `run_acceptance_now` through
 `brain.ops.schedule_runner`, once per newly deployed commit and whenever a Super Admin presses run
 now on the Scheduled jobs screen, and it writes one row per check to `ops.acceptance_result`.
 
+**A row is written as each check finishes, and a run survives the worker's restart.** A run is
+thirty-five minutes and more and every deploy restarts the worker, so rows written at the end were
+never written on a busy day, and no task could close. The run is opened in `ops.acceptance_run`
+before its first check, each result is appended as it ends, and a worker that finds an unfinished
+run of the commit it serves finishes it under the same id, running only what has no result. See
+`brain.ops.acceptance_resume`, which says what was rejected and why a heartbeat and not a lock.
+`run_acceptance` is the one place a run is marked complete, after its last check.
+
 **Every check is one database transaction, and the transaction is always rolled back.** The
 harness opens a connection, begins, and hands the product's services an `async_sessionmaker` bound
 to that connection in `create_savepoint` mode: a service that opens a session and commits releases
@@ -40,6 +48,7 @@ Task ids: M38.5.1
 from __future__ import annotations
 
 import asyncio
+import gc
 import secrets
 import sys
 import uuid
@@ -70,6 +79,18 @@ from brain.ops.acceptance import (
     reason_for,
     registered,
     summary,
+)
+from brain.ops.acceptance_resume import (
+    abandon,
+    beat,
+    checked_commits,
+    claim,
+    finish,
+    open_run,
+    record_check,
+    recorded,
+    settle,
+    unfinished,
 )
 from brain.ops.safe_error import describe
 from brain.session import ApplicationRoleSession, make_app_engine
@@ -346,6 +367,20 @@ async def in_use(engine: AsyncEngine, stream: TextIO) -> bool:
 
 
 # ------------------------------------------------------------------------- running
+#: Why the suite collects garbage between its checks.
+A_CHECK_THAT_FAILED_MAY_NOT_KEEP_THE_NEXT_ONE_SHORT_OF_MEMORY: Final = (
+    "The suite runs several hundred checks in one process inside the worker's container, and that "
+    "container's memory limit is the whole of what the process has. A check that failed leaves an "
+    "exception whose traceback holds the frames that raised it, and those hold the harness, its "
+    "connection and whatever the check built: a reference cycle, which Python frees on its own "
+    "schedule and not on the suite's. On an install whose worker was being killed for memory "
+    "(2026-10-13, 339 MB of anonymous memory in one process) the suite could not afford that "
+    "schedule, so each check's cycles are collected before the next begins. This cannot return "
+    "memory the allocator keeps, so it is no substitute for a limit with margin "
+    "(`brain.ops.container_limit`)."
+)
+
+
 async def run_one(
     engine: AsyncEngine,
     one: Check,
@@ -393,89 +428,74 @@ async def run_suite(
     settings: Settings,
     stream: TextIO,
     run: str | None = None,
+    prior: Sequence[Result] = (),
+    before: Callable[[Check], Awaitable[None]] | None = None,
+    after: Callable[[Result], Awaitable[None]] | None = None,
 ) -> tuple[Result, ...]:
-    """Every check, each in its own transaction, or every check not run if the run may not start."""
+    """Every check, each in its own transaction, or every check not run if the run may not start.
+
+    `prior` is what a resumed run recorded before it was interrupted: those checks are not run
+    again and not counted twice, their outcomes are what a roll-up check reads as having run
+    before it, and they lead the tuple returned. `before` is called ahead of each check and `after`
+    with each result as it is known, which is how a run is recorded as it goes
+    (`brain.ops.acceptance_resume.A_CHECK_IS_RECORDED_WHEN_IT_FINISHES`).
+    """
     run = run or secrets.token_hex(4)
-    if await in_use(engine, stream):
+    done = {one.name for one in prior}
+    todo = [one for one in checks if one.name not in done]
+    results: list[Result] = list(prior)
+    came_to: dict[str, tuple[str, str]] = {one.name: (one.outcome, one.reason) for one in prior}
+    if todo and await in_use(engine, stream):
         at = datetime.now(UTC)
-        return tuple(
-            Result(
+        for one in todo:
+            stopped = Result(
                 one.name,
                 one.leaves,
                 NOT_RUN,
                 at,
                 A_RESERVED_DEPARTMENT_HOLDING_A_REAL_PERSON_STOPS_THE_RUN[:240],
             )
-            for one in checks
-        )
-    results: list[Result] = []
-    came_to: dict[str, tuple[str, str]] = {}
-    for one in checks:
+            results.append(stopped)
+            if after is not None:
+                await after(stopped)
+        return tuple(results)
+    for one in todo:
+        if before is not None:
+            await before(one)
         outcome, reason = await run_one(
             engine, one, run=run, settings=settings, stream=stream, earlier=dict(came_to)
         )
         came_to[one.name] = (outcome, reason)
-        results.append(Result(one.name, one.leaves, outcome, datetime.now(UTC), reason))
+        result = Result(one.name, one.leaves, outcome, datetime.now(UTC), reason)
+        results.append(result)
+        if after is not None:
+            await after(result)
+        # See `A_CHECK_THAT_FAILED_MAY_NOT_KEEP_THE_NEXT_ONE_SHORT_OF_MEMORY`.
+        gc.collect()
     return tuple(results)
 
 
 # ------------------------------------------------------------------------ recording
 async def occasion_now(engine: AsyncEngine, *, serving: str) -> Occasion | None:
-    """Whether this commit is owed a run, or a person asked for one since the last."""
+    """Whether this commit is owed a run, or a person asked for one since the last.
+
+    A commit is checked when a *complete* run of it is recorded
+    (`brain.ops.acceptance_resume.ONLY_A_COMPLETE_RUN_COUNTS`): a half-written run is finished by
+    `run_acceptance`, which looks for one before it asks this.
+    """
     from brain.ops.schedule_control import request_states, requested_at
 
     sessions = async_sessionmaker(bind=engine, expire_on_commit=False)
     async with sessions() as session:
-        checked = (
-            await session.execute(
-                select(AcceptanceResultRow.commit)
-                .where(AcceptanceResultRow.commit == serving)
-                .limit(1)
-            )
-        ).scalars()
         last = (await session.execute(select(func.max(AcceptanceResultRow.started_at)))).scalar()
         request = (await request_states(session)).get(CONTROL)
         await session.rollback()
     return owed(
         serving=serving,
-        checked=tuple(checked),
+        checked=await checked_commits(engine, serving),
         asked_at=None if request is None else requested_at(request),
         last_started=last,
     )
-
-
-async def record(
-    engine: AsyncEngine,
-    results: Sequence[Result],
-    *,
-    commit: str,
-    occasion: Occasion,
-    started_at: datetime,
-    run_id: uuid.UUID | None = None,
-) -> uuid.UUID:
-    """Append one row per result, committed together, and say which run they belong to."""
-    run_id = run_id or uuid.uuid4()
-    if not results:
-        return run_id
-    async with engine.begin() as connection:
-        await connection.execute(
-            insert(AcceptanceResultRow),
-            [
-                {
-                    "run_id": run_id,
-                    "commit": commit,
-                    "occasion": occasion.value,
-                    "check_name": one.name,
-                    "leaves": " ".join(one.leaves),
-                    "outcome": one.outcome,
-                    "reason": one.reason or None,
-                    "started_at": started_at,
-                    "checked_at": max(one.checked_at, started_at),
-                }
-                for one in results
-            ],
-        )
-    return run_id
 
 
 async def run_acceptance(
@@ -488,19 +508,63 @@ async def run_acceptance(
     make_engine: Callable[[str], AsyncEngine] = make_app_engine,
     force: bool = False,
 ) -> tuple[Occasion | None, tuple[Result, ...]]:
-    """Run the suite when it is owed, or when `force`d from a shell, and record it; what was
-    owed, and what each check came to."""
+    """Run the suite when it is owed, or when `force`d from a shell, and record it as it goes; what
+    was owed, and what each check came to.
+
+    **Unfinished runs are settled first.** A run of another commit that stopped is abandoned; a run
+    of this commit that stopped is taken over and finished under its own id and start, running only
+    the checks without a result (`A_RESTARTED_WORKER_FINISHES_THE_RUN_OF_ITS_OWN_RELEASE`); a run of
+    this commit that is still beating is left to its worker, and nothing is started beside it. A
+    `force`d run is always a fresh one and takes no run over. The returned results of a resumed run
+    are the whole run's, those recorded before the interruption first.
+    """
     out = stream or sys.stderr
     engine = make_engine(database_url)
     try:
-        occasion = Occasion.REQUEST if force else await occasion_now(engine, serving=commit)
-        if occasion is None:
-            return None, ()
-        started_at = datetime.now(UTC)
+        suite = registered() if checks is None else checks
+        settlement = settle(commit, await unfinished(engine))
+        abandoned = await abandon(engine, settlement.abandon)
+        if abandoned:
+            print(
+                f"{LOG_PREFIX} {abandoned} unfinished run(s) of another release abandoned", file=out
+            )
+        taken = settlement.resume
+        if taken is not None and (force or not await claim(engine, taken.run_id)):
+            taken = None
+        prior: tuple[Result, ...] = ()
+        if taken is not None:
+            run_id, occasion, started_at = taken.run_id, taken.occasion, taken.started_at
+            prior = await recorded(engine, run_id)
+            print(f"{LOG_PREFIX} resuming a run with {len(prior)} result(s) recorded", file=out)
+        else:
+            if settlement.in_progress and not force:
+                return None, ()
+            owed_now = Occasion.REQUEST if force else await occasion_now(engine, serving=commit)
+            if owed_now is None:
+                return None, ()
+            occasion, run_id, started_at = owed_now, uuid.uuid4(), datetime.now(UTC)
+            await open_run(
+                engine, run_id=run_id, commit=commit, occasion=occasion, started_at=started_at
+            )
+
+        async def before(_: Check) -> None:
+            await beat(engine, run_id)
+
+        async def after(one: Result) -> None:
+            await record_check(
+                engine,
+                one,
+                run_id=run_id,
+                commit=commit,
+                occasion=occasion,
+                started_at=started_at,
+            )
+
         results = await run_suite(
-            engine, registered() if checks is None else checks, settings=settings, stream=out
+            engine, suite, settings=settings, stream=out, prior=prior, before=before, after=after
         )
-        await record(engine, results, commit=commit, occasion=occasion, started_at=started_at)
+        if not await finish(engine, run_id):
+            print(f"{LOG_PREFIX} the run was abandoned by another worker before it ended", file=out)
         return occasion, results
     finally:
         await engine.dispose()
@@ -525,7 +589,10 @@ def run_acceptance_now(
         loop_factory=loop_factory,
     )
     if occasion is None:
-        return f"acceptance: {commit} is checked already and nobody has asked since"
+        return (
+            f"acceptance: nothing is owed on {commit}: it is checked already and nobody has asked "
+            "since, or a worker is still running it"
+        )
     said = f"acceptance {commit} ({occasion.value}): {summary(results)}"
     if any(one.outcome == FAILED for one in results):
         raise AcceptanceChecksFailedError(said)

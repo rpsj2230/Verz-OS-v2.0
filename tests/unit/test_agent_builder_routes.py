@@ -340,7 +340,8 @@ def ready(console: Console, document: Mapping[str, Any]) -> tuple[str, int]:
 def test_the_form_is_the_builders_own_document_and_nobody_else_is_given_it(
     console: Console,
 ) -> None:
-    """The form served is `form_document()` whole, and a reader who cannot build gets the one 404.
+    """The form served is `form_document()` whole, and beside it the parts the builder links to
+    and does not hold (needs-rupash 170 A), and a reader who cannot build gets the one 404.
 
     Delete this and the console could render a form the server does not describe, or the form
     could be served to anybody, which lists what an agent may be given."""
@@ -348,7 +349,10 @@ def test_the_form_is_the_builders_own_document_and_nobody_else_is_given_it(
     refused = console.get("u_wide", FORM_PATH)
 
     assert given.status_code == 200
-    assert given.json() == form_document()
+    body = given.json()
+    linked = body.pop("set_elsewhere")
+    assert body == form_document()
+    assert [one["part"] for one in linked] == ["knowledge", "workflows", "memory", "channels"]
     assert refused.status_code == 404
 
 

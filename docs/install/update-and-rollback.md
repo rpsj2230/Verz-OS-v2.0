@@ -40,6 +40,16 @@ version fact an install holds, an update overwrites it, and nothing recorded wha
 So the update script copies `RELEASE` to `/opt/brain/PREVIOUS_RELEASE` **before** it writes the
 new tag, and that copy is the only thing the rollback reads.
 
+## A server that deploys itself keeps its own hook, and the hook is refreshed from the image
+
+A server that updates with the pull timer does not run `update.sh`: `brain-autodeploy` pulls the
+image and runs `/usr/local/bin/brain-deploy`. Since 2026-10-13 it copies that hook out of the image
+it is about to deploy, when the two differ and the image's parses, and keeps the one it replaced as
+`brain-deploy.previous`, so a release that adds a step to the hook is deployed by a hook that has
+it. A server whose `brain-autodeploy` is older than that needs the two scripts copied out of the
+image once, which [server-steps.md](server-steps.md) gives, with the check for whether yours is
+current.
+
 ## What a rollback is, and the thing that does not roll back
 
 Images are tagged by the release they were built for, so going back is re-pinning the previous

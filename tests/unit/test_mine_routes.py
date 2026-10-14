@@ -596,3 +596,39 @@ def test_the_digests_undo_refuses_somebody_elses_learning_as_a_missing_one(
     assert len({one.json()["message"] for one in refused}) == 1
     assert records.undone == []
     assert post(client, ME, UNDO, {"memory_id": "mem_mine"}).status_code == 200
+
+
+def test_the_corrections_sentence_counts_in_the_words_a_person_reads() -> None:
+    """None, one and several, each said plainly and none of them naming anybody else's. Delete
+    this and M40.2.1.1 can say "1 answers" or say nothing happened after one did."""
+    from brain.mine_routes import corrections_said
+
+    assert corrections_said(0) == "You have not marked an answer wrong this month."
+    assert corrections_said(1) == "You marked 1 answer wrong this month."
+    assert corrections_said(3) == "You marked 3 answers wrong this month."
+
+
+FORGET_ALL = f"{API_PREFIX}/me/memory/forget-all"
+
+
+def test_undo_all_forgets_what_the_page_shows_about_the_person_and_nothing_of_anybody_elses(
+    client: TestClient, rows: dict[type, list[Any]], records: KeptRecords
+) -> None:
+    """**One press forgets everything the page lists as learnt about the person** (M40.4.1.2): both
+    their stated and their inferred memory, each through the store a single forget writes through,
+    and neither the memory somebody else holds nor anything for somebody without the member grant.
+    Delete this and the Undo all control can forget one row, somebody else's, or nothing while the
+    page says it forgot."""
+    memories_with_records(rows)
+
+    response = client.post(FORGET_ALL, headers={"authorization": f"Bearer {token_for(ME)}"})
+    refused = client.post(FORGET_ALL, headers={"authorization": f"Bearer {token_for('u_admin')}"})
+
+    assert response.status_code == 200, response.text
+    assert {one["memory_id"] for one in response.json()["changed"]} == {"mem_mine", "mem_guess"}
+    assert all(one["took_effect"] for one in response.json()["changed"])
+    assert {(one.memory_id, actor) for one, actor in records.undone} == {
+        ("mem_mine", ME),
+        ("mem_guess", ME),
+    }
+    assert refused.status_code == 404

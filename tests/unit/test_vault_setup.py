@@ -200,6 +200,7 @@ exit 0
 #: The policy files and the switch, as the release lays them out.
 POLICY_FILES = tuple(sorted((REPO / "ops/openbao/policies").glob("*.hcl")))
 SWITCH_SCRIPT = "ops/openbao/switch-to-auto-unseal.sh"
+VAULT_COMPOSE = "ops/openbao/compose.yml"
 
 
 def committed() -> str:
@@ -1143,7 +1144,11 @@ def test_the_image_carries_its_releases_vault_changes_where_the_deploy_hook_read
     satisfied by a pair that disagrees: the Dockerfile copies the script and the policies to where
     the hook copies them from, and `.dockerignore`, which keeps the rest of `ops` out, lets both
     through. Delete this and a trimmed build drops them, and every deploy says its image carries no
-    vault changes while its policies wait for nobody."""
+    vault changes while its policies wait for nobody.
+
+    The same holds for the vault's compose file and the switch script, which a server with no
+    checkout copies out of the image: without them the one command that moves an older install has
+    nothing to run from."""
     dockerfile = (REPO / "Dockerfile").read_text(encoding="utf-8")
     copied = dict(
         re.findall(r"^COPY\s+(?:--\S+\s+)*(ops/openbao/\S+)\s+(\S+)\s*$", dockerfile, re.M)
@@ -1151,11 +1156,20 @@ def test_the_image_carries_its_releases_vault_changes_where_the_deploy_hook_read
     assert copied == {
         APPLY_SCRIPT: f"/app/{APPLY_SCRIPT}",
         "ops/openbao/policies": "/app/ops/openbao/policies",
+        # Since 2026-10-13 the image also carries the vault's own compose file and the one command
+        # that moves an older install onto the seal that opens itself, for the server that has no
+        # checkout to run them from (docs/install/server-steps.md). Nothing in the image runs them.
+        VAULT_COMPOSE: f"/app/{VAULT_COMPOSE}",
+        SWITCH_SCRIPT: f"/app/{SWITCH_SCRIPT}",
     }
     hook = (REPO / "ops/deploy/brain-deploy").read_text(encoding="utf-8")
     assert 'docker cp "$cid:/app/ops/openbao/." "$dir/"' in hook
     assert 'sh "$dir/apply-release.sh"' in hook
     for path in (APPLY_SCRIPT, *(f"ops/openbao/policies/{one.name}" for one in POLICY_FILES)):
         assert not ignored_by_the_build(path), path
+    # The two the image carries for a server with no checkout are let through, and the runbooks
+    # beside them are not: a serving container has no use for prose.
+    for path in (VAULT_COMPOSE, SWITCH_SCRIPT):
+        assert not ignored_by_the_build(path), path
     assert ignored_by_the_build("ops/openbao/UNSEAL.md")
-    assert ignored_by_the_build(SWITCH_SCRIPT)
+    assert ignored_by_the_build("ops/openbao/REHEARSAL.md")

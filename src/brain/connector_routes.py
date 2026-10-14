@@ -321,6 +321,7 @@ from brain.ops.secrets import SecretsUnavailableError
 from brain.ops.stewardship_store import NamedSteward, StoredStewardship
 from brain.ops.webhook_delivery import SystemResolver
 from brain.reviewed_connectors import current as reviewed_now
+from brain.role_refusals import CONNECTING_A_SOURCE_NEEDS_THE_CONNECTOR_CAPABILITY, role_refusal
 from brain.routing_routes import sessions_of
 from brain.skill_routes import SkillLibrary
 from brain.tools.fetch import Resolver, UnsafeAddressError, assert_fetchable
@@ -1368,6 +1369,8 @@ async def connect(request: Request, body: ConnectAsked, asked: Asked) -> JSONRes
     """Connect a source and keep its key, or write nothing and say why."""
     if not may_connect_source(asked.reach, body.connector, asked.now):
         log.info("connecting a source not answerable", principal=asked.caller.principal.id)
+        if permitted(screen("connectors").read, asked.reach, asked.now):
+            return role_refusal(CONNECTING_A_SOURCE_NEEDS_THE_CONNECTOR_CAPABILITY)
         raise _not_answerable("connect")
     await reviewed_now(request.app.state)
     found = connection_problems(body.connector, body.settings, body.credential)
@@ -1459,10 +1462,14 @@ async def connect(request: Request, body: ConnectAsked, asked: Asked) -> JSONRes
 
 
 @router.post(DISCONNECT_PATH, response_model=ConnectorChangedView, responses=COMMON_RESPONSES)
-async def disconnect(request: Request, connector: str, asked: Asked) -> ConnectorChangedView:
+async def disconnect(
+    request: Request, connector: str, asked: Asked
+) -> JSONResponse | ConnectorChangedView:
     """Disconnect a source and record who did. Its key stays in the vault, as the answer says."""
     if not may_connect_source(asked.reach, connector, asked.now):
         log.info("disconnecting a source not answerable", principal=asked.caller.principal.id)
+        if permitted(screen("connectors").read, asked.reach, asked.now):
+            return role_refusal(CONNECTING_A_SOURCE_NEEDS_THE_CONNECTOR_CAPABILITY)
         raise _not_answerable("disconnect")
     records = records_of(request)
     if records is None:

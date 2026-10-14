@@ -126,6 +126,11 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
  * Checked, not trusted: an entry for a file that no longer holds both fails the first test.
  */
 const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
+  "src/components/MyPreferences.tsx":
+    "Where I am reached is chosen from lists the API sent, the channels the person is connected on " +
+    "and the places an approval may wait, and an empty choice is the statement of nothing chosen; " +
+    "the quiet hours button is disabled until both times are set. tests/my-preferences.test.tsx " +
+    "holds that the whole reach and the two times are sent only from their own forms.",
   "src/pages/agents/AgentLeash.tsx":
     "Both forms are choices from lists the API sent, a setting and a rung, and a verdict from the " +
     "ledger's four; nothing is typed, so nothing can be sent blank, and Change is disabled until a " +

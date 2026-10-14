@@ -212,11 +212,14 @@ EARLIEST_FRACTION: Final = 0.9
 #: only the executor's timeout can end the read on time.
 HOLD_SECONDS: Final = 5.0
 
-#: How many independent reads the fan-out step makes at once, and how long each is held. A fourth
-#: read needs the first, so the question's critical path is two holds long.
+#: How many independent reads the fan-out step makes at once, and the longest the first of them
+#: waits for the rest to be in a source's hands beside it. A fourth read needs the first, so it
+#: cannot be among them. The wait ends the moment the last arrives, so a fan-out run at once
+#: spends none of it; it is spent only by an executor that did not run them together, and it is
+#: held under the call's own timeout so that executor is reported as having made them in turn
+#: rather than as having timed out.
 FAN_OUT: Final = 3
-FAN_OUT_HOLD_SECONDS: Final = 0.2
-CRITICAL_PATH: Final = 2
+FAN_OUT_RENDEZVOUS_SECONDS: Final = 0.6
 
 #: How many askers ask for one record at once. The leaf's twenty.
 HERD: Final = 20
@@ -500,23 +503,63 @@ def _call(
     )
 
 
+THE_BURST_IS_COUNTED_AT_ONE_INSTANT = (
+    "A burst is the reads a full bucket admits before any token has come back, so it is asked of a "
+    "clock that does not run. Counted against the wall clock, the figure depends on how long the "
+    "machine took to ask, and a slow one reads more than the bucket holds."
+)
+
+THE_FAN_OUT_IS_COUNTED_IN_WHO_IS_IN_FLIGHT = (
+    "Independent reads are shown to run together by having been in a source's hands at the same "
+    "moment, and a dependent read by having started after another answered. How long the question "
+    "took says neither, and on a slow machine it says the wrong thing about both."
+)
+
+
+@dataclass
+class _ManualClock:
+    """A clock that moves only when the check moves it.
+
+    **Why the burst check does not read the wall clock.** A token bucket refills with the time
+    `read_live` hands the throttle, and with the real clock a process that stalls between two
+    questions earns tokens: Xero's bucket refills one a second, and a stall of a fifth of a second
+    is enough for the executor to find a wait that fits the live budget, spin on the no-op sleep
+    until the token arrives and make an eleventh read. The product is right to do that, and a check
+    that asks it to count to ten while the clock runs is asking what a quiet machine will do. See
+    `THE_BURST_IS_COUNTED_AT_ONE_INSTANT`.
+    """
+
+    at: datetime
+
+    def __call__(self) -> datetime:
+        return self.at
+
+    def advance(self, by: timedelta) -> None:
+        self.at += by
+
+
 async def _ask(
     sources: LiveSources,
     calls: Sequence[LiveCall],
     *,
     throttle: LiveThrottle | None = None,
+    clock: Callable[[], datetime] = _clock,
     budget_ms: int = LIVE_READ_BUDGET_MS,
     jitter: Callable[[], float] = _no_jitter,
     sleep: Callable[[float], Awaitable[object]] = _no_wait,
 ) -> LiveRead:
-    """One question's live reads through the executor, with its own flights."""
+    """One question's live reads through the executor, with its own flights.
+
+    `clock` is the time the throttle and the breaker are handed. A check that counts what a bucket
+    admits passes a `_ManualClock`; every other asks the wall clock.
+    """
     return await read_live(
         calls,
         sources=sources,
         asker=f"{RESERVED_DEPARTMENTS[0]}.asker",
         throttle=throttle or LiveThrottle(),
         flights=LiveFlights(),
-        clock=_clock,
+        clock=clock,
         budget_ms=budget_ms,
         jitter=jitter,
         sleep=sleep,
@@ -940,19 +983,67 @@ async def a_live_read_uses_the_service_key_ends_on_time_and_is_made_once(
             raise CheckFailedError("an asker of a record read once was answered with another")
 
 
+@dataclass
+class _InFlight:
+    """Which reads were in a source's hands at once, and what had answered when each arrived.
+
+    Kept under a lock because every read arrives on a thread. `meet` is the whole of the wait: the
+    independent reads each hold here until `wanted` of them are in flight together, which a
+    fan-out run at once reaches the moment the last arrives and one run in turn never reaches, so
+    the first of them gives up after `patience` seconds and the shortfall is what the check reads.
+    """
+
+    wanted: int
+    patience: float
+    in_flight: int = 0
+    peak: int = 0
+    answered: int = 0
+    answered_when_the_dependent_arrived: int | None = None
+    _met: threading.Condition = field(default_factory=threading.Condition, repr=False)
+
+    def arrive(self, *, dependent: bool) -> None:
+        with self._met:
+            self.in_flight += 1
+            self.peak = max(self.peak, self.in_flight)
+            if dependent:
+                self.answered_when_the_dependent_arrived = self.answered
+            self._met.notify_all()
+
+    def meet(self) -> None:
+        with self._met:
+            self._met.wait_for(lambda: self.peak >= self.wanted, timeout=self.patience)
+
+    def leave(self) -> None:
+        with self._met:
+            self.in_flight -= 1
+            self.answered += 1
+            self._met.notify_all()
+
+
 async def _fan_out_takes_its_critical_path(rig: _Rig, number: str) -> None:
     """Three reads of three records with nothing between them, and a fourth that needs the first.
 
-    Each is held for `FAN_OUT_HOLD_SECONDS`. Run at once, the three end in about one hold and the
-    fourth one hold later, so the question takes two holds: its critical path. Made one after
-    another they take four, and the check refuses anything from three. The fourth's request is
-    built from the first's answer, so it cannot have been sent before that answer came.
+    **Counted in who is in flight, never in seconds.** The three independent reads each wait in the
+    source until all three are in its hands together (`_InFlight.meet`), so an executor that ran
+    them at once is released the moment the third arrives and one that ran them in turn is seen to
+    have had one at a time. The fourth's request is built from the first's answer, so the check
+    reads how many reads had answered when it arrived. Neither figure moves with how slow the
+    machine is. See `THE_FAN_OUT_IS_COUNTED_IN_WHO_IS_IN_FLIGHT`, which replaced a comparison of
+    the question's elapsed time with the length of its critical path, and failed on a loaded
+    machine for a fan-out that was made at once.
     """
     ids = [str(uuid.uuid4()) for _ in range(FAN_OUT)]
+    flight = _InFlight(wanted=FAN_OUT, patience=FAN_OUT_RENDEZVOUS_SECONDS)
 
     def held(url: str) -> SourceAnswer:
-        time.sleep(FAN_OUT_HOLD_SECONDS)
-        return _listed(url, _invoice(next(one for one in ids if one in url), number))
+        dependent = ids[FAN_OUT] in url
+        flight.arrive(dependent=dependent)
+        try:
+            if not dependent:
+                flight.meet()
+            return _listed(url, _invoice(next(one for one in ids if one in url), number))
+        finally:
+            flight.leave()
 
     def after_the_first(answered: Mapping[str, TypedResult[SourceRecord]]) -> FetchRequest:
         if "record-0" not in answered:
@@ -966,15 +1057,13 @@ async def _fan_out_takes_its_critical_path(rig: _Rig, number: str) -> None:
             _call(FAN_OUT, ids[FAN_OUT]), depends_on=("record-0",), derive=after_the_first
         ),
     )
-    started = time.monotonic()
     fanned = await _ask(rig.sources(_Answering(held)), calls)
-    elapsed = time.monotonic() - started
+    if flight.peak < FAN_OUT:
+        raise CheckFailedError("independent live reads were made one after another, not at once")
     if sorted(fanned.rows) != [f"record-{index}" for index in range(FAN_OUT + 1)]:
         raise CheckFailedError("a read in a fan-out, or one waiting on another, was not answered")
-    if elapsed < CRITICAL_PATH * FAN_OUT_HOLD_SECONDS * EARLIEST_FRACTION:
+    if not flight.answered_when_the_dependent_arrived:
         raise CheckFailedError("a read that needs another was made before that one answered")
-    if elapsed >= (CRITICAL_PATH + 1) * FAN_OUT_HOLD_SECONDS:
-        raise CheckFailedError("independent live reads were made one after another, not at once")
 
 
 # ------------------------------------------------------ 6. the bucket and the ceiling
@@ -1036,8 +1125,10 @@ async def a_burst_is_paced_by_the_source_s_documented_ceiling(h: Harness) -> Non
         ):
             raise CheckFailedError("a live read bucket is paced other than by the documented row")
 
+    # See THE_BURST_IS_COUNTED_AT_ONE_INSTANT: the throttle is handed a clock that does not run.
     rig = _rig(h)
     throttle = LiveThrottle()
+    clock = _ManualClock(h.now)
     burst = int(bucket_for(SOURCE, now=h.now).capacity)
     number = h.word()
     answered = _Answering(lambda url: _listed(url, _invoice(str(uuid.uuid4()), number)))
@@ -1046,7 +1137,7 @@ async def a_burst_is_paced_by_the_source_s_documented_ceiling(h: Harness) -> Non
     refused: list[FailureReason] = []
     for _ in range(burst + 1):
         calls = tuple(_call(one, str(uuid.uuid4())) for one in range(DEFAULT_PER_SOURCE_CALLS))
-        asked = await _ask(sources, calls, throttle=throttle)
+        asked = await _ask(sources, calls, throttle=throttle, clock=clock)
         read_through += len(asked.rows)
         refused.extend(one.reason for one in asked.partial.failed)
         if refused:
