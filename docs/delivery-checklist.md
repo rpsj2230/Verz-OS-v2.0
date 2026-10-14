@@ -134,7 +134,7 @@ Work in the plan that no commit can close. Every item here is done by a person, 
 
 - [ ] `M38.2.1.3` Deploy to production
   - the pipeline that does it is built, closed by the wave-zero milestone, and has deployed this repository all day. What is left is somebody deciding a particular release goes out on a particular day, which is the act, and no commit closes it
-- [x] `M38.2.1.4` Smoke test: one real question answered end to end by a real person (done by the owner on the install on 2026-10-14: a real person signed in, asked on Ask and was answered)
+- [ ] `M38.2.1.4` Smoke test: one real question answered end to end by a real person
   - the leaf says a real person in as many words, and that is the whole content of it. A fixture asking the same question is the wave-one milestone, which is a different leaf and is buildable
 - [ ] `M38.2.1.5` Restore drill from wave three onward
   - a drill is somebody restoring a real backup onto real hardware and timing it. The machinery it exercises is code and is the recovery screen leaf under M27; the drill is the act, and `brain.launch.service_level` already refuses to report a recovery figure that rests on a schedule rather than on a copy somebody made
