@@ -44,6 +44,16 @@ depends_on = None
 #: Read by `tests/unit/test_tables.py`. Points at nothing: a peak is a fact about a machine.
 TABLES: tuple[str, ...] = ("ops.model_server_peak",)
 
+#: The columns this adds to `know.chunk`, which `0009` built, declared here for the reason `0024`'s
+#: `ADDS_COLUMNS` gives: `tests/unit/test_search.py` compares the table `0009` builds with the
+#: model column by column and exempts what a later migration says it added, so a column added
+#: without saying so is a failure of that comparison and not a drift nobody sees.
+ADDS_COLUMNS: tuple[str, ...] = ("parse_path", "parse_engine")
+
+#: The column this adds to `know.item`, named for that table so the chunk comparison above is not
+#: told about a column on a different one (the convention `0115` sets).
+ITEM_COLUMNS_ADDED: tuple[str, ...] = ("parse_notice",)
+
 APP_ROLE = "brain_app"
 
 #: Widths and bounds held equal to `brain.tables.model_server`, `brain.knowledge.search` and
@@ -130,10 +140,20 @@ def upgrade() -> None:
         f"parse_path IS NULL OR {_one_of('parse_path', PATHS)}",
         schema="know",
     )
+    # Both or neither, as two one-way constraints rather than one equality: the compatibility gate
+    # (`brain.deployment.compatibility`) reads a restriction that begins `<new column> IS NULL OR`
+    # as binding only rows the previous release cannot write, and an equality it cannot read is a
+    # finding. Together they say exactly what the equality said.
     op.create_check_constraint(
-        "parse_engine_with_its_path",
+        "parse_engine_follows_its_path",
         "chunk",
-        "(parse_path IS NULL) = (parse_engine IS NULL)",
+        "parse_path IS NULL OR parse_engine IS NOT NULL",
+        schema="know",
+    )
+    op.create_check_constraint(
+        "parse_path_follows_its_engine",
+        "chunk",
+        "parse_engine IS NULL OR parse_path IS NOT NULL",
         schema="know",
     )
     op.add_column(
@@ -145,7 +165,8 @@ def downgrade() -> None:
     op.drop_column("item", "parse_notice", schema="know")
     # The bare names, with the type, so Alembic applies the naming convention to them as it did
     # when it created them. See 0007.
-    op.drop_constraint("parse_engine_with_its_path", "chunk", schema="know", type_="check")
+    op.drop_constraint("parse_path_follows_its_engine", "chunk", schema="know", type_="check")
+    op.drop_constraint("parse_engine_follows_its_path", "chunk", schema="know", type_="check")
     op.drop_constraint("parse_path_is_a_path", "chunk", schema="know", type_="check")
     op.drop_column("chunk", "parse_engine", schema="know")
     op.drop_column("chunk", "parse_path", schema="know")

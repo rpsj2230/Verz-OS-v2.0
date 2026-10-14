@@ -118,7 +118,6 @@ for is a port nobody decided about. The third column is prose.
 | `automation-egress` | `3128` | The automation canvas alone. This is the proxy that stops an assembled flow reaching anything it was not allowed to, so it is the one container here whose reachability is a security control rather than a convenience. |
 | `cache` | `6379` | The application alone. Never from outside. |
 | `db` | `5432` | The two poolers. Never from outside, and never from the application or the workers directly. |
-| `inference-server` | `8080` | The application alone. It is handed the text of documents that have already passed the permission layer, so anything that can reach it can ask it to read them. Only where `INSTALL_SERVICES` names `modelserver`. |
 | `keycloak` | `8080` | Staff browsers, through your proxy, on the identity provider's own address. `standard` and `full`. |
 | `langfuse-cache` | `6379` | The trace ledger alone. `full` only. |
 | `langfuse-clickhouse` | `8123` | The trace ledger alone. `full` only. |
@@ -130,6 +129,13 @@ for is a port nobody decided about. The third column is prose.
 
 The application itself is deliberately not in that table, because it opens no declared port at
 all. See the section above.
+
+The optional model server is not in that table either, because no profile composes it: it is an
+optional service that a release starts as its own compose project when `INSTALL_SERVICES` names
+`modelserver`. It answers on port 8080 on an internal network of its own, which has no route off the
+host, and nothing publishes it. It is handed the text of documents that have already
+passed the permission layer, so anything that can reach it can ask it to read them: never put it
+behind your proxy.
 
 ## Firewall
 
