@@ -150,6 +150,65 @@ published by the `Release` workflow and neither produced by anything on this pag
 to exist from a machine that has never seen this repository, and the two publication settings
 that still stop a client install from working.
 
+## What a normal pull request no longer proves
+
+Decided by the owner on 2026-10-14 (the CI speed-up list, item 2), after measuring that a pull
+request which fell back to the whole suite cost 127 to 222 job-minutes and 45 to 50 minutes of
+wall clock, against 56 and 12 for one running only the files its diff reaches, on a plan that runs
+20 jobs at a time. Nine of them queued at once took over an hour each.
+
+**What changed.** The unit shards (`brain.ops.test_plan`, `brain.ops.test_selection`) used to run
+the whole suite on a pull request when the diff touched shared test infrastructure: a `conftest.py`,
+anything under `tests/fixtures`, a helper module under `tests/`, a workflow file, or the planner's
+own code. They no longer do. Those are selected by what reads them:
+
+| The diff touches | What a normal pull request now runs |
+| --- | --- |
+| a fixture or a helper module under `tests/` | the tests that import it, directly or through another fixture, read by text to a fixed point |
+| a `conftest.py` or `__init__.py` | every test beneath its directory (a root one, which reaches everything, runs everything) |
+| a workflow file | the tests that name `.github`, and the tests that walk the tree |
+| the planner (`brain.ops.test_plan`, `test_selection`, `test_shards`, `guards`) | the tests that import it, as for any source module |
+| `pyproject.toml` or `uv.lock` | **the whole suite, as before**: every test runs on the dependencies |
+| a deleted source module, no base commit, a diff git cannot compute, a planner error | **the whole suite, as before**: the selection cannot say what it reaches |
+
+Lint, types, the invariants and everything `main` runs are unchanged. `main`'s gates, the
+`CI` workflow's triggers (a push to `main` and a pull request, with no manual dispatch) and the
+trigger of `Deploy` (the `CI` workflow completing on `main`) are not touched, and
+`tests/unit/test_test_selection.py` pins all three by parsing the workflows.
+
+**What a normal pull request therefore does not prove.** That no test outside its selection is
+broken by it. A change to a shared fixture is checked against the tests that import it by name; a
+test that reaches a fixture some way the text does not show (a fixture named in a string, an
+import built at run time) is not selected, and a workflow change is checked only by the tests that
+read workflows. A merge of such a pull request reaches `main`, passes `main`'s eight gates, and
+deploys. If it broke an unselected test, the first run to say so is the nightly suite, up to a day
+later, and a red nightly does not un-deploy anything.
+
+**Where the whole suite runs instead.**
+
+1. **A merge train**: a pull request whose head branch starts with `train/`. `CI` sets
+   `WHOLE_SUITE` from the branch name alone (`startsWith(github.head_ref, 'train/')`; no label and
+   no comment can set it) and each shard plans its full share, so the coverage floor is held on
+   it too. `ops/dev/assemble_train.py` makes one from a list of pull request numbers (see
+   `ops/dev/README.md`): it merges each pull request into one branch with a merge commit, never a
+   squash, refuses duplicate or gapped migration numbers, and opens the pull request with
+   auto-merge off. A train is merged with a merge commit, so each original commit and its
+   `Closes:` and `Proved-on-install:` lines reach `main`.
+2. **Every night** at 01:41 UTC (`nightly-suite.yml`), against `main`, with the coverage floor.
+3. **On demand**: the same workflow has `workflow_dispatch`, so `gh workflow run "Nightly suite"
+   --ref <branch>` runs the whole suite on any branch, for instance before cutting a release.
+   `CI` itself is deliberately not dispatchable: `Deploy` listens for `CI` on `main`, and a manual
+   run there is a way to start a deploy by accident.
+
+**Why that is acceptable, and what it is not.** The train and the nightly are the floor, and the
+floor is real only if something uses it: **nothing forces an ordinary pull request through a
+train**, so a pull request merged on its own relies on the nightly alone. The trade the owner
+approved is that a rare late finding of a broken unselected test is cheaper than an hour of queue
+on every pull request that touched a fixture. The way to narrow it without giving it back is to
+batch pull requests that touch shared test infrastructure into a train, and to dispatch the
+nightly suite before a release. A red nightly on a file a pull request did not select is the signal
+to widen `brain.ops.test_selection`, not to trust it.
+
 ## Rollback
 
 Images are tagged by commit SHA, so rolling back is redeploying an older tag - set

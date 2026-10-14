@@ -90,7 +90,9 @@ jobs:
         # suite. An empty share of a selection is a pass, with the reason printed.
         run: |
           mode_file="$GITHUB_WORKSPACE/plan-shard-${{ matrix.shard }}.txt"
-          files=$(uv run python -m brain.ops.test_plan --shard ${{ matrix.shard }} --of ${{ strategy.job-total }} --base "$TEST_SELECTION_BASE" --head "$GITHUB_SHA" --mode-file "$mode_file") || {
+          whole_flag=""
+          if [ "${WHOLE_SUITE:-false}" = "true" ]; then whole_flag="--whole-suite"; fi
+          files=$(uv run python -m brain.ops.test_plan --shard ${{ matrix.shard }} --of ${{ strategy.job-total }} --base "$TEST_SELECTION_BASE" --head "$GITHUB_SHA" --mode-file "$mode_file" $whole_flag) || {
             echo "::warning::the test selection failed, so shard ${{ matrix.shard }} runs its whole share of the suite"
             echo "mode=full" > "$mode_file"
             files=$(uv run python -m brain.ops.test_shards --shard ${{ matrix.shard }} --of ${{ strategy.job-total }})
