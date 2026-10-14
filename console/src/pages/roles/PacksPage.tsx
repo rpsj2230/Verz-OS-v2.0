@@ -462,7 +462,7 @@ export function PacksPage() {
             ? (row) => (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${row.label}`}>
+                    <Button variant="quiet" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${row.label}`}>
                       <MoreHorizontal aria-hidden />
                     </Button>
                   </DropdownMenuTrigger>

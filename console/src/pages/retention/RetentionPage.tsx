@@ -239,7 +239,7 @@ function HoldsView({ report, controls, onDone }: { readonly report: Report | nul
             rowActions={(one) => (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for legal hold ${one.hold_id}`}>
+                  <Button variant="quiet" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for legal hold ${one.hold_id}`}>
                     <MoreHorizontal aria-hidden />
                   </Button>
                 </DropdownMenuTrigger>

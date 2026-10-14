@@ -134,7 +134,7 @@ export function ReferralsPage() {
           one.handled_at !== null ? null : (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for the ${one.label} referral from ${nameOf(people, one.asked_by)}`}>
+                <Button variant="quiet" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for the ${one.label} referral from ${nameOf(people, one.asked_by)}`}>
                   <MoreHorizontal aria-hidden />
                 </Button>
               </DropdownMenuTrigger>

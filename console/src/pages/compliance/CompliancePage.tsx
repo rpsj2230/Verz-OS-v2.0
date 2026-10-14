@@ -187,7 +187,7 @@ function TopicsView({ onDone, version }: { readonly onDone: (told: string) => vo
             rowActions={(one) => (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${one.label}`}>
+                  <Button variant="quiet" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${one.label}`}>
                     <MoreHorizontal aria-hidden />
                   </Button>
                 </DropdownMenuTrigger>

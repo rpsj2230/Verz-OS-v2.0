@@ -465,7 +465,7 @@ function EntityFields({
               <td>
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="quiet"
                   size="sm"
                   aria-label={`Remove field ${String(fieldAt + 1)}`}
                   disabled={entity.fields.length === 1}

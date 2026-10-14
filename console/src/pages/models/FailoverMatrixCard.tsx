@@ -94,7 +94,7 @@ function StepMenu({ line, acts }: { readonly line: MatrixLine; readonly acts: Ma
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
-          variant="ghost"
+          variant="quiet"
           size="icon-sm"
           className="size-11 opacity-100 sm:size-7 sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100 sm:data-[state=open]:opacity-100"
           aria-label={`Actions for step ${String(step)} of ${line.provider} ${line.model}`}

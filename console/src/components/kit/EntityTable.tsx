@@ -185,7 +185,7 @@ export function EntityTable<Row>({
                   <Download aria-hidden /> {EXPORT_SELECTED}
                 </Button>
               )}
-              <Button size="icon-sm" variant="ghost" aria-label={CLEAR_SELECTION} onClick={clear}>
+              <Button size="icon-sm" variant="quiet" aria-label={CLEAR_SELECTION} onClick={clear}>
                 <X aria-hidden />
               </Button>
             </div>

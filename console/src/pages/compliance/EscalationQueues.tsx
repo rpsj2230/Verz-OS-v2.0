@@ -273,7 +273,7 @@ export function EscalationQueuesView({ onDone, version }: { readonly onDone: (to
           rowActions={(one) => (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${one.queue}`}>
+                <Button variant="quiet" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${one.queue}`}>
                   <MoreHorizontal aria-hidden />
                 </Button>
               </DropdownMenuTrigger>

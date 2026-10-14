@@ -116,7 +116,7 @@ export function Narrowing({
         <Choice key={one.label} narrow={one} />
       ))}
       {narrowed && onReset !== undefined ? (
-        <Button type="button" variant="ghost" size="sm" className="min-h-11 sm:min-h-8" onClick={onReset}>
+        <Button type="button" variant="quiet" size="sm" className="min-h-11 sm:min-h-8" onClick={onReset}>
           {RESET_LABEL} <X aria-hidden />
         </Button>
       ) : null}

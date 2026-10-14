@@ -276,7 +276,7 @@ function RowMenu({ row }: { readonly row: DocRow }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${row.title}`}>
+        <Button variant="quiet" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${row.title}`}>
           <MoreHorizontal aria-hidden />
         </Button>
       </DropdownMenuTrigger>

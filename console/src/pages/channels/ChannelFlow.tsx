@@ -153,7 +153,7 @@ export function ChannelFlow({
             <Button
               key={choice.key}
               type="button"
-              variant={choice.key === place.path ? "default" : "outline"}
+              variant={choice.key === place.path ? "primary" : "outline"}
               aria-pressed={choice.key === place.path}
               className="min-h-11 justify-start sm:min-h-9"
               onClick={() => {

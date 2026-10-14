@@ -242,7 +242,7 @@ export function Toolbar({
         ))}
       </Choice>
       {narrowed(filters, defaults) ? (
-        <Button asChild variant="ghost" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
+        <Button asChild variant="quiet" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
           <Link to={base}>
             {RESET_FILTERS} <X aria-hidden />
           </Link>

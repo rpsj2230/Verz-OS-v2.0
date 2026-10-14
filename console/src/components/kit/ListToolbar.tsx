@@ -156,7 +156,7 @@ export function ListToolbar<Row>({
       {narrows(question) ? (
         <Button
           type="button"
-          variant="ghost"
+          variant="quiet"
           size="sm"
           className="min-h-11 sm:min-h-8"
           onClick={() => {

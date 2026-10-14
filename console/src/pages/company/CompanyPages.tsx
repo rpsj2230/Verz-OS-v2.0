@@ -235,7 +235,7 @@ function Filters({
       ) : null}
       {children}
       {narrowed ? (
-        <Button asChild variant="ghost" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
+        <Button asChild variant="quiet" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
           <Link to={base}>{CLEAR_FILTERS}</Link>
         </Button>
       ) : null}

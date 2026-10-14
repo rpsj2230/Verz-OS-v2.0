@@ -143,7 +143,7 @@ describe("switching a feature", () => {
     const again = await screen.findByRole("alertdialog");
     // Switching on adds rather than removes, so its button is not the danger one (found on the
     // owner's install on 2026-09-29, where every confirmation was red).
-    expect(within(again).getByRole("button", { name: SWITCH_ON }).getAttribute("data-variant")).toBe("default");
+    expect(within(again).getByRole("button", { name: SWITCH_ON }).getAttribute("data-variant")).toBe("primary");
     await act(async () => {
       fireEvent.click(within(again).getByRole("button", { name: SWITCH_ON }));
     });

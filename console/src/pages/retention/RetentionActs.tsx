@@ -116,7 +116,7 @@ export function SweepActs({ report, controls, onDone }: { readonly report: Repor
     <>
       <Button
         size="sm"
-        variant={report.released ? "outline" : "default"}
+        variant={report.released ? "outline" : "primary"}
         className="min-h-11 sm:min-h-8"
         disabled={write.busy}
         onClick={() => {

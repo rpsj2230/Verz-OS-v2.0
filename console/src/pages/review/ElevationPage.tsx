@@ -75,7 +75,7 @@ function DecideMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${row.capability}, ${nameOf({}, row.principal_id, row.display_name)}`}>
+        <Button variant="quiet" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${row.capability}, ${nameOf({}, row.principal_id, row.display_name)}`}>
           <MoreHorizontal aria-hidden />
         </Button>
       </DropdownMenuTrigger>

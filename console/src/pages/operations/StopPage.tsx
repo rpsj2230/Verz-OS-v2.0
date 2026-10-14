@@ -237,7 +237,7 @@ function StopForm({ body, onStopped }: { readonly body: HaltsBody; readonly onSt
         </Field>
         {problem !== null && scope === "everything" ? <FormProblem>{problem}</FormProblem> : null}
         <div>
-          <Button type="submit" variant="destructive" className="min-h-11 sm:min-h-9" disabled={busy}>
+          <Button type="submit" variant="danger" className="min-h-11 sm:min-h-9" disabled={busy}>
             {STOP_LABEL}
           </Button>
         </div>
