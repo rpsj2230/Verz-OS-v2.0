@@ -617,8 +617,17 @@ code {
 /* A thumb is not a cursor. 2.75rem is 44 CSS pixels at the default root size. */
 .ask__question,
 .ask__submit,
-.ask__skip {
+.ask__skip,
+.ask__dictate {
   min-height: 2.75rem;
+}
+
+/* The dictation control sits under the field it fills, its button above the two sentences about it. */
+.ask__dictation {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
 }
 
 /*

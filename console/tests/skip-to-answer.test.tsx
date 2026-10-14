@@ -220,6 +220,60 @@ describe("the skip-to-answer control", () => {
     expect(precedes(provenance, answer)).toBe(true);
   });
 
+  test("in a browser that can dictate, the dictation button is one more stop, straight after the field and before the control", async () => {
+    // What breaks if this is deleted: the dictation control (M40.7.3) added to the order without
+    // anybody counting it, so the control that skips the citations is no longer the first stop past
+    // the form, or the new stop lands after the pickers and splits the field from the thing it fills.
+    class Listening {
+      start(): void {}
+      stop(): void {}
+      abort(): void {}
+    }
+    Object.defineProperty(window, "SpeechRecognition", { configurable: true, writable: true, value: Listening });
+    try {
+      const { container } = await askScreen(whole(answerFrames(ANSWER, CITATIONS)));
+      askWithAPointer(container, QUESTION);
+      await answerArrived(container);
+
+      const skip = within(page(container)).getByRole("button", { name: SKIP_TO_ANSWER });
+      // The question, the dictation button, the kind it may be narrowed to, the submit button, then
+      // the control, and after it the one that copies the answer.
+      expect(tabStops(page(container)).map((one) => one.tagName)).toEqual([
+        "TEXTAREA",
+        "BUTTON",
+        "SELECT",
+        "BUTTON",
+        "BUTTON",
+        "BUTTON",
+      ]);
+      expect(tabStops(page(container))[4]).toBe(skip);
+      expect(tabStops(page(container))[1]?.classList.contains("ask__dictate")).toBe(true);
+      expect(tabStops(page(container))[3]?.getAttribute("type")).toBe("submit");
+    } finally {
+      Reflect.deleteProperty(window, "SpeechRecognition");
+    }
+  });
+
+  test("the dictation button is a thumb tall on a phone", async () => {
+    // What breaks if this is deleted: a control a cursor can hit and a thumb cannot, on the screen
+    // the owner opens from a phone first. Read for the rendered element at phone width.
+    class Listening {
+      start(): void {}
+      stop(): void {}
+      abort(): void {}
+    }
+    Object.defineProperty(window, "SpeechRecognition", { configurable: true, writable: true, value: Listening });
+    try {
+      const { container } = await askScreen(whole(answerFrames(ANSWER, CITATIONS)));
+      const button = page(container).querySelector<HTMLElement>(".ask__dictate");
+      expect(button).not.toBeNull();
+      const height = pixels(declared(button as HTMLElement, "min-height", consoleRules(), PHONE_WIDTH_PX) ?? "");
+      expect(height).toBeGreaterThanOrEqual(TAP_TARGET_PX);
+    } finally {
+      Reflect.deleteProperty(window, "SpeechRecognition");
+    }
+  });
+
   test("pressing it puts focus on the answer, which a screen reader names and the tab key never stops on", async () => {
     // What breaks if this is deleted: a control that scrolls and leaves focus where it was, so
     // the next Tab goes back into the citations; or an answer made reachable by giving it a
