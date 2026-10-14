@@ -56,7 +56,7 @@ import {
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
-import { FailureNotice } from "../../ui/FailureNotice";
+import { FailureNotice, SOMETHING_DID_NOT_WORK } from "../../ui/FailureNotice";
 import { Notice } from "../../ui/Notice";
 import { ROSTER_HEADING, agentAddress } from "./AgentsPage";
 import { ChannelChoices, ticked } from "./ChannelChoices";
@@ -160,7 +160,7 @@ export const QUESTIONS_IT_ASKS = "Test questions it would ask";
 export const NOT_YOURS = "Only its author can change this draft.";
 export const PUBLISHED_ALREADY = "This draft is published. Start a new draft from the agent to change it again.";
 export const OPEN_THE_AGENT = "Open the agent";
-export const SOMETHING_DID_NOT_WORK = "Something did not work";
+export { SOMETHING_DID_NOT_WORK };
 export const NOTHING_CHANGED = "Nothing was changed";
 export const SAVE_LABEL = "Save";
 

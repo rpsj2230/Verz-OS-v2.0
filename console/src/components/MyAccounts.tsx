@@ -93,7 +93,7 @@ export function MyAccounts() {
           </li>
         ))}
       </ul>
-      <p className="hint note">{answer.data.told}</p>
+      <p className="note">{answer.data.told}</p>
     </>
   );
 }

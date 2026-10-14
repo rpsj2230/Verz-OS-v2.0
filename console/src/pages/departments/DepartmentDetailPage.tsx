@@ -257,7 +257,7 @@ function Teams({
                               principalId: one.principal_id,
                               person: one.display_name,
                             }}
-                            label="Take out"
+                            label="End membership"
                             onWritten={onWritten}
                           />
                         ) : null}

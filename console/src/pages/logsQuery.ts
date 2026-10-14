@@ -35,7 +35,7 @@ export const NO_VALUE_IS_KEPT =
   "A field shows its value only when it is one of the product's own words or numbers, and an exception shows its type.";
 
 export const READING_THE_LOG = "Loading the log.";
-export const THE_BRAIN_COULD_NOT_BE_REACHED = "The Brain could not be reached";
+export { THE_BRAIN_COULD_NOT_BE_REACHED } from "../ui/FailureNotice";
 export const UNREADABLE_ANSWER =
   "The API answered in a shape this console does not read, so no row is listed. The console and " +
   "the API are probably from different releases.";

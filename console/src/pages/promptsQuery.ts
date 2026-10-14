@@ -33,7 +33,7 @@ export const PROMPTS_LEDE =
 
 export const READING_PROMPTS = "Reading the instructions.";
 export const NO_AGENTS = "There is no agent whose instructions this screen can show you.";
-export const THE_BRAIN_COULD_NOT_BE_REACHED = "The Brain could not be reached";
+export { THE_BRAIN_COULD_NOT_BE_REACHED } from "../ui/FailureNotice";
 export const UNREADABLE_ANSWER =
   "The API answered in a shape this console does not read, so no instructions are listed. The " +
   "console and the API are probably from different releases.";

@@ -205,12 +205,12 @@ function Holders({ version, onWritten }: { readonly version: number; readonly on
                 <Button
                   size="sm"
                   variant="outline"
-                  aria-label={`Remove ${roleWords(row.role)} from ${nameOf(row)}`}
+                  aria-label={`Withdraw ${roleWords(row.role)} from ${nameOf(row)}`}
                   onClick={() => {
-                    setEnding({ kind: "role", grantId: row.id, question: `Remove ${roleWords(row.role)} from ${nameOf(row)}?` });
+                    setEnding({ kind: "role", grantId: row.id, question: `Withdraw ${roleWords(row.role)} from ${nameOf(row)}?` });
                   }}
                 >
-                  Remove
+                  Withdraw
                 </Button>
               )
             : undefined

@@ -190,7 +190,7 @@ export function CoauthorPanel({
                 setMissing(false);
               }}
             />
-            {missing ? <p className="m-0 text-[12px] text-danger-text">{ASK_NEEDED}</p> : null}
+            {missing ? <p className="m-0 text-[12px] text-crit">{ASK_NEEDED}</p> : null}
           </div>
           <div>
             <Button size="sm" disabled={sending} onClick={begin}>

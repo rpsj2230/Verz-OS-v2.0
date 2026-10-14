@@ -32,7 +32,7 @@ export const ACT_LABELS = Object.freeze({
   pause: "Pause",
   resume: "Resume",
   reschedule: "Change schedule",
-  remove: "Remove",
+  remove: "Retire",
   adopt: "Adopt",
   reinstate: "Bring back",
   add: "Add an automation",

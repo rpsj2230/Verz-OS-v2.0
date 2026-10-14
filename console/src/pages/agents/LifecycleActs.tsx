@@ -27,7 +27,7 @@ import type { ApiFailure } from "../../api/errors";
 import { ConfirmDialog } from "../../components/kit";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
-import { FailureNotice } from "../../ui/FailureNotice";
+import { FailureNotice, SOMETHING_DID_NOT_WORK } from "../../ui/FailureNotice";
 import { Notice } from "../../ui/Notice";
 import {
   ACT_CONSEQUENCES,
@@ -48,7 +48,7 @@ import {
 
 export const KEEP_LABEL = "Not now";
 export const NOT_CHANGED = "Nothing was changed";
-export const SOMETHING_DID_NOT_WORK = "Something did not work";
+export { SOMETHING_DID_NOT_WORK };
 export const OPEN_THE_COPY = "Open the copy";
 
 interface Chosen {
@@ -182,7 +182,7 @@ export function useLifecycleActs(onChanged: () => void, addressOf: (agentId: str
               }}
             />
             {missing === null ? null : (
-              <p id={`${fieldId}-missing`} className="text-[12px] text-danger-text">
+              <p id={`${fieldId}-missing`} className="text-[12px] text-crit">
                 {missing}
               </p>
             )}

@@ -308,7 +308,7 @@ function FigureRow({
               }}
               className={cn(
                 "min-h-8 rounded-[4px] px-2.5 text-[12px]",
-                value === range ? "bg-surface font-medium text-ink shadow-sm" : "text-dim hover:text-ink",
+                value === range ? "bg-panel font-medium text-ink shadow-sm" : "text-dim hover:text-ink",
               )}
             >
               {words}

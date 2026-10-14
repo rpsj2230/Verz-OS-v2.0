@@ -20,9 +20,9 @@ export const UNAVAILABLE = Object.freeze({});
 export const ACT_LABELS = Object.freeze({
   open: "Open",
   keep: "Keep",
-  remove: "Remove",
+  remove: "Withdraw",
   keepSelected: "Keep selected",
-  removeSelected: "Remove selected",
+  removeSelected: "Withdraw selected",
   decideLater: "Decide later",
   ask: "Ask for access",
   askSend: "Ask for this",

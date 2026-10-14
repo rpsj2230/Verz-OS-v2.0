@@ -188,7 +188,7 @@ export function LimitSettings({ screen = LIMITS_SCREEN }: { readonly screen?: Kn
               }}
             />
             {problem === null ? null : (
-              <p id={`${field}-problem`} className="m-0 text-sm text-danger" role="alert">
+              <p id={`${field}-problem`} className="m-0 text-sm text-crit" role="alert">
                 {problem}
               </p>
             )}

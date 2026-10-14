@@ -40,8 +40,8 @@ export const PACK_LABEL = "Assign a pack";
 
 export function removeQuestion(held: Held, person: string): string {
   return held.kind === "pack"
-    ? `Take the ${held.packLabel ?? held.pack ?? "pack"} pack away from ${person}?`
-    : `Remove ${held.capabilities[0] ?? "this capability"} from ${person}?`;
+    ? `Withdraw the ${held.packLabel ?? held.pack ?? "pack"} pack from ${person}?`
+    : `Withdraw ${held.capabilities[0] ?? "this capability"} from ${person}?`;
 }
 
 export const REMOVAL_CONSEQUENCE =
@@ -107,13 +107,13 @@ function RemoveControl({
     })();
   }, [held, principalId, onWritten]);
 
-  const label = held.kind === "pack" ? "Remove pack" : "Remove";
+  const label = held.kind === "pack" ? "Withdraw pack" : "Withdraw";
   return (
     <span className="flex flex-col items-end gap-1">
       <Button
         size="sm"
         variant="outline"
-        aria-label={held.kind === "pack" ? `Remove the ${held.packLabel ?? held.pack ?? ""} pack` : `Remove ${held.capabilities[0] ?? ""}`}
+        aria-label={held.kind === "pack" ? `Withdraw the ${held.packLabel ?? held.pack ?? ""} pack` : `Withdraw ${held.capabilities[0] ?? ""}`}
         onClick={() => {
           setFailure(null);
           setAsking(true);
@@ -131,7 +131,7 @@ function RemoveControl({
             <p className="m-0 font-mono text-[12px] [overflow-wrap:anywhere]">{held.capabilities.join(", ")}</p>
           ) : undefined
         }
-        confirmLabel={held.kind === "pack" ? "Remove the pack" : "Remove the grant"}
+        confirmLabel={held.kind === "pack" ? "Withdraw the pack" : "Withdraw the grant"}
         cancelLabel="Keep it"
         busy={busy}
         onConfirm={remove}

@@ -166,7 +166,7 @@ describe("access review", () => {
     );
     await chooseInMenu(screen.getByRole("button", { name: /^Actions for read:client.name/ }), ACT_LABELS.remove);
     const dialog = await screen.findByRole("alertdialog");
-    expect(dialog.textContent).toContain("Remove read:client.name from Wei Ling Tan?");
+    expect(dialog.textContent).toContain("Withdraw read:client.name from Wei Ling Tan?");
     expect(dialog.textContent).toContain(REMOVING);
     expect(posts(idp)).toEqual([]);
     await confirmWith(ACT_LABELS.remove);

@@ -243,7 +243,7 @@ export function AgentFiguresView({
             <dt>{DIVERGENCE_LABEL}</dt>
             <dd>
               {divergent.map((part) => (
-                <code className="roster__clause" key={part}>
+                <code key={part}>
                   {part}
                 </code>
               ))}

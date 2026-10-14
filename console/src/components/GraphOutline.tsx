@@ -47,7 +47,7 @@ export function GraphOutline({ anchor, label, graph }: GraphOutlineProps) {
       {/* Focusable by the skip link and not by the tab key, so the page has one tab stop fewer. */}
       <ol id={anchor} tabIndex={-1} className="graph__outline">
         {steps.map((step) => (
-          <li key={step.id} className="graph__outline-step">
+          <li key={step.id}>
             <span className="graph__outline-label">{step.label}</span>
             {step.kind === "" ? null : (
               <>

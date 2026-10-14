@@ -513,7 +513,7 @@ export function EndDialog({ ending, onClose, onWritten }: { readonly ending: End
       question={ending?.question ?? ""}
       consequence={ending?.kind === "rule" ? RETIRING_A_RULE_DOES : REMOVING_A_ROLE_DOES}
       details={failure === null ? undefined : <FailureState failure={failure} />}
-      confirmLabel={ending?.kind === "rule" ? "Retire the mapping" : "Remove the role"}
+      confirmLabel={ending?.kind === "rule" ? "Retire the mapping" : "Withdraw the role"}
       cancelLabel="Keep it"
       busy={busy}
       onConfirm={go}

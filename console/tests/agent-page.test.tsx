@@ -1056,10 +1056,10 @@ describe("group chats", () => {
       expect(groupPosts(mounted.idp)).toEqual([{ path: GROUPS_API, body: { channel: "lark", room_ref: "oc_pricing" } }]);
     });
 
-    fireEvent.click(within(groupsCard(mounted.container) as HTMLElement).getByRole("button", { name: "Take this agent out of Sales team" }));
+    fireEvent.click(within(groupsCard(mounted.container) as HTMLElement).getByRole("button", { name: "Detach this agent from Sales team" }));
     const removing = await screen.findByRole("alertdialog", { name: REMOVE_QUESTION("Sales team") });
     await act(async () => {
-      fireEvent.click(within(removing).getByRole("button", { name: "Take it out" }));
+      fireEvent.click(within(removing).getByRole("button", { name: "Detach it" }));
     });
     await waitFor(() => {
       expect(groupPosts(mounted.idp)[1]).toEqual({ path: GROUP_REMOVAL_API, body: { install_id: "11111111-1111-4111-8111-000000000001" } });

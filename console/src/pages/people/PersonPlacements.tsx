@@ -84,7 +84,7 @@ function questionFor(act: Act, person: string): string {
 function labelFor(act: Act): string {
   switch (act.kind) {
     case "leave":
-      return "Take out";
+      return "End membership";
     case "appoint":
       return "Make lead";
     case "stand_down":

@@ -257,7 +257,8 @@ describe("the Artifacts section", () => {
     });
     await press(rowOf(container, 0), "Download");
     await waitFor(() => {
-      expect(container.querySelector('[role="alert"]')?.textContent).toBe("I could not find that.");
+      // Drawn by the one failure component, so it carries the heading and the reference as well.
+      expect(container.querySelector('[data-slot="failure-state"]')?.textContent).toContain("I could not find that.");
     });
     // A browser with no way to make a file from memory, as `saveFile` asks.
     (URL as { createObjectURL?: unknown }).createObjectURL = undefined;
@@ -293,7 +294,7 @@ describe("the Artifacts section", () => {
     await press(rowOf(container, 1), "Replace with a newer one");
     const dialog = await confirm("");
     expect((dialog.querySelector("select") as HTMLSelectElement).value).toBe(NEW);
-    await confirm("Replace");
+    await confirm("Supersede");
     const [sent] = posts(idp);
     expect(sent?.url).toContain(artifactSupersedeApiPath(AGENT, OLD));
     expect(JSON.parse(String(sent?.init?.body))).toEqual({ by: NEW });

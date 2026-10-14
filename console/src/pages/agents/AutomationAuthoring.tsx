@@ -33,7 +33,7 @@ import { useResource } from "../../api/useResource";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Textarea } from "../../components/ui/textarea";
-import { FailureNotice } from "../../ui/FailureNotice";
+import { FailureNotice, SOMETHING_DID_NOT_WORK } from "../../ui/FailureNotice";
 import { Notice } from "../../ui/Notice";
 import { FORM, Field, SELECT, Status, Submit } from "../knowledge/formParts";
 import { ConfirmAction } from "../../components/ConfirmAction";
@@ -74,7 +74,7 @@ export const NO_CONNECTORS = "No connected source is bound to this agent, so the
 export const NO_TOOLS = "This agent's ceiling allows no tools, so this automation can use none.";
 export const PREVIEW_UNREADABLE =
   "The API's answer about this automation could not be read, so nothing can be confirmed. Nothing was saved.";
-export const SOMETHING_DID_NOT_WORK = "Something did not work";
+export { SOMETHING_DID_NOT_WORK };
 export const CANNOT_BE_AN_AUTOMATION = "What you wrote cannot be an automation yet";
 
 export const START_FROM_LABEL = "Start from";

@@ -83,7 +83,7 @@ export const READING_WORKSPACE = "Reading your workspace.";
 export const OPENS_ON_THE_MEMBER_GRANT =
   "This page opens for anybody holding the member grant, and for nobody else, whatever else they " +
   "hold. If you expected to see it, ask your department administrator for it.";
-export const THE_BRAIN_COULD_NOT_BE_REACHED = "The Brain could not be reached";
+export { THE_BRAIN_COULD_NOT_BE_REACHED } from "../ui/FailureNotice";
 
 export const NO_AGENTS = "There are no agents you can call.";
 export const NO_CEILING = "No budget of your own is set.";

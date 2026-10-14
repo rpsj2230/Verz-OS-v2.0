@@ -552,8 +552,8 @@ describe("one person's page", () => {
     expect(textOf(rows[0] ?? null)).toContain("Web");
     expect(textOf(rows[1] ?? null)).toContain("Pack: Helpdesk, version 2");
     expect(textOf(rows[2] ?? null)).toContain("Elevation");
-    expect(within(rows[1] as HTMLElement).queryByRole("button", { name: /^Remove read:client/ })).toBeNull();
-    expect(within(rows[1] as HTMLElement).getByRole("button", { name: "Remove the Helpdesk pack" })).toBeTruthy();
+    expect(within(rows[1] as HTMLElement).queryByRole("button", { name: /^Withdraw read:client/ })).toBeNull();
+    expect(within(rows[1] as HTMLElement).getByRole("button", { name: "Withdraw the Helpdesk pack" })).toBeTruthy();
     expect(textOf(container)).toContain("A capability that came with a pack is removed with the whole pack.");
   });
 
@@ -565,17 +565,17 @@ describe("one person's page", () => {
       [`POST ${API}/govern/grants/removal`]: { body: { principal_id: "p_ada", capability: "read:ticket.*", removed_at: "2019-03-04T09:00:00Z" } },
       [`POST ${API}/govern/access-review/decision`]: { body: { kind: "pack", row_id: PACK.row_id, principal_id: "p_ada", decision: "remove", decided_at: "2019-03-04T09:00:00Z" } },
     });
-    press(mounted.container, "Remove read:ticket.*");
-    const first = await confirmation("Remove read:ticket.* from Ada Okafor?");
+    press(mounted.container, "Withdraw read:ticket.*");
+    const first = await confirmation("Withdraw read:ticket.* from Ada Okafor?");
     expect(writes(mounted.idp)).toEqual([]);
-    press(first, "Remove the grant");
+    press(first, "Withdraw the grant");
     await waitFor(() => expect(writes(mounted.idp)).toHaveLength(1));
     expect(writes(mounted.idp)[0]).toEqual({ to: `POST ${API}/govern/grants/removal`, body: { principal_id: "p_ada", capability: "read:ticket.*" } });
 
     await settled(mounted.container);
-    press(mounted.container, "Remove the Helpdesk pack");
-    const second = await confirmation("Take the Helpdesk pack away from Ada Okafor?");
-    press(second, "Remove the pack");
+    press(mounted.container, "Withdraw the Helpdesk pack");
+    const second = await confirmation("Withdraw the Helpdesk pack from Ada Okafor?");
+    press(second, "Withdraw the pack");
     await waitFor(() => expect(writes(mounted.idp)).toHaveLength(2));
     expect(writes(mounted.idp)[1]).toEqual({ to: `POST ${API}/govern/access-review/decision`, body: { kind: "pack", row_id: PACK.row_id, decision: "remove" } });
   });
@@ -892,9 +892,9 @@ describe("Roles and permissions", () => {
     expect(textOf(mounted.container)).not.toMatch(/[a-z]+:[a-z]/);
     expect(textOf(mounted.container)).toContain("Ada Okafor");
     expect(textOf(mounted.container)).not.toContain("p_ada");
-    press(mounted.container, "Remove Approver from Ada Okafor");
-    const asking = await confirmation("Remove Approver from Ada Okafor?");
-    press(asking, "Remove the role");
+    press(mounted.container, "Withdraw Approver from Ada Okafor");
+    const asking = await confirmation("Withdraw Approver from Ada Okafor?");
+    press(asking, "Withdraw the role");
     await waitFor(() => expect(writes(mounted.idp)).toEqual([{ to: `POST ${API}/govern/roles/removal`, body: { grant_id: "g-1" } }]));
   });
 

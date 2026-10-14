@@ -65,7 +65,7 @@ export function passwordLabel(held: boolean | null | undefined): string {
 }
 export const SAVE_PASSWORD_LABEL = "Save password";
 export const TRIAL_LABEL = "Send test message";
-export const REMOVE_LABEL = "Remove relay";
+export const REMOVE_LABEL = "Disconnect relay";
 export const SWITCH_OFF_LABEL = "Switch off";
 export const SWITCH_ON_LABEL = "Switch on";
 export const KEEP_LABEL = "Change nothing";
@@ -463,13 +463,13 @@ export function RemoveRelayDialog({
         setFailure(result.failure);
         return;
       }
-      onDone("The relay is removed.");
+      onDone("The relay is disconnected.");
     })();
   };
   return (
     <ConfirmDialog
       open
-      question={`Remove the relay ${page.email.host ?? ""}?`}
+      question={`Disconnect the relay ${page.email.host ?? ""}?`}
       consequence={page.removing_email}
       details={failure === null ? undefined : <FailureNotice failure={failure} title={NOT_DONE} />}
       confirmLabel={REMOVE_LABEL}
