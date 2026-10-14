@@ -25,22 +25,21 @@ import {
   DetailHeader,
   DetailPage,
   EmptyList,
+  Explanation,
   Fact,
   FactList,
   FailureState,
   KpiStrip,
   LoadingState,
   Note,
-  NotOffered,
   SectionCard,
   StatCard,
-  UnavailableAction,
 } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 import { accountName, SERVICE_ACCOUNTS_API_PATH, SERVICE_ACCOUNTS_LABEL, when, type AccountRow } from "../serviceAccountsQuery";
 import { EndingDialog, IssueKeyDrawer, type Ending } from "./AccountActs";
-import { ACT_LABELS, NOT_HELD_MARK, NOT_OFFERED, UNAVAILABLE } from "./serviceAccountActions";
+import { ACT_LABELS, NOT_HELD_MARK } from "./serviceAccountActions";
 
 export const READING_ACCOUNT = "Reading this service account.";
 export const UNREADABLE_ACCOUNT = "The answer could not be read as a service account.";
@@ -84,7 +83,7 @@ function AccountView({ account, onChanged }: { readonly account: AccountRow; rea
           subline={account.label.trim() === "" ? undefined : account.client_id}
           actions={
             <>
-              <UnavailableAction label={ACT_LABELS.changeEnd} text={ACT_LABELS.changeEnd} reason={UNAVAILABLE.changeEnd.reason} />
+              <Explanation form="action" act="service_account.change_end" label={ACT_LABELS.changeEnd} text={ACT_LABELS.changeEnd} />
               <Button
                 variant="outline"
                 size="sm"
@@ -119,7 +118,7 @@ function AccountView({ account, onChanged }: { readonly account: AccountRow; rea
       }
     >
       <div className="flex min-w-0 flex-col gap-4">
-        <SectionCard title={KEYS_HEADING} lede={KEYS_LEDE} footer={<NotOffered>{NOT_OFFERED.rotate}</NotOffered>}>
+        <SectionCard title={KEYS_HEADING} lede={KEYS_LEDE} footer={<Explanation form="line" act="service_account.rotate" />}>
           {account.keys.length === 0 ? (
             <EmptyList
               title={NO_KEYS}
@@ -175,14 +174,14 @@ function AccountView({ account, onChanged }: { readonly account: AccountRow; rea
               ))}
             </span>
             {account.not_held_now.length === 0 ? null : (
-              <Note kind="not-yet">
+              <Note kind="attention">
                 {NOT_HELD_NOW} {account.not_held_now.join(", ")}.
               </Note>
             )}
           </div>
         </SectionCard>
         <SectionCard title="Owner">
-          <NotOffered>{NOT_OFFERED.changeOwner}</NotOffered>
+          <Explanation form="line" act="service_account.change_owner" />
         </SectionCard>
         <Advanced>
           <FactList>

@@ -166,7 +166,7 @@ function SweepView({ report, controls, onDone }: { readonly report: Report | nul
             <StatCard label="Due now" value={String(report.stores.filter((one) => one.reached).reduce((total, one) => total + one.due, 0))} />
             <StatCard label="Next run" value={report.released ? "Removes what is due" : "Reports again"} />
           </KpiStrip>
-          {report.failure === null ? null : <Note kind="not-yet">{`The last run removed nothing: ${report.failure}`}</Note>}
+          {report.failure === null ? null : <Note kind="attention">{`The last run removed nothing: ${report.failure}`}</Note>}
           <SectionCard title="What the sweep found in each store" action={<SweepActs report={report} controls={controls} onDone={onDone} />}>
             {report.stores.length === 0 ? (
               <Note>{NO_STORES}</Note>

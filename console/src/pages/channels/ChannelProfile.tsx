@@ -24,7 +24,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { request } from "../../api/client";
 import type { ApiFailure, FieldProblem } from "../../api/errors";
-import { ConfirmDialog, Fact, FactList, NotOffered, Note, SectionCard } from "../../components/kit";
+import { ConfirmDialog, Explanation, Fact, FactList, Note, SectionCard } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
@@ -73,9 +73,6 @@ export const TEST_TO_LABEL = "Send it to";
 export const TEST_TO_FORMAT = "Where the vendor should deliver it, in the vendor's own terms: a chat, conversation or sender id.";
 export const SAVE_FIRST = "Save the set-up first. A test message goes out through it.";
 export const NOT_SENT = "The test message was not sent";
-export const NOT_RECEIVED =
-  "This release cannot receive or reply on this channel yet, so there is nothing to set up here.";
-
 const SETUP_FORM = "channel-setup";
 const TEST_FORM = "channel-test";
 
@@ -297,7 +294,7 @@ export function TestMessage({ row }: { readonly row: ChannelRow }) {
 
 export function ChannelProfile({ row, onChanged }: { readonly row: ChannelRow; readonly onChanged: (told: string) => void }) {
   if (!row.receives) {
-    return <NotOffered>{NOT_RECEIVED}</NotOffered>;
+    return <Explanation form="line" act="channel.not_received" />;
   }
   return (
     <div data-slot="channel-profile" className="flex min-w-0 flex-col gap-4">

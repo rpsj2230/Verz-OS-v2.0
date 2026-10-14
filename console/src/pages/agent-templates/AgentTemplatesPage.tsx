@@ -21,9 +21,9 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import type { FilterChoice, SortChoice } from "../../components/listing";
 import { useListing } from "../../components/useListing";
-import { Chip, ListPage, UnavailableAction, type EntityColumn } from "../../components/kit";
+import { Chip, type EntityColumn, Explanation, ListPage } from "../../components/kit";
 import { readTemplates, TEMPLATES_API_PATH, type TemplateCard } from "../agentTemplatesQuery";
-import { ACT_LABELS, originWords, UNAVAILABLE } from "./templateActions";
+import { ACT_LABELS, originWords } from "./templateActions";
 
 export const TEMPLATES_HEADING = "Agent templates";
 export const TEMPLATES_LEDE =
@@ -88,7 +88,7 @@ export function AgentTemplatesPage() {
       crumbs={[{ label: TEMPLATES_HEADING }]}
       title={TEMPLATES_HEADING}
       lede={TEMPLATES_LEDE}
-      primary={<UnavailableAction label={ACT_LABELS.author} text={ACT_LABELS.author} icon={<Plus aria-hidden />} reason={UNAVAILABLE.author.reason} />}
+      primary={<Explanation form="action" act="template.author" label={ACT_LABELS.author} text={ACT_LABELS.author} icon={<Plus aria-hidden />} />}
       listing={listing}
       rows={rows}
       filtersLabel={FILTERS_LABEL}

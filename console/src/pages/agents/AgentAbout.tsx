@@ -20,7 +20,7 @@
 import { ArrowUpRight, CircleSlash } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
-import { FailureState, LoadingState, Note } from "../../components/kit";
+import { Explanation, FailureState, LoadingState, Note } from "../../components/kit";
 import { agentAboutApiPath, leashRowId, readAbout } from "./agentDetailQuery";
 import { LEASH_ANCHOR } from "./AgentProfile";
 
@@ -29,9 +29,6 @@ export const ABOUT_LEDE = "What it is for, how it works, and what it will never 
 export const SEE_SETUP = "See how it is set up";
 export const LOADING_ABOUT = "Loading how this agent works.";
 export const NO_SUMMARY = "Nobody has written a summary for this agent yet.";
-export const OVERVIEW_SOON =
-  "a longer description written by whoever looks after the agent. Today an agent has only its one-line summary.";
-
 function SubHeading({ children }: { readonly children: string }) {
   return <h3 className="m-0 font-mono text-[10.5px] font-medium tracking-[0.1em] text-dim uppercase">{children}</h3>;
 }
@@ -68,7 +65,7 @@ export function AgentAbout({ agentId, profileAddress }: { readonly agentId: stri
       <div className="flex flex-col gap-3 px-4 py-4">
         <SubHeading>Summary</SubHeading>
         <p className="m-0 text-[15px] leading-relaxed font-medium text-ink [overflow-wrap:anywhere]">{about.summary ?? NO_SUMMARY}</p>
-        <Note kind="soon">{OVERVIEW_SOON}</Note>
+        <Explanation form="note" act="agent.overview" />
       </div>
 
       {about.steps.length === 0 ? null : (

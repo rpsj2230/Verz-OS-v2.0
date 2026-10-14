@@ -45,11 +45,18 @@ is not the same as the files under `brain/tables`: `know.chunk` is declared in
 installation values are `brain.install.INSTALLATION`. Both go into `inventory.json` beside the
 schema, generated and uncommitted for the schema's reason.
 
+**And the sentences the console draws when an act cannot be done.** `explanations.json` is
+`brain.console.explanations.EXPLANATIONS`, whole. The console fetches one of them at a time from
+`GET /console/explanations/{act}`, so its source holds none, and its tests need the sentences
+to assert against: reading them out of the Python registry here means a test compares a page
+with the server's words rather than with a constant the page also imports (`tests/support/
+explanations.ts` reads this file and says why).
+
 Run it from anywhere:
 
     uv run python console/scripts/export-openapi.py
 
-Task ids: M32.5.1.1
+Task ids: M32.5.1.1, M27.15.70
 """
 
 from __future__ import annotations
@@ -68,6 +75,7 @@ CONSOLE_ROOT = REPO_ROOT / "console"
 OUT_DIR = CONSOLE_ROOT / "src" / "api" / "generated"
 SCHEMA_PATH = OUT_DIR / "openapi.internal.json"
 INVENTORY_PATH = OUT_DIR / "inventory.json"
+EXPLANATIONS_PATH = OUT_DIR / "explanations.json"
 
 #: Where the console's copy of the lock text lives, and the exact shape it must have.
 #: Anchored to the export statement so that renaming the constant fails this check loudly
@@ -120,6 +128,7 @@ def main() -> None:
     sys.path.insert(0, str(REPO_ROOT / "src"))
 
     from brain.app import Settings, create_app
+    from brain.console.explanations import EXPLANATIONS
     from brain.core.redaction import LOCK_TEXT
     from brain.db import Base
     from brain.install import INSTALLATION
@@ -148,6 +157,25 @@ def main() -> None:
     }
     INVENTORY_PATH.write_text(
         json.dumps(inventory, indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
+
+    EXPLANATIONS_PATH.write_text(
+        json.dumps(
+            [
+                {
+                    "act": one.act,
+                    "form": one.form.value,
+                    "lead": one.lead.value,
+                    "sentence": one.sentence,
+                    "retired_by": one.retired_by,
+                }
+                for one in EXPLANATIONS
+            ],
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+        newline="\n",
     )
 
     versioned = sorted(p for p in paths if p.startswith(API_PREFIX))

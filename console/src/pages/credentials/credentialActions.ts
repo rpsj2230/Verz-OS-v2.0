@@ -7,28 +7,16 @@
  * every slot the list marks writable. A source's first key goes in by connecting it on Connectors,
  * and a provider's key is checked against its provider on Models; both are links, because the act
  * exists and lives there. Checking a source's key with its vendor before the worker's next read has
- * no route, so it is `UNAVAILABLE` and drawn inert, and `tests/credentials-page.test.tsx` reads its
- * `retiredBy` against the API document so the sentence goes the day the route arrives.
+ * no route, so it is a `kit/Explanation` of the `action` form (`credential.check_source`), and
+ * `tests/unit/test_console_explanations.py` reads its expiry against the routes the application
+ * mounts so the sentence goes the day the route arrives.
  *
  * **Removing a credential is not offered, and that is a product decision, not a gap.** The vault's
  * application policy grants no delete, and a key removed takes everything using it off at once;
- * what an administrator does is replace one. So it is a `NotOffered` sentence, never a control.
+ * what an administrator does is replace one. So it is an `Explanation` of the `line` form (`credential.not_removed`), never a control.
  *
  * Task ids: M27.11.10
  */
-
-/** Why each act that has no route cannot be pressed, and the API path whose arrival retires it. */
-export const UNAVAILABLE = Object.freeze({
-  checkSource: {
-    reason: "Coming soon: checking a source's key with its vendor without waiting for the next read.",
-    retiredBy: /^\/api\/v1\/connectors\/\{[^}]+\}\/(test|check)$/,
-  },
-});
-
-/** Said where a Remove control would be. */
-export const NOT_REMOVED =
-  "A credential is replaced, never removed: removing one would stop everything that uses it at once, " +
-  "and the vault gives this system no way to delete one.";
 
 /** Where the acts that live on other pages are done, as console addresses. */
 export const WORKS_AT = Object.freeze({

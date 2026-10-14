@@ -101,7 +101,7 @@ function Panel({ panel }: { readonly panel: UpdatesPanel }) {
             <>
               {history.holds ? null : (
                 <div role="alert" className="mb-2">
-                  <Note kind="not-yet">{HISTORY_CHANGED}</Note>
+                  <Note kind="attention">{HISTORY_CHANGED}</Note>
                 </div>
               )}
               {history.deploys.length ? (

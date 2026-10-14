@@ -255,7 +255,7 @@ export function DataTable<T extends RowData>({
        * something for it to exclude.
        */}
       {!failure && !busy && rows.length === 0 ? (
-        <EmptyList compact title={NOTHING_TO_SHOW} adds={emptyAdds} by={emptyBy} />
+        <EmptyList compact className="grid__empty" title={NOTHING_TO_SHOW} adds={emptyAdds} by={emptyBy} />
       ) : null}
 
       {busy ? (

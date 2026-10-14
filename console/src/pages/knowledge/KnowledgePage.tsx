@@ -37,11 +37,11 @@ import { useResource } from "../../api/useResource";
 import {
   ConfirmDialog,
   Drawer,
+  type EntityColumn,
+  Explanation,
   ListPage,
   Note,
   SectionCard,
-  UnavailableAction,
-  type EntityColumn,
 } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import {
@@ -57,7 +57,6 @@ import { defaultReviewDay, instantOf, TASKS_API_PATH } from "../knowledgeLifecyc
 import { readUploadOptions, UPLOAD_OPTIONS_API_PATH, type UploadOptions } from "../knowledgeQuery";
 import { AddFileForm, AddLinkForm, AddManyForm, levelsOf } from "./addForms";
 import { REVIEW_HINT, REVIEW_LABEL, reviewProblem } from "./formParts";
-import { UNAVAILABLE } from "./knowledgeActions";
 import {
   dayWords,
   DOCUMENT_FILTERS,
@@ -387,7 +386,7 @@ export function KnowledgePage() {
             <Button asChild variant="outline" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
               <Link to={CORRECTIONS_ADDRESS}>{CORRECTIONS_LINK}</Link>
             </Button>
-            <UnavailableAction label={EXPORT_LABEL} text={EXPORT_LABEL} icon={<Download aria-hidden />} reason={UNAVAILABLE.exportInventory.reason} />
+            <Explanation form="action" act="knowledge.export_inventory" label={EXPORT_LABEL} text={EXPORT_LABEL} icon={<Download aria-hidden />} />
           </>
         }
         notice={notice}

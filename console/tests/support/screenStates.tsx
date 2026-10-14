@@ -43,6 +43,7 @@ import { CALLBACK_PATH, SIGNED_OUT_PATH } from "../../src/auth/constants";
 import { RETURN_PATH as STAFF_LIST_RETURN_PATH } from "../../src/setup/staffList";
 import { FIRST_RUN_PATH } from "../../src/setup/wizard";
 import { fakeIdentityProvider, ISSUER, loadConsole, signIn } from "./auth";
+import { EXPLANATIONS_ADDRESS, servedBody } from "./explanations";
 import { COMPANY_CONSOLE, NAVIGATION_ADDRESS } from "./navigation";
 import { PAGES } from "./pageCases";
 
@@ -228,6 +229,12 @@ export async function mountIn(
     const path = new URL(url, CONSOLE_ORIGIN).pathname;
     if (path === NAVIGATION_ADDRESS) {
       return json(state.kind === "answered" ? (state.answers[NAVIGATION_ADDRESS] ?? navigation) : navigation, 200);
+    }
+    if (path.startsWith(EXPLANATIONS_ADDRESS)) {
+      // The sentence an unavailable act is explained by is the server's, the same in every state of
+      // every page (`support/explanations.ts`), so no case answers it and none is held to.
+      const served = servedBody(decodeURIComponent(path.slice(EXPLANATIONS_ADDRESS.length)));
+      return served === null ? json({ message: API_SENTENCE, trace_id: TRACE_SENTINEL }, 404) : json(served, 200);
     }
     if (path === ME_ADDRESS && !readsMe) {
       return json(A_CALLER_WITH_NOTHING_WITHHELD, 200);

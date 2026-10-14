@@ -256,7 +256,7 @@ export function RoutingPage() {
         <section aria-label={LEVELS_CANNOT_ANSWER} className="flex flex-col gap-1 rounded-md border border-line bg-panel px-4 py-3">
           <h2 className="m-0 text-sm font-semibold text-ink">{LEVELS_CANNOT_ANSWER}</h2>
           {body.exhausted_tiers.map((tier) => (
-            <Note key={tier} kind="not-yet">
+            <Note key={tier} kind="attention">
               {exhaustedSentence(tier)}
             </Note>
           ))}

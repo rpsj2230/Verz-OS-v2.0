@@ -14,12 +14,12 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import { NOT_RECORDED } from "../src/components/kit";
-import { UNAVAILABLE } from "../src/pages/credentials/credentialActions";
 import { CREDENTIALS_HEADING, NOT_OUTRANKED } from "../src/pages/credentials/CredentialsPage";
 import { SET_VALUE, REPLACE_VALUE, KEEP_IT, TYPE_FIRST } from "../src/pages/credentials/SetValueForm";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { apiDocument } from "./support/openapi";
 import { installRadixStubs } from "./support/radix";
+import { noRouteRetires, retiringPattern } from "./support/explanations";
 
 const CONSOLE_ORIGIN = "https://console.test";
 const LIST = "/api/v1/credentials";
@@ -358,10 +358,8 @@ describe("what cannot be done yet", () => {
     // What breaks if this is deleted: a route lands and the page goes on saying the act is coming,
     // so a person is told they cannot do what they can.
     const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
-    for (const [act, { retiredBy }] of Object.entries(UNAVAILABLE)) {
-      expect(paths.filter((path) => retiredBy.test(path)), act).toEqual([]);
-    }
-    expect(UNAVAILABLE.checkSource.retiredBy.test("/api/v1/connectors/{connector}/test")).toBe(true);
+    noRouteRetires(["credential.check_source"]);
+    expect(retiringPattern("credential.check_source").test("/api/v1/connectors/{connector}/test")).toBe(true);
     // The positive sibling: the write this page makes is declared.
     expect(paths).toContain("/api/v1/credentials/{family}/{name}");
   });

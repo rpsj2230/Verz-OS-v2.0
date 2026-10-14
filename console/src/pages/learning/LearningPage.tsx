@@ -9,8 +9,8 @@
  *
  * **Undo is drawn only on a row the API offers it on** (`UNDO_IS_ASKED_OF_THE_SERVER_ROW_BY_ROW`),
  * and it is sent only from a confirmation whose consequence is the sentence the API serves for what
- * that undo writes. Promote and Decide have no route, so each is `kit/UnavailableAction` with its
- * reason (`learningActions.ts`); nothing is drawn that pretends to work.
+ * that undo writes. Promote and Decide have no route, so each is a `kit/Explanation` of the
+ * `action` form with the server's reason; nothing is drawn that pretends to work.
  *
  * **Waiting is left out of the switch for a reader who may not be told where gated changes went.**
  * The API sends it as null, not as an empty list, and a view that reader may not open is not in the
@@ -35,27 +35,26 @@ import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
 import {
   Advanced,
-  ConfirmDialog,
   BY_THE_INSTALL,
+  ConfirmDialog,
+  type DetailView,
   Drawer,
   EmptyList,
   EmptyState,
+  type EntityColumn,
   EntityTable,
+  Explanation,
   Fact,
   FactList,
   FailureState,
   KpiStrip,
   LoadingState,
   Note,
-  NotOffered,
   PageHeader,
   RESET_LABEL,
   SectionCard,
   StatCard,
-  UnavailableAction,
   ViewSwitch,
-  type DetailView,
-  type EntityColumn,
 } from "../../components/kit";
 import { NOTHING_MATCHES } from "../../components/ListControls";
 import { Button } from "../../components/ui/button";
@@ -83,7 +82,7 @@ import {
 } from "../learningQuery";
 import { LimitSettings } from "../operations/LimitSettings";
 import { Narrowing } from "../requirement-checks/Narrowing";
-import { UNAVAILABLE, changeWords, undoWritesWords } from "./learningActions";
+import { ACT_LABELS, changeWords, undoWritesWords } from "./learningActions";
 
 export const LEARNING_HEADING = "Learning";
 export const LEARNING_LEDE =
@@ -106,8 +105,6 @@ export const READY_WORD = "Ready to promote";
 export const PROVING_WORD = "Proving";
 export const WAITING_WORD = "Waiting";
 export const NOTHING_IN_TIER = "Nothing in this tier";
-export const TIER_THREE_WITHHELD =
-  "Where gated changes were routed is shown to a reader who holds the Scopes and departments screen for the whole company, because each one names the department that decides it.";
 export const NOTIFY_DO_NOT_ASK =
   "Tier one lands silently and can be undone. Nobody approves every preference change; they skim and reverse what looks wrong. Forgetting something wrong never needs permission, or the system stays wrong while it waits.";
 export const EVERY_KIND = "Every kind";
@@ -326,7 +323,7 @@ function Shadow({ review, onOpen }: { readonly review: Review; readonly onOpen: 
     <SectionCard
       title="In shadow"
       lede="Rules proving themselves before they apply."
-      action={<UnavailableAction label={UNAVAILABLE.promote.label} text={UNAVAILABLE.promote.label} reason={UNAVAILABLE.promote.reason} />}
+      action={<Explanation form="action" act="learning.promote" label={ACT_LABELS.promote} text={ACT_LABELS.promote} />}
     >
       {review.tierTwo.length === 0 ? (
         <EmptyList
@@ -392,7 +389,7 @@ function Waiting({ review, onOpen }: { readonly review: Review; readonly onOpen:
   if (review.tierThree === null) {
     return (
       <SectionCard title="Waiting on a person">
-        <NotOffered>{TIER_THREE_WITHHELD}</NotOffered>
+        <Explanation form="line" act="learning.tier_three_withheld" />
       </SectionCard>
     );
   }
@@ -422,7 +419,7 @@ function Waiting({ review, onOpen }: { readonly review: Review; readonly onOpen:
     <SectionCard
       title="Waiting on a person"
       lede="Changes that would widen who sees what, routed to the department that decides each."
-      action={<UnavailableAction label={UNAVAILABLE.decide.label} text={UNAVAILABLE.decide.label} reason={UNAVAILABLE.decide.reason} />}
+      action={<Explanation form="action" act="learning.decide" label={ACT_LABELS.decide} text={ACT_LABELS.decide} />}
     >
       {review.queueAlarm?.raised === true ? (
         <p role="alert" data-slot="queue-alarm" className="m-0 mb-3 flex items-start gap-2 rounded-md bg-warn-wash px-3 py-2 text-[13px] text-warn">

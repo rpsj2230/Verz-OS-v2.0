@@ -83,8 +83,6 @@ export const NEVER_SUCCEEDED = "Never";
 export const ON_SCHEDULE = "On schedule";
 export const SOMEBODY = "somebody";
 
-export const CONTROLS_SWITCHED_OFF =
-  "Pausing a job and running one now are switched off on this install; they are switched on under Features. A paused job can still be resumed.";
 export const NO_RUN_CAN_BE_STOPPED = "A run that has started cannot be stopped here; pausing stops the schedule starting it again.";
 export const EVERY_CHANGE_IS_IN_THE_AUDIT_TRAIL = "Every pause, resume and run request is kept in the audit log with who made it.";
 export const MESSAGE_KEPT_ON_THE_SERVER = "A failure is shown by its kind; its message stays on the server.";

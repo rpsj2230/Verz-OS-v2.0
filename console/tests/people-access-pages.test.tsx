@@ -28,7 +28,7 @@ import { CAPABILITY_PATTERN, SHORT_NAME_PATTERN, shortNameProblem } from "../src
 import { phraseFor } from "../src/pages/auditQuery";
 import { ACCOUNT_READY_HEADING, COPY } from "../src/pages/people/AccountReady";
 import { CHOOSE_A_DEPARTMENT, MOVE_SELECTED, MOVE_TITLE } from "../src/pages/people/MoveDrawer";
-import { DEPARTMENT_SET_ON_PEOPLE, EDITED_AT_THE_SOURCE, UNAVAILABLE, WHAT_NEEDS_A_SECOND_FACTOR } from "../src/pages/people/peopleActions";
+import { WHAT_NEEDS_A_SECOND_FACTOR } from "../src/pages/people/peopleActions";
 import { PEOPLE_FILTERS, readPeople } from "../src/pages/people/peopleQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { apiDocument, declaredPropertyNames, declaredRequestBodySchema } from "./support/openapi";
@@ -38,6 +38,7 @@ import { ADD_WORK_EMAIL, JOIN, WORK_EMAIL_BLANK } from "../src/pages/people/Work
 import { installRadixStubs } from "./support/radix";
 import { readRepoFile } from "./support/repo";
 import { NOMINATED_NOBODY, NOTHING_TO_DECIDE } from "../src/pages/roles/RolesPage";
+import { sentenceFor } from "./support/explanations";
 
 const CONSOLE_ORIGIN = "https://console.test";
 const API = "/api/v1";
@@ -525,10 +526,14 @@ describe("one person's page", () => {
     // staff source on an install where the sync never reads it again (M1.6.19).
     const around = { [`${API}/agents`]: { body: { items: [] } }, [`${API}/govern/staff_sources/transfers`]: { body: { transfers: [] } } };
     const listed = await consoleAt("/people/p_ada", { [PERSON_API]: { body: detail() }, ...around });
-    expect(textOf(listed.container)).toContain(EDITED_AT_THE_SOURCE);
+    await waitFor(() => {
+      expect(textOf(listed.container)).toContain(sentenceFor("person.changed_at_the_source"));
+    });
     const managed = await consoleAt("/people/p_ada", { [PERSON_API]: { body: detail({ department_set_on_people: true }) }, ...around });
-    expect(textOf(managed.container)).toContain(DEPARTMENT_SET_ON_PEOPLE);
-    expect(textOf(managed.container)).not.toContain(EDITED_AT_THE_SOURCE);
+    await waitFor(() => {
+      expect(textOf(managed.container)).toContain(sentenceFor("person.department_set_on_people"));
+    });
+    expect(textOf(managed.container)).not.toContain(sentenceFor("person.changed_at_the_source"));
   });
 
   test("a person the API refuses is its sentence and reference and nothing else, whatever the reason", async () => {
@@ -1133,9 +1138,6 @@ describe("what the pages hold against the API", () => {
     // What breaks if this is deleted: a control drawn inert after its route has landed, telling a
     // person they cannot do what they can.
     const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
-    for (const [act, { retiredBy }] of Object.entries(UNAVAILABLE)) {
-      expect(paths.filter((path) => retiredBy.test(path)), act).toEqual([]);
-    }
     // The preview this table held retired with its route, which the page now calls.
     expect(paths).toContain("/api/v1/agents/{agent_id}/preview");
   });

@@ -24,7 +24,6 @@
 
 import { ArrowDown, ArrowUp, Info, MoreHorizontal } from "lucide-react";
 import { Fragment, useId, type ReactNode } from "react";
-import { EmptyList } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import {
   DropdownMenu,
@@ -228,12 +227,7 @@ function MatrixTable({
               <TableCell className={`${CELL} text-acc-text tabular-nums`}>{line.step === null ? "" : String(line.step)}</TableCell>
               {rung === null ? (
                 <TableCell colSpan={acts === undefined ? 3 : 4} className={`${CELL} text-dim`}>
-                  <EmptyList
-                    compact
-                    title={NO_STEP_FOR_THE_LEVEL}
-                    adds="Add a step to the level with Add a step."
-                    by={["super_admin"]}
-                  />
+                  {NO_STEP_FOR_THE_LEVEL}
                 </TableCell>
               ) : (
                 <>

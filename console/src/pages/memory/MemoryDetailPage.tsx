@@ -29,33 +29,33 @@ import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
 import {
   Advanced,
+  BY_THE_INSTALL,
   DetailHeader,
   DetailPage,
-  BY_THE_INSTALL,
+  type DetailView,
   Drawer,
   EmptyList,
   EmptyState,
+  type EntityColumn,
   EntityTable,
+  Explanation,
   Fact,
   FactList,
   FailureState,
   KpiStrip,
   LoadingState,
   Note,
-  NotOffered,
   RESET_LABEL,
   SectionCard,
   StatCard,
   ViewSwitch,
-  type DetailView,
-  type EntityColumn,
 } from "../../components/kit";
 import { NOTHING_MATCHES } from "../../components/ListControls";
 import { Button } from "../../components/ui/button";
 import { cn } from "../../lib/utils";
 import { dayWords, whenWords } from "../access/formParts";
 import { personApiPath, readPersonDetail } from "../people/peopleQuery";
-import { EDIT_NOT_OFFERED, changeWords } from "../learning/learningActions";
+import { changeWords } from "../learning/learningActions";
 import {
   KIND_WORDS,
   MEMORY_PATH,
@@ -169,12 +169,12 @@ function RememberedView({ memory, onOpen }: { readonly memory: Memory; readonly 
       title="What is remembered"
       lede="In its own words, newest first."
       footer={
-        <NotOffered>
-          {EDIT_NOT_OFFERED}{" "}
+        <>
+          <Explanation form="line" act="learning.memory_not_edited" />
           <Link to="/learning" className="text-acc-text underline-offset-4 hover:underline">
             Open Learning
           </Link>
-        </NotOffered>
+        </>
       }
     >
       {all.length === 0 ? (

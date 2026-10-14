@@ -19,7 +19,7 @@ import { useId, useState } from "react";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
-import { ConfirmDialog, FailureState, LoadingState, Note } from "../../components/kit";
+import { ConfirmDialog, Explanation, FailureState, LoadingState, Note } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Label } from "../../components/ui/label";
 import { dayWords } from "../access/formParts";
@@ -232,7 +232,7 @@ export function AgentLeash({ agentId, unnamed }: { readonly agentId: string; rea
                 ? ""
                 : ` Last review: ${String(supervision.understood)} of ${String(supervision.reviewed)} judged actions accepted unchanged.`}
             </span>
-            {supervision.held ? <Note kind="not-yet">every action it takes only practises until a review finds it ready.</Note> : null}
+            {supervision.held ? <Explanation form="note" act="agent.practising_only" /> : null}
             {leash.mayMove && supervision.held && supervision.due ? (
               <div>
                 <Button size="xs" variant="outline" onClick={() => setAsking({ kind: "review" })}>

@@ -28,6 +28,7 @@ import {
   Chip,
   ConfirmDialog,
   EmptyState,
+  Explanation,
   Fact,
   FactList,
   FailureState,
@@ -294,9 +295,7 @@ function SettingsView({
         <SectionCard title={FINDINGS_HEADING}>
           <div className="flex flex-col gap-1.5">
             {body.findings.map((one) => (
-              <Note key={one} kind="not-yet">
-                {one}
-              </Note>
+              <Explanation key={one} form="note" lead="not-yet" told={one} />
             ))}
           </div>
         </SectionCard>

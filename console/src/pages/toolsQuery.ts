@@ -38,9 +38,6 @@ export const UNREADABLE_ANSWER =
 
 export const ON = "On";
 export const OFF_FOR_THE_INSTALL = "Off for the install";
-export const NO_LONGER_OFFERED =
-  "This install no longer registers this tool. It is listed because its catalogue row is kept, so " +
-  "a stop on it still has something to name.";
 export const KEEP_IT = "Leave it as it is";
 export const SWITCH_OFF_FOR_THE_INSTALL = "Switch off for the install";
 export const SWITCH_ON_FOR_THE_INSTALL = "Switch back on for the install";

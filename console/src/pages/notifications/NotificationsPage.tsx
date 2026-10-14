@@ -28,7 +28,16 @@
 import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
-import { Advanced, BY_THE_INSTALL, Fact, FactList, Note, SectionCard, type EntityColumn } from "../../components/kit";
+import {
+  Advanced,
+  BY_THE_INSTALL,
+  type EntityColumn,
+  Explanation,
+  Fact,
+  FactList,
+  Note,
+  SectionCard,
+} from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { GROUP_LABEL } from "../channelsQuery";
 import { at, Line, OpsPage, WholeList } from "../operations/parts";
@@ -221,7 +230,7 @@ function Body({ page, onAct }: { readonly page: NotificationsBody; readonly onAc
           ) : (
             <Note>{RELAY_NOT_SAVED}</Note>
           )}
-          {email.password.vault === "ready" ? null : <Note kind="not-yet">{email.password.vault_told}</Note>}
+          {email.password.vault === "ready" ? null : <Explanation form="note" lead="not-yet" told={email.password.vault_told} />}
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"

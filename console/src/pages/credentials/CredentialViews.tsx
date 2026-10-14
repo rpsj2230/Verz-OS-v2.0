@@ -16,15 +16,14 @@ import {
   Advanced,
   BY_THE_INSTALL,
   EmptyList,
+  Explanation,
   Fact,
   FactList,
-  Note,
-  NotOffered,
   NOT_RECORDED,
+  Note,
   SectionCard,
-  UnavailableAction,
 } from "../../components/kit";
-import { NOT_REMOVED, UNAVAILABLE, WORKS_AT } from "./credentialActions";
+import { WORKS_AT } from "./credentialActions";
 import { READ_BY_WORDS, stateWords, whenWords, type CredentialDetail } from "./credentialRows";
 import { SetValueForm } from "./SetValueForm";
 
@@ -73,7 +72,7 @@ export function CredentialDashboard({ detail }: { readonly detail: CredentialDet
       footer={
         outranked || !row.writable || detail.history?.length === 0 ? (
           <>
-            {outranked ? <Note kind="not-yet">{detail.takesEffectTold}</Note> : null}
+            {outranked ? <Explanation form="note" lead="not-yet" told={detail.takesEffectTold} /> : null}
             {row.writable ? null : <Note>{row.writeTold}</Note>}
             {detail.history?.length === 0 ? (
               <EmptyList
@@ -114,7 +113,7 @@ function ElsewhereLinks({ detail }: { readonly detail: CredentialDetail }) {
           <Link to={WORKS_AT.connectors} className={link}>
             {CONNECT_ON_CONNECTORS}
           </Link>
-          <UnavailableAction label={CHECK_SOURCE} text={CHECK_SOURCE} reason={UNAVAILABLE.checkSource.reason} />
+          <Explanation form="action" act="credential.check_source" label={CHECK_SOURCE} text={CHECK_SOURCE} />
         </>
       ) : null}
       {kind === "relay" ? (
@@ -167,7 +166,7 @@ export function CredentialProfile({
         lede={SET_OR_REPLACE_LEDE}
         footer={
           <>
-            <NotOffered>{NOT_REMOVED}</NotOffered>
+            <Explanation form="line" act="credential.not_removed" />
             <ElsewhereLinks detail={detail} />
           </>
         }

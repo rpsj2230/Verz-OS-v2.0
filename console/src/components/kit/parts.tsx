@@ -1,15 +1,14 @@
 /**
  * The small parts every module page is built from: a headed card, a labelled fact, a chip, a note
- * saying what is true today, an action that is not built yet, and the Advanced section.
+ * saying what is true today, and the Advanced section.
  *
  * **Two kinds of control, and they are kept visibly apart**, because the owner's rule for these
  * pages is no fake functionality. A control whose route exists is an ordinary `Button` or link. A
- * control whose route does not exist is `UnavailableAction`: focusable, so a keyboard reaches the
- * reason; inert, so pressing it changes nothing; dashed, so nobody reads it as live; and its reason
- * is one plain sentence read out by a screen reader and shown on hover or focus. It is never drawn
- * as a working control, and it is never hidden, because a hidden control says the product has no
- * such act at all. A capability the product does not offer is `NotOffered`, a sentence and no
- * control, because a disabled switch still says "this could be switched on".
+ * control whose route does not exist, and a capability the product does not offer, are an
+ * `Explanation` (`kit/explanation.tsx`): one component in three forms, so how an unavailable act is
+ * drawn, and the rule that it is never hidden, is written once. Until 2026-10-15 this file drew two
+ * of them (`UnavailableAction` and `NotOffered`) and a third was the `soon` and `not-yet` kinds of
+ * `Note`; none of the three is here any more.
  *
  * **Internal identifiers live in `Advanced` and nowhere else on a page.** A slug, a principal id or
  * a template id is how the system names a thing, not how a person does, and the owner found the
@@ -22,14 +21,9 @@
  * Task ids: M27.10.2
  */
 
-import { Ban, CircleCheck, CircleDashed, Info } from "lucide-react";
+import { CircleCheck, Info } from "lucide-react";
 import { useId, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
-import { Button } from "../ui/button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
-
-/** What an unavailable control is marked with, so a test can find every one on a page. */
-export const UNAVAILABLE_MARK = "data-unavailable";
 
 /** The Advanced section's own summary line. */
 export const ADVANCED_LABEL = "Advanced";
@@ -139,7 +133,12 @@ export function Chip({
 }
 
 /**
- * What each kind of note leads with. The owner asked for these words and no package codes.
+ * What each kind of note leads with. `attention` is a line the page composed about what just
+ * happened or what is wrong now (a level that cannot answer, a run that removed nothing, a test that
+ * failed): it says nothing about an act that is unavailable, which is an `Explanation`, and it
+ * leads with nothing. The owner asked for these words and no package codes. The two
+ * leads for what is not built or not on, "Coming soon: " and "Not available yet: ", belong to an
+ * `Explanation`, which is the one component that says so.
  *
  * `works` says what a feature does today; `done` says that an act a person just took was done,
  * and leads with nothing. Until 2026-09-29 the confirmation after an act was a `works` note, so the
@@ -147,11 +146,10 @@ export function Chip({
  * that had failed.
  */
 export const NOTE_LEADS = Object.freeze({
-  soon: "Coming soon: ",
-  "not-yet": "Not available yet: ",
   works: "Works today: ",
   done: "",
   info: "",
+  attention: "",
 });
 
 export type NoteKind = keyof typeof NOTE_LEADS;
@@ -161,7 +159,7 @@ export type NoteKind = keyof typeof NOTE_LEADS;
  * never a package code, a route or an internal name: those are for whoever builds the thing.
  */
 export function Note({ children, kind = "info" }: { readonly children: ReactNode; readonly kind?: NoteKind | undefined }) {
-  const Icon = kind === "soon" || kind === "not-yet" ? CircleDashed : kind === "works" || kind === "done" ? CircleCheck : Info;
+  const Icon = kind === "works" || kind === "done" ? CircleCheck : Info;
   const lead = NOTE_LEADS[kind];
   return (
     <p
@@ -169,7 +167,7 @@ export function Note({ children, kind = "info" }: { readonly children: ReactNode
       data-kind={kind}
       className={cn(
         "m-0 flex items-start gap-1.5 text-[12px] leading-relaxed",
-        kind === "soon" || kind === "not-yet" ? "text-warn" : kind === "works" || kind === "done" ? "text-ok" : "text-dim",
+        kind === "works" || kind === "done" ? "text-ok" : kind === "attention" ? "text-warn" : "text-dim",
       )}
     >
       <Icon aria-hidden className="mt-[3px] size-3.5 shrink-0" />
@@ -177,78 +175,6 @@ export function Note({ children, kind = "info" }: { readonly children: ReactNode
         {lead === "" ? null : <span className="font-semibold">{lead}</span>}
         {children}
       </span>
-    </p>
-  );
-}
-
-/**
- * A control whose action is not built yet. Focusable, inert, dashed, and carrying its reason.
- *
- * `aria-disabled` rather than `disabled`, on purpose: a disabled button leaves the tab order, and
- * then a keyboard user never meets the sentence that says why. The press is swallowed, so nothing
- * happens however it arrives.
- */
-export function UnavailableAction({
-  label,
-  reason,
-  icon,
-  text,
-  size = "sm",
-  className,
-}: {
-  /** What the control would do, as its accessible name when it shows no text. */
-  readonly label: string;
-  /** One plain sentence: why it cannot be pressed today. */
-  readonly reason: string;
-  readonly icon?: ReactNode | undefined;
-  /** The visible words, when the control is not an icon. */
-  readonly text?: string | undefined;
-  readonly size?: "sm" | "xs" | "icon-sm" | undefined;
-  readonly className?: string | undefined;
-}) {
-  const describedBy = useId();
-  return (
-    <TooltipProvider delayDuration={200}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            size={size}
-            aria-disabled="true"
-            aria-label={text === undefined ? label : undefined}
-            aria-describedby={describedBy}
-            data-unavailable=""
-            onClick={(event) => {
-              event.preventDefault();
-            }}
-            className={cn(
-              "min-h-11 cursor-not-allowed border-dashed bg-transparent text-dim shadow-none hover:bg-transparent hover:text-dim sm:min-h-8",
-              size === "icon-sm" && "size-11 sm:size-8",
-              className,
-            )}
-          >
-            {icon}
-            {text === undefined ? null : <span>{text}</span>}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-[18rem] text-[12px] leading-snug">
-          {reason}
-        </TooltipContent>
-      </Tooltip>
-      <span id={describedBy} className="sr-only">
-        {reason}
-      </span>
-    </TooltipProvider>
-  );
-}
-
-/** A sentence in place of a control, for something this product does not offer at all. */
-export function NotOffered({ children }: { readonly children: ReactNode }) {
-  return (
-    <p data-slot="not-offered" className="m-0 flex items-start gap-1.5 text-[12.5px] leading-snug text-dim">
-      <Ban aria-hidden className="mt-0.5 size-3.5 shrink-0" />
-      <span>{children}</span>
     </p>
   );
 }

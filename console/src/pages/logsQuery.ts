@@ -62,7 +62,6 @@ export function keptFor(days: number): string {
 /** The export's button, and what it says it holds. */
 export const EXPORT_LOG = "Export";
 export const EXPORT_LOG_TITLE = "Exports every row this search finds in this period, as a CSV file.";
-export const EXPORT_CUT_OFF = "The period held more rows than one export carries; choose a shorter period for the rest.";
 export const EXPORT_SAVED = "The export was saved as a file.";
 export const EXPORT_NOT_SAVED = "This browser could not save the export as a file.";
 

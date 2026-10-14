@@ -77,6 +77,8 @@ function grid(props: Partial<Parameters<typeof DataTable<Client>>[0]> = {}) {
       columns={COLUMNS}
       rows={ROWS}
       rowId={(row) => row.id}
+      emptyAdds="Add a client from the Clients screen."
+      emptyBy={["super_admin"]}
       {...props}
     />,
   ).container;

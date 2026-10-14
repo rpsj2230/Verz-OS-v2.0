@@ -25,7 +25,7 @@ import { Link } from "react-router-dom";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
-import { Advanced, Chip, ConfirmDialog, Fact, FactList, Note, SectionCard } from "../../components/kit";
+import { Advanced, Chip, ConfirmDialog, Explanation, Fact, FactList, SectionCard } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import {
   DropdownMenu,
@@ -276,7 +276,7 @@ export function LarkCard({
           setOff(null);
         }}
       />
-      {guide.vault_told === "" ? null : <Note kind="not-yet">{guide.vault_told}</Note>}
+      {guide.vault_told === "" ? null : <Explanation form="note" lead="not-yet" told={guide.vault_told} />}
     </SectionCard>
   );
 }

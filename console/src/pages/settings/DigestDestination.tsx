@@ -12,7 +12,7 @@ import { useId, useState } from "react";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
-import { ConfirmDialog, FailureState, LoadingState, Note } from "../../components/kit";
+import { ConfirmDialog, Explanation, FailureState, LoadingState, Note } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Label } from "../../components/ui/label";
 import {
@@ -66,7 +66,7 @@ function DestinationForm({ start, label }: { readonly start: DestinationBody; re
 
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      {body.stopped_because === "" ? null : <Note kind="not-yet">{body.stopped_because}</Note>}
+      {body.stopped_because === "" ? null : <Explanation form="note" lead="not-yet" told={body.stopped_because} />}
       {offered ? null : <p className="m-0 text-[12.5px] leading-snug text-dim">{NOTHING_TO_CHOOSE}</p>}
       {body.offers
         .filter((offer) => offer.why_none !== "")

@@ -14,8 +14,8 @@
  * **Nothing here decides who may export.** `exportable` only decides whether the form is drawn; the
  * route decides again before it reads anything.
  *
- * **Importing has no route**, so it is `kit/UnavailableAction` with the sentence
- * `operationsActions.ts` gives; the catalogue still lists every import the product knows with the
+ * **Importing has no route**, so it is a `kit/Explanation` of the `action`
+ * form (`operations.import_data`); the catalogue still lists every import the product knows with the
  * API's sentence for why it cannot run yet.
  *
  * **What was removed.** The breadcrumb as text, the file digest as a default column (a column a
@@ -29,7 +29,7 @@ import { useCallback, useId, useState, type FormEvent } from "react";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
-import { BY_THE_INSTALL, ConfirmDialog, Note, SectionCard, UnavailableAction, type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, ConfirmDialog, type EntityColumn, Explanation, Note, SectionCard } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { FailureNotice } from "../../ui/FailureNotice";
@@ -51,9 +51,9 @@ import {
   type ExportRecordRow,
 } from "../dataTransferQuery";
 import type { Problem } from "../webhooksQuery";
-import { UNAVAILABLE } from "./operationsActions";
 import { at, GOVERNANCE, Line, OpsPage, UNREADABLE, WholeList } from "./parts";
 import { AvailablePill } from "./pills";
+import { ACT_LABELS } from "./operationsActions";
 
 export const DATA_TRANSFER_HEADING = "Import and export";
 export const DATA_TRANSFER_LEDE = "Take an export of the audit trail, see the exports you have taken, and what else can be moved in or out.";
@@ -325,11 +325,12 @@ export function DataTransferPage() {
       title={DATA_TRANSFER_HEADING}
       lede={DATA_TRANSFER_LEDE}
       primary={
-        <UnavailableAction
-          label={UNAVAILABLE.importData.label}
-          text={UNAVAILABLE.importData.label}
+        <Explanation
+          form="action"
+          act="operations.import_data"
+          label={ACT_LABELS.importData}
+          text={ACT_LABELS.importData}
           icon={<Upload aria-hidden />}
-          reason={UNAVAILABLE.importData.reason}
         />
       }
       notice={

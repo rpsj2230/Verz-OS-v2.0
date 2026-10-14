@@ -30,6 +30,7 @@ import { useCallback, useState, type FormEvent } from "react";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
+import { Explanation } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Textarea } from "../../components/ui/textarea";
@@ -238,11 +239,8 @@ function TriggerFields({
           )}
         </Field>
       )}
-      {options.triggers.find((one) => one.kind === draft.kind)?.notOffered ? (
-        <Status>{options.triggers.find((one) => one.kind === draft.kind)?.notOffered}</Status>
-      ) : options.triggers.find((one) => one.kind === draft.kind)?.fires === false ? (
-        <Status>{NOTHING_FIRES_HERE}</Status>
-      ) : null}
+      {options.triggers.map((one) => (one.notOffered === null ? null : <Explanation key={one.kind} form="line" told={one.notOffered} />))}
+      {options.triggers.find((one) => one.kind === draft.kind)?.fires === false ? <Status>{NOTHING_FIRES_HERE}</Status> : null}
     </>
   );
 }

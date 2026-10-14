@@ -48,9 +48,6 @@ export const NO_MODEL_IS_CALLED_YET =
   "given from the next request, and no answer anybody has received.";
 export const EVERY_CHANGE_IS_IN_THE_AUDIT_TRAIL =
   "Every edit and give-back, and who made it, is kept in the audit trail, without the words.";
-export const EDITING_SWITCHED_OFF =
-  "Editing instructions is switched off on this install. An administrator switches it on under " +
-  "Install, Features. Instructions already changed can still be given back to their template.";
 export const NOT_INSTALLED =
   "This agent has no install record, so its instructions have no template to be recorded against " +
   "and cannot be edited here.";

@@ -23,7 +23,18 @@
 
 import { Copy } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { ConnectFlow, copied, FlowDialog, forgetFlow, indexOf, Note, recallFlow, rememberFlow, type FlowStep } from "../../components/kit";
+import {
+  ConnectFlow,
+  copied,
+  Explanation,
+  FlowDialog,
+  type FlowStep,
+  forgetFlow,
+  indexOf,
+  Note,
+  recallFlow,
+  rememberFlow,
+} from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import type { ChannelRow } from "./channelRows";
 import { SAVE_FIRST, SetUp, TestMessage } from "./ChannelProfile";
@@ -38,9 +49,6 @@ export const EVENTS_ADDRESS = "This install's events address";
 export const COPY_ADDRESS = "Copy the address";
 export const ADDRESS_COPIED = "Copied.";
 export const ADDRESS_NOT_COPIED = "Your browser did not allow copying. Select the address and copy it yourself.";
-export const NO_ADDRESS =
-  "This install names no address of its own yet, so there is no events address to paste. Set the install's sign-in redirect address first.";
-
 export function connectLabel(row: ChannelRow): string {
   return `Connect ${row.label}`;
 }
@@ -95,7 +103,7 @@ export function channelFlowKey(name: string): string {
 function EventsAddress({ address }: { readonly address: string }) {
   const [said, setSaid] = useState<"done" | "failed" | null>(null);
   if (address === "") {
-    return <Note kind="not-yet">{NO_ADDRESS}</Note>;
+    return <Explanation form="note" act="channel.no_address" />;
   }
   return (
     <div className="flex min-w-0 flex-col gap-1.5">

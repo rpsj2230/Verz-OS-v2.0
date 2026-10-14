@@ -26,7 +26,7 @@ import { NO_HOLDING, READING_HOLDING } from "../src/pages/review/HoldingPage";
 import { NO_REQUESTS, READING_ELEVATION } from "../src/pages/review/ElevationPage";
 import { READING_REQUEST } from "../src/pages/review/RequestPage";
 import { NOTHING_TO_REVIEW, READING_REVIEW } from "../src/pages/review/ReviewPage";
-import { ACT_LABELS, UNAVAILABLE } from "../src/pages/review/reviewActions";
+import { ACT_LABELS } from "../src/pages/review/reviewActions";
 import { holdingAddress, requestAddress } from "../src/pages/review/reviewQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { apiDocument, declaredQueryParameters, declaredRequestBodySchema } from "./support/openapi";
@@ -34,6 +34,7 @@ import { backendEnumMembers } from "./support/python";
 import { installRadixStubs } from "./support/radix";
 import { readRepoFile } from "./support/repo";
 import { chooseInMenu, confirmWith } from "./support/rowMenu";
+import { registered } from "./support/explanations";
 
 const CONSOLE_ORIGIN = "https://console.test";
 const REVIEW = "/api/v1/govern/access-review";
@@ -293,9 +294,8 @@ describe("access review", () => {
     expect(pattern).toBe(REFERENCE_PATTERN.source);
     expect([...EXPORT_REASONS].sort()).toEqual(Object.values(backendEnumMembers("src/brain/ops/export.py", "ExportReason")).sort());
     const paths = Object.keys((apiDocument()["paths"] as Record<string, unknown>) ?? {});
-    for (const one of Object.values(UNAVAILABLE) as { retiredBy: RegExp }[]) {
-      expect(paths.filter((path) => one.retiredBy.test(path))).toEqual([]);
-    }
+    expect(registered().filter((one) => one.act.startsWith("review."))).toEqual([]);
+    expect(paths.length).toBeGreaterThan(0);
   });
 });
 

@@ -43,15 +43,15 @@ import {
   ConfirmDialog,
   DetailHeader,
   DetailPage,
+  type DetailView,
+  Explanation,
   Fact,
   FactList,
   FailureState,
   LoadingState,
   Note,
   SectionCard,
-  UnavailableAction,
   ViewSwitch,
-  type DetailView,
 } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -340,7 +340,7 @@ function RehearsalResult({ rehearsal }: { readonly rehearsal: DraftRehearsal }) 
           <Words items={rehearsal.questions} />
         </div>
       )}
-      <Note kind="not-yet">{rehearsal.notDone}</Note>
+      <Explanation form="note" lead="not-yet" told={rehearsal.notDone} />
     </div>
   );
 }
@@ -695,7 +695,7 @@ function DraftAnswer({ draftId, step }: { readonly draftId: string; readonly ste
           ) : !draft.yours ? (
             <Note>{draft.state === "published" ? PUBLISHED_ALREADY : NOT_YOURS}</Note>
           ) : draft.publishUnavailable !== undefined ? (
-            <UnavailableAction text={PUBLISH_LABEL} label={PUBLISH_LABEL} reason={draft.publishUnavailable} />
+            <Explanation form="action" told={draft.publishUnavailable} text={PUBLISH_LABEL} label={PUBLISH_LABEL} />
           ) : (
             <>
               <p className="m-0 text-sm text-body">{PUBLISH_CONSEQUENCE}</p>

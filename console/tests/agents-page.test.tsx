@@ -24,7 +24,6 @@ import { ROSTER_ADDRESS } from "../src/components/agentWorkspaceState";
 import { NOT_RECORDED, UNAVAILABLE_MARK } from "../src/components/kit";
 import { agentAddress, NO_AGENTS, ROSTER_HEADING } from "../src/pages/Agents";
 import { readRoster } from "../src/pages/agentsQuery";
-import { UNAVAILABLE } from "../src/pages/agents/agentActions";
 import { ACT_DONE, MAY_NOT_CHANGE, TYPED_MISSING } from "../src/pages/agentLifecycleQuery";
 import { DRAFTS_LINK, NOT_AVAILABLE, readAgentRows } from "../src/pages/agents/AgentsPage";
 import { DRAFTS_ADDRESS, NEW_AGENT_ADDRESS } from "../src/pages/agents/agentDraftsQuery";
@@ -37,6 +36,7 @@ import { apiDocument, declaredProperty, declaredPropertyNames, declaredResponseS
 import { backendPublicMessages } from "./support/python";
 import { installRadixStubs } from "./support/radix";
 import { parseConsoleSource } from "./support/typescript";
+import { noRouteRetires, retiringPattern } from "./support/explanations";
 
 const CONSOLE_ORIGIN = "https://console.test";
 const ROSTER_API = "/api/v1/agents";
@@ -485,13 +485,10 @@ describe("what an entry becomes", () => {
     // What breaks if this is deleted: a sentence saying "coming soon" about an act that has arrived,
     // so a person is told they cannot do what they can. When a lifecycle route lands, this fails
     // until its control is made live and its sentence removed.
-    const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
-    for (const [act, { retiredBy }] of Object.entries(UNAVAILABLE)) {
-      expect(paths.filter((path) => retiredBy.test(path)), act).toEqual([]);
-    }
+    noRouteRetires(["agent.level", "agent.browser"]);
     // The positive sibling: the pattern shape does match the paths it is written for.
-    expect(UNAVAILABLE.browser.retiredBy.test("/api/v1/agents/{agent_id}/browser")).toBe(true);
-    expect(UNAVAILABLE.level.retiredBy.test("/api/v1/agents/{agent_id}/audience")).toBe(true);
+    expect(retiringPattern("agent.browser").test("/api/v1/agents/{agent_id}/browser")).toBe(true);
+    expect(retiringPattern("agent.level").test("/api/v1/agents/{agent_id}/audience")).toBe(true);
   });
 });
 

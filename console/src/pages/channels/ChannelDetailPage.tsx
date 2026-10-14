@@ -32,20 +32,20 @@ import {
   ConfirmDialog,
   DetailHeader,
   DetailPage,
+  type DetailView,
+  Explanation,
   FailureState,
   KpiStrip,
   LoadingState,
   Note,
   StatCard,
-  UnavailableAction,
   ViewSwitch,
-  type DetailView,
 } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { FailureNotice } from "../../ui/FailureNotice";
 import { healthApiPath, switchApiPath, type HealthBody } from "../channelsQuery";
 import { at } from "../operations/parts";
-import { ACT_LABELS, UNAVAILABLE } from "./channelActions";
+import { ACT_LABELS } from "./channelActions";
 import { ChannelAbout } from "./ChannelAbout";
 import { ChannelDashboard } from "./ChannelDashboard";
 import { ChannelFlow, connectLabel } from "./ChannelFlow";
@@ -195,7 +195,7 @@ function ChannelAnswer({ name, tab }: { readonly name: string; readonly tab: str
             </Button>
           )}
           {row.receives ? (
-            <UnavailableAction label={UNAVAILABLE.verify.label} text={UNAVAILABLE.verify.label} reason={UNAVAILABLE.verify.reason} />
+            <Explanation form="action" act="channel.verify" label={ACT_LABELS.verify} text={ACT_LABELS.verify} />
           ) : null}
         </>
       }

@@ -35,27 +35,27 @@ import type { ApiFailure } from "../../api/errors";
 import { useResource, type Resource } from "../../api/useResource";
 import {
   Advanced,
+  BY_THE_INSTALL,
   Chip,
   DetailHeader,
-  BY_THE_INSTALL,
   DetailPage,
+  type DetailView,
   EmptyList,
   EmptyState,
+  type EntityColumn,
   EntityTable,
+  Explanation,
   Fact,
   FactList,
   FailureState,
   KpiStrip,
   LoadingState,
   Note,
-  NotOffered,
   PageHeader,
   SectionCard,
   StatCard,
   StatsStrip,
   ViewSwitch,
-  type DetailView,
-  type EntityColumn,
 } from "../../components/kit";
 import { listPath, NO_QUESTION } from "../../components/listing";
 import { Button } from "../../components/ui/button";
@@ -121,8 +121,6 @@ export const MORE_AGENTS = "There are more agents than are listed here.";
 export const NO_DOCUMENT = "No document you may open is filed under this department.";
 export const NO_GAP = "There is no gap to show here.";
 export const NO_HISTORY = "No change to this department that you may see is recorded.";
-export const PROFILE_ELSEWHERE =
-  "Its lead, teams and scopes are managed on Departments by somebody who may open it.";
 export const HOW_IT_WORKS =
   "A department is where people sit and what a scope can name. Its lead is appointed and confers nothing: what anybody may see comes only from their own grants.";
 
@@ -411,7 +409,7 @@ function Profile({ slug, name, row }: { readonly slug: string; readonly name: st
         lede="Its name, who leads it and how it is organised."
         footer={
           row.data === null && !notTheirs(row.failure) ? undefined : department === null ? (
-            <NotOffered>{PROFILE_ELSEWHERE}</NotOffered>
+            <Explanation form="line" act="department.profile_elsewhere" />
           ) : (
             <p className="m-0 text-[12.5px]">
               <Link to={departmentAddress(slug, "teams")} className="text-acc-text underline-offset-4 hover:underline">

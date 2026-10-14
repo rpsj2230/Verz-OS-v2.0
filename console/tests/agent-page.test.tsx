@@ -27,7 +27,6 @@ import { CompositionDiff } from "../src/components/CompositionDiff";
 import { NOT_RECORDED, UNAVAILABLE_MARK } from "../src/components/kit";
 import { FIGURES_FAILED } from "../src/components/kit/KpiStrip";
 import { readAgentWorkspace, type AgentWorkspaceAnswer } from "../src/pages/agentQuery";
-import { UNAVAILABLE } from "../src/pages/agents/agentActions";
 import { leashRowId, readHeaderFacts, readProfile } from "../src/pages/agents/agentDetailQuery";
 import { COMPUTER_HEADING, takenOverWords } from "../src/pages/agents/AgentProfile";
 import { ANSWERS_NOWHERE, CHANGE_CHANNELS, CHANNELS_DONE, CHANNELS_QUESTION, SAVE_CHANNELS } from "../src/pages/agents/AgentChannels";
@@ -66,6 +65,7 @@ import { backendEnumMembers, backendModelFields, backendPublicMessages } from ".
 import { installRadixStubs } from "./support/radix";
 import { readRepoFile } from "./support/repo";
 import { parseConsoleSource, staticImportGraph } from "./support/typescript";
+import { sentenceFor } from "./support/explanations";
 
 const WORKSPACE_MODULE = "src/brain/console/workspace.py";
 const MODEL_MODULE = "src/brain/agents/model.py";
@@ -574,10 +574,12 @@ describe("the Profile", () => {
       (one) => one.textContent === "Change permissions",
     );
     expect(permissions?.hasAttribute(UNAVAILABLE_MARK)).toBe(false);
-    const reasons = new Set(Object.values(UNAVAILABLE).map((one) => one.reason));
+    const reasons = new Set(["agent.level"].map(sentenceFor));
     for (const control of inert) {
       expect(control.getAttribute("aria-disabled")).toBe("true");
-      expect(reasons.has(document.getElementById(control.getAttribute("aria-describedby") ?? "")?.textContent ?? "")).toBe(true);
+      await waitFor(() => {
+        expect(reasons.has(document.getElementById(control.getAttribute("aria-describedby") ?? "")?.textContent ?? "")).toBe(true);
+      });
     }
     const before = mounted.idp.urls.length;
     for (const control of inert) {

@@ -27,16 +27,16 @@ import {
   ConfirmDialog,
   EmptyList,
   EmptyState,
+  type EntityColumn,
   EntityTable,
+  Explanation,
   FailureState,
   ListToolbar,
   LoadingState,
-  NotOffered,
   Note,
   SectionCard,
   StatCard,
   StatsStrip,
-  type EntityColumn,
 } from "../../components/kit";
 import { FETCHING_MORE, SHOW_MORE } from "../../components/ListControls";
 import { Button } from "../../components/ui/button";
@@ -53,7 +53,7 @@ import {
   type UnboundBody,
 } from "../channelsQuery";
 import { at } from "../operations/parts";
-import { ACT_LABELS, NOT_OFFERED } from "./channelActions";
+import { ACT_LABELS } from "./channelActions";
 import type { ChannelRow } from "./channelRows";
 import { boundBasisWords, channelPeriodOf, channelStatsApiPath, FIRST_PERIOD, readChannelStats } from "./channelStats";
 
@@ -227,7 +227,7 @@ function Bound({ row, version, onChanged }: { readonly row: ChannelRow; readonly
       title={BOUND_HEADING}
       footer={
         <>
-          <NotOffered>{NOT_OFFERED.bindForSomebody}</NotOffered>
+          <Explanation form="line" act="channel.bind_for_somebody" />
           {truncated ? <Note>{MORE_BOUND}</Note> : null}
         </>
       }

@@ -27,12 +27,15 @@ import { useCallback, useMemo, useState } from "react";
 import { useResource } from "../../api/useResource";
 import {
   Advanced,
+  BY_THE_INSTALL,
   Chip,
   DetailHeader,
   DetailPage,
-  BY_THE_INSTALL,
+  type DetailView,
   EmptyList,
+  type EntityColumn,
   EntityTable,
+  Explanation,
   Fact,
   FactList,
   FailureState,
@@ -43,8 +46,6 @@ import {
   SectionCard,
   StatCard,
   ViewSwitch,
-  type DetailView,
-  type EntityColumn,
 } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { at, Line } from "../operations/parts";
@@ -210,7 +211,7 @@ function Profile({ row, page, onAct }: { readonly row: SubscriberRow; readonly p
         </FactList>
         {page.vault === "ready" ? null : (
           <div className="mt-2">
-            <Note kind="not-yet">{page.vault_told}</Note>
+            <Explanation form="note" lead="not-yet" told={page.vault_told} />
           </div>
         )}
       </SectionCard>

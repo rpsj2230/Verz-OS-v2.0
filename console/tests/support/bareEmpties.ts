@@ -11,6 +11,11 @@
  * so; there is no table with no rows, so there is no row to say how to add. They are named so that a new
  * one is a decision.
  *
+ * **One more kind of state: a cell of the owner's drawn failover matrix.** The matrix is a table of the four
+ * levels the owner drew (`tests/models-module.test.tsx` holds it to his screenshot: no lede, no paragraph in
+ * the card), so a level with no step is a cell that says so and not a list with no rows; the control that adds
+ * a step is the card's own.
+ *
  * **`BARE_LISTS` is the backlog, and it is empty.** Each entry would be an empty list drawn as a paragraph
  * that does not say what would add a row or who does it. The test holds the set to exactly this, in both
  * directions: a new bare empty list fails, and a sentence converted to an `EmptyList` must be taken out
@@ -48,14 +53,15 @@ export const BARE_STATES: Readonly<Record<string, readonly string[]>> = {
   "/me": ["No budget of your own is set."],
   "/memory/:subject": ["None"],
   "/memory/:subject/:view": ["None"],
+  "/models": ["No model is set up for this level."],
   "/models/:provider": ["No provider at this address"],
   "/models/:provider/:view": ["No provider at this address"],
   "/people": ["No data steward is appointed."],
   "/prompts": ["Nothing in the platform sends a prompt to a model yet. An edit changes what an agent would be given from the next request, and no answer anybody has received."],
   "/retention/erasures/:requestId": ["No erasure request here"],
   "/retention/holds/:holdId": ["No legal hold here"],
-  "/routing": ["No person is in the directory yet, so there is nobody to ask a golden question as.", "No rule is set, so a question may go to any provider that is turned on."],
-  "/routing/:rungId": ["No person is in the directory yet, so there is nobody to ask a golden question as.", "No rule is set, so a question may go to any provider that is turned on.", "No step on the matrix matches this address. Routing"],
+  "/routing": ["No model is set up for this level.", "No person is in the directory yet, so there is nobody to ask a golden question as.", "No rule is set, so a question may go to any provider that is turned on."],
+  "/routing/:rungId": ["No model is set up for this level.", "No person is in the directory yet, so there is nobody to ask a golden question as.", "No rule is set, so a question may go to any provider that is turned on.", "No step on the matrix matches this address. Routing"],
   "/spend": ["No currency is set yet, so the amount is shown without one. Set it on Install, Settings."],
   "/staff_sources": ["No run yet"],
   "/tools/:name": ["No tool by that name is listed on this install."],

@@ -16,12 +16,13 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import { NO_INSTALLABLE_VERSION } from "../src/pages/agent-templates/AgentTemplateDetailPage";
-import { ACT_LABELS, originWords, UNAVAILABLE } from "../src/pages/agent-templates/templateActions";
+import { ACT_LABELS, originWords } from "../src/pages/agent-templates/templateActions";
 import { NO_TEMPLATES } from "../src/pages/AgentTemplates";
 import { readTemplates } from "../src/pages/agentTemplatesQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { apiDocument, declaredPropertyNames, declaredResponseSchema } from "./support/openapi";
 import { installRadixStubs } from "./support/radix";
+import { noRouteRetires, retiringPattern } from "./support/explanations";
 
 const CONSOLE_ORIGIN = "https://console.test";
 const DIGEST = "d".repeat(64);
@@ -112,10 +113,8 @@ describe("what this module agrees with the API about", () => {
     // What breaks if this is deleted: "coming soon" said about withdrawing after its route lands,
     // or a count of installs added to the gallery, which counts agents the reader may not see.
     const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
-    for (const [one, { retiredBy }] of Object.entries(UNAVAILABLE)) {
-      expect(paths.filter((path) => retiredBy.test(path)), one).toEqual([]);
-    }
-    expect(UNAVAILABLE.withdraw.retiredBy.test("/api/v1/agent-templates/{template_id}/versions/{version}/withdraw")).toBe(true);
+    noRouteRetires(["template.author", "template.withdraw"]);
+    expect(retiringPattern("template.withdraw").test("/api/v1/agent-templates/{template_id}/versions/{version}/withdraw")).toBe(true);
     expect(paths).toContain("/api/v1/agent-templates/{template_id}");
     const gallery = declaredPropertyNames(declaredResponseSchema("/api/v1/agent-templates", "get"));
     expect(gallery.filter((name) => /count|installed/.test(name))).toEqual([]);

@@ -6,7 +6,7 @@
  * says what this screen has to make visible: a role governs the platform and never implies a
  * capability. So the catalogue is a role, what it exists to do, how many usually hold it and whether
  * it needs a scope, and there is no column that could grow a capability. Editing what a role grants is
- * not offered, because there is nothing to edit (`NotOffered`).
+ * not offered, because there is nothing to edit (an `Explanation` of the `line` form).
  *
  * **Holders, named, and no count of anybody hidden.** `GET /govern/roles/holders` answers only the
  * appointments the Roles screen's read admits over where each holder sits, and each carries the
@@ -33,13 +33,13 @@ import { useResource } from "../../api/useResource";
 import {
   BY_THE_INSTALL,
   EmptyList,
+  type EntityColumn,
   EntityTable,
+  Explanation,
   FailureState,
   LoadingState,
-  NotOffered,
   PageHeader,
   SectionCard,
-  type EntityColumn,
 } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import {
@@ -83,9 +83,6 @@ export function nominationState(row: NominationRow): string {
 }
 export const MISCONFIGURED_HEADING = "Approver role and approve permission";
 export const SYNCED_HEADING = "Roles the sync wrote from a group";
-export const A_ROLE_IS_NOT_EDITED =
-  "What a role grants is not edited here, because a role grants nothing: what somebody may see is only what their grants say.";
-
 /** One holder, as the holders route sends one. */
 export interface HolderLine {
   readonly id: string;
@@ -262,7 +259,7 @@ function Holders({ version, onWritten }: { readonly version: number; readonly on
           </>
         ) : undefined
       }
-      footer={<NotOffered>{A_ROLE_IS_NOT_EDITED}</NotOffered>}
+      footer={<Explanation form="line" act="role.not_edited" />}
     >
       {body}
       <AppointDrawer open={appointing} onOpenChange={setAppointing} onWritten={onWritten} />

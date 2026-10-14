@@ -20,7 +20,7 @@
 import { useCallback, useState, type FormEvent, type ReactNode } from "react";
 import { request } from "../../api/client";
 import type { ApiFailure, FieldProblem } from "../../api/errors";
-import { ConfirmDialog, Drawer, Fact, FactList, Note } from "../../components/kit";
+import { ConfirmDialog, Drawer, Explanation, Fact, FactList } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
@@ -49,7 +49,7 @@ import {
   type IssuedKeyBody,
   type KeyRow,
 } from "../serviceAccountsQuery";
-import { ACT_LABELS, NOT_OFFERED } from "./serviceAccountActions";
+import { ACT_LABELS } from "./serviceAccountActions";
 
 export const CANCEL = "Change nothing";
 export const REVIEW = "Review";
@@ -262,7 +262,7 @@ export function RegisterDrawer({
             )}
           </Field>
         </form>
-        <Note>{NOT_OFFERED.changeOwner}</Note>
+        <Explanation form="line" act="service_account.change_owner" />
       </div>
       <ConfirmDialog
         open={pending}
@@ -312,7 +312,7 @@ function NewKey({ issued, onKept }: { readonly issued: IssuedKeyBody; readonly o
       <p aria-label="Key" className="m-0 rounded-md border border-line bg-sunk p-3 font-mono text-[12.5px] text-ink [overflow-wrap:anywhere]">
         {issued.key}
       </p>
-      <Note kind="not-yet">{issued.shown_once}</Note>
+      <Explanation form="note" lead="not-yet" told={issued.shown_once} />
       <p className="m-0 text-[12.5px] text-dim">It stops working after {when(issued.lapses_at)}.</p>
       {copied === null ? null : (
         <p role="status" className="m-0 text-[12.5px] text-dim">
@@ -443,7 +443,7 @@ export function IssueKeyDrawer({
               )}
             </Field>
           </form>
-          <Note>{NOT_OFFERED.rotate}</Note>
+          <Explanation form="line" act="service_account.rotate" />
         </div>
       ) : (
         <NewKey issued={issued} onKept={onDone} />

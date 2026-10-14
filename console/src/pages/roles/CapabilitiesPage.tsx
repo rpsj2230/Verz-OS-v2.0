@@ -24,13 +24,13 @@ import { useResource } from "../../api/useResource";
 import {
   EmptyList,
   EmptyState,
+  type EntityColumn,
   EntityTable,
+  Explanation,
   FailureState,
   LoadingState,
-  NotOffered,
   PageHeader,
   SectionCard,
-  type EntityColumn,
 } from "../../components/kit";
 import { Input } from "../../components/ui/input";
 import { CAPABILITIES_API_PATH, readCapabilities, type CapabilityRow } from "../governQuery";
@@ -41,9 +41,6 @@ export const CAPABILITIES_LEDE = "Everything that can be granted at all, and wha
 export const NO_CAPABILITIES = "No capabilities to show";
 export const NO_CAPABILITIES_DESCRIPTION =
   "The vocabulary is declared by the tools and connected sources this install has, and is shown to a reader who may name capabilities.";
-export const THE_VOCABULARY_IS_DECLARED =
-  "Capabilities are declared by the product's tools and the sources connected to it, so they are not added or edited here.";
-
 const COLUMNS: readonly EntityColumn<CapabilityRow>[] = [
   {
     id: "capability",
@@ -87,7 +84,7 @@ export function CapabilitiesPage() {
   return (
     <div data-slot="capabilities-page" className="flex min-w-0 flex-col gap-4">
       <PageHeader crumbs={[{ label: ROLES_HEADING }, { label: CAPABILITIES_CRUMB }]} title={CAPABILITIES_CRUMB} lede={CAPABILITIES_LEDE} />
-      <SectionCard title="The vocabulary" footer={<NotOffered>{THE_VOCABULARY_IS_DECLARED}</NotOffered>}>
+      <SectionCard title="The vocabulary" footer={<Explanation form="line" act="capability.vocabulary_declared" />}>
         <div className="flex min-w-0 flex-col gap-3">
           {all.length === 0 ? null : (
             <span className="relative flex w-full min-w-0 items-center sm:w-72">

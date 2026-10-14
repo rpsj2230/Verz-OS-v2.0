@@ -14,7 +14,7 @@
  *
  * **A limit is changed here, within bounds the product fixes** (M22.4.1). `LimitSettings` lists
  * every budget and request window `brain.tuning_routes` serves, and draws a control on each row only
- * for a reader the answer says may change it. Until 2026-09-29 this was `kit/UnavailableAction`
+ * for a reader the answer says may change it. Until 2026-09-29 this was a `kit/Explanation`
  * saying "coming soon"; the route landed and the act went, in the same commit.
  *
  * **What was removed.** Raw `true` and `false` cells and bare seconds (words now), and the
