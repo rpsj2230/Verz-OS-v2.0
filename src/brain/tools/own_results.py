@@ -24,7 +24,7 @@ silence as the empty policy with more paperwork.
 scope against the record's own fields: a website check granted for one host reads the records
 whose `website_host` is that host, which is the scope the tool itself asks first.
 
-Task ids: M12.4.4, M12.2.8, M12.2.9
+Task ids: M12.4.4, M12.2.8, M12.2.9, M12.3.5
 """
 
 from __future__ import annotations
@@ -37,6 +37,11 @@ from pydantic import BaseModel
 
 from brain.core.entitlement import Capability
 from brain.core.field_policy import Classification, FieldPolicy, FieldRule
+from brain.tools.document_generation import (
+    GENERATED_DOCUMENT_OBJECT,
+    GENERATED_DOCUMENT_READ,
+    GeneratedDocument,
+)
 from brain.tools.registry import SKILL_SCRIPT_OBJECT
 from brain.tools.run_skill import ScriptRun
 from brain.tools.skill_tools import (
@@ -88,6 +93,12 @@ OWN_RESULT_POLICIES: Final[Mapping[str, FieldPolicy]] = MappingProxyType(
             ScriptRun,
             entity=SKILL_SCRIPT_OBJECT,
             capability=SCRIPT_OUTPUT_CAPABILITY.value,
+            classification=Classification.INTERNAL,
+        ),
+        GENERATED_DOCUMENT_OBJECT: policy_over(
+            GeneratedDocument,
+            entity=GENERATED_DOCUMENT_OBJECT,
+            capability=GENERATED_DOCUMENT_READ.value,
             classification=Classification.INTERNAL,
         ),
         SKILL_INSTRUCTIONS_OBJECT: policy_over(

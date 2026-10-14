@@ -735,19 +735,19 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M32.1.1.1": {
-    status: "BLOCKED",
-    why: "waits on memory for Langfuse: 2,048 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-30 (needs-rupash 120, row 3). PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_services, ops.overlays, ops.wiring +1 more); open for proof on the install or a decision, not for code",
-    updated: "2026-09-30",
+    status: "READY FOR TESTING",
+    why: "Built, wired and off until switched on; the memory wait is over (needs-rupash 120, decided A on 2026-10-05: the other project's Dify, old Langfuse and old v1 worker were taken down, so the five services need 2,304 MB of about 7,000 MB available, measured read-only on 2026-10-14). To prove it on the install: open Install, Settings, set Optional services this server runs to langfuse (add presidio after a comma if the detector is wanted too), save, wait for the next update to finish, then look at the install's next acceptance run, which runs after each update, and check the install check for the trace ledger's five services passes (web, worker, column store, cache and file store each running and healthy). To undo it set the setting back to none. It closes when the install's two newest runs both pass it. PRIOR WORK: ops.overlays, ops.acceptance_checks_services, ops.wiring, docker-compose.langfuse.yml",
+    updated: "2026-10-14",
   },
   "M32.1.1.2": {
-    status: "BLOCKED",
-    why: "waits on memory for Langfuse: 2,048 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-30 (needs-rupash 120, row 3). PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_services, ops.overlays, ops.wiring); open for proof on the install or a decision, not for code",
-    updated: "2026-09-30",
+    status: "READY FOR TESTING",
+    why: "Built, wired and off until switched on; the memory wait is over (needs-rupash 120, decided A on 2026-10-05; about 7,000 MB available against the 2,304 MB the ledger's limits add up to, measured read-only on 2026-10-14). Each of the five services carries a hard memory limit equal to its budget, and saving a list of services that would not all fit in the memory the server last measured is refused at Settings. To prove it on the install: switch langfuse on as for M32.1.1.1, then check the install check that each of the five runs under its budgeted limit passes. It closes when the install's two newest runs both pass it. PRIOR WORK: ops.overlays, ops.acceptance_checks_services, ops.wiring, docker-compose.langfuse.yml",
+    updated: "2026-10-14",
   },
   "M32.2.1.1": {
-    status: "BLOCKED",
-    why: "waits on memory for the personal-data detector: 1,536 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-30 (needs-rupash 120, row 1). PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_services, ops.overlays, ops.pii); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-g4",
-    updated: "2026-09-30",
+    status: "READY FOR TESTING",
+    why: "Built, wired and off until switched on; the memory wait is over (needs-rupash 120, decided A on 2026-10-05; the detector's 1,536 MB fits beside the ledger's 2,304 MB in about 7,000 MB available, measured read-only on 2026-10-14). To prove it on the install: open Install, Settings, set Optional services this server runs to presidio, save, wait for the next update to finish, then look at the install's next acceptance run, which runs after each update, and check the install check that the detector finds every entity the scrub relies on passes. To undo it set the setting back to none. It closes when the install's two newest runs both pass it. The model server (M32.2.1.2) still waits on a larger server (item 120, row 2). PRIOR WORK: ops.overlays, ops.acceptance_checks_services, ops.pii, docker-compose.presidio.yml",
+    updated: "2026-10-14",
   },
   "M32.2.1.2": {
     status: "BLOCKED",
@@ -4907,6 +4907,11 @@ const PROGRESS = {
   "M27.16.3": {
     status: "READY FOR TESTING",
     why: "Built on branch M27/console-lists-wizards-buttons. Prove it on the install. (1) Open Agents (or People, Skills, Connectors): the toolbar ends in Saved filters. Type a search, choose a filter, open Saved filters, give it a name and Save. Clear the search, reopen Saved filters and press the name: the list narrows to the same question. Reload the page and it is still there; sign in as somebody else and it is not. Audit and Logs have the same control beside their filters. (2) Every list table has Columns (hide one and it goes), Export (downloads a file of the rows shown, in the columns shown), a tick box on every row (Export selected appears), and a small panel button on each row that opens a drawer showing every column, including hidden ones. People, Sessions, Access review and the Library also offer an act on the ticked rows. (3) No list shows a total, a page count or an of N anywhere.",
+    updated: "2026-10-14",
+  },
+  "M12.3.5": {
+    status: "READY FOR TESTING",
+    why: "built for Word only, behind a switch that ships off (brain.tools.document_generation, tool documents.generate_document); decks and spreadsheets wait on needs-rupash 193 and are not offered. NO PRIOR WORK existed (no note, no branch, no code). Proved on the install when: 1. Install, Features: switch on 'Let an agent produce a Word document from an approved template'. 2. Knowledge: add a document of kind Template holding a line such as 'Prepared for {{client_name}}.' and have its steward verify it. 3. Give a person, and an agent whose tools include documents.generate_document, the capabilities invoke:generated_document and read:generated_document. 4. As that person ask the agent to produce a document from the template with a value for client_name: its answer names a file, which is listed under that person's artifacts and opens in Word with the value in it. 5. Ask the same as a person in another department, and with a draft or unverified document as the template: nothing is produced and the refusal is the same sentence. Limit: the layout is rebuilt from the template's text, so the original file's styles and logo are not carried; that needs a link from each library item to its original file, which is a migration.",
     updated: "2026-10-14",
   },
 };
