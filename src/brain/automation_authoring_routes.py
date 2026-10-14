@@ -88,7 +88,8 @@ from brain.console.automation_gallery import (
 from brain.core.errors import Absent, Failed
 from brain.ops.agent_automation_store import StoredAgentAutomations
 from brain.ops.automation_event import WEBHOOK_NOT_OFFERED_ON_THE_FORM
-from brain.ops.features import AUTOMATION_AUTHORING, AUTOMATION_EVENTS, is_on
+from brain.ops.features import AUTOMATION_AUTHORING, is_on
+from brain.ops.features_declared.automation_events import AUTOMATION_EVENTS
 from brain.orchestration.unattended import TriggerKind
 from brain.routing_routes import sessions_of
 

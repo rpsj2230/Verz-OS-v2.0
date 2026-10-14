@@ -34,7 +34,8 @@ from brain.ops.automation_event_store import event_starts_are_on, run_changes
 from brain.ops.automation_run import RUNNER_ACTOR, PausedBecause
 from brain.ops.automation_run_store import run_automations
 from brain.ops.connector_sync_store import record_upsert
-from brain.ops.features import AUTOMATION_EVENTS, switch
+from brain.ops.features import switch
+from brain.ops.features_declared.automation_events import AUTOMATION_EVENTS
 from brain.session import make_session_factory
 from tests.fixtures.scratch_postgres import engine, run, sql
 from tests.unit.test_acceptance import at_head

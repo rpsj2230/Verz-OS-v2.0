@@ -2,11 +2,11 @@
 
 `brain.ops.automation_event` decides what is due and holds no connection. This is the SQL between
 those decisions and the worker's `automation_run` control, which runs it as the second half of
-every tick when `brain.ops.features.AUTOMATION_EVENTS` is on. Nothing here is a second runner: the
-reach is `brain.ops.automation_run.admitted_run`, the performer is
-`brain.ops.automation_run_store.perform`, the run is a `RunRecord` in the same table, its
-consequences leave through the same outbox event and its failures pause through the same
-`afterwards`. What differs is what makes it due.
+every tick when `AUTOMATION_EVENTS` (`brain.ops.features_declared.automation_events`) is on.
+Nothing here is a second runner: the reach is `brain.ops.automation_run.admitted_run`, the
+performer is `brain.ops.automation_run_store.perform`, the run is a `RunRecord` in the same
+table, its consequences leave through the same outbox event and its failures pause through the
+same `afterwards`. What differs is what makes it due.
 
 **An armed automation is one whose `next_run_at` holds the instant it was armed.** A change starts
 nothing before that instant, and no cadence ever moves it, so what the console shows as the next
@@ -89,7 +89,8 @@ from brain.ops.automation_run import (
     failures_in_a_row,
     run_event,
 )
-from brain.ops.features import AUTOMATION_EVENTS, is_on
+from brain.ops.features import is_on
+from brain.ops.features_declared.automation_events import AUTOMATION_EVENTS
 from brain.ops.halt_store import Work, read_state, refusal_in
 from brain.ops.outbox_store import record_event, subscribers
 from brain.orchestration.unattended import TriggerKind

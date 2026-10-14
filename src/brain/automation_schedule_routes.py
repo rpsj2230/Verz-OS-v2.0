@@ -71,7 +71,8 @@ from brain.console.automations import ChangeKind
 from brain.core.errors import Absent, Failed
 from brain.ops.automation_run import PausedBecause, RunRecord
 from brain.ops.automation_run_store import Listed, StoredAutomationSchedules
-from brain.ops.features import AUTOMATION_EVENTS, is_on
+from brain.ops.features import is_on
+from brain.ops.features_declared.automation_events import AUTOMATION_EVENTS
 from brain.orchestration.unattended import TriggerKind
 from brain.routing_routes import sessions_of
 from brain.tables.automation_run import STARTED

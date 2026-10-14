@@ -198,8 +198,10 @@ async def a_change_starts_one_run_as_an_owner_who_may_read_it(h: Harness) -> Non
         await pass_over(reader),
         await pass_over(outsider),
     )
+    if not first:
+        raise CheckFailedError(NO_RUN_WAS_STARTED)
     if first != [RunOutcome.SUCCEEDED]:
-        raise CheckFailedError(NO_RUN_WAS_STARTED if not first else A_RECORD_STARTED_TWO)
+        raise CheckFailedError(A_RECORD_STARTED_TWO)
     if again:
         raise CheckFailedError(A_REPEAT_LOOK_RAN)
     if nothing:
