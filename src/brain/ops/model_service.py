@@ -90,7 +90,7 @@ from brain.models.wire import (
     http_transport,
     local_wire,
 )
-from brain.ops.egress import Detector, analyser
+from brain.ops.egress import Detector, analyser, detector_for, entities
 from brain.ops.provider_health_store import (
     SessionDepthAlerts,
     SessionHealth,
@@ -600,6 +600,7 @@ def model_service_at_start(
     *,
     client: httpx.Client | None = None,
     analyser_address: str | None = None,
+    entity_address: str | None = None,
 ) -> ModelService:
     """The executor this process calls models through. Never raises.
 
@@ -611,9 +612,16 @@ def model_service_at_start(
     `analyser_address` is where this install's personal data analyser answers, from
     `brain.ops.pii.analyzer_address`, or None where the profile deploys none: every request to a
     third party is then scrubbed by the rules alone, and never sent unscrubbed.
+
+    `entity_address` is where the install's entity model answers, from
+    `brain.ops.model_server_client.entity_endpoint`, or None where the install runs none. It is a
+    second leg beside the analyser's and, like it, only adds names the rules cannot find.
     """
     owned = client if client is not None else httpx.Client(follow_redirects=False)
-    detector = analyser(analyser_address, owned) if analyser_address else None
+    detector = detector_for(
+        analyser_detector=analyser(analyser_address, owned) if analyser_address else None,
+        entity_detector=entities(entity_address, owned) if entity_address else None,
+    )
     try:
         address = value_of(ENDPOINT_SETTING)
     except Exception as exc:
@@ -635,6 +643,14 @@ def model_service_at_start(
         "model drivers built",
         providers=sorted(drivers),
         ladder="database" if sessions is not None else "none",
-        egress_detector="analyser" if detector is not None else "rules",
+        egress_detector=(
+            "analyser and entity model"
+            if analyser_address and entity_address
+            else "entity model"
+            if entity_address
+            else "analyser"
+            if detector is not None
+            else "rules"
+        ),
     )
     return ModelService(calls=calls, client=owned)

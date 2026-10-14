@@ -14,7 +14,8 @@ from __future__ import annotations
 
 import asyncio
 import io
-from collections.abc import Iterator
+import json
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from typing import Any
 
@@ -297,3 +298,107 @@ def test_the_photograph_check_fails_where_an_ordinary_page_is_refused(
     outcome = judged(PHOTOGRAPHS)
 
     assert outcome[0] == FAILED and "ordinary page was refused" in outcome[1]
+
+
+# ------------------------------------------------------------------ the entity part
+ENTITY = "the_entity_part_finds_a_name_no_pattern_describes"
+SENTENCE_WITH_NAME = (
+    f"Please send the signed lease to {modelserver.NAME_NO_PATTERN_DESCRIBES} before Friday."
+)
+
+
+@pytest.fixture
+def entity_part() -> Iterator[None]:
+    before = hold_saved(
+        {"INSTALL_SERVICES": "modelserver", "INSTALL_MODEL_PARTS": "embedding,entities"}
+    )
+    yield
+    hold_saved(before)
+
+
+def entity_server(monkeypatch: pytest.MonkeyPatch, handler: Callable[[Any], Any]) -> list[str]:
+    import httpx
+
+    sent: list[str] = []
+    real = httpx.Client
+
+    def client(*args: Any, **kwargs: Any) -> httpx.Client:
+        def recording(request: httpx.Request) -> httpx.Response:
+            sent.append(request.content.decode("utf-8"))
+            answered: httpx.Response = handler(request)
+            return answered
+
+        kwargs["transport"] = httpx.MockTransport(recording)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "Client", client)
+    return sent
+
+
+def finds_the_name() -> Any:
+    import httpx
+
+    name = modelserver.NAME_NO_PATTERN_DESCRIBES
+    start = SENTENCE_WITH_NAME.index(name)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        span = {"label": "person", "start": start, "end": start + len(name), "score": 0.95}
+        return httpx.Response(200, json={"spans": [span]})
+
+    return handler
+
+
+def test_the_entity_check_is_not_run_without_the_server_or_the_part(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Not failed: an install that runs no server, or one without the part, has nothing wrong.
+
+    Delete this and every install that chose not to run it shows a failure; nothing is sent."""
+    sent = entity_server(monkeypatch, finds_the_name())
+    before = hold_saved({})
+    try:
+        assert judged(ENTITY) == (NOT_RUN, modelserver.NO_MODEL_SERVER_HERE)
+        hold_saved({"INSTALL_SERVICES": "modelserver"})
+        assert judged(ENTITY) == (NOT_RUN, modelserver.NO_ENTITY_PART_HERE)
+    finally:
+        hold_saved(before)
+    assert sent == []
+
+
+@pytest.mark.usefixtures("entity_part")
+def test_a_part_that_finds_the_name_passes_and_is_asked_the_applications_question(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The positive case, and what was asked: the request is the application's, with the declared
+    labels and the sentence.
+
+    Delete this and a check that fails everything passes every refusal below."""
+    sent = entity_server(monkeypatch, finds_the_name())
+
+    assert judged(ENTITY) == (PASSED, "")
+    [body] = [json.loads(one) for one in sent]
+    assert tuple(body) == ("model", "labels", "text") and body["text"] == SENTENCE_WITH_NAME
+
+
+@pytest.mark.usefixtures("entity_part")
+@pytest.mark.parametrize(
+    ("status", "body", "sentence"),
+    [
+        (200, {"spans": []}, modelserver.THE_ENTITY_PART_LEFT_THE_NAME),
+        (503, None, modelserver.THE_ENTITY_PART_DID_NOT_ANSWER),
+        (200, {"nothing": 1}, modelserver.THE_ENTITY_PART_DID_NOT_ANSWER),
+    ],
+    ids=["finds-nothing", "unwell", "unreadable"],
+)
+def test_a_part_that_finds_nothing_or_does_not_answer_fails_with_its_own_sentence(
+    monkeypatch: pytest.MonkeyPatch, status: int, body: Any, sentence: str
+) -> None:
+    """Nothing found leaves the name in the text, and a part that is down or unreadable did not
+    answer; they are two sentences with two remedies.
+
+    Delete this and a part that finds no names passes by answering."""
+    import httpx
+
+    entity_server(monkeypatch, lambda request: httpx.Response(status, json=body))
+
+    assert judged(ENTITY) == (FAILED, sentence)

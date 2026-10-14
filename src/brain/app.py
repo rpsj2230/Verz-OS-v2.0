@@ -138,6 +138,7 @@ from brain.ops.ledger_export import KeptKeys, LedgerShipper, destination_here
 from brain.ops.live_read_run import live_records_for
 from brain.ops.log_store import start_log_store, stop_log_store
 from brain.ops.matrix_gate_run import InstallMatrixGate
+from brain.ops.model_server_client import entity_endpoint
 from brain.ops.model_service import (
     ModelService,
     held_providers,
@@ -684,6 +685,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.models = model_service_at_start(
         app.state.db_sessions,
         analyser_address=analyzer_address(settings.profile, settings.presidio_url),
+        entity_address=entity_endpoint(),
     )
     # The matrix gate a Routing screen change is run through before it takes traffic (M5.6.2).
     # Reads the state above at each change, so it asks the rules and registry of that moment.
