@@ -46,6 +46,16 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Switching a plugin on or off and removing a disabled one change a record and nothing that runs, because no " +
     "runner exists for the points that take code; a removed plugin is a retired row that keeps every version it " +
     "ran, so recording its manifest again brings it back, which tests/unit/test_acceptance_checks_plugin_registry.py holds.",
+  "src/pages/install/MigrationPanel.tsx document.path":
+    "Saving the register, the comparison period or the cutover record adds a version and replaces nothing: " +
+    "ops.migration_record is insert-only (no UPDATE or DELETE is granted) and the newest version is current, so " +
+    "every earlier one is kept and can be read, and nothing reaches the old system, which " +
+    "tests/unit/test_migration_routes.py and tests/unit/test_acceptance_checks_migration_workspace.py hold.",
+  "src/pages/install/MigrationPanel.tsx COMPLETE_PATH":
+    "Reporting a cutover complete records a claim and ends nothing: brain.migration_routes builds CompletedCutover, " +
+    "which refuses while an act with a security consequence is unrecorded, writes one more insert-only version, and " +
+    "reaches nothing of the old system; an edit afterwards is no longer reported complete, so it is undone by " +
+    "saving again, which tests/unit/test_migration_routes.py holds.",
   "src/pages/install/OrchestrationPanel.tsx REHEARSALS_API_PATH":
     "Weighing a plan adds one decision to the record and starts, ends and replaces nothing: " +
     "brain.orchestration_routes.rehearse keeps the numbers and the verdict in ops.fanout_gate, which is insert-only " +
