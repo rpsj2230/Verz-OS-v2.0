@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-14T07:35:25.584803+00:00",
-  "commit": "60daa44e",
-  "commit_subject": "Deploy publishes one image at a time, so a burst of merges ends on main's tip; main's CI is measured and left as it is (#592)",
+  "generated_at": "2026-10-14T07:48:41.001470+00:00",
+  "commit": "5adf9ec9",
+  "commit_subject": "A person's own skill gets somewhere to say whose it is: agent.skill_personal (migration 0232, tables only) (#591)",
   "total": 1625,
   "done": 864,
   "percent": 53.2,
