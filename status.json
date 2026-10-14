@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-14T05:46:37.817914+00:00",
-  "commit": "8f6dad40",
-  "commit_subject": "Shared files stop conflicting: derived counts, one file per new feature, one file per new proof hold (#596)",
+  "generated_at": "2026-10-14T05:59:27.729759+00:00",
+  "commit": "ac6217dd",
+  "commit_subject": "A merge that changes nothing a worker runs no longer restarts the worker, so an acceptance run in progress survives it (#594)",
   "total": 1625,
   "done": 864,
   "percent": 53.2,
