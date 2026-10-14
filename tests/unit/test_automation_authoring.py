@@ -226,7 +226,7 @@ def test_a_trigger_carries_exactly_the_one_fact_its_kind_needs() -> None:
     saved with a cadence nothing reads, or a schedule with nothing to say when."""
     assert TriggerChoice(kind=TriggerKind.SCHEDULE, cadence=DAILY).fires
     assert not TriggerChoice(kind=TriggerKind.WEBHOOK, source="invoice_paid").fires
-    assert not TriggerChoice(kind=TriggerKind.CONNECTOR_EVENT, source="invoicing").fires
+    assert TriggerChoice(kind=TriggerKind.CONNECTOR_EVENT, source="invoicing").fires
     with pytest.raises(GalleryError):
         TriggerChoice(kind=TriggerKind.SCHEDULE)
     with pytest.raises(GalleryError):

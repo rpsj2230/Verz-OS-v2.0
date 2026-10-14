@@ -795,7 +795,7 @@
    "proof": [
     "M17.7.3"
    ],
-   "decision": null
+   "decision": "needs-rupash 223: an automation starts by a schedule or by a connected source's change, and nothing starts one from outside, so a webhook is refused when written and shown as not offered"
   },
   {
    "id": "ARC-A-046",
@@ -4087,7 +4087,7 @@
    "proof": [
     "M17.7.3"
    ],
-   "decision": null
+   "decision": "needs-rupash 223: an automation starts by a schedule or by a connected source's change, and nothing starts one from outside, so a webhook is refused when written and shown as not offered"
   },
   {
    "id": "FEAT-8.2",
@@ -10763,7 +10763,7 @@
    "proof": [
     "M17.7.3"
    ],
-   "decision": null
+   "decision": "needs-rupash 223: an automation starts by a schedule or by a connected source's change, and nothing starts one from outside, so a webhook is refused when written and shown as not offered"
   },
   {
    "id": "REQ-20",
@@ -17864,7 +17864,7 @@
     "M39.9.2.5",
     "M39.9.2.6"
    ],
-   "decision": "needs-rupash 209: a connector event or a webhook can be chosen and saved, and nothing fires one yet; needs-rupash 210: an instruction a person writes is saved and cannot be run yet"
+   "decision": "needs-rupash 223: a change starts an automation once the install switches it on, and a webhook is refused when written; needs-rupash 210: an instruction a person writes is saved and cannot be run yet"
   },
   {
    "id": "ANY-033",

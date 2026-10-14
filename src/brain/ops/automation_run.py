@@ -65,6 +65,7 @@ from __future__ import annotations
 
 import enum
 import hashlib
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -131,6 +132,9 @@ RUN_ID_PREFIX: Final = "run_"
 
 #: Hex characters of the digest a run id carries. 128 bits, well inside an event id's width.
 RUN_ID_DIGEST_CHARS: Final = 32
+
+#: What a run id looks like, from the two constants it is built with.
+RUN_ID_SHAPE: Final = f"{RUN_ID_PREFIX}[0-9a-f]{{{RUN_ID_DIGEST_CHARS}}}"
 
 
 class AutomationRunError(Exception):
@@ -430,8 +434,13 @@ def afterwards(
     owner_id: str,
     guards: str,
     at: datetime,
+    armed_at: datetime | None = None,
 ) -> Afterwards:
     """The automation's next run, or its pause, after one run ended with `outcome`.
+
+    `armed_at` is for an automation a change starts: it has no cadence, and what stays on it
+    between runs is the instant it was armed, so a success or a failure under the threshold
+    leaves exactly that and only a refusal or the failure pause removes it.
 
     `failures_before` is how many runs immediately before this one failed. A refusal pauses at
     once with its reason; a failure brings the count to one more and pauses through
@@ -462,6 +471,8 @@ def afterwards(
                 notice=paused.notice,
             )
     if cadence is None:
+        if armed_at is not None:
+            return Afterwards(next_run_at=armed_at, paused_because=None)
         msg = f"{automation.automation_id!r} ran with no cadence to schedule its next run from"
         raise AutomationRunError(msg)
     return Afterwards(next_run_at=next_run_after(cadence, at), paused_because=None)
@@ -486,18 +497,32 @@ PAUSE_AFTER: Final = FAILURES_BEFORE_PAUSE
 
 
 # ------------------------------------------------------------------ the record
-def run_id(automation_id: str, due_at: datetime) -> str:
-    """One slot's run id: derived from the automation and the instant it was due, never minted.
+def run_id(automation_id: str, due_at: datetime, change_key: str = "") -> str:
+    """One run's id: derived from the automation and the instant it was due, never minted.
 
     The instant is normalised to UTC in microseconds, so one slot read back through two drivers
-    with two offsets is one id.
+    with two offsets is one id. A run a change started also hashes the change's key
+    (`brain.ops.automation_event.change_key`), because a source writes a page of records in one
+    transaction and so several records share one instant: the instant alone would call the
+    second record's run the first's and refuse it. With no key the digest is exactly what it was
+    before changes could start a run, so no scheduled slot's id moved.
     """
     if due_at.tzinfo is None:
         msg = "a naive due instant names a different slot on every host"
         raise AutomationRunError(msg)
     slot = due_at.astimezone(UTC).isoformat(timespec="microseconds")
-    digest = hashlib.sha256(f"{automation_id}\n{slot}".encode()).hexdigest()
+    material = (
+        f"{automation_id}\n{slot}" if not change_key else f"{automation_id}\n{slot}\n{change_key}"
+    )
+    digest = hashlib.sha256(material.encode()).hexdigest()
     return f"{RUN_ID_PREFIX}{digest[:RUN_ID_DIGEST_CHARS]}"
+
+
+#: The key a change-started run carries when it was read back from the table. The key is hashed
+#: into the id and not stored, so a stored run cannot say which change it answered and nobody asks
+#: it to: what the constructor guards is a writer building an id wrongly, and a stored id was
+#: built by a writer.
+CHANGE_NOT_KEPT: Final = "<not kept>"
 
 
 @dataclass(frozen=True)
@@ -520,9 +545,15 @@ class RunRecord:
     reason: PausedBecause | None = None
     ent_hash: str | None = None
     result: tuple[str, ...] = ()
+    #: The change that started this run, or empty for a scheduled slot. See `run_id`.
+    change_key: str = ""
 
     def __post_init__(self) -> None:
-        if self.run_id != run_id(self.automation_id, self.due_at):
+        if self.change_key == CHANGE_NOT_KEPT:
+            if not re.fullmatch(RUN_ID_SHAPE, self.run_id):
+                msg = f"{self.run_id!r} is not the shape of a run id"
+                raise AutomationRunError(msg)
+        elif self.run_id != run_id(self.automation_id, self.due_at, self.change_key):
             msg = f"{self.run_id!r} is not the id of {self.automation_id!r}'s slot"
             raise AutomationRunError(msg)
         if (self.outcome is RunOutcome.REFUSED) != (self.reason is not None):

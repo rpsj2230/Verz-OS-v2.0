@@ -1320,9 +1320,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M17.4.1": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Schedule trigger is built: automation_run, automation_run_store.run_automations_now started by schedule_runner, cadence from console/automation_gallery. Connector-event and webhook triggers exist only as orchestration/unattended.TriggerKind (used by adoption.channel_for_trigger); nothing starts a run on either. NEXT: build the two missing trigger paths (connector change event, inbound webhook) into automation_run and show all three kinds on the agent page's New automation PLAN 2026-10-12: also reached from the agent page's New automation (M39.9.2.2); the trigger kinds must be selectable and shown there.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built (M17/automation-start-sources) to needs-rupash 223 option B: an automation starts by a schedule or by a connector change and by nothing from outside. ops/automation_event decides what is due (per-pass and per-hour bounds, a change run once by its id), ops/automation_event_store finds changed records inside the owner's row scope and runs each as the owner through admitted_run, and the index's updated_at now moves only when a record's fields change. A webhook is refused when written and the form lists it as not offered. Behind the automation_events switch, which ships off. Proved on the install by the check a_change_starts_one_run_as_an_owner_who_may_read_it once the owner switches it on and changes a record. NOT BUILT: a condition is still not applied to a change or a schedule (needs-rupash 177); the signed inbound address is not built until a real automation needs it. PRIOR WORK: Schedule trigger built (automation_run, run_automations_now); TriggerKind existed with nothing starting a run on two of its kinds.",
+    updated: "2026-10-14",
   },
   "M17.4.2": {
     status: "IN PROGRESS",

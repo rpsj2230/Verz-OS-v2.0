@@ -89,12 +89,19 @@ from brain.ops.automation_run_store import (
     Listed,
     StoredAutomationSchedules,
 )
+from brain.orchestration.unattended import TriggerKind
 from brain.routing_routes import sessions_of
 from brain.tables.automation_run import STARTED
 
 log = structlog.get_logger()
 
 #: The addresses, under `API_PREFIX`. The console's query file names the same ones.
+#: What the page says about an automation a change starts: where it is started from.
+STARTED_FROM_THE_AGENTS_PAGE: Final = (
+    "It starts when a connected source reports a change, and it is started from the agent's own "
+    "Automations tab, where what it listens to is shown."
+)
+
 LIST_PATH: Final = "/console/automations"
 ONE_PATH: Final = "/console/automations/{automation_id}"
 STATS_PATH: Final = "/console/automations/{automation_id}/stats"
@@ -547,7 +554,11 @@ def detail_view(detailed: Detailed, agent: AgentRecord, asked: Asking) -> Automa
     if one.paused and not listed.removed:
         cannot_run = cannot_start_because(one, agent, asked.now)
         if cannot_run is None and cadence is None and listed.authored is not None:
-            cannot_run = NOTHING_FIRES_THIS_YET
+            cannot_run = (
+                STARTED_FROM_THE_AGENTS_PAGE
+                if listed.authored.trigger.kind is TriggerKind.CONNECTOR_EVENT
+                else NOTHING_FIRES_THIS_YET
+            )
     return AutomationDetailView(
         automation=row_view(listed, agent, asked),
         guards=listed.guards,

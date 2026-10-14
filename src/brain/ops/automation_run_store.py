@@ -45,7 +45,7 @@ from datetime import datetime, timedelta
 from typing import Any, Final
 
 import structlog
-from sqlalchemy import Select, func, insert, select, text, update
+from sqlalchemy import ColumnElement, Select, func, insert, select, text, update
 from sqlalchemy.dialects.postgresql import insert as upsert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -65,6 +65,7 @@ from brain.ops.automation_change_store import changes_by_automation, record_chan
 from brain.ops.automation_owner import PrincipalRecords
 from brain.ops.automation_owner_store import PRINCIPAL_SETTING
 from brain.ops.automation_run import (
+    CHANGE_NOT_KEPT,
     PAUSE_AFTER,
     REPORT_PERIOD,
     RUNNER_ACTOR,
@@ -82,6 +83,7 @@ from brain.ops.automation_run import (
 from brain.ops.halt_store import Work, read_state, refusal_in
 from brain.ops.outbox_store import record_event, subscribers
 from brain.ops.question_gap_store import gaps_between
+from brain.orchestration.unattended import TriggerKind
 from brain.session import make_app_engine, make_session_factory
 from brain.tables.agent_automation import AgentAutomationRow
 from brain.tables.audit import ENT_HASH_SETTING, TRACE_ID_SETTING
@@ -108,6 +110,19 @@ RUN_EVERY: Final = timedelta(minutes=1)
 
 
 # ------------------------------------------------------------------ the statements
+def _started_by_the_clock() -> ColumnElement[bool]:
+    """Rows a cadence starts: a template's, and an authored row whose trigger is a schedule.
+
+    Written as `IS DISTINCT FROM` the two kinds a change or a call starts, so a row with no trigger
+    column (every template install) is a schedule's, which is what it was before triggers existed.
+    A row a change starts carries the instant it was armed in `next_run_at` and must never be
+    claimed here: it would be due at once and refused as a schedule with no cadence.
+    """
+    return AgentAutomationRow.trigger_kind.is_distinct_from(
+        TriggerKind.CONNECTOR_EVENT.value
+    ) & AgentAutomationRow.trigger_kind.is_distinct_from(TriggerKind.WEBHOOK.value)
+
+
 def owed_ids(now: datetime, limit: int) -> Select[tuple[str]]:
     """The automations owed a run at `now`, soonest first, bounded. Read without a lock.
 
@@ -119,6 +134,7 @@ def owed_ids(now: datetime, limit: int) -> Select[tuple[str]]:
         .where(
             AgentAutomationRow.next_run_at.is_not(None),
             AgentAutomationRow.next_run_at <= now,
+            _started_by_the_clock(),
             AgentAutomationRow.automation_id.not_in(removed_ids()),
         )
         .order_by(AgentAutomationRow.next_run_at, AgentAutomationRow.automation_id)
@@ -134,6 +150,7 @@ def claim(automation_id: str, now: datetime) -> Select[tuple[AgentAutomationRow]
             AgentAutomationRow.automation_id == automation_id,
             AgentAutomationRow.next_run_at.is_not(None),
             AgentAutomationRow.next_run_at <= now,
+            _started_by_the_clock(),
             AgentAutomationRow.automation_id.not_in(removed_ids()),
         )
         .with_for_update(skip_locked=True)
@@ -473,6 +490,13 @@ async def run_automations(
         done = await run_one(sessions, one, now=now, principals=readers, entitlements=loader)
         if done is not None:
             ran.append(done)
+    # The second half of the tick: what a change started. Imported here because the store of
+    # changes imports this module, and asked of the switch on every tick so turning it off stops
+    # the next pass without a restart.
+    from brain.ops.automation_event_store import event_starts_are_on, run_changes
+
+    if await event_starts_are_on(sessions):
+        ran.extend(await run_changes(sessions, now=now, principals=readers, entitlements=loader))
     return tick_of(ran)
 
 
@@ -647,6 +671,9 @@ def record_of_run(row: AutomationRunRow) -> RunRecord | None:
     """A stored run as the domain's record, or None and a log line when it does not construct."""
     try:
         return RunRecord(
+            change_key=""
+            if row.run_id == run_id(row.automation_id, row.due_at)
+            else CHANGE_NOT_KEPT,
             run_id=row.run_id,
             automation_id=row.automation_id,
             agent_id=row.agent_id,
@@ -701,7 +728,8 @@ def _cadence_of(row: AgentAutomationRow) -> Cadence | None:
     """The cadence a row starts from: its template's, or the one a person wrote.
 
     A row a person wrote carries its own cadence in three columns when its trigger is a schedule,
-    and none when it is not, which is what makes such an automation unstartable. A template that
+    and none when it is not. Such a row's run is a change's and not this runner's: `owed_ids` and
+    `claim` do not hand one to it, and `brain.ops.automation_event_store` runs it. A template that
     has since been withdrawn leaves a row with no cadence, as before.
     """
     if row.template_id == AUTHORED_TEMPLATE:
@@ -715,8 +743,10 @@ def _has_a_source(row: AgentAutomationRow, cadence: Cadence | None) -> bool:
     """Whether something still says what this row runs and when: its template or what was written.
 
     A template that has been withdrawn leaves nothing to run, as before. An automation a person
-    wrote with no schedule leaves nothing to run either, because nothing on this install fires an
-    event or a webhook, and a run of it is refused with the same reason, not counted as a failure.
+    wrote with no schedule leaves nothing for a clock to run: a change's is run by
+    `brain.ops.automation_event_store` and never reaches here, and a webhook's is not started by
+    anything, so a run of one that is somehow forced is refused with the same reason and not
+    counted as a failure.
     """
     if row.template_id == AUTHORED_TEMPLATE:
         return cadence is not None
