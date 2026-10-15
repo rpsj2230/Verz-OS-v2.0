@@ -258,6 +258,57 @@ describe("a newer version on the Profile", () => {
     }
   });
 
+  test("what the version would leave missing is named before anybody presses upgrade, and an upgrade that leaves some says it switched the agent off", async () => {
+    // What breaks if this is deleted: a person upgrades blind and learns what the version needed
+    // from the agent going quiet, or a switched-off agent is announced as simply upgraded.
+    const needs = [
+      { kind: "placeholder", name: "renewal_price_list", sentence: "The new version asks a question, renewal_price_list, that nobody has answered here yet." },
+      { kind: "tool", name: "no.such_tool", sentence: "Nothing on this install provides the tool no.such_tool yet." },
+    ];
+    const { container } = await consoleAt(
+      answers(
+        { body: reviewWire({ conflicts: [], needs }) },
+        {
+          [`POST /api/v1${agentUpgradeAcceptApiPath(AGENT)}`]: {
+            body: { agent_id: AGENT, outcome: "upgraded", switched_off: true, needs },
+          },
+        },
+      ),
+    );
+    const shown = await waitForCard(container);
+    expect(shown.textContent).toContain("What this version needs on this install");
+    expect(shown.textContent).toContain(needs[0]?.sentence);
+    expect(shown.textContent).toContain(needs[1]?.sentence);
+    await act(async () => {
+      fireEvent.click(button(shown, "Upgrade"));
+    });
+    await confirm("Upgrade");
+    await waitFor(() => {
+      expect(container.textContent).toContain("Upgraded, and switched off until it has what it needs");
+    });
+  });
+
+  test("a version that needs nothing here draws no needs, and its upgrade is announced plainly", async () => {
+    // What breaks if this is deleted: a needs heading drawn over an empty list, or every upgrade
+    // announced as switching the agent off.
+    const { container } = await consoleAt(
+      answers(
+        { body: reviewWire({ conflicts: [], needs: [] }) },
+        { [`POST /api/v1${agentUpgradeAcceptApiPath(AGENT)}`]: { body: { agent_id: AGENT, outcome: "upgraded", switched_off: false, needs: [] } } },
+      ),
+    );
+    const shown = await waitForCard(container);
+    expect(shown.textContent).not.toContain("What this version needs on this install");
+    await act(async () => {
+      fireEvent.click(button(shown, "Upgrade"));
+    });
+    await confirm("Upgrade");
+    await waitFor(() => {
+      expect(container.textContent).toContain("Upgraded");
+    });
+    expect(container.textContent).not.toContain("switched off until");
+  });
+
   test("the routes the card asks are declared, and a half-sent review is left out", () => {
     // What breaks if this is deleted: a path spelled differently from the route, or a review with
     // no version to name treated as an offer.
