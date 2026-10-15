@@ -71,6 +71,10 @@ from brain.agent_coauthor_routes import router as agent_coauthor_router
 # and how each run ended, a failed one included.
 from brain.agent_conversation_routes import router as agent_conversation_router
 
+# Starting a draft from a description of the agent, in one act (M20.5.3). See
+# `brain.agent_describe_routes`.
+from brain.agent_describe_routes import router as agent_describe_router
+
 # An agent installed into a group chat the bot is in, and taken out of one, by whoever switches its
 # channels (M39.2.4.4). See `brain.agent_group_routes`.
 from brain.agent_group_routes import router as agent_group_router

@@ -204,6 +204,11 @@ const PROGRESS = {
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
     updated: "2026-10-13",
   },
+  "M13.9.2": {
+    status: "IN PROGRESS",
+    why: "Built: the form a department's administrator writes an agent in, the same one a Super Admin uses, lists only the tools and connectors that administrator's own reach holds, and says why the list is short. Not built: the same cut for skills and for the knowledge an agent draws on (knowledge is set on the agent's own page, behind that page's reach), and a name typed past the form is still not refused, it waits for a second person who holds it as before (needs-you question). To prove what is built: after the release, open Install, Acceptance, run the checks and read the row 'a department builder is offered only what their department holds'.",
+    updated: "2026-10-15",
+  },
   "M13.8.19": {
     status: "READY FOR TESTING",
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
@@ -1918,6 +1923,11 @@ const PROGRESS = {
     status: "OPEN",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_builder_routes, builder.agent_drafts, builder.publish); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
+  },
+  "M20.5.3": {
+    status: "IN PROGRESS",
+    why: "Built: behind the switch 'Start an agent's draft from a description' (it ships off), New agent offers 'Describe it': the person writes what the agent is for, a draft of their own is started, and the model's suggestions for its name, summary, instructions, skills and connectors are shown beside what the draft holds, none chosen, to take as any suggestion is taken. Not what the leaf says in two ways: tools, permissions, knowledge and channels are not drafted (the product writes an agent's words and never what it may reach, and the answer says so), and a procedure is not drawn. Whether describing may put the suggestions in without a separate take is a needs-you question. To prove it: after the release, open Install, Acceptance, run the checks and read the row 'describing an agent starts a draft and applies nothing'.",
+    updated: "2026-10-15",
   },
   "M21.1.1": {
     status: "IN PROGRESS",

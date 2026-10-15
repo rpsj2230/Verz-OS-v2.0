@@ -49,6 +49,13 @@ import { ADDABLE_KINDS } from "../src/components/procedure";
 import { CHECK_THESE_ANSWERS } from "../src/components/SchemaForm";
 import { EDIT_AS_DRAFT } from "../src/pages/agents/AgentDetailPage";
 import { SCRATCH_LABEL } from "../src/pages/agents/NewAgentPage";
+import {
+  DESCRIBE_BUTTON,
+  DESCRIBE_HEADING,
+  DESCRIBE_LABEL,
+  DESCRIBE_QUESTION,
+  NOT_DRAFTED_HEADING,
+} from "../src/pages/agents/agentCoauthorQuery";
 import { START_LABEL } from "../src/pages/agents/DraftStart";
 import { WAITING_PUBLISHES_HEADING } from "../src/pages/agents/WaitingPublishes";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
@@ -197,6 +204,63 @@ describe("New agent", () => {
     await waitFor(() => {
       expect(router.state.location.pathname).toBe(draftAddress(DRAFT_ID));
     });
+  });
+
+  test("describing an agent is offered only when the API says it would be answered", async () => {
+    // What breaks if this is deleted: a card whose press the API refuses with the one 404, offered
+    // to every person on an install that has not switched describing on (M20.5.3).
+    await consoleAt(NEW_AGENT_ADDRESS, {
+      "GET /api/v1/agent-templates": { body: { items: [], next_cursor: null, truncated: false } },
+      "GET /api/v1/agent-drafts": { body: { items: [], waiting_for_you: [], can_describe: false } },
+    });
+    expect(screen.queryByText(DESCRIBE_HEADING)).toBeNull();
+  });
+
+  test("describing sends the words after a confirmation and opens the draft on the suggestions, none ticked", async () => {
+    // What breaks if this is deleted: a description sent on one press without saying where it goes,
+    // or a draft opened with the model's words already chosen for the person (M20.5.3).
+    const { idp, router } = await consoleAt(NEW_AGENT_ADDRESS, {
+      "GET /api/v1/agent-templates": { body: { items: [], next_cursor: null, truncated: false } },
+      "GET /api/v1/agent-drafts": { body: { items: [], waiting_for_you: [], can_describe: true } },
+      "POST /api/v1/agent-drafts/describe": {
+        status: 201,
+        body: {
+          draft_id: DRAFT_ID,
+          agent_id: "invoice_helper_ab12cd",
+          revision: 1,
+          suggestion: {
+            revision: 1,
+            base_digest: "abc",
+            hunks: [{ path: "persona", where: "Instructions", before: null, after: "\"Answer overdue invoice questions.\"" }],
+            dropped: [],
+            note: "Nothing here has been applied.",
+          },
+          told: null,
+          not_drafted: ["The channels it answers on: you choose them when you publish."],
+        },
+      },
+      [`GET ${DRAFT_API}`]: { body: aDraft() },
+      "GET /api/v1/builder/form": { body: FORM },
+    });
+    fireEvent.change(await screen.findByLabelText(DESCRIBE_LABEL), { target: { value: "Answers overdue invoice questions." } });
+    fireEvent.click(button(DESCRIBE_BUTTON));
+    expect(posts(idp)).toEqual([]);
+    await confirmIn(DESCRIBE_QUESTION, DESCRIBE_BUTTON);
+
+    expect(posts(idp)).toEqual([
+      { path: "/api/v1/agent-drafts/describe", body: { description: "Answers overdue invoice questions." } },
+    ]);
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe(draftAddress(DRAFT_ID, "write"));
+    });
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("Answer overdue invoice questions.");
+      expect(document.body.textContent).toContain(NOT_DRAFTED_HEADING);
+      expect(document.body.textContent).toContain("you choose them when you publish");
+    });
+    const ticks = screen.getAllByRole("checkbox").filter((one) => one.closest('[data-slot="coauthor-suggestion"]') !== null);
+    expect(ticks.length).toBe(1);
+    expect(ticks.every((one) => !(one as HTMLInputElement).checked)).toBe(true);
   });
 
   test("starting from a template names it in the question and sends its id", async () => {
