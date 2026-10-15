@@ -419,3 +419,68 @@ async def a_photograph_is_judged_by_what_its_header_claims(h: Harness) -> None:
         ScanVerdict.CLEAN
     ):
         raise CheckFailedError("a photograph whose header cannot be read was cleared")
+
+
+# ------------------------------------------------------------------------ the revision it holds
+#: Said where the install chose the embedding part and has declared no revision for it.
+NO_EMBEDDING_REVISION_IS_DECLARED_HERE: Final = (
+    "this install has not declared a revision for the embedding weights: "
+    "INSTALL_EMBEDDING_REVISION is unset, so nothing is embedded and there is nothing to compare"
+)
+
+#: Said where the install has not chosen the embedding part, so there are no weights to hold.
+NO_EMBEDDING_PART_HERE: Final = (
+    "this install's model server does not run the embedding part: INSTALL_MODEL_PARTS does not "
+    "name embedding"
+)
+
+#: Said where the server states no revision for weights that this install chose.
+THE_SERVER_STATES_NO_REVISION: Final = (
+    "the model server states no revision for the embedding weights it was chosen to run, which "
+    "means the weights file is not in its volume or the release's step has not fetched it"
+)
+
+#: Said where the revision declared is not the one the server holds.
+THE_DECLARED_REVISION_IS_NOT_THE_HELD_ONE: Final = (
+    "the embedding revision this install declares is not the one the model server holds, so every "
+    "vector it returns is refused; the model server screen gives the revision it holds"
+)
+
+
+@check(
+    leaves=("M7.3.3",),
+    sentence=(
+        "The embedding revision this install declares is the revision the model server says its "
+        "embedding weights have, so a vector it returns is recorded under the weights that made it "
+        "and is not refused for being made by others."
+    ),
+)
+async def the_declared_embedding_revision_is_the_one_the_server_holds(h: Harness) -> None:
+    from brain.knowledge.embed_policy import embedding_revision
+    from brain.knowledge.embedding import EmbeddingError
+    from brain.ops.model_server import ModelServerError, Part, read_config
+    from brain.ops.model_server_client import held_embedding_revision, server_readiness
+    from brain.ops.overlays import BY_NAME, switched_on_here
+
+    if BY_NAME["modelserver"] not in switched_on_here():
+        raise CheckNotRunError(NO_MODEL_SERVER_HERE)
+    try:
+        chosen = read_config().parts
+    except ModelServerError as error:
+        raise CheckFailedError(THE_SETTINGS_CANNOT_BE_READ) from error
+    if Part.EMBEDDING not in chosen:
+        raise CheckNotRunError(NO_EMBEDDING_PART_HERE)
+    try:
+        declared = embedding_revision()
+    except EmbeddingError as error:
+        raise CheckFailedError(THE_DECLARED_REVISION_IS_NOT_THE_HELD_ONE) from error
+    if declared is None:
+        raise CheckNotRunError(NO_EMBEDDING_REVISION_IS_DECLARED_HERE)
+    answered = await server_readiness()
+    if answered is None:
+        raise CheckFailedError(THE_MODEL_SERVER_DID_NOT_ANSWER)
+    held = held_embedding_revision(answered[1])
+    if held is None:
+        raise CheckFailedError(THE_SERVER_STATES_NO_REVISION)
+    if held != declared:
+        raise CheckFailedError(THE_DECLARED_REVISION_IS_NOT_THE_HELD_ONE)

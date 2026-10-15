@@ -295,6 +295,7 @@ def test_the_scanned_page_reader_applies_the_floor_to_the_pages_the_server_repor
         _ocr_answer(_entry("x", 0, 1), pages=[{"page": 2, "confidence": 0.9}]),
         _ocr_answer(_entry("x", 0, 1), pages=[{"page": 1, "confidence": 1.5}]),
         _ocr_answer(_entry("x", 0, 1), pages=[{"page": True, "confidence": 0.9}]),
+        _ocr_answer(_entry("x", 0, 1), pages=[{"page": 1, "confidence": True}]),
         _ocr_answer(
             _entry("x", 0, 1),
             pages=[{"page": 1, "confidence": 0.9}, {"page": 1, "confidence": 0.9}],
@@ -636,6 +637,17 @@ def test_a_header_claiming_no_pixels_is_unopenable_and_the_bound_is_inclusive() 
     assert _verdict(_jpeg(100, 0))[1] is ScanCause.UNOPENABLE
     assert _verdict(_png(10_000, 10_000)) == (ScanVerdict.CLEAN, None)
     assert _verdict(_png(10_000, 10_001))[1] is ScanCause.EXPANDS_WITHOUT_BOUND
+
+
+def test_a_png_whose_first_chunk_is_not_a_header_is_not_read_for_a_size() -> None:
+    """Bytes at the place a header's size would be are not a size unless the chunk there is a
+    header: an ordinary-looking size in a chunk of another name is unopenable.
+
+    Delete this and any PNG-signed file with plausible numbers in the right place is cleared."""
+    not_a_header = bytearray(_png(2480, 3508))
+    not_a_header[12:16] = b"tEXt"
+
+    assert _verdict(bytes(not_a_header)) == (ScanVerdict.UNSCANNABLE, ScanCause.UNOPENABLE)
 
 
 def test_a_jpeg_frame_is_found_after_markers_that_stand_alone_and_segments_of_any_length() -> None:
