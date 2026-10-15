@@ -259,3 +259,34 @@ def test_the_only_source_that_writes_a_learned_owner_is_the_learning_door() -> N
                     found.add(path)
 
     assert found == allowed
+
+
+def test_the_prompts_screens_view_says_who_wrote_the_instructions_and_whether_a_machine_did() -> (
+    None
+):
+    """The view of the instructions in force carries the source of the value and whether it was the
+    agent's own learning: the template's words are neither, an administrator's are an instance's and
+    not a machine's, a learned change is a machine's, and the person named is the one who set it
+    or approved it.
+
+    Delete this and the Prompts screen can show a learned change as an administrator's edit, or an
+    administrator's as the agent's, with every other test green."""
+    from brain.prompt_routes import instructions_view
+
+    signed = _signed()
+    audience = AgentAudience(level=Visibility.COMPANY, owner_id=ADMIN)
+
+    def seen(instance: TemplateInstance) -> tuple[str, bool, str]:
+        record = materialise(signed, instance, audience=audience).record
+        view = instructions_view(record, (signed, instance), effective_hash="h", editable=True)
+        return view.source, view.machine_authored, view.set_by or ""
+
+    template = seen(_instance(signed))
+    by_a_person = seen(set_field(_instance(signed), "persona", ADMIN_WORDS, by=ADMIN, at=LATER))
+    learned = seen(
+        learn_field(_instance(signed), "persona", LEARNED_WORDS, approved_by=REVIEWER, at=LATER)
+    )
+
+    assert template[:2] == ("template", False)
+    assert by_a_person == ("instance", False, ADMIN)
+    assert learned == ("learned", True, REVIEWER)

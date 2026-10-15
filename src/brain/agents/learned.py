@@ -123,8 +123,9 @@ def learn_field(
             f"{A_PATH_IS_LEARNABLE_ONLY_WHEN_ITS_CHANGES_REACH_THE_LEDGER}"
         )
         raise NotLearnableError(msg)
-    held = instance.overlay_owners.get(path)
-    if path in instance.overlay and (held is None or held.source is not FieldSource.LEARNED):
+    # An overlaid path always has an owner (`TemplateInstance` refuses one without), so the owner is
+    # read directly: a guard for a missing one would be a branch no instance can reach.
+    if path in instance.overlay and instance.overlay_owners[path].source is not FieldSource.LEARNED:
         msg = (
             f"{path!r} was set by a person on this agent, so learning leaves it alone. "
             f"{A_LEARNED_CHANGE_NEVER_REPLACES_WHAT_A_PERSON_SET}"
