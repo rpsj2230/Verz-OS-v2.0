@@ -184,10 +184,63 @@ sweep the run only reports which months it would detach.
 partitions:`. On `lite`, which runs no worker, every row stays in the catch-all partition, which is
 correct and does not age out.
 
+## The peak load test
+
+Nothing starts it for you, and it ships switched off. It asks your install's own answer route the
+number of questions per second your profile states for its busiest minute, for ten minutes, and tells
+you whether each lane held the service levels (answers inside eight seconds, record lookups inside
+half a second, more than 99.5 in 100 requests succeeding). **It spends your model provider's calls**:
+most of what it asks goes to the model, so the full run at the `full` profile is 1,200 requests, about
+960 of them to the model. Run it at a quiet time.
+
+The stated peaks are the capacity model's and are shown on **Install > Capacity**: `lite` 0.5 a second
+(2 in flight at once), `full` 2 a second (8 in flight), `ha` 8 a second (32 in flight). The run reports
+the most it really had in flight at once beside that figure.
+
+### Steps
+
+1. **Switch it on.** On the console's Features page, turn on "Allow the peak load test to be run
+   against this install".
+2. **Make the people it asks as.** Create a department called `load_test`, put two or more people in
+   it (each needs their own sign-in, because each person has their own rate limit and the run spreads
+   its questions over them), and add one small document the department alone may read. Write the
+   questions in a file, one per line as `answer`, a tab, then a question the document answers, and
+   `fast`, a tab, then a record lookup a rule of that department answers. The run **refuses** any
+   token that is not a person in that department, so it can never be sent as a real person.
+3. **Get a token for each test person** and put them in a file, one per line, kept off the server's
+   disk afterwards. Nothing prints a token.
+4. **Run it in the application's container**, with the same number twice. A short run first:
+
+   ```
+   docker exec -i <application container> python -m brain.ops.load_peak \
+     --base-url http://localhost:8000 --token-file /path/tokens --questions-file /path/questions \
+     --profile full --seconds 100 --max-requests 200 --confirm-requests 200
+   ```
+
+   The full run is `--seconds 600 --max-requests 1200 --confirm-requests 1200`. A run below the stated
+   peak is reported, and says it is not the peak test.
+5. **Read the result.** It prints each lane's 95th percentile and success rate against the target and
+   ends `held at the stated peak`, `held, on a run smaller than the stated peak`, or `not held`. The
+   same figures are kept as one row in your own database (no token, person or question in it).
+
+**It stops itself** if the install starts refusing most of what it is asked (at least 20 replies in,
+half of them refused): it sends nothing further and says how many requests it did not send. It never
+changes a limit. **What it leaves behind:** each question is an ordinary request in the request
+ledger, which is append-only, attributed to the test people alone; nothing else is written except the
+result row. **What it does not measure:** the network or proxy in front of the address it is given, or
+the server's memory headroom.
+
+The install's checks prove the machinery on every run without spending anything: a short run through
+the same driver inside a transaction that is rolled back, with no model called.
+
 ## What is checked and what is not
 
 | Claim | Held by |
 | --- | --- |
+| The run's stated peak is the capacity model's, a smaller run says so, the most in flight at once is measured, and it stops when the install refuses most of what it is sent | `test_load_peak.py` and `test_load_peak_run.py`, without a server |
+| It refuses before sending anything while the switch is off, for a token that is not a test person, and without the number typed twice, and nothing but the command builds its sender | `test_load_peak_run.py` |
+| A short run is driven, judged, kept and read back inside a rolled-back transaction, with each request recorded on the lane it was sent to | `test_acceptance_load_peak.py`, against a real database in CI, and the install's own check |
+| **That the full run at a profile's stated peak holds the service levels on your hardware** | **nobody until you run it. The command is the proof and the stored row is its record.** |
 | The replica runs the main database's image, admits at least as many connections, copies through the slot the setup creates, and the application is pointed at it | `test_streaming_replica.py`, against `docker-compose.replica.yml` and both files that describe `db` |
 | The slot has the limit, and the setup writes one rule to the database's volume and nothing else | the same test |
 | Each host's service list, and that together they start every service once | `test_split.py`, against every profile's files |
@@ -202,4 +255,4 @@ correct and does not age out.
 
 ## Task ids
 
-M36.1.1.1, M36.1.2.1, M36.1.4.1, M36.1.4.2
+M36.1.1.1, M36.1.2.1, M36.1.4.1, M36.1.4.2, M22.3.3

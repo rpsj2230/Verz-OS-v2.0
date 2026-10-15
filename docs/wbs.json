@@ -4248,9 +4248,9 @@
      "updated": "2026-10-06"
     },
     "M22.3.3": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in ops.admission; NOT wired: ops.scaling",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "Built to the capacity model's stated peak (python -m brain.ops.load_peak --profile full, which reads each profile's arrival rate and Little's-law concurrency from ops.admission.seed_profiles) and behind the load_test switch, which ships off. It refuses before sending anything unless the switch is on, every token belongs to a person in the load_test department, the operator repeats the request count, and the install has a database to keep the result in; it stops if the install sheds most of what it is sent; it keeps each run as one row in the install's own settings with no person, token or question. The install's own check a_short_peak_run_is_driven_judged_and_kept_and_leaves_nothing proves the machinery in a rolled-back transaction with no model called, and closes the leaf when the install's two newest runs both pass it. The peak run itself is the owner's decision (needs-rupash 194; item 103 says CI, not the install). Install proof, steps: (1) open the Install page's list of checks after a deploy and see that check pass; (2) only if you choose to run the peak: turn on the Features page switch for the load test, make a department called load_test with two people and a small document only it can read, then follow docs/install/scaling.md, The peak load test.",
+     "updated": "2026-10-14"
     }
    }
   },
