@@ -197,9 +197,22 @@ def attached(*artifacts: Artifact, agents: Sequence[AgentRow] = ()) -> Iterator[
         yield c
 
 
-def get(c: TestClient, pid: str) -> Response:
-    response: Response = c.get(ARTIFACTS, headers={"authorization": f"Bearer {token_for(pid)}"})
+def get(c: TestClient, pid: str, query: str = "") -> Response:
+    response: Response = c.get(
+        ARTIFACTS + query, headers={"authorization": f"Bearer {token_for(pid)}"}
+    )
     return response
+
+
+def many(count: int, *, agent: str = "quoting") -> list[Artifact]:
+    """`count` artifacts of one agent, the first the newest and each an hour older than the last.
+
+    The identifiers sort the way the artifacts are ordered, so a test can read a page's position
+    off its names."""
+    return [
+        produced(f"art_{agent}_{index:03d}", agent_id=agent, at=ago(hours=index + 1))
+        for index in range(count)
+    ]
 
 
 # ------------------------------------------------------------------------ the answers
@@ -215,7 +228,7 @@ def test_an_install_recording_nothing_is_told_so_rather_than_shown_an_empty_list
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["artifacts"] is None
+    assert body["items"] == []
     assert body["unread"] == NOTHING_HERE_RECORDS_WHAT_AN_AGENT_PRODUCED
     assert body["kept_rule"] == AN_ARTIFACT_MAY_NOT_OUTLIVE_THE_THING_IT_WAS_BUILT_FROM
 
@@ -234,7 +247,7 @@ def test_an_attached_source_lists_what_the_reader_may_see_with_provenance_and_re
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["unread"] == ""
-    [row] = body["artifacts"]
+    [row] = body["items"]
     assert row["artifact_id"] == "art_1"
     assert row["produced_for"] == "u_caller"
     assert row["run_id"] == "run_art_1"
@@ -254,7 +267,7 @@ def test_an_artifact_past_its_window_is_absent_rather_than_listed_as_expired() -
     for c in attached(old, fresh, agents=[agent_row("quoting")]):
         body = get(c, "u_admin").json()
 
-    assert [one["artifact_id"] for one in body["artifacts"]] == ["art_new"]
+    assert [one["artifact_id"] for one in body["items"]] == ["art_new"]
 
 
 def test_a_class_with_no_clock_says_why_there_is_no_date() -> None:
@@ -284,8 +297,8 @@ def test_a_scoped_reader_sees_only_the_artifacts_their_grant_admits_and_no_count
         narrow = get(c, "u_narrow").json()
         wide = get(c, "u_admin").json()
 
-    assert [one["artifact_id"] for one in narrow["artifacts"]] == ["art_quote"]
-    assert sorted(one["artifact_id"] for one in wide["artifacts"]) == ["art_hr", "art_quote"]
+    assert [one["artifact_id"] for one in narrow["items"]] == ["art_quote"]
+    assert sorted(one["artifact_id"] for one in wide["items"]) == ["art_hr", "art_quote"]
     assert set(narrow) == set(ArtifactsView.model_fields)
     assert {"total", "count", "hidden", "withheld"}.isdisjoint(narrow)
 
@@ -301,7 +314,176 @@ def test_an_artifact_of_an_agent_outside_the_readers_audience_is_absent() -> Non
     for c in attached(*rows, agents=agents):
         body = get(c, "u_admin").json()
 
-    assert body["artifacts"] == []
+    assert body["items"] == []
+
+
+# ------------------------------------------------------------------------ the pages
+def _ids(body: dict[str, Any]) -> list[str]:
+    return [one["artifact_id"] for one in body["items"]]
+
+
+def test_a_page_is_bounded_and_the_cursor_walks_every_row_once() -> None:
+    """The page is cut on the server (M32.5.2.1): a limit of three over seven artifacts answers
+    three, three and one, newest first, each row exactly once, and the last page carries no cursor.
+
+    Delete this and the screen could go back to answering the whole estate in one body, or a
+    cursor could skip or repeat a row between two pages, which a reader sees as a missing
+    artifact."""
+    rows = many(7)
+    agents = [agent_row("quoting")]
+    seen: list[str] = []
+    cursors: list[str | None] = []
+    for c in attached(*rows, agents=agents):
+        query = "?limit=3"
+        while True:
+            body = get(c, "u_admin", query).json()
+            assert len(body["items"]) <= 3
+            seen.extend(_ids(body))
+            cursors.append(body["next_cursor"])
+            if body["next_cursor"] is None:
+                break
+            query = f"?limit=3&cursor={body['next_cursor']}"
+
+    assert seen == [f"art_quoting_{index:03d}" for index in range(7)]
+    assert [one is None for one in cursors] == [False, False, True]
+
+
+def test_a_search_a_filter_and_an_order_are_the_servers_and_read_only_what_the_row_shows() -> None:
+    """Search matches the artifact, the agent and the person it was for; a filter is an equality on
+    a declared column; the order is by when it was produced and can be turned round. A search for a
+    value the row does not carry as a searched column (the run) finds nothing.
+
+    Delete this and the narrowing could drift back into the browser, where it narrows only what
+    arrived, or a search could match a column the screen does not show."""
+    rows = [*many(2, agent="quoting"), *many(2, agent="hiring")]
+    agents = [agent_row("quoting"), agent_row("hiring")]
+    for c in attached(*rows, agents=agents):
+        by_search = _ids(get(c, "u_admin", "?q=hiring").json())
+        by_filter = _ids(get(c, "u_admin", "?filter=agent_id:quoting").json())
+        by_run = _ids(get(c, "u_admin", "?q=run_art_quoting_000").json())
+        oldest_first = _ids(get(c, "u_admin", "?sort=produced_at&filter=agent_id:hiring").json())
+        newest_first = _ids(get(c, "u_admin", "?filter=agent_id:hiring").json())
+
+    assert by_search == ["art_hiring_000", "art_hiring_001"]
+    assert by_filter == ["art_quoting_000", "art_quoting_001"]
+    assert by_run == []
+    assert newest_first == ["art_hiring_000", "art_hiring_001"]
+    assert oldest_first == ["art_hiring_001", "art_hiring_000"]
+
+
+def test_a_search_reads_the_agent_and_the_person_and_not_only_the_artifact() -> None:
+    """The identifiers here share nothing with the agent or the person, so a search can only match
+    through the column it names. `payroll` finds the artifact of that agent, `u_bob` the one made
+    for that person, and neither finds the other.
+
+    Delete this and a search that stopped reading the agent or the person would still pass every
+    test whose artifact identifiers happen to contain the word searched for."""
+    rows = [
+        produced("art_a", agent_id="payroll", caller_id="u_ann"),
+        produced("art_b", agent_id="rota", caller_id="u_bob", at=ago(hours=2)),
+    ]
+    agents = [agent_row("payroll"), agent_row("rota")]
+    for c in attached(*rows, agents=agents):
+        by_agent = _ids(get(c, "u_admin", "?q=payroll").json())
+        by_person = _ids(get(c, "u_admin", "?q=u_bob").json())
+        by_both = _ids(get(c, "u_admin", "?q=rota%20u_bob").json())
+        by_neither = _ids(get(c, "u_admin", "?q=payroll%20u_bob").json())
+
+    assert by_agent == ["art_a"]
+    assert by_person == ["art_b"]
+    assert by_both == ["art_b"]
+    assert by_neither == []
+
+
+def test_a_column_the_list_does_not_declare_and_a_page_too_large_are_refused() -> None:
+    """The declaration is the API document: a filter or an order on a column the list does not
+    offer, a page over the bound and a page of none are refused before the route runs, the same
+    for every reader.
+
+    Delete this and `?filter=run_id:...` could be accepted and ignored, which is a filter box with
+    a word in it and every row still on the screen."""
+    for c in attached(*many(2), agents=[agent_row("quoting")]):
+        refused = [
+            get(c, "u_admin", "?filter=run_id:run_art_quoting_000"),
+            get(c, "u_admin", "?sort=run_id"),
+            get(c, "u_admin", "?limit=201"),
+            get(c, "u_admin", "?limit=0"),
+        ]
+        allowed = get(c, "u_admin", "?limit=200")
+
+    assert [one.status_code for one in refused] == [422, 422, 422, 422]
+    assert allowed.status_code == 200
+
+
+def test_a_cursor_is_refused_for_another_reader_another_question_and_a_garbage_one() -> None:
+    """A cursor is a position bound to the reader and the exact question that minted it, so one
+    copied to another reader, carried across an order or made up is the same 422, and it is the
+    same 422 on a process with no store, because the question is checked before a record is read.
+
+    Delete this and a cursor could be replayed under a different reader's grants or a different
+    order, or its refusal could depend on whether a store is attached."""
+    rows = many(4)
+    agents = [agent_row("quoting")]
+    for c in attached(*rows, agents=agents):
+        minted = get(c, "u_admin", "?limit=2").json()["next_cursor"]
+        assert minted is not None
+        replayed = get(c, "u_narrow", f"?limit=2&cursor={minted}")
+        reordered = get(c, "u_admin", f"?limit=2&sort=kind&cursor={minted}")
+        garbage = get(c, "u_admin", "?cursor=not-a-cursor")
+        honest = get(c, "u_admin", f"?limit=2&cursor={minted}")
+
+    assert [one.status_code for one in (replayed, reordered, garbage)] == [422, 422, 422]
+    assert honest.status_code == 200
+    # Everything but the trace id, which is minted per request.
+    assert {k: v for k, v in replayed.json().items() if k != "trace_id"} == {
+        k: v for k, v in garbage.json().items() if k != "trace_id"
+    }
+
+
+def test_a_garbage_cursor_is_the_same_refusal_with_no_store_attached(client: TestClient) -> None:
+    """The sibling of the test above for a process that records nothing: the question is checked
+    before the source is looked for, so the refusal does not say whether one is attached.
+
+    Delete this and a malformed cursor could be answered with the sentence about the missing store
+    on one install and a 422 on another."""
+    assert get(client, "u_admin", "?cursor=not-a-cursor").status_code == 422
+    assert get(client, "u_admin", "?limit=3").json()["items"] == []
+
+
+def test_a_cursor_says_more_only_when_a_row_the_reader_may_see_follows() -> None:
+    """A reader scoped to one agent holds two artifacts and the estate holds seven more of another
+    agent's. A page of two says there is no more, and a page of one says there is, then there is
+    not: the cursor is computed over rows the reader may see and never over what was withheld.
+
+    Delete this and the cursor could be present because withheld rows follow, which is a count of
+    them arrived at by a boolean."""
+    rows = [*many(2, agent="quoting"), *many(7, agent="hiring")]
+    agents = [agent_row("quoting"), agent_row("hiring")]
+    for c in attached(*rows, agents=agents):
+        whole = get(c, "u_narrow", "?limit=2").json()
+        first = get(c, "u_narrow", "?limit=1").json()
+        second = get(c, "u_narrow", f"?limit=1&cursor={first['next_cursor']}").json()
+
+    assert _ids(whole) == ["art_quoting_000", "art_quoting_001"]
+    assert whole["next_cursor"] is None
+    assert _ids(first) == ["art_quoting_000"]
+    assert first["next_cursor"] is not None
+    assert _ids(second) == ["art_quoting_001"]
+    assert second["next_cursor"] is None
+
+
+def test_a_search_for_what_the_reader_may_not_see_answers_as_a_search_for_nothing() -> None:
+    """A scoped reader searching another agent's name gets the answer a search for nothing gets,
+    body for body. Delete this and the search could leak that the other agent has artifacts, by
+    answering differently from a search that matches nothing anywhere."""
+    rows = [*many(2, agent="quoting"), *many(3, agent="hiring")]
+    agents = [agent_row("quoting"), agent_row("hiring")]
+    for c in attached(*rows, agents=agents):
+        withheld = get(c, "u_narrow", "?q=hiring").json()
+        nothing = get(c, "u_narrow", "?q=zzzzzz").json()
+
+    assert withheld == nothing
+    assert withheld["items"] == []
 
 
 # ------------------------------------------------------------------------ the refusals

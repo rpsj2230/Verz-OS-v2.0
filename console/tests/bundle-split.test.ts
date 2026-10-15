@@ -23,7 +23,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
-import { packageOf, staticImportGraph } from "./support/typescript";
+import { callOptionsOf, packageOf, parseConsoleSource, staticImportGraph } from "./support/typescript";
 
 /** The entry the bundler starts from. `index.html` names it in a module script tag. */
 const ENTRY = "src/main.tsx";
@@ -38,11 +38,15 @@ const ENTRY = "src/main.tsx";
  * shell will put in the entry because its menu and header are built from it, and `sonner`, whose
  * toast region has to exist before its first message for a screen reader to announce it
  * (`components/ui/sonner.tsx`).
+ *
+ * **`@tanstack/react-table` is not on this list since 2026-10-14, and is on the next one.** It was
+ * here while one screen used it. Every module list now renders through it (M32.5.2.1), and the
+ * route registry imports every page eagerly, so keeping it out of the entry would have meant sixty
+ * lazy routes and a loading state in front of every list to save the core's 10.7 kB gzipped.
  */
 const HEAVY = [
   "@rjsf/core",
   "@rjsf/validator-ajv8",
-  "@tanstack/react-table",
   "@xyflow/react",
   "react-hook-form",
   "zod",
@@ -111,6 +115,27 @@ describe("what the entry chunk reaches", () => {
     const reached = new Set(staticImportGraph("src/pages/Records.tsx").packages);
     expect(reached.has("@rjsf/core")).toBe(true);
     expect(reached.has("@tanstack/react-table")).toBe(true);
+  });
+});
+
+describe("the table library, which every grid is drawn with", () => {
+  test("the table library is in the entry and is the feature-less core", () => {
+    // What breaks if this is deleted: the budget the move above was argued on. The library is in
+    // the entry on purpose (every list page is), and what makes that cheap is that no feature is
+    // registered: a feature is the part that weighed 40 kB in the design spike and the first
+    // step to a client-side page. Asserting the entry reaches the library is the positive half
+    // (a console that no longer drew a grid with it would have lost the leaf); asserting the
+    // feature module declares nothing but the type-only slot is the half that keeps the figure
+    // true. The size is measured in the comment above and not asserted, because a number in a
+    // test fails for a library bump and not for a decision.
+    const entry = staticImportGraph(ENTRY);
+    expect(entry.packages).toContain("@tanstack/react-table");
+    expect(entry.files).toContain("src/components/gridFeatures.ts");
+    expect(entry.files).toContain("src/components/kit/EntityTable.tsx");
+    const registered = Object.keys(
+      callOptionsOf(parseConsoleSource("src/components/gridFeatures.ts"), "tableFeatures"),
+    );
+    expect(registered).toEqual(["columnMeta"]);
   });
 });
 
