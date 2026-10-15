@@ -55,6 +55,7 @@ from brain.console.govern_estate import (
     LibraryRow,
     approver_of,
     artifact_estate,
+    artifacts_of_agent,
     departments_represented,
     estate_gaps,
     learning_estate,
@@ -63,10 +64,12 @@ from brain.console.govern_estate import (
     leash_estate,
     library_rows,
     may_undo,
+    records_of_agent,
     rung_estate,
     skill_queue,
     spans_departments,
     subject_memory,
+    subject_memory_of_agent,
 )
 from brain.console.reach_view import (
     CircuitBreak,
@@ -1029,3 +1032,64 @@ def test_a_memory_viewer_leaves_out_what_a_correction_marked_and_keeps_it_in_the
         ("m_kept", None),
         ("m_undone", Correction.DEMOTED),
     }
+
+
+# ------------------------------------------------------- one agent's slice (M27.15.34)
+def test_an_artifact_slice_is_cut_from_what_the_estate_admitted_and_no_agent_is_all() -> None:
+    """**M27.15.34.** The slice takes the admitted tuple, so an artifact the reader holds nothing
+    for is never in it, whichever agent is named; with no agent it is the whole answer. The
+    sibling proves the slice is a cut and not an empty tuple.
+
+    Delete this and the helper can be handed the raw entries, which is the filter running before
+    the audience."""
+    reader = holding("read:artifact", principal_id="u_reader")
+    entries = (
+        an_artifact("a_desk", agent_id=DESK, caller="u_other"),
+        an_artifact("a_ledger", agent_id=FINANCE_AGENT, caller="u_other"),
+    )
+    admitted = artifact_estate(entries, reader, NOW, visible_agents={DESK})
+
+    assert tuple(one.artifact_id for one in artifacts_of_agent(admitted, DESK)) == ("a_desk",)
+    assert artifacts_of_agent(admitted, FINANCE_AGENT) == ()
+    assert artifacts_of_agent(admitted, None) == admitted
+
+
+def test_a_record_slice_is_the_audience_cut_to_the_named_agent_and_a_hidden_one_is_empty() -> None:
+    """The records handed in are the agents the reader's audience covers, so an agent outside it
+    is not among them and its slice is empty, the same as an agent that does not exist.
+
+    Delete this and the slice searches somewhere wider than the audience."""
+    visible = (an_agent(DESK, "read:client.name"),)
+
+    assert tuple(one.agent_id for one in records_of_agent(visible, DESK)) == (DESK,)
+    assert records_of_agent(visible, FINANCE_AGENT) == records_of_agent(visible, "nobody") == ()
+    assert records_of_agent(visible, None) == visible
+
+
+def test_a_subjects_memory_slice_needs_the_agent_to_be_visible_and_the_memory_to_name_it() -> None:
+    """**A memory carries no agent id on any screen**, so the slice asks the audience before it
+    looks at which agent formed what. Two memories of one person: one formed by `DESK`, one by
+    an agent outside the audience. Naming `DESK` returns its memory, naming the outsider returns
+    nothing even though its memory is there, and a memory nothing names is in no agent's slice.
+
+    Delete this and the slice answers which agent formed a memory to a reader who may not see
+    that agent."""
+    reader = holding("read:client.name", "read:memory", principal_id="u_reader")
+    entries = (
+        (a_learning("m_desk", subject_principal="u_one"), "prefers email"),
+        (a_learning("m_other", subject_principal="u_one"), "prefers a call"),
+        (a_learning("m_bare", subject_principal="u_one"), "prefers a letter"),
+    )
+    whole = subject_memory(subject_id="u_one", entries=entries, reader=reader, now=NOW)
+    formed_by = {"m_desk": DESK, "m_other": FINANCE_AGENT}
+
+    mine = subject_memory_of_agent(whole, DESK, formed_by=formed_by, visible_agents={DESK})
+    outsider = subject_memory_of_agent(
+        whole, FINANCE_AGENT, formed_by=formed_by, visible_agents={DESK}
+    )
+
+    assert [one.memory_id for one in mine.memory.extracted] == ["m_desk"]
+    assert [one.memory_id for one in mine.history] == ["m_desk"]
+    assert (outsider.memory.extracted, outsider.memory.curated, outsider.history) == ((), (), ())
+    assert subject_memory_of_agent(whole, None, formed_by=formed_by, visible_agents=()) == whole
+    assert mine.subject_id == whole.subject_id == "u_one"

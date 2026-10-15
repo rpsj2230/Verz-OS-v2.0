@@ -90,13 +90,23 @@ would raise an alarm on rows the reader may not see, which is a count of them ar
 banner. The alarm carries a sentence and no figure, and is absent wherever tier three is. See
 `brain.memory.review.THE_ALARM_IS_RAISED_ON_WHAT_THE_READER_CAN_SEE`.
 
-Task ids: M27.7.20, M27.7.21, M27.7.22, M27.8.6, M7.6.1, M16.5.4
+**The learning review, the memory viewer and the Artifacts screen take an optional `agent`
+(M27.15.34), and it is cut after the audience.** An agent's Memory and Artifacts sections show that
+agent's slice, and the company-wide reads can be asked for the same slice. The filter narrows
+what `visible_agent_ids`, `may_recall` and `artifact_estate` already admitted and never what is
+loaded to be admitted, so an agent the reader may not see, one that holds nothing and one that
+does not exist answer the same empty list, and there is no count of what the slice left out. Left
+off, the read is the whole estate the reader may see, as it was. There is no value of the filter
+meaning every agent: that is the filter being absent. See
+`brain.console.govern_estate.AN_AGENT_FILTER_RUNS_AFTER_THE_READER_IS_ADMITTED_AND_NEVER_BEFORE`.
+
+Task ids: M27.7.20, M27.7.21, M27.7.22, M27.8.6, M7.6.1, M16.5.4, M27.15.34
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from types import MappingProxyType
 from typing import Annotated, Final, Protocol
@@ -108,7 +118,7 @@ from sqlalchemy import Select, String, column, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.agent_routes import every_agent, one_agent, record_of, viewer_of
-from brain.agents.model import AgentRecord, visible_agent_ids
+from brain.agents.model import AGENT_ID_CHARS, AgentRecord, visible_agent_ids
 from brain.api import API_PREFIX, COMMON_RESPONSES, Page
 from brain.api_routes import Asked, Asking
 from brain.console.govern import NOWHERE, Placed
@@ -121,8 +131,10 @@ from brain.console.govern_estate import (
     learnings_in_view,
     library_rows,
     may_undo,
+    records_of_agent,
     spans_departments,
     subject_memory,
+    subject_memory_of_agent,
 )
 from brain.console.reach_view import (
     MemoryText,
@@ -715,6 +727,9 @@ class RememberedAbout:
 
     entries: tuple[tuple[StoredMemory, str], ...]
     corrections: Corrections
+    #: Memory id to the agent its learning record names, for the memories that have one. A memory
+    #: formed in a plain conversation or with no learning record is not in it (M27.15.34).
+    formed_by: Mapping[str, str] = field(default_factory=dict)
 
 
 async def remembered_about(session: AsyncSession, subject_id: str, limit: int) -> RememberedAbout:
@@ -738,7 +753,11 @@ async def remembered_about(session: AsyncSession, subject_id: str, limit: int) -
     entries = tuple(
         found for found in (stored_memory(row, records.get(row.id)) for row in rows) if found
     )
-    return RememberedAbout(entries=entries, corrections=corrections_of(marks))
+    return RememberedAbout(
+        entries=entries,
+        corrections=corrections_of(marks),
+        formed_by={one.memory_id: one.agent_id for one in records.values() if one.agent_id},
+    )
 
 
 async def learning_of(session: AsyncSession, memory_id: str) -> Learning | None:
@@ -767,7 +786,11 @@ class StoredLearnings:
 
 
 async def learnings_stored(
-    session: AsyncSession, visible: Sequence[AgentRecord], limit: int
+    session: AsyncSession,
+    visible: Sequence[AgentRecord],
+    limit: int,
+    *,
+    conversations: bool = True,
 ) -> StoredLearnings:
     """The learnings formed while these agents ran, and in plain conversations, with their
     memories and corrections.
@@ -778,6 +801,11 @@ async def learnings_stored(
     memories are read by id from both tables, because a learning record does not say which table
     its memory is in, and a learning whose memory is in neither is skipped: there is no formation
     to decide recall from.
+
+    **`conversations=False` is one agent's slice** (M27.15.34): an agent's Memory section and the
+    Learning review asked for one agent are about that agent, and a learning formed with no agent
+    running belongs to none. Left in, every agent's Memory tab listed what people asked Ask
+    directly to remember, which is the estate's and not the agent's.
     """
     rows = [
         *(
@@ -787,7 +815,11 @@ async def learnings_stored(
             if visible
             else ()
         ),
-        *(await session.execute(learnings_of_conversations(limit))).scalars().all(),
+        *(
+            (await session.execute(learnings_of_conversations(limit))).scalars().all()
+            if conversations
+            else ()
+        ),
     ]
     ids = [one.memory_id for one in rows]
     if not ids:
@@ -949,6 +981,20 @@ LIBRARY: Final[Listing[LibraryRowView]] = Listing(
 )
 LibraryQuery = Annotated[ListAsked, Depends(LIBRARY.query())]
 
+#: The optional agent an estate read is cut to (M27.15.34). Absent is the whole estate the reader
+#: may see; present only narrows it, after the reader's audience has been applied.
+AgentFilter = Annotated[
+    str | None,
+    Query(
+        max_length=AGENT_ID_CHARS,
+        pattern=r"^\S+$",
+        description=(
+            "Narrow the answer to what this one agent holds. An agent you may not see, one that "
+            "holds nothing and one that does not exist are the same empty answer."
+        ),
+    ),
+]
+
 
 router = APIRouter(prefix=API_PREFIX, tags=["govern"])
 
@@ -998,7 +1044,7 @@ async def library(request: Request, asked: Asked, listed: LibraryQuery) -> Libra
 
 
 @router.get("/govern/learning", response_model=LearningReviewView, responses=COMMON_RESPONSES)
-async def learning(request: Request, asked: Asked) -> LearningReviewView:
+async def learning(request: Request, asked: Asked, agent: AgentFilter = None) -> LearningReviewView:
     """The three tiers across the agents this reader may see, kept apart, and what undo would do.
 
     The screen's question first and the database second. The agents are loaded bounded and
@@ -1007,6 +1053,13 @@ async def learning(request: Request, asked: Asked) -> LearningReviewView:
     `learning_estate` decides every row, including which learnings the caller may be told of at
     the reach their run of each agent has. Whether a row's undo is offered is `may_undo`, asked per
     row of the learning the row is about.
+
+    **`agent` is one agent's slice (M27.15.34), cut after the audience.** The agents are narrowed
+    to the caller's audience first and then to the one named, so an agent the caller may not see
+    answers what a missing one does. A slice holds what that agent learnt and no learning formed
+    in a plain conversation, and the week's company-wide marks are left off it, because a figure
+    about everybody beside one agent's rows reads as that agent's. See
+    `brain.console.govern_estate.AN_AGENT_FILTER_RUNS_AFTER_THE_READER_IS_ADMITTED_AND_NEVER_BEFORE`.
     """
     if not permitted(screen(LEARNING_SCREEN).read, asked.reach, asked.now):
         log.info("learning screen not answerable", principal=asked.caller.principal.id)
@@ -1021,11 +1074,14 @@ async def learning(request: Request, asked: Asked) -> LearningReviewView:
         agent_rows = (await session.execute(bounded_agents(MAX_AGENTS_CONSIDERED))).scalars().all()
         records = [one for one in (record_of(row) for row in agent_rows) if one is not None]
         stored = await learnings_stored(
-            session, visible_records(records, asked), MAX_LEARNINGS_CONSIDERED
+            session,
+            records_of_agent(visible_records(records, asked), agent),
+            MAX_LEARNINGS_CONSIDERED,
+            conversations=agent is None,
         )
         marks = (
             await counted_in(session, since=since, until=asked.now)
-            if basis is Basis.EVERYONE
+            if basis is Basis.EVERYONE and agent is None
             else None
         )
         return stored, marks
@@ -1185,6 +1241,7 @@ async def memory(
     request: Request,
     asked: Asked,
     subject: Annotated[str, Query(min_length=1, max_length=PRINCIPAL_ID_CHARS, pattern=r"^\S+$")],
+    agent: AgentFilter = None,
 ) -> SubjectMemoryView:
     """What this reader may read of what is remembered about one person, and its history.
 
@@ -1200,6 +1257,14 @@ async def memory(
 
     The pattern refuses a subject made of white space before `subject_memory` is reached, so
     that function's refusal of a blank subject is a 422 naming the parameter rather than a 500.
+
+    **`agent` is the memories that one agent formed about this person (M27.15.34), cut after
+    recall.** Every row is admitted or not by `subject_memory` first, and only then is what was
+    admitted narrowed to the memories whose learning record names the agent, so an agent's slice
+    is never wider than the whole and a diff was decided over both of its sides. The agent must
+    be one the caller's audience covers; otherwise the slice is the empty answer a person nobody
+    remembers anything about gets, because a memory carries no agent id on any screen and a hidden
+    agent's id would be a way of asking which agent formed it.
     """
     if not permitted(screen(MEMORY_SCREEN).read, asked.reach, asked.now):
         log.info("memory screen not answerable", principal=asked.caller.principal.id)
@@ -1207,18 +1272,28 @@ async def memory(
 
     reads = _require_console_reads(request)
 
-    async def load(session: AsyncSession) -> RememberedAbout:
-        return await remembered_about(session, subject, MAX_MEMORIES_CONSIDERED)
+    async def load(session: AsyncSession) -> tuple[RememberedAbout, frozenset[str]]:
+        found = await remembered_about(session, subject, MAX_MEMORIES_CONSIDERED)
+        if agent is None:
+            return found, frozenset()
+        agent_rows = (await session.execute(bounded_agents(MAX_AGENTS_CONSIDERED))).scalars().all()
+        records = [one for one in (record_of(row) for row in agent_rows) if one is not None]
+        return found, frozenset(one.agent_id for one in visible_records(records, asked))
 
     served = await reads.read(load, now=asked.now)
-    stored = served.value
-    remembered = subject_memory(
-        subject_id=subject,
-        entries=stored.entries,
-        reader=asked.reach,
-        now=asked.now,
-        supersessions=stored.corrections.supersessions,
-        demotions=stored.corrections.demotions,
+    stored, audience = served.value
+    remembered = subject_memory_of_agent(
+        subject_memory(
+            subject_id=subject,
+            entries=stored.entries,
+            reader=asked.reach,
+            now=asked.now,
+            supersessions=stored.corrections.supersessions,
+            demotions=stored.corrections.demotions,
+        ),
+        agent,
+        formed_by=stored.formed_by,
+        visible_agents=audience,
     )
     return SubjectMemoryView(
         subject_id=remembered.subject_id,
