@@ -1,0 +1,60 @@
+The model server embeds: the embedding part, the worker keeping what the server measured of itself, and the revision the install must declare
+
+Stacked on the document parts. The embedding part is the smallest of the server's parts and the
+default one (Qwen3-Embedding-0.6B at 8 bits through llama.cpp, the weights memory-mapped), and this
+is what it, the worker and the install's settings page need to agree on one thing: which weights made
+a vector. Leaves touched and none closed: M7.3.3, M7.3.4, M7.3.5, M7.7.8.
+
+**Never run against the real library or the real weights.** Nothing here has installed
+llama-cpp-python or downloaded the file, so `Llama(...)`, `embed(...)` and `n_embd()` are written
+from the library's published interface. The request the part reads, the identity it states, the
+width and length of what it returns and the revision of the file are this program's own and are
+tested through a stand-in for the one object that touches the library, and across the wire to the
+product's real client in `test_model_server_end_to_end.py`.
+
+What it adds, and why it is shaped this way
+
+* One passage at a time in a window of 1,024 tokens, which is the figure the budget's anonymous
+  memory was worked out for (the key and value cache is a fixed 112 KiB a token). A list handed to
+  the library would be a batch whose cache is held at once.
+* The part states the file's OWN identity: the install's model name, the first twelve characters of
+  the file's SHA-256 as the revision, the width the library reports. The application records that
+  beside every vector and refuses a vector under any other revision, so a file replaced by hand is a
+  new revision, which is the model change that has no symptom made into one. The digest is the one
+  the fetch recorded, trusted only while the file keeps the length it recorded, and hashed (once, at
+  load) otherwise; the readiness route reads the record and never hashes, so the health check stays
+  free.
+* The install must declare that revision (`INSTALL_EMBEDDING_REVISION`) and nothing tells it what to
+  write, so the model server screen now shows the one the server holds beside the one the install
+  declares, in words, and an install check holds the two equal with a sentence for each way they
+  part (a different revision; none stated, so the file is not fetched).
+* The worker keeps what the server measured of itself. Both clients take an `observer`, a
+  thread-safe `PeakKeeper` takes the reports from the thread a client is called in, and the job
+  flushes it in a `finally`, each report in a savepoint of its own: a batch that ran the server out
+  of memory is the one whose peak is wanted, and a table that will not take a row costs that row and
+  not fifty embedded passages. Bounded at one ring for every part.
+* Unit length: a vector that is not is made so, because the column's search is by angle.
+* The model server screen and the check read the server over the readiness route, which now also
+  states each chosen part's weights' revision.
+
+What was rejected
+
+* Hashing the file on the health check: a gigabyte every twenty seconds.
+* Echoing the requested model in the answer: the part states its own and the application refuses a
+  disagreement; echoing would record vectors under weights that did not make them.
+* Embedding a question with the model's instruction prefix: the wire has no field that says a text
+  is a question, so every text is embedded as a passage, which is a loss of retrieval quality nothing
+  here has measured. Adding the field is a change to the wire's contract.
+* M7.7.8's "previous vectors keep serving while the corpus is rebuilt" is not built: the product
+  decided against it on purpose and put it to the owner as needs-rupash 186, which is still open.
+  The leaf is not blocked on memory any more; it waits on his answer.
+
+Not done: the part run for real (the image is unbuilt and unpublished and the file is neither
+fetched nor pinned: needs-rupash 235); a rebuild run on an install whose server answers.
+
+Reused: knowledge.embed_queue and chunk_store.run_embed_job (the job and its guards, unchanged),
+ops.inference (the wire and `decode_embeddings`), inference_client (the embedding client; gains an
+observer), knowledge.reembed (the rebuild page, unchanged), model_server_peaks and model_server_store
+(the ring and `record_peak`), the existing install check of the embedding server.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

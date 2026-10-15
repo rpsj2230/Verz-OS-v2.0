@@ -1,0 +1,22 @@
+Mutation (brain.ops.mutation; the named tests run clean first). 19 mutations of the embedding part, the keeper, the
+readiness read and the revision check, every one caught on the first run:
+
+  a vector with no length is returned                                | caught
+  a vector of the wrong width is stored                              | caught
+  a chunk named twice is embedded twice                              | caught
+  a blank passage gets a vector                                      | caught
+  a record of another length is believed                             | caught
+  the revision is thirteen characters                                | caught
+  the window is not the one the memory was sized for                 | caught
+  the pooling is left to the library                                 | caught
+  a server without the embedding part states a revision              | caught
+  the keeper grows without a bound                                   | caught
+  the keeper's bound is not a ring for every part                    | caught
+  a peak is written outside its savepoint                            | caught
+  a row the table refuses fails the job                              | caught
+  the embedding task does not write what it heard                    | caught
+  a server holding other weights is called the same                  | caught
+  a declared revision with no held one is told to be set             | caught
+  a held revision that is not the declared one passes the check      | caught
+  a server stating no revision passes the check                      | caught
+  a body that is not an object is a readiness answer                 | caught

@@ -1,0 +1,21 @@
+Mutation (brain.ops.mutation; the named tests run clean first). 12 mutations of the entity part and its egress leg;
+9 caught on the first run and 3 survived. Two were a missing test (the higher of two scores, and a status check no
+test isolated) and were caught on a second run once the test existed; the third was dead code and is stated below:
+
+  the windows do not overlap                                         | caught
+  the tail of a long text is not read                                | SURVIVED: dead code, branch removed
+  a label nobody asked for is kept                                   | caught
+  a span under the floor is kept                                     | caught
+  a name found twice keeps the lower score                           | SURVIVED, then caught once a test was added
+  an entity part that is unwell is read as an answer                 | SURVIVED, then caught once a test was added
+  a second leg is asked with no time left                            | caught
+  every leg being down is an answer                                  | caught
+  the entity model gets the analyser's budget                        | caught
+  the analyser alone is wrapped                                      | caught
+  an install that does not run the server has an entity model        | caught
+  an install that did not choose the part has an entity model        | caught
+
+  The third survivor was dead code, not a missing test: the tail-window branch of `windows` can never fire, because the
+  last start of the range already reaches the end of the text (argued in a comment, and a property test holds that the
+  tail is read). The branch was removed rather than a test invented for it. The removal has not been re-run through the
+  harness; the property test that covers the tail passes.
