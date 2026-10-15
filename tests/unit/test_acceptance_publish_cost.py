@@ -80,8 +80,8 @@ def test_every_reason_the_cost_hold_check_can_give_is_a_named_literal_that_fits_
             [argument] = node.args
             assert isinstance(argument, ast.Name)
             reasons.append(getattr(module, argument.id))
-    assert len(reasons) == 8
-    assert len(set(reasons)) == 8
+    assert len(reasons) == 9
+    assert len(set(reasons)) == 9
     assert all(isinstance(one, str) and 0 < len(one) <= REASON_CHARS for one in reasons)
 
 
@@ -125,6 +125,20 @@ def _held_within_the_ceiling(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(routes, "cost_hold", always)
 
 
+def _held_without_a_ceiling(monkeypatch: pytest.MonkeyPatch) -> None:
+    import brain.agent_builder_routes as routes
+    from brain.builder.run_cost import cost_hold
+
+    def zero(manifest: Any, *, department: str | None, ceiling_minor: int | None) -> Any:
+        return cost_hold(
+            manifest,
+            department=department,
+            ceiling_minor=0 if ceiling_minor is None else ceiling_minor,
+        )
+
+    monkeypatch.setattr(routes, "cost_hold", zero)
+
+
 def _no_cost_on_the_record(monkeypatch: pytest.MonkeyPatch) -> None:
     import brain.builder.publish as publish
 
@@ -135,6 +149,7 @@ BREAKS: dict[str, tuple[Any, str]] = {
     "never_held": (_never_held, "NOT_HELD"),
     "held_while_off": (_held_while_off, "HELD_WHILE_OFF"),
     "held_within_the_ceiling": (_held_within_the_ceiling, "HELD_WITHIN_THE_CEILING"),
+    "held_without_a_ceiling": (_held_without_a_ceiling, "HELD_WITH_NO_CEILING"),
     "no_cost_on_the_record": (_no_cost_on_the_record, "NO_COST_ON_THE_RECORD"),
 }
 
@@ -144,8 +159,9 @@ BREAKS: dict[str, tuple[Any, str]] = {
 def test_the_cost_hold_check_fails_where_the_product_is_broken(
     monkeypatch: pytest.MonkeyPatch, broken: str
 ) -> None:
-    """Four breaks: a hold that never fires, one that fires with its switch off, one that fires on
-    an agent within its ceiling, and a record without a cost. Each fails with its own sentence.
+    """Five breaks: a hold that never fires, one that fires with its switch off, one that fires on
+    an agent within its ceiling, one that fires where no ceiling was set, and a record without a
+    cost. Each fails with its own sentence.
     Delete this and the check can pass with the hold gone or applied to everything."""
     import brain.ops.acceptance_checks_publish_cost as module
 

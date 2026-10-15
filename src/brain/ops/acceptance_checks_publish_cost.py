@@ -49,6 +49,7 @@ A, _ = RESERVED_DEPARTMENTS
 #: See `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
 CHECK_ORDER: Final = 410
 
+HELD_WITH_NO_CEILING: Final = "a publish was held for its cost in a department that set no ceiling"
 HELD_WHILE_OFF: Final = "a publish was held for its cost while the switch for it was off"
 NOT_HELD: Final = "a publish costing more than its department's ceiling was not held"
 HELD_WITHOUT_FIGURES: Final = "a publish held for its cost did not tell its author both figures"
@@ -141,6 +142,18 @@ async def a_costly_publish_waits_for_a_colleague_in_the_department(
     async def made(agent_id: object) -> bool:
         found = await h.execute(select(AgentRow.id).where(AgentRow.id == agent_id))
         return found.first() is not None
+
+    # A department that has set no per-run ceiling has said nothing about a run, so even with the
+    # switch on nothing is held. Asked only where this department really has none, which is the
+    # case for a reserved department and is not assumed.
+    async with h.sessions() as session:
+        none_set = await history_of(session, key) is None
+    if none_set:
+        await switched(True)
+        draft, revision = await ready()
+        status, body = await _publish(h, app, author, str(draft["draft_id"]), revision)
+        if status != 201 or body.get("held_for_cost"):
+            raise CheckFailedError(HELD_WITH_NO_CEILING)
 
     await ceiling(TIGHT)
 
