@@ -93,7 +93,7 @@ def _registry(source: str):  # type: ignore[no-untyped-def]
 
     return build_registry(
         source=source,
-        records=_NoRows(),  # type: ignore[arg-type]
+        records=_NoRows(),
         website=WebsiteCheckTool(resolver=SystemResolver(), prober=HttpsProber()),
     )
 
