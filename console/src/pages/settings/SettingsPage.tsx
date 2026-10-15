@@ -36,10 +36,11 @@ import {
   PageHeader,
   SectionCard,
 } from "../../components/kit";
+import type { GridColumn } from "../../components/gridFeatures";
+import { GridTable } from "../../components/kit/GridTable";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 import {
   byWords,
   CHOICES,
@@ -318,27 +319,14 @@ function SettingsView({
         </FactList>
       </SectionCard>
       <SectionCard title={LEAVING_HEADING} lede={body.leaving.told}>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>What</TableHead>
-              <TableHead>Removed by</TableHead>
-              <TableHead>How</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {body.leaving.steps.map((step) => (
-              <TableRow key={step.what}>
-                <TableCell className="align-top whitespace-normal [overflow-wrap:anywhere]">
-                  <span className="font-mono text-[12px]">{step.what}</span>
-                  {step.holds === "" ? null : <span className="block text-[12px] text-dim">{step.holds}</span>}
-                </TableCell>
-                <TableCell className="align-top whitespace-normal">{byWords(step.by)}</TableCell>
-                <TableCell className="align-top whitespace-normal [overflow-wrap:anywhere]">{step.how}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <GridTable
+          look="kit"
+          caption={LEAVING_HEADING}
+          captionHidden
+          columns={LEAVING_COLUMNS}
+          rows={body.leaving.steps}
+          rowId={(step) => step.what}
+        />
         <p className="m-0 mt-2 text-[12.5px] text-dim">
           The certificate names the day the last backup expires: {body.leaving.backup_retention_days} days after the last
           part is removed.
@@ -371,6 +359,35 @@ function SettingsView({
     </>
   );
 }
+
+type LeavingStep = SettingsBody["leaving"]["steps"][number];
+
+/** What leaving the product removes, and who removes it. */
+const LEAVING_COLUMNS: GridColumn<LeavingStep>[] = [
+  {
+    id: "what",
+    header: "What",
+    cell: ({ row }) => (
+      <>
+        <span className="font-mono text-[12px]">{row.original.what}</span>
+        {row.original.holds === "" ? null : <span className="block text-[12px] text-dim">{row.original.holds}</span>}
+      </>
+    ),
+    meta: { cellClassName: "align-top whitespace-normal [overflow-wrap:anywhere]" },
+  },
+  {
+    id: "by",
+    header: "Removed by",
+    cell: ({ row }) => byWords(row.original.by),
+    meta: { cellClassName: "align-top whitespace-normal" },
+  },
+  {
+    id: "how",
+    header: "How",
+    cell: ({ row }) => row.original.how,
+    meta: { cellClassName: "align-top whitespace-normal [overflow-wrap:anywhere]" },
+  },
+];
 
 export function SettingsPage() {
   const answer = useResource<unknown>(SETTINGS_API_PATH);

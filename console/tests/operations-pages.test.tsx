@@ -22,7 +22,7 @@ import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { NOT_RECORDED, UNAVAILABLE_MARK } from "../src/components/kit";
 import { durationWords, runningFor } from "../src/pages/liveRunsQuery";
 import { LANE_BASIS_WORDS, TIER_BASIS_WORDS } from "../src/pages/errorsQuery";
-import { keptUntil, narrowed, NO_ARTIFACT_FILTERS, offeredKinds } from "../src/pages/artifactsQuery";
+import { ARTIFACT_FILTERS, ARTIFACT_SORTS, keptUntil, kindWords } from "../src/pages/artifactsQuery";
 import { windowOf } from "../src/pages/dataTransferQuery";
 import { filtersFrom, logsApiPath, logsExportApiPath, LOGS_PAGE_SIZE } from "../src/pages/logsQuery";
 import { UNAVAILABLE } from "../src/pages/operations/operationsActions";
@@ -280,14 +280,17 @@ describe("what the Operations pages agree with the API about", () => {
     expect(jobName("spend_report_refresh")).toBe("Spend report refresh");
   });
 
-  test("a window of whole days includes the last day, and artifacts narrow what the page holds", () => {
+  test("a window of whole days includes the last day, and the artifact list's controls are the route's", () => {
     // What breaks if this is deleted: the last day's entries left out of every export, or the
-    // artifact list offering a kind nothing on the page is.
+    // artifact list offering a kind read from anywhere but the rows drawn. Which filters and
+    // orders the route declares is held against its own document in `tests/artifacts-page.test.tsx`.
     expect(windowOf("2019-03-04", "2019-03-05")).toEqual({ since: "2019-03-04T00:00:00.000Z", until: "2019-03-06T00:00:00.000Z" });
     expect(windowOf("", "2019-03-05")).toBeNull();
     const rows = [artifact({ artifact_id: "old", produced_at: "2019-01-01T00:00:00Z" }), artifact({ artifact_id: "new", kind: "deck" })];
-    expect(offeredKinds(rows)).toEqual(["deck", "report"]);
-    expect(narrowed(rows, NO_ARTIFACT_FILTERS).map((one) => one.artifact_id)).toEqual(["new", "old"]);
+    expect(ARTIFACT_FILTERS.map((one) => one.column)).toEqual(["kind"]);
+    expect(ARTIFACT_SORTS.map((one) => one.value)).toEqual(["", "produced_at"]);
+    expect(ARTIFACT_FILTERS[0]?.read(rows[1] as (typeof rows)[number])).toBe("deck");
+    expect(kindWords("quarterly_report")).toBe("Quarterly report");
     expect(keptUntil(artifact({ kept_until: "", kept_because: "while the record exists" }))).toBe("while the record exists");
   });
 });
@@ -1157,11 +1160,11 @@ describe("Artifacts and Import and export", () => {
     // What breaks if this is deleted: an estate nothing records drawn as one that produced
     // nothing, or principal ids and slugs back as the rows' text.
     expect(Object.keys(artifact()).sort()).toEqual(backendModelFields("src/brain/artifact_routes.py", "ArtifactView").sort());
-    const unread = await open("/artifacts", { "GET /api/v1/govern/artifacts": () => ({ body: { artifacts: null, unread: "UNREAD", kept_rule: "RULE" } }) });
+    const unread = await open("/artifacts", { "GET /api/v1/govern/artifacts": () => ({ body: { items: [], unread: "UNREAD", kept_rule: "RULE" } }) });
     expect(mainText(unread.container)).toContain(NOTHING_RECORDED);
     expect(unread.container.querySelector("main table")).toBeNull();
 
-    const listed = await open("/artifacts", { "GET /api/v1/govern/artifacts": () => ({ body: { artifacts: [artifact()], unread: "", kept_rule: "RULE" } }) });
+    const listed = await open("/artifacts", { "GET /api/v1/govern/artifacts": () => ({ body: { items: [artifact()], unread: "", kept_rule: "RULE" } }) });
     const text = mainText(listed.container);
     expect(text).toContain("Report");
     expect(text).toContain("kept 30 days");
