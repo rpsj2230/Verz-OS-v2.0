@@ -17,7 +17,7 @@
  * are not kept, why the not-found sentence is never a gap, where usage is, why there was no export,
  * and the window's raw instant). Export is offered now, of the lines drawn.
  *
- * Task ids: M27.7.18, M27.16.1
+ * Task ids: M27.7.18, M27.16.1, M27.16.3
  */
 
 import { Plug } from "lucide-react";
@@ -126,6 +126,7 @@ function Gaps({ body }: { readonly body: QuestionsBody }) {
       {body.gaps.length === 0 ? null : (
         <SectionCard title={GAPS_HEADING}>
           <EntityTable
+            exportName="question-gaps"
             caption={GAPS_HEADING}
             columns={COLUMNS}
             rows={[...body.gaps].sort((a, b) => b.asked - a.asked)}

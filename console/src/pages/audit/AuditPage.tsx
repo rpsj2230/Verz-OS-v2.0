@@ -24,13 +24,15 @@
  * **Verifying the ledger has its own page** (`VerifyPage.tsx`), reached from the header: it is a
  * check somebody runs, not something to read past on the way to the entries.
  *
- * Task ids: M27.7.13, M27.8.6, M27.16.1, M33.4.1.3
+ * Task ids: M27.7.13, M27.8.6, M27.16.1, M33.4.1.3, M27.16.3
  */
 
 import { ScrollText, ShieldAlert, ShieldCheck, X } from "lucide-react";
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { EmptyState, Fact, FactList, FailureState, LoadingState, PageHeader, SectionCard } from "../../components/kit";
+import { SavedFilters } from "../../components/kit/SavedFilters";
+import { addressFor } from "../../components/kit/savedFilterStore";
 import { useResource } from "../../api/useResource";
 import { SEARCH_LABEL } from "../../components/ListControls";
 import { Button } from "../../components/ui/button";
@@ -242,15 +244,40 @@ export function Toolbar({
         ))}
       </Choice>
       {narrowed(filters, defaults) ? (
-        <Button asChild variant="ghost" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
+        <Button asChild variant="quiet" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
           <Link to={base}>
             {RESET_FILTERS} <X aria-hidden />
           </Link>
         </Button>
       ) : null}
+      <SavedFilters
+        label={FILTERS_LABEL}
+        question={{
+          search: filters.search,
+          filters: { action: filters.action, kind: filters.kind, actor: filters.actor, period: filters.period },
+          sort: filters.order,
+        }}
+        columns={kinds === null ? ["action", "actor", "period"] : ["action", "kind", "actor", "period"]}
+        sorts={[...ORDERS]}
+        onApply={(question) => {
+          navigate(addressFor(base, question, SAVED_NAMES, search));
+        }}
+      />
     </form>
   );
 }
+
+/** The parameters a saved filter's parts travel in on this page's address. */
+const SAVED_NAMES = {
+  search: ADDRESS_PARAMETERS.search,
+  filters: {
+    action: ADDRESS_PARAMETERS.action,
+    kind: ADDRESS_PARAMETERS.kind,
+    actor: ADDRESS_PARAMETERS.actor,
+    period: ADDRESS_PARAMETERS.period,
+  },
+  sort: ADDRESS_PARAMETERS.order,
+} as const;
 
 /**
  * The entries for the filters in the address. `useLedger` starts again from the first page when

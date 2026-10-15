@@ -129,7 +129,7 @@ function ToolView({ row, body, onSwitched }: { readonly row: ToolRow; readonly b
               {choices.map((choice) => (
                 <Button
                   key={choice.department ?? "install"}
-                  variant={choice.on ? "default" : "outline"}
+                  variant={choice.on ? "primary" : "outline"}
                   size="sm"
                   className="min-h-11 sm:min-h-8"
                   disabled={busy}

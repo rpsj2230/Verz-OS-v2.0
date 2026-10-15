@@ -168,7 +168,7 @@ function ChannelAnswer({ name, tab }: { readonly name: string; readonly tab: str
           {row.steps.length === 0 ? null : (
             <Button
               size="sm"
-              variant={row.status === "not_set_up" ? "default" : "outline"}
+              variant={row.status === "not_set_up" ? "primary" : "outline"}
               className="min-h-11 sm:min-h-8"
               onClick={() => {
                 setTold(null);
@@ -182,7 +182,7 @@ function ChannelAnswer({ name, tab }: { readonly name: string; readonly tab: str
           {row.status === "not_set_up" ? null : (
             <Button
               size="sm"
-              variant={on ? "outline" : "default"}
+              variant={on ? "outline" : "primary"}
               className="min-h-11 sm:min-h-8"
               disabled={busy}
               onClick={() => {

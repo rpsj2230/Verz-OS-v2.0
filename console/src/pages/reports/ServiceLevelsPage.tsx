@@ -18,7 +18,7 @@
  * What was removed from the old page: lower-case column headings that were field names, and the
  * one fixed window of a day (now the period every Report page offers).
  *
- * Task ids: M27.7.16, M27.16.1
+ * Task ids: M27.7.16, M27.16.1, M27.16.3
  */
 
 import { useState } from "react";
@@ -134,7 +134,7 @@ function Reading({ lanes }: { readonly lanes: readonly LaneReadingRow[] }) {
         </SectionCard>
       )}
       <SectionCard title={LANES_HEADING}>
-        <EntityTable caption={LANES_HEADING} columns={COLUMNS} rows={lanes} rowId={(row) => row.lane} rowLabel={(row) => row.lane} />
+        <EntityTable exportName="service-levels" caption={LANES_HEADING} columns={COLUMNS} rows={lanes} rowId={(row) => row.lane} rowLabel={(row) => row.lane} />
       </SectionCard>
     </>
   );

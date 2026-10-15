@@ -58,7 +58,7 @@ export function StopControl({ stop, departments }: { readonly stop: StopOffer; r
       ) : null}
       <Button
         type="button"
-        variant="destructive"
+        variant="danger"
         className="min-h-11 sm:min-h-9"
         disabled={busy}
         aria-label={stop === "everything" ? STOP_EVERYTHING : `${STOP_LABEL}: ${departments.join(", ")}`}

@@ -25,7 +25,7 @@
  * M36.1.2.4, M36.1.3.3, M36.1.4.3). The API decides each from `brain.ops.scaling`; this page draws the
  * sentence it sends and a due flag it was sent, and never turns an unmeasured move into "not due".
  *
- * Task ids: M27.7.27, M27.16.1, M22.3.1, M22.3.2, M22.3.4, M36.1.1.4, M36.1.2.4, M36.1.3.3, M36.1.4.3
+ * Task ids: M27.7.27, M27.16.1, M22.3.1, M22.3.2, M22.3.4, M36.1.1.4, M36.1.2.4, M36.1.3.3, M36.1.4.3, M27.16.3
  */
 
 import { useResource } from "../../api/useResource";
@@ -156,6 +156,7 @@ export function CapacityPage() {
               </SectionCard>
             )}
             <WholeList
+              exportName="connections"
               title={CONNECTIONS_HEADING}
               caption={CONNECTIONS_HEADING}
               columns={COLUMNS}
@@ -166,6 +167,7 @@ export function CapacityPage() {
               emptyDescription={NO_CONNECTIONS_MORE}
             />
             <WholeList
+              exportName="sizing"
               title={SIZING_HEADING}
               lede={SIZING_LEDE}
               caption={SIZING_HEADING}
@@ -176,6 +178,7 @@ export function CapacityPage() {
               empty={NO_SIZINGS}
             />
             <WholeList
+              exportName="moves"
               title={MOVES_HEADING}
               lede={MOVES_LEDE}
               caption={MOVES_HEADING}

@@ -147,10 +147,6 @@ const A_DRAFT_STARTS_FROM_ONE_TEMPLATE =
 const A_DEPARTMENT_PAGE_IS_ONE_DEPARTMENT =
   "This page is one department, and its only writes rename or retire that department, each " +
   "confirmed on its own, so there is no act to do to several rows at once.";
-const AN_UNBINDING_IS_ONE_PERSONS_CHAT =
-  "Unbinding stops a chat account being answered as its person, at once, and is recorded against " +
-  "them; it is confirmed one person at a time so nobody's chat is taken away as a side effect of " +
-  "somebody else's.";
 
 /**
  * The Models screen as the owner drew it on 2026-09-03 and restated on 2026-09-29: providers as a row
@@ -287,7 +283,9 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   },
   "/jobs/:name": {},
   "/approvals": { bulk: AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD },
-  "/adoption": { bulk: READ_ONLY },
+  // The table now selects, to export, so a box on each row is offered and no excuse stands for it.
+  // What the selection does not do, and why, is held in `list-tools.test.tsx`.
+  "/adoption": {},
   "/people": {},
   // A person's page borrows the roster for the agents they steward, and links to the Agents list.
   "/people/:personId": {
@@ -382,7 +380,9 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   },
   "/access-requests": {},
   "/channels": {},
-  "/channels/:name": { bulk: AN_UNBINDING_IS_ONE_PERSONS_CHAT },
+  // The people-bound table selects, to export. Unbinding stays one person's chat at a time, which is
+  // `list-tools.test.tsx`' reason for there being no bulk act here.
+  "/channels/:name": {},
 };
 
 /**
