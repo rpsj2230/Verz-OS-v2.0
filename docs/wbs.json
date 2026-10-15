@@ -6834,19 +6834,19 @@
      "updated": "2026-10-14"
     },
     "M32.6.1.1": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.automation); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "The canvas was already built and wired (docker-compose.automation.yml, the automation overlay, ops.automation). What was missing was proof on the install, and it is merged: the install check the_canvas_runs_as_three_services_each_held_to_its_budget reads what the deploy step saw and closes the leaf when the install's two newest runs both pass it. Install proof, steps: (1) put automation in the install's optional services setting (needs-rupash 124 decided yes; it takes 896 MiB, and the deploy says in words if the server has no room); (2) deploy, and read the deploy's journal for the line saying the canvas's facts are kept for this release; (3) open the Install page's list of checks after the next run and see the check pass.",
+     "updated": "2026-10-14"
     },
     "M32.6.1.2": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.automation); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "Built and wired already; the proof was missing and is merged. The deploy step now asks docker what is running (ops/deploy/overlays/automation.observe.sh: networks, the names and never the values of the canvas's variables, routes, the proxy's hosts and its answer for a host on no list) and the install check the_canvas_has_no_way_out_but_its_proxy_and_no_foreign_secret judges it, closing the leaf when the install's two newest runs both pass it. Install proof, steps: the same three as M32.6.1.1; the second check on the Install page is the one for this task. A failure names the kind of fault in a sentence and the worker's log names the variables.",
+     "updated": "2026-10-14"
     },
     "M32.6.1.4": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.automation); open for proof on the install or a decision, not for code",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "Built and wired already: the canvas is the automation overlay and the one setting INSTALL_SERVICES switches it, a fresh install ships with none. The proof was missing and is merged: the install check the_canvas_runs_where_the_setting_names_it_and_nowhere_else is judged both ways (running where the setting names it, absent from the deploy's report where it does not) and closes the leaf when the install's two newest runs both pass it. Install proof, steps: with automation in the setting, as for M32.6.1.1, the third check passes; the other direction is what an install that has not named it shows once any other optional service reports.",
+     "updated": "2026-10-14"
     },
     "M32.7.2": {
      "status": "READY FOR TESTING",
