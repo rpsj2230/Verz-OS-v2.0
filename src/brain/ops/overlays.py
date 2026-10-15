@@ -38,6 +38,16 @@ belonging to a company nobody here has met.
 See `AN_UNLIMITED_NEIGHBOUR_IS_COUNTED_AT_WHAT_IT_USES` and the 2026-10-05 measurement in
 `wiring.NEIGHBOUR_MIB`, where it was 1,389 MiB across eight containers that reserve nothing.
 
+**The same costing refuses a save, from the room the server last measured.** A plan made on the
+server is read in a deploy's journal, which is a long way from the person who typed the setting
+and a release later than when they typed it. So the planner also keeps the room it measured
+(`ROOM_KEY`, written on every deploy whether or not anything is switched on), and saving
+`INSTALL_SERVICES` asks `plan_in_room`, the one costing, whether the services it names would all
+start in that room (`memory_problem`). Refused in words at the Settings screen, with the same
+sentence the deploy would have written. Rejected: a second sum at save, which is a second place
+for the budget to be subtly wrong; and refusing with no measurement, which blocks the first
+switch-on of every install. See `THE_SAVE_CHECK_USES_THE_ROOM_THE_SERVER_LAST_MEASURED`.
+
 **An overlay that does not fit is refused in words, and the ones before it still start.**
 Overlays are costed in declaration order, which is the order item 120 gave the room in, so a
 refusal names exactly the one that did not fit and what it would have needed. A plan the
@@ -396,6 +406,96 @@ async def runtime_problem(session: AsyncSession, value: str) -> str:
     return ""
 
 
+#: Where the room the server last measured is kept: one `ops.setting` row, rewritten on every
+#: deploy whether or not anything is switched on. See
+#: `THE_SAVE_CHECK_USES_THE_ROOM_THE_SERVER_LAST_MEASURED`.
+ROOM_KEY: Final = "overlay.room"
+
+#: The row's description, the product's own sentence for it.
+ROOM_DESCRIPTION: Final = (
+    "How much memory this server had left for optional services when the deploy step last "
+    "measured it, after every other container and the host's own reserve."
+)
+
+#: Why saving a set of services is refused from a stored measurement, and by which arithmetic.
+THE_SAVE_CHECK_USES_THE_ROOM_THE_SERVER_LAST_MEASURED: Final = (
+    "Nothing inside the application can see how much memory the server has left: the container "
+    "limits of everything else on it are known to the server's docker alone. So the deploy step "
+    "keeps the room it measured, from the same facts and by the same costing it starts services "
+    "with, and a save is refused when the services it names could not all start in that room. "
+    "Without a measurement a save is allowed and the next deploy decides, because refusing on a "
+    "guess would block the first switch-on of every install. A measurement can be out of date, "
+    "so the refusal says it is the server's last one and that the next update measures again."
+)
+
+#: Said when a save is refused for memory, ahead of the half-sentence naming what did not fit.
+NOT_ALL_OF_THESE_FIT_ON_THIS_SERVER: Final = (
+    "This server cannot hold all of these services at once, going by the memory it last measured: "
+)
+
+#: And after it, what the person can do about it.
+WHAT_TO_DO_ABOUT_A_SERVICE_THAT_DOES_NOT_FIT: Final = (
+    ". Leave one of the others out, or give the server more memory, then save this again; the "
+    "next update measures the server again."
+)
+
+
+def room_observation(host: Host) -> dict[str, object]:
+    """The row `ROOM_KEY` holds: the room left for optional services and the machine it is of."""
+    return {"available_mib": host.available_mib, "total_mib": host.total_mib}
+
+
+def room_in(value: object) -> int | None:
+    """The room a stored measurement reports, or None when it is not one.
+
+    Defensive like `seen_in`, because the row is in a table a person with a database prompt can
+    write: a value of the wrong shape, or a count that is not a whole non-negative number, is no
+    measurement rather than a room of nonsense. A `bool` is an `int` to Python and is refused.
+    """
+    if not isinstance(value, Mapping):
+        return None
+    room = value.get("available_mib")
+    if not isinstance(room, int) or isinstance(room, bool) or room < 0:
+        return None
+    return room
+
+
+async def memory_problem(session: AsyncSession, value: str) -> str:
+    """Why a value naming more services than the server has room for may not be saved, or empty.
+
+    From the room the deploy step last measured (`ROOM_KEY`), through `plan_in_room`, the costing
+    the deploy itself uses, so it names the same service the deploy would leave out. A service
+    that needs a runtime the server lacks is `runtime_problem`'s to refuse and is not counted
+    twice. See `THE_SAVE_CHECK_USES_THE_ROOM_THE_SERVER_LAST_MEASURED`.
+    """
+    from brain.ops.setting_store import read_namespace
+
+    wanting = switched_on(value)
+    if not wanting:
+        return ""
+    held = await read_namespace(session, ROOM_KEY.split(".", 1)[0])
+    row = held.get(ROOM_KEY)
+    room = room_in(row.value) if row is not None else None
+    if room is None:
+        return ""
+    # Every runtime is offered, so the only refusals left are memory's: a missing runtime is
+    # `runtime_problem`'s, and saying it twice would name one service for two reasons.
+    every_runtime = frozenset({"runc", *(one.needs_runtime for one in OVERLAYS)})
+    # The overlay the product always runs is costed first, as it is on the server, and is never
+    # named: it is not what the person chose, and a room too small for it holds nothing else.
+    refused = [
+        reason
+        for one, reason in plan_in_room(planned(wanting), room, every_runtime).refused
+        if not one.always
+    ]
+    if not refused:
+        return ""
+    first = refused[0].removesuffix(SO_IT_IS_NOT_STARTED)
+    return (
+        NOT_ALL_OF_THESE_FIT_ON_THIS_SERVER + first + WHAT_TO_DO_ABOUT_A_SERVICE_THAT_DOES_NOT_FIT
+    )
+
+
 def switched_on_here(
     env: Mapping[str, str] | None = None, saved: Mapping[str, str] | None = None
 ) -> tuple[Overlay, ...]:
@@ -528,19 +628,38 @@ def runtime_refusal(one: Overlay) -> str:
     )
 
 
+#: How the plan's sentence for a service that does not fit ends.
+SO_IT_IS_NOT_STARTED: Final = ", so it is not started"
+
+
+def shortfall(cost_mib: int, remaining_mib: int) -> str:
+    """The half-sentence for a service that does not fit, in the plan and at save."""
+    return f"needs {cost_mib} MiB and this server has {max(remaining_mib, 0)} MiB left for it"
+
+
 def plan(switched: Sequence[Overlay], host: Host) -> Plan:
     """Each switched-on overlay started while it fits, in declaration order, or refused in words.
 
     A container an overlay shares with one already started is not charged again. See
     `A_SHARED_CONTAINER_IS_PAID_FOR_ONCE`.
     """
-    remaining = host.available_mib
+    return plan_in_room(switched, host.available_mib, host.runtimes)
+
+
+def plan_in_room(switched: Sequence[Overlay], available_mib: int, runtimes: frozenset[str]) -> Plan:
+    """`plan` from the two facts it reads of a server, so a saved report can be asked it too.
+
+    **There is one costing and this is it.** The deploy step asks it of a measured `Host` and the
+    Settings screen asks it of the room the step last kept (`memory_problem`), so a save can never
+    be refused by arithmetic the next deploy would not repeat.
+    """
+    remaining = available_mib
     start: list[Overlay] = []
     refused: list[tuple[Overlay, str]] = []
     costs: dict[str, int] = {}
     running: set[str] = set()
     for one in switched:
-        if one.needs_runtime and one.needs_runtime not in host.runtimes:
+        if one.needs_runtime and one.needs_runtime not in runtimes:
             refused.append((one, runtime_refusal(one)))
             continue
         cost = set_cost_mib(name for name in one.components if name not in running)
@@ -551,16 +670,12 @@ def plan(switched: Sequence[Overlay], host: Host) -> Plan:
             remaining -= cost
             continue
         refused.append(
-            (
-                one,
-                f"{one.what} ({one.name}) needs {cost} MiB and this server has "
-                f"{max(remaining, 0)} MiB left for it, so it is not started",
-            )
+            (one, f"{one.what} ({one.name}) {shortfall(cost, remaining)}{SO_IT_IS_NOT_STARTED}")
         )
     return Plan(
         start=tuple(start),
         refused=tuple(refused),
-        available_mib=host.available_mib,
+        available_mib=available_mib,
         costs=costs,
     )
 
@@ -732,8 +847,14 @@ def seen_in(value: object, *, commit: str) -> dict[str, Seen] | None:
     return found
 
 
-def _record(value: dict[str, object]) -> None:
-    """Write the observation over a connection of its own, attributed to the deploy step."""
+def _record(
+    value: dict[str, object],
+    *,
+    key: str = OBSERVED_KEY,
+    description: str = OBSERVED_DESCRIPTION,
+    trace_id: str | None = None,
+) -> None:
+    """Write one of the step's rows over a connection of its own, attributed to the deploy step."""
     from sqlalchemy import create_engine
 
     from brain.db import normalise_database_url
@@ -750,15 +871,17 @@ def _record(value: dict[str, object]) -> None:
     try:
         with engine.begin() as conn:
             for statement in attributed_to(
-                actor_id=DEPLOY_STEP, ent_hash="0" * 32, trace_id=f"overlays-{value['commit']}"
+                actor_id=DEPLOY_STEP,
+                ent_hash="0" * 32,
+                trace_id=trace_id or f"overlays-{value['commit']}",
             ):
                 conn.execute(statement)
             conn.execute(
                 put_statement(
-                    OBSERVED_KEY,
+                    key,
                     value_type=SettingType.JSON,
                     value=value,
-                    description=OBSERVED_DESCRIPTION,
+                    description=description,
                     updated_by=DEPLOY_STEP,
                 )
             )
@@ -811,7 +934,30 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"SAY no plan was made, so nothing is started or stopped: {describe(error)}")
         return 1
     sys.stdout.write(render(plan(planned(switched), host), host))
+    _keep_room(host)
     return 0
+
+
+def _keep_room(host: Host) -> None:
+    """Keep the room this server has, so a save can be checked against it before a deploy.
+
+    **Whether or not anything is switched on**, which is the only time the check is of any use:
+    the report `_observe` keeps is written only after a service has been started, so an install
+    asking to switch its first one on would have no measurement to be refused by. A failure is
+    said and changes nothing, because the plan has already been made and the deploy is the
+    authority: a save that cannot be checked is allowed, not a deploy that stops.
+    """
+    try:
+        _record(
+            room_observation(host),
+            key=ROOM_KEY,
+            description=ROOM_DESCRIPTION,
+            trace_id="overlays-room",
+        )
+    except Exception as error:
+        from brain.ops.safe_error import describe
+
+        print(f"SAY the room measured on this server was not kept: {describe(error)}")
 
 
 def _observe() -> int:

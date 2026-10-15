@@ -45,6 +45,8 @@ import { UNSET_CURRENCY } from "../pages/spendQuery";
 import { FailureNotice } from "../ui/FailureNotice";
 import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import { ConfirmAction } from "./ConfirmAction";
+import type { GridColumn } from "./gridFeatures";
+import { GridTable } from "./kit/GridTable";
 
 const PRICE_FORM = "model-price";
 
@@ -125,6 +127,50 @@ export function ModelPrices({ editable }: { readonly editable: boolean }) {
   const unset = body.currency === UNSET_CURRENCY;
   const controls = editable && !unset;
 
+  const columns: GridColumn<ModelPriceRow>[] = [
+    {
+      id: "model",
+      header: "Model",
+      cell: ({ row }) => (
+        <>
+          {modelWords(row.original)}
+          {row.original.on_ladder ? null : <span className="note"> ({NOT_IN_USE})</span>}
+        </>
+      ),
+    },
+    { id: "input", header: INPUT_LABEL, cell: ({ row }) => priceWords(row.original.input_minor_per_million) },
+    { id: "output", header: OUTPUT_LABEL, cell: ({ row }) => priceWords(row.original.output_minor_per_million) },
+    { id: "costed", header: "Costed", cell: ({ row }) => costedWords(row.original, body.currency) },
+  ];
+  if (controls) {
+    columns.push({
+      id: "actions",
+      header: "Actions",
+      cell: ({ row }) => {
+        const one = row.original;
+        return (
+          <button
+            type="button"
+            className="button"
+            disabled={busy}
+            aria-label={`${SET_PRICE}: ${modelWords(one)}`}
+            onClick={() => {
+              setEditing(one);
+              setInput(one.costed && one.input_minor_per_million !== null ? majorFromMinor(one.input_minor_per_million) : "");
+              setOutput(one.costed && one.output_minor_per_million !== null ? majorFromMinor(one.output_minor_per_million) : "");
+              setBlank([]);
+              setFailure(null);
+              setTold(null);
+              setAsked(false);
+            }}
+          >
+            {SET_PRICE}
+          </button>
+        );
+      },
+    });
+  }
+
   return (
     <section className="card" aria-labelledby="models-prices">
       <h2 id="models-prices">{PRICES_HEADING}</h2>
@@ -133,54 +179,13 @@ export function ModelPrices({ editable }: { readonly editable: boolean }) {
       {body.models.length === 0 ? (
         <p className="note">{NO_MODELS}</p>
       ) : (
-        <div className="grid__scroll">
-          <table className="grid__table">
-            <caption className="grid__caption">What a million tokens cost on each model</caption>
-            <thead>
-              <tr>
-                <th scope="col">Model</th>
-                <th scope="col">{INPUT_LABEL}</th>
-                <th scope="col">{OUTPUT_LABEL}</th>
-                <th scope="col">Costed</th>
-                {controls ? <th scope="col">Actions</th> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {body.models.map((row) => (
-                <tr key={`${row.provider}/${row.model}`}>
-                  <td>
-                    {modelWords(row)}
-                    {row.on_ladder ? null : <span className="note"> ({NOT_IN_USE})</span>}
-                  </td>
-                  <td>{priceWords(row.input_minor_per_million)}</td>
-                  <td>{priceWords(row.output_minor_per_million)}</td>
-                  <td>{costedWords(row, body.currency)}</td>
-                  {controls ? (
-                    <td>
-                      <button
-                        type="button"
-                        className="button"
-                        disabled={busy}
-                        aria-label={`${SET_PRICE}: ${modelWords(row)}`}
-                        onClick={() => {
-                          setEditing(row);
-                          setInput(row.costed && row.input_minor_per_million !== null ? majorFromMinor(row.input_minor_per_million) : "");
-                          setOutput(row.costed && row.output_minor_per_million !== null ? majorFromMinor(row.output_minor_per_million) : "");
-                          setBlank([]);
-                          setFailure(null);
-                          setTold(null);
-                          setAsked(false);
-                        }}
-                      >
-                        {SET_PRICE}
-                      </button>
-                    </td>
-                  ) : null}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <GridTable
+          look="grid"
+          caption="What a million tokens cost on each model"
+          columns={columns}
+          rows={body.models}
+          rowId={(row) => `${row.provider}/${row.model}`}
+        />
       )}
       {editing === null ? null : (
         <form className="form" aria-label={`Price of ${modelWords(editing)}`} onSubmit={ask}>

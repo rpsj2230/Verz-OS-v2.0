@@ -21,6 +21,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -111,6 +112,72 @@ def _no_network(monkeypatch: pytest.MonkeyPatch) -> None:
         transport=fake.transport(),
     )
     monkeypatch.setattr(acceptance_workspace, "artifact_backend", lambda h: (backend, "brain"))
+
+
+@pytest.fixture(autouse=True)
+def _no_collection_between_checks(monkeypatch: pytest.MonkeyPatch) -> None:
+    """**The suite's full garbage collection after every check is not what this file is about, and
+    in a shard it cost more than the checks.** `run_suite` calls `gc.collect()` after each check so
+    a failed check's reference cycles do not pile up in the worker's container
+    (`A_CHECK_THAT_FAILED_MAY_NOT_KEEP_THE_NEXT_ONE_SHORT_OF_MEMORY`, held by
+    `test_acceptance_suite_memory.py`). The three tests below that run the whole registry make that
+    call about 2,300 times between them (573 checks, four runs), and a full collection walks every
+    object in the process, which in a shard that has imported ninety test files and records
+    coverage is a great deal more than in a process holding this file alone. The unit shard that
+    held this file took 66 to 123 minutes against 4 to 44 for the others in every pull request run
+    from the one after that call was added (2026-10-13) and in none before it. Nothing a test here
+    asserts depends on the call. Only this module's own name for `gc` is replaced, so the
+    interpreter's collector, and every other test's, is untouched."""
+    monkeypatch.setattr(acceptance_run, "gc", SimpleNamespace(collect=lambda: 0))
+
+
+def test_a_suite_run_in_this_file_makes_no_full_collection_and_the_product_still_asks_for_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**Both halves of the trade, so neither can be lost quietly.** Here a two-check run asks the
+    interpreter's collector for nothing, which is what keeps the whole-registry test minutes
+    shorter; `test_acceptance_suite_memory.py` holds that `run_suite` itself still collects after
+    every check. Delete this and the fixture above can go, or be widened to the interpreter's own
+    `gc`, with the memory test still green and the shard that holds this file an hour slower."""
+    import gc
+    import io
+
+    from brain.ops.acceptance import Check
+    from brain.settings import Settings
+
+    asked: list[str] = []
+
+    async def none_in_use(engine: object, stream: object) -> bool:
+        return False
+
+    async def run_one(engine: object, one: Check, **_: object) -> tuple[str, str]:
+        return (PASSED, "")
+
+    monkeypatch.setattr(acceptance_run, "in_use", none_in_use)
+    monkeypatch.setattr(acceptance_run, "run_one", run_one)
+
+    def spy(*_: int) -> int:
+        asked.append("collect")
+        return 0
+
+    monkeypatch.setattr(gc, "collect", spy)
+    checks = [
+        Check(name=name, leaves=("M32.4.1.4",), sentence="Runs.", run=_nothing)
+        for name in ("check_one", "check_two")
+    ]
+
+    results = asyncio.run(
+        acceptance_run.run_suite(
+            None,  # type: ignore[arg-type]
+            checks,
+            settings=Settings(),
+            stream=io.StringIO(),
+        )
+    )
+
+    assert asked == []
+    assert [one.name for one in results] == ["check_one", "check_two"]
+    assert [one.outcome for one in results] == [PASSED, PASSED]
 
 
 # ------------------------------------------------------------------------ the registry
