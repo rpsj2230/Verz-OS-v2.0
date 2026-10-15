@@ -1,0 +1,73 @@
+........................................................................ [  4%]
+........................................................................ [  9%]
+........................................................................ [ 14%]
+........................................................................ [ 19%]
+........................................................................ [ 23%]
+........................................................................ [ 28%]
+........................................................................ [ 33%]
+........................................................................ [ 38%]
+........................................................................ [ 42%]
+........................................................................ [ 47%]
+........................................................................ [ 52%]
+........................................................................ [ 57%]
+........................................................................ [ 61%]
+........................................................................ [ 66%]
+....F.F................................................................. [ 71%]
+........................................................................ [ 76%]
+........................................................................ [ 80%]
+........................................................................ [ 85%]
+........................................................................ [ 90%]
+........................................................................ [ 95%]
+........................................................................ [ 99%]
+..                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_every_recurrence_predicate_in_the_tree_belongs_to_a_control_or_is_excused _
+
+    def test_every_recurrence_predicate_in_the_tree_belongs_to_a_control_or_is_excused() -> None:
+        """Delete this and a scheduled mechanism can be added that nothing describes.
+    
+        The converse, and the half that is derived rather than declared. The control set cannot
+        be generated from the code, so the protection against the list falling behind is this:
+        every module-level `due` predicate in the tree is either part of a control, with a
+        sentence saying what it guards, or in `NOT_A_SCHEDULE` with a sentence saying why it is a
+        growth trigger instead. Neither is optional and there is no third answer.
+        """
+        described = {symbol for one in CONTROLS for symbol in one.symbols}
+        undescribed = [
+            predicate
+            for predicate in recurrence_predicates()
+            if predicate not in described and predicate not in NOT_A_SCHEDULE
+        ]
+>       assert undescribed == [], (
+            "these say when something is due and nothing records what they guard: "
+            f"{undescribed}. Add a row to CONTROLS, or an entry to NOT_A_SCHEDULE"
+        )
+E       AssertionError: these say when something is due and nothing records what they guard: ['brain.ops.acceptance_checks_supervision:the_leash_screen_shows_when_a_pin_ends_and_that_it_is_due']. Add a row to CONTROLS, or an entry to NOT_A_SCHEDULE
+E       assert ['brain.ops.a...at_it_is_due'] == []
+E         
+E         Left contains one more item: 'brain.ops.acceptance_checks_supervision:the_leash_screen_shows_when_a_pin_ends_and_that_it_is_due'
+E         Use -v to get more diff
+
+tests/invariants/test_no_safety_mechanism_lacks_a_caller.py:317: AssertionError
+_______________ test_the_registry_has_nothing_else_wrong_with_it _______________
+
+    def test_the_registry_has_nothing_else_wrong_with_it() -> None:
+        """Delete this and the checks above are the only ones that run in CI.
+    
+        `registry_gaps` is the whole check and the tests above are the parts of it worth naming
+        separately, because a failure that says only "one finding" sends somebody to read a
+        function rather than to fix a control. This asserts the rest: duplicate names, a cadence
+        whose source has been deleted, a route nothing declares, and a workflow file that has
+        lost its schedule entry.
+        """
+>       assert registry_gaps() == ()
+E       AssertionError: assert ('brain.ops.a... a schedule',) == ()
+E         
+E         Left contains one more item: 'brain.ops.acceptance_checks_supervision:the_leash_screen_shows_when_a_pin_ends_and_that_it_is_due says when something...ything runs it. Add a row to CONTROLS, or an entry to NOT_A_SCHEDULE saying why it is a trigger rather than a schedule'
+E         Use -v to get more diff
+
+tests/invariants/test_no_safety_mechanism_lacks_a_caller.py:345: AssertionError
+=========================== short test summary info ============================
+FAILED tests/invariants/test_no_safety_mechanism_lacks_a_caller.py::test_every_recurrence_predicate_in_the_tree_belongs_to_a_control_or_is_excused
+FAILED tests/invariants/test_no_safety_mechanism_lacks_a_caller.py::test_the_registry_has_nothing_else_wrong_with_it
+2 failed, 1512 passed, 9 warnings in 286.74s (0:04:46)

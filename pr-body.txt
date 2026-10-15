@@ -1,0 +1,5 @@
+Install acceptance checks (CHECK_ORDER 805 and 810) naming M13.7.2, M13.8.2, M13.7.4, M13.5.18, M13.8.13 and M13.8.4, with failing-product tests for each. No migration, no route change, no flag.
+
+The agent-run checks use a scripted model and the real knowledge.search_documents; the pin check writes the pin through the verb the Pin press uses, because the template carries none.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)

@@ -1,0 +1,17 @@
+Install checks for an agent run's bounds, its re-judged grant and channels, the thirty-day pin review and company-wide publication
+
+Six leaves that were built and wired, and have unit tests over fakes, are shown on the install's own tables, registry and routes.
+
+- M13.7.2: the real AgentRuntime, over the install's registry, resolver and ops.agent_run under row-level security, stops at its turn bound when a scripted model only talks and at its tool-call bound when it only asks, each recorded in the asker's name with the reason and the counts; a document that reads as steering is counted and not obeyed.
+- M13.8.2: a grant taken away between two tool calls refuses the second, in the words a model is told for a tool nobody registered.
+- M13.7.4: an agent switched on for the web alone, with a ceiling narrower than its asker's, answers there at its ceiling and is answered for in Lark as an agent nobody made; its steward switches Lark on through the lifecycle route and it then answers as on the web.
+- M13.5.18 and M13.8.13: the chaser installed as the gallery installs it is disabled at Shadow; its pin, left thirty-one days, is read by the worker's pass as a report and changes nothing, is not written while the switch is off, and is reviewed to extended, never released, once it is on. The Leash screen is told the date, that it is due and held, and a reader without the Settings tab is refused.
+- M13.8.4: a department administrator holding the lifecycle authority and a plain member are refused publishing an agent company-wide and retiring it; only the holder of the visibility authority does either, and a member of each department is then offered it.
+
+The model in the runtime checks is scripted, said in the module, so no provider or key is needed; the tool it asks for is the real knowledge.search_documents over a document the check uploads. The pin is written through StoredLeash.write_pin because the template carries no pin row: a person presses Pin, and the leaf's words are met by the template's Shadow leash plus that press. The Leash screen shows one date per agent, not per rung, and the sentence says so.
+
+Every check is shown failing with the product broken in the way it would plausibly break (bound never reached, run log written to nothing, steering uncounted, reach frozen at the start of the run, roster ignoring the channel, a pass that releases on a date or writes with its switch off, a screen showing no pin or open to every reader, the visibility authority given to every administrator).
+
+Not named: M13.7.1 (automation, workflow step and delegated subtask do not enter the runtime), M13.7.7 (one decision per suspension, no second approver in the database).
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
