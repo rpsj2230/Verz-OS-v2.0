@@ -155,3 +155,56 @@ export const KEEP_LABEL = "Not now";
 export const NOT_CHANGED = "Nothing was changed";
 export const SOMETHING_DID_NOT_WORK = "Something did not work";
 export const TAKEN = "Taken into the draft";
+
+/** `brain.agent_describe_routes.DESCRIBE_PATH`. */
+export const DESCRIBE_API_PATH = "/agent-drafts/describe";
+
+/** What a description started: `DescribedView`. The suggestion is null when the model gave none. */
+export interface Described {
+  readonly draftId: string;
+  readonly suggestion: Suggestion | null;
+  readonly told: string | null;
+  readonly notDrafted: readonly string[];
+  /** The words the person described the agent in, which the Write step shows as what was asked. */
+  readonly description: string;
+}
+
+export function readDescribed(payload: unknown, description: string): Described | null {
+  const fields = fieldsOf(payload);
+  const draftId = said(fields?.["draft_id"]);
+  if (fields === null || draftId === undefined) {
+    return null;
+  }
+  const not = Array.isArray(fields["not_drafted"]) ? (fields["not_drafted"] as readonly unknown[]) : [];
+  return {
+    draftId,
+    suggestion: fields["suggestion"] === null ? null : readSuggestion(fields["suggestion"]),
+    told: said(fields["told"]) ?? null,
+    notDrafted: not.filter((one): one is string => typeof one === "string"),
+    description,
+  };
+}
+
+export const DESCRIBE_HEADING = "Describe it";
+export const DESCRIBE_LEDE =
+  "Say what the agent is for in your own words. A model suggests its name, instructions, skills and connectors, and you choose which to take.";
+export const DESCRIBE_LABEL = "What should the agent do?";
+export const DESCRIBE_BUTTON = "Draft it from this";
+export const DESCRIBE_NEEDED = "Describe the agent before drafting it.";
+export const DESCRIBE_QUESTION = "Draft an agent from this description?";
+export const DESCRIBE_CONSEQUENCE =
+  "What you wrote is sent to the model provider this install uses, and a draft of your own is started. Nothing is put into it until you take a suggestion, and nothing is live.";
+export const NOT_DRAFTED_HEADING = "Not drafted";
+export const NOT_DESCRIBED = "No draft was started";
+
+/** What the navigation that opened this draft carried, when it was a description: and only for this draft. */
+export function describedFrom(state: unknown, draftId: string): Described | undefined {
+  const carried = fieldsOf(state)?.["described"];
+  const fields = fieldsOf(carried);
+  if (fields === null || fields["draftId"] !== draftId || typeof fields["description"] !== "string") {
+    return undefined;
+  }
+  // A cast at the boundary: the shape was written by `DescribeAgent` and each field is checked above
+  // or is a string list read as one.
+  return carried as Described;
+}

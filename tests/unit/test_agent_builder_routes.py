@@ -351,6 +351,8 @@ def test_the_form_is_the_builders_own_document_and_nobody_else_is_given_it(
     assert given.status_code == 200
     body = given.json()
     linked = body.pop("set_elsewhere")
+    # A builder with the install authority over everything is offered the form as it is (M13.9.2).
+    assert body.pop("offer_note") is None
     assert body == form_document()
     assert [one["part"] for one in linked] == ["knowledge", "workflows", "memory", "channels"]
     assert refused.status_code == 404

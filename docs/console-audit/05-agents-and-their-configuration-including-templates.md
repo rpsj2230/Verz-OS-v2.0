@@ -3,7 +3,7 @@
 - **Screens:** `/agents`, `/agents/:agentId`, `/agents/:agentId/:tab`, `/agent-templates`, `/agent-templates/:templateId`, `/approvals`, `/approvals/:suspensionId`, `/agents/new`, `/agents/drafts`, `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step`
 - **Tables:** `agent.agent`, `agent.template_instance`, `agent.template_version`, `agent.template_draft`, `agent.audience_extra`, `agent.upgrade_decline`, `agent.leash_change`, `agent.supervised_action`, `agent.action_verdict`, `agent.supervision_pin`, `agent.tool_attachment`, `ops.agent_item_use`, `agent.group_install`, `ops.channel_room`, `agent.browser_envelope`, `gate.suspension`, `agent.manifest_draft`, `agent.manifest_revision`, `agent.manifest_act`, `agent.learning_pause`, `ops.agent_run`
 - **Installation values:** none
-- **Measured here:** 73 routes, 14 called by no screen; 41 write routes, 38 with all three proofs; 4 gaps.
+- **Measured here:** 74 routes, 15 called by no screen; 42 write routes, 39 with all three proofs; 4 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -37,6 +37,7 @@
 | `GET /api/v1/builder/form` | `/agents/drafts/:draftId` |
 | `GET /api/v1/console/agents/{agent_id}/stats` | `/agents`, `/agents/:agentId` |
 | `POST /api/v1/agent-drafts` | `/agents/:agentId`, `/agents/:agentId/:tab` |
+| `POST /api/v1/agent-drafts/describe` | **no screen** |
 | `POST /api/v1/agent-drafts/import` | **no screen** |
 | `POST /api/v1/agent-drafts/{draft_id}/approve` | `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step` |
 | `POST /api/v1/agent-drafts/{draft_id}/check` | `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step` |
@@ -91,6 +92,7 @@
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
 | `POST /api/v1/agent-drafts` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_a_new_agent_is_drafted_approved_by_a_second_person_and_every_step_is_on_the_ledger` in `tests/unit/test_agent_draft_store.py` (database, in CI) | `test_a_new_agent_is_drafted_approved_by_a_second_person_and_every_step_is_on_the_ledger` in `tests/unit/test_agent_draft_store.py` (database, in CI) | `test_a_new_draft_starts_from_the_blank_template_under_an_id_minted_for_it` in `tests/unit/test_agent_builder_routes.py` |
+| `POST /api/v1/agent-drafts/describe` | **no screen** | `test_on_a_real_database_a_description_starts_a_draft_and_nothing_is_kept` in `tests/unit/test_acceptance_describe.py` (database, in CI) | `test_a_new_agent_is_drafted_approved_by_a_second_person_and_every_step_is_on_the_ledger` in `tests/unit/test_agent_draft_store.py` (database, in CI) | `test_a_description_starts_a_draft_and_proposes_what_the_model_said_without_applying_it` in `tests/unit/test_agent_describe_routes.py` |
 | `POST /api/v1/agent-drafts/{draft_id}/approve` | `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step` | `test_a_new_agent_is_drafted_approved_by_a_second_person_and_every_step_is_on_the_ledger` in `tests/unit/test_agent_draft_store.py` (database, in CI) | `test_a_new_agent_is_drafted_approved_by_a_second_person_and_every_step_is_on_the_ledger` in `tests/unit/test_agent_draft_store.py` (database, in CI) | `test_a_new_agent_that_reaches_anything_waits_for_a_second_person_who_is_not_its_author` in `tests/unit/test_agent_builder_routes.py` |
 | `POST /api/v1/agent-drafts/{draft_id}/check` | `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step` | `test_a_new_agent_is_drafted_approved_by_a_second_person_and_every_step_is_on_the_ledger` in `tests/unit/test_agent_draft_store.py` (database, in CI) | `test_a_new_agent_is_drafted_approved_by_a_second_person_and_every_step_is_on_the_ledger` in `tests/unit/test_agent_draft_store.py` (database, in CI) | `test_a_check_that_passes_is_recorded_and_a_publish_needs_one` in `tests/unit/test_agent_builder_routes.py` |
 | `POST /api/v1/agent-drafts/{draft_id}/decline` | `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step` | `test_a_publish_sent_back_is_one_row_and_one_entry_and_makes_no_agent` in `tests/unit/test_agent_draft_store.py` (database, in CI) | `test_a_publish_sent_back_is_one_row_and_one_entry_and_makes_no_agent` in `tests/unit/test_agent_draft_store.py` (database, in CI) | `test_a_publish_sent_back_publishes_nothing_and_returns_to_its_author` in `tests/unit/test_agent_builder_routes.py` |
