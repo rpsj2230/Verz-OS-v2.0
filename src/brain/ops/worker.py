@@ -214,8 +214,12 @@ from brain.ops.container_limit import (
 )
 from brain.ops.heartbeat import beat, heartbeat_path, ready
 from brain.ops.inference import inference_gaps
+from brain.ops.inference import is_switched_on as inference_is_switched_on
 from brain.ops.inference_client import make_client
 from brain.ops.install_settings import refresh_changed
+from brain.ops.model_server import ModelServerError
+from brain.ops.model_server import read_config as read_server_config
+from brain.ops.model_server import request_ceiling_bytes as server_request_ceiling
 from brain.ops.queue import (
     DEPLOY_PLAN,
     DRIVER_SCHEMA,
@@ -947,7 +951,7 @@ def advisories(env: Mapping[str, str], *, worker_component: str) -> tuple[str, .
     return (
         *policy_gaps(),
         *queue_split_advisory(env, worker_component=worker_component),
-        *model_server_advisory(_declared_revision(env)),
+        *model_server_advisory(_declared_revision(env), env),
     )
 
 
@@ -966,23 +970,40 @@ def _declared_revision(env: Mapping[str, str]) -> str | None:
         return None
 
 
-def model_server_advisory(revision: str | None) -> tuple[str, ...]:
+def model_server_advisory(
+    revision: str | None,
+    env: Mapping[str, str] | None = None,
+    saved: Mapping[str, str] | None = None,
+) -> tuple[str, ...]:
     """What the door admits that the model server cannot be sent, said once an install has one.
 
-    **Declared by the embedding revision, and nothing else.** An install that has not said which
-    weights its model server holds has no model server to send a file to, and printing that a
-    50 MiB PDF is larger than a request ceiling on a server that does not exist would be a finding
-    every operator learns to read past. An install that has declared one gets
-    `brain.knowledge.parse_layout.layout_request_gaps`: the door's largest file, base64 encoded,
-    against the request the server accepts. It is an advisory rather than a refusal for the reason
-    `advisories` gives: the worker has other work, and what is wrong is a file accepted at the
-    door that the parse service would refuse after it had been fetched, scanned and stored.
-    Closing it is the owner's choice (a smaller door, a larger container or another request
-    format), and printing it at every start is what makes it a decision rather than a surprise.
+    **Said for an install that has a server and sends it documents.** An install that has declared
+    an embedding revision, or runs the server among its optional services, has a model server; and
+    the finding is about a document, so it needs one of the parts that is sent one (layout, scanned
+    pages, the general reader). An install whose server only embeds is sent no document, and
+    printing that a 50 MiB PDF is larger than a request ceiling sized for an embedding batch would
+    be a finding every operator learns to read past. An install the finding is for gets
+    `brain.knowledge.parse_layout.layout_request_gaps` against the ceiling **its own choice of
+    parts and upload size gives** (`brain.ops.model_server.request_ceiling_bytes`): the door's
+    largest file, base64 encoded, against the request the server accepts. It is an advisory rather
+    than a refusal for the reason `advisories` gives: the worker has other work, and what is wrong
+    is a file accepted at the door that the parse service would refuse after it had been fetched,
+    scanned and stored. Closing it is the owner's choice (a smaller door, a larger container or
+    another request format), and printing it at every start is what makes it a decision rather
+    than a surprise (M7.7.11).
+
+    A setting that cannot be read says nothing here: it is refused where it is saved, and an
+    advisory must not stop a worker.
     """
-    if revision is None:
+    if revision is None and not inference_is_switched_on(env, saved):
         return ()
-    return layout_request_gaps()
+    try:
+        config = read_server_config(env, saved)
+    except ModelServerError:
+        return ()
+    if not config.reads_documents:
+        return ()
+    return layout_request_gaps(ceiling_bytes=server_request_ceiling(config))
 
 
 # ----------------------------------------------------------------------------- the process

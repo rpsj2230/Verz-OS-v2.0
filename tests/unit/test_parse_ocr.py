@@ -127,8 +127,16 @@ def test_a_reading_carries_no_field_a_line_of_the_document_could_travel_in() -> 
     into logs and console rows that travel further than the document's scope.
 
     Delete this and a `detail` or `raw_text` field is added to help with debugging, and the
-    recognised text of somebody's payslip ends up in an operator log."""
-    assert {field.name for field in dataclasses.fields(OcrReading)} == {"blocks", "confidence"}
+    recognised text of somebody's payslip ends up in an operator log.
+
+    `left_out_pages` is the one addition (M7.7.10) and is page numbers only, which are the
+    uploader's own and quote nothing the file says: it is a tuple of whole numbers, which the
+    next test holds."""
+    assert {field.name for field in dataclasses.fields(OcrReading)} == {
+        "blocks",
+        "confidence",
+        "left_out_pages",
+    }
 
 
 # ------------------------------------------------------------------ what the parser does

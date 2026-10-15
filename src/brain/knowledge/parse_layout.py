@@ -218,8 +218,12 @@ def largest_admissible_bytes() -> tuple[MediaType, int]:
     return worst, sizes[worst]
 
 
-def layout_request(content: ScannedContent) -> Mapping[str, object]:
+def layout_request(content: ScannedContent, *, model: str = LAYOUT_ENGINE) -> Mapping[str, object]:
     """One document as it goes onto the wire. Read-only, and carrying no name.
+
+    `model` names which reader the body is for and is the only thing the three document parts of
+    the model server (layout, scanned pages, the general reader) differ in on the way in: they
+    are sent the same document the same way, so the filename-free shape is held in one place.
 
     `MappingProxyType` at both levels, matching `brain.ops.inference.embedding_request`, and
     the edge it protects is the same one: a mapping handed out of a builder is a mapping
@@ -235,7 +239,7 @@ def layout_request(content: ScannedContent) -> Mapping[str, object]:
     """
     return MappingProxyType(
         {
-            "model": LAYOUT_ENGINE,
+            "model": model,
             "document": MappingProxyType(
                 {
                     "digest": content.upload.digest,
