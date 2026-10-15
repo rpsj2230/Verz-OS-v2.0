@@ -106,7 +106,7 @@ on the console's company pages; what this module holds is the disclosure decisio
 and the route copies its answer.
 
 Task ids: M33.1.1.1, M33.1.1.3, M33.1.1.4, M33.1.2.1, M33.1.2.2
-Task ids: M33.1.2.3, M33.1.2.4, M33.1.2.5, M33.1.1.2
+Task ids: M33.1.2.3, M33.1.2.4, M33.1.2.5, M33.1.1.2, M20.5.1
 """
 
 from __future__ import annotations
@@ -139,6 +139,7 @@ from brain.knowledge.visibility import (
     Approval,
     PromotionProposal,
     approve_promotion,
+    holds_for_level,
 )
 from brain.ops.halt import ENFORCED_AXES, HALT_CAPABILITY, Halt, HaltScope, stop_everything
 from brain.ops.halt_store import may_act
@@ -653,6 +654,11 @@ def may_approve_publication(
     """
     if entitlement.principal_id == request.record.proposer_id:
         return False
+    # The level asked for decides how wide the authority has to be (M20.5.1), so a department's
+    # administrator is not offered a request to publish to the whole company that the approval
+    # would refuse them.
+    if not holds_for_level(entitlement, PROMOTION_CAPABILITY, request.record.to_level, now):
+        return False
     return _in_reach(entitlement, PROMOTION_CAPABILITY, request.where, now)
 
 
@@ -838,15 +844,18 @@ PUBLISHING_WIDENS_WHO_IS_TOLD_AND_NEVER_WHAT_IS_REACHED: Final = (
 def may_publish(entitlement: EntitlementSet, now: datetime | None = None) -> bool:
     """Whether this reader may move an agent's audience to the whole company (M33.1.2.1).
 
-    One capability and no scope, because an audience is not a row: publishing does not happen
-    somewhere, it happens to everybody at once, and a department-scoped grant over it would
-    be a grant to publish company-wide within one department, which is not a thing.
+    One capability, held over everything, because an audience is not a row: publishing does not
+    happen somewhere, it happens to everybody at once, and **a department-scoped grant over it is
+    not authority to publish company-wide** (M20.5.1). Until 2026-10-14 this asked only that the
+    capability be held in any scope at all, which let a department's administrator publish an
+    agent to every department alone; `brain.knowledge.visibility.holds_for_level` is the one place
+    the question is now asked, for agents and knowledge alike.
 
     See `PUBLISHING_WIDENS_WHO_IS_TOLD_AND_NEVER_WHAT_IS_REACHED`. The steward rule is
     `lifecycle.publish`'s own and is not repeated here: it needs the record, this does not
     have one, and asking half the question in two places is how the two answers drift.
     """
-    return entitlement.holds(AGENT_PUBLICATION_CAPABILITY, now)
+    return holds_for_level(entitlement, AGENT_PUBLICATION_CAPABILITY, PUBLICATION_LEVEL, now)
 
 
 def publishable(
