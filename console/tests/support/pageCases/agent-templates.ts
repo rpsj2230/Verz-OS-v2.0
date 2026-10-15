@@ -31,6 +31,20 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         total: null,
         truncated: false,
       },
+      // What is withdrawn, for a reader who holds the install authority: a name and a reason, both
+      // of which wrap anywhere, and the form to bring a template in.
+      "/api/v1/agent-template-withdrawals": {
+        versions: [
+          {
+            template_id: UNBROKEN,
+            version: 1,
+            display_name: UNBROKEN,
+            reason: UNBROKEN,
+            set_by: UNBROKEN,
+            at: "2026-10-01T09:00:00Z",
+          },
+        ],
+      },
     },
   },
   // One template: its name is the heading, what it asks for are chips that wrap, its instructions
@@ -67,6 +81,16 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         content_digest: "d".repeat(64),
         starts: UNBROKEN,
         unavailable: null,
+      },
+      // Whether this version is offered, for a reader who may withdraw it: the form asking why.
+      "/api/v1/agent-templates/pricing_desk/versions/2/withdrawal": {
+        template_id: "pricing_desk",
+        version: 2,
+        withdrawn: false,
+        changes: [{ withdrawn: true, set_by: UNBROKEN, at: "2026-10-01T09:00:00Z", reason: UNBROKEN }],
+        may_withdraw: true,
+        may_undo: false,
+        unavailable: "",
       },
     },
   },

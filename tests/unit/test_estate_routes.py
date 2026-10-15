@@ -27,7 +27,7 @@ The present is the wall clock here, and deliberately. The routes read `datetime.
 from the instant a memory was formed. So a memory in this file is formed an hour or four
 hundred days before the test runs, never on a date, and nothing here can go off on a schedule.
 
-Task ids: M27.7.20, M27.7.21, M27.7.22
+Task ids: M27.7.20, M27.7.21, M27.7.22, M27.15.34
 """
 
 from __future__ import annotations
@@ -89,6 +89,7 @@ from brain.estate_routes import (
 from brain.gate.admission import SECOND_FACTOR_NEEDED_MESSAGE
 from brain.identity.bearer import TokenAuthority
 from brain.knowledge.item import RETRIEVABLE_STATES
+from brain.knowledge.visibility import Visibility
 from brain.listing import MAX_PAGE_ROWS
 from brain.memory.correction import Correction
 from brain.memory.digest import COUNTING_FIELD_NAMES
@@ -1643,3 +1644,195 @@ def test_the_waiting_alarm_is_raised_past_one_sitting_of_the_rows_listed_and_no_
     assert quiet is not None and not quiet.raised
     assert partly is not None and not partly.raised
     assert estate_routes.waiting_alarm(None, over, reader=reader, now=now) is None
+
+
+# ------------------------------------------------------- one agent's slice (M27.15.34)
+def _two_agents_that_learnt(stored: Stored) -> None:
+    """`desk` and `other` each hold one tier-one learning, a plain conversation holds a third, and
+    a personal agent of somebody else holds a fourth that no reader here may see."""
+    stored.agents = [
+        agent_row("desk", capabilities=(CLIENT_NAME,)),
+        agent_row("other", capabilities=(CLIENT_NAME,)),
+        agent_row(
+            "private", level=Visibility.PERSONAL, owner_id="u_someone", capabilities=(CLIENT_NAME,)
+        ),
+    ]
+    stored.inferred = [
+        inferred("m_desk", "Prefers the short answer", formed_at=ago(hours=1)),
+        inferred("m_other", "Prefers the long answer", formed_at=ago(hours=2)),
+        inferred("m_plain", "Prefers the figure first", formed_at=ago(hours=3)),
+        inferred("m_private", "Prefers a call", formed_at=ago(hours=4)),
+    ]
+    stored.learnings = [
+        learnt("m_desk", agent_id="desk"),
+        learnt("m_other", agent_id="other"),
+        learnt("m_plain", agent_id=None),
+        learnt("m_private", agent_id="private"),
+    ]
+
+
+def test_the_learning_review_cut_to_one_agent_holds_what_that_agent_learnt_and_nothing_else(
+    client: TestClient, stored: Stored
+) -> None:
+    """**M27.15.34, the Learning read cut to an agent.** Without a filter the review is every
+    learning the reader may be told of, a plain conversation's included; named for `desk` it is
+    `desk`'s alone, with nothing from the other agent or from a conversation, and the company's
+    week of marks is left off because it is about everybody.
+
+    Delete this and the filter can be accepted and ignored, which is an agent's Memory section
+    listing the whole estate's learning."""
+    _two_agents_that_learnt(stored)
+    stored.marks = [(True, 3), (False, 2)]
+
+    whole = get_strongly(client, "u_admin", LEARNING)
+    cut = get(client, "u_admin", LEARNING, agent="desk")
+
+    assert cut.status_code == 200, cut.text
+    assert sorted(ids(whole.json()["tier_one"])) == ["m_desk", "m_other", "m_plain"]
+    assert whole.json()["marks"] is not None
+    assert ids(cut.json()["tier_one"]) == ["m_desk"]
+    assert cut.json()["marks"] is None
+
+
+def test_an_agent_the_reader_may_not_see_cuts_the_review_to_what_a_missing_agent_does(
+    client: TestClient, stored: Stored
+) -> None:
+    """**The filter runs after the audience, never before it** (DENIED is ABSENT). A personal agent
+    of somebody else holds a learning, and naming it answers the bytes naming an agent that does
+    not exist answers, so the filter is no way to ask which agents exist. The sibling is the
+    visible agent's own cut, which is not empty, so the identity is not an empty answer to
+    everything.
+
+    Delete this and the slice is cut from the load before the audience is applied, and a hidden
+    agent's learnings are one guessed id away."""
+    _two_agents_that_learnt(stored)
+
+    hidden = get(client, "u_admin", LEARNING, agent="private")
+    missing = get(client, "u_admin", LEARNING, agent="no_such_agent")
+    visible = get(client, "u_admin", LEARNING, agent="other")
+
+    assert hidden.status_code == missing.status_code == 200
+    # The page says when it was read, which is the one thing two requests never share.
+    assert {**hidden.json(), "as_of": ""} == {**missing.json(), "as_of": ""}
+    assert ids(hidden.json()["tier_one"]) == []
+    assert ids(visible.json()["tier_one"]) == ["m_other"]
+
+
+def test_an_agent_filter_is_refused_when_it_is_empty_or_made_of_white_space(
+    client: TestClient, stored: Stored
+) -> None:
+    """**The parameter's own shape.** An empty or spaced agent is a 422 naming the parameter and
+    not a filter that matches nothing, which would read as an agent that learnt nothing. The
+    sibling is a well-formed one.
+
+    Delete this and an empty value is accepted as "no such agent", which hides a mistyped
+    request behind an answer that looks right."""
+    for bad in ("", " ", "two words"):
+        for path in (LEARNING, MEMORY, f"{API_PREFIX}/govern/artifacts"):
+            extra = {"subject": "u_subject"} if path == MEMORY else {}
+            assert get(client, "u_admin", path, agent=bad, **extra).status_code == 422
+    assert get(client, "u_admin", LEARNING, agent="desk").status_code == 200
+
+
+def test_a_subjects_memory_cut_to_one_agent_holds_what_that_agent_formed_about_them(
+    client: TestClient, stored: Stored
+) -> None:
+    """**The memory read cut to an agent.** About one person: `desk` formed one memory, `other`
+    another, and a third has no learning record so no agent. Whole, the viewer shows all three;
+    cut to `desk`, one, in curated or extracted, and the history carries only that memory.
+
+    Delete this and the filter can be accepted and ignored, or can drop a memory that has no
+    agent into every agent's slice."""
+    stored.agents = [agent_row("desk"), agent_row("other")]
+    stored.inferred = [
+        inferred("m_desk", "Prefers the short answer", formed_at=ago(hours=1)),
+        inferred("m_other", "Prefers the long answer", formed_at=ago(hours=2)),
+    ]
+    stored.stated = [stated("m_bare", "Prefers invoices by post", formed_at=ago(hours=3))]
+    stored.learnings = [learnt("m_desk", agent_id="desk"), learnt("m_other", agent_id="other")]
+
+    whole = get(client, "u_admin", MEMORY, subject="u_subject").json()
+    cut = get(client, "u_admin", MEMORY, subject="u_subject", agent="desk").json()
+
+    assert sorted(one["memory_id"] for one in whole["history"]) == ["m_bare", "m_desk", "m_other"]
+    assert [one["memory_id"] for one in cut["extracted"]] == ["m_desk"]
+    assert cut["curated"] == []
+    assert [one["memory_id"] for one in cut["history"]] == ["m_desk"]
+    assert cut["subject_id"] == "u_subject"
+
+
+def test_naming_an_agent_the_reader_may_not_see_gives_a_subjects_memory_no_agent_to_tell(
+    client: TestClient, stored: Stored
+) -> None:
+    """**A memory carries no agent id on any screen**, so naming a hidden agent must not return
+    the memories it formed: that would say which agent formed them. It answers the bytes a missing
+    agent answers, while the same memory is shown to the same reader when the visible agent that
+    formed it is named.
+
+    Delete this and the slice is cut from the rows without asking the audience, and the filter
+    becomes a lookup of which agent formed what."""
+    stored.agents = [
+        agent_row("desk"),
+        agent_row("private", level=Visibility.PERSONAL, owner_id="u_someone"),
+    ]
+    stored.inferred = [
+        inferred("m_desk", "Prefers the short answer", formed_at=ago(hours=1)),
+        inferred("m_private", "Prefers a call", formed_at=ago(hours=2)),
+    ]
+    stored.learnings = [learnt("m_desk", agent_id="desk"), learnt("m_private", agent_id="private")]
+
+    hidden = get(client, "u_admin", MEMORY, subject="u_subject", agent="private")
+    missing = get(client, "u_admin", MEMORY, subject="u_subject", agent="no_such_agent")
+    shown = get(client, "u_admin", MEMORY, subject="u_subject", agent="desk")
+
+    assert hidden.status_code == missing.status_code == 200
+    assert hidden.content == missing.content
+    assert [one["memory_id"] for one in shown.json()["extracted"]] == ["m_desk"]
+
+
+def test_a_memory_the_reader_may_not_recall_stays_absent_when_its_agent_is_named(
+    client: TestClient, stored: Stored
+) -> None:
+    """**Recall is decided before the slice**: a reader who holds the screen and not the
+    capability a memory was formed under is shown nothing about a person, and naming the agent
+    that formed it changes nothing (the same bytes as the unfiltered answer). The admin's answer
+    proves the memory is there.
+
+    Delete this and the slice is taken over the entries, so a memory recall withheld comes back
+    the moment somebody names its agent."""
+    stored.agents = [agent_row("desk")]
+    stored.inferred = [inferred("m_desk", "Prefers the short answer", formed_at=ago(hours=1))]
+    stored.learnings = [learnt("m_desk", agent_id="desk")]
+
+    whole = get(client, "u_narrow", MEMORY, subject="u_subject")
+    cut = get(client, "u_narrow", MEMORY, subject="u_subject", agent="desk")
+
+    assert whole.content == cut.content
+    assert [one["memory_id"] for one in whole.json()["extracted"]] == []
+    assert get(client, "u_admin", MEMORY, subject="u_subject", agent="desk").json()["extracted"]
+
+
+def test_an_agents_own_memory_section_is_loaded_without_the_learnings_no_agent_formed(
+    stored: Stored,
+) -> None:
+    """**An agent's Memory section is that agent's slice.** `agent_entries` is the load behind it,
+    and it was handed the plain-conversation learnings with the agent's own, so every agent's tab
+    listed what people asked Ask directly to remember. The sibling is the agent's own learning,
+    which is still there.
+
+    Delete this and every agent's Memory tab shows the estate's conversational memory."""
+    import asyncio
+
+    from brain.agent_memory_routes import agent_entries
+    from brain.agent_routes import record_of
+
+    _two_agents_that_learnt(stored)
+    record = record_of(agent_row("desk", capabilities=(CLIENT_NAME,)))
+    assert record is not None
+
+    async def load() -> list[str]:
+        async with StubSession() as session:
+            _, entries = await agent_entries(session, record)
+            return [one.memory_id for one, _ in entries]
+
+    assert asyncio.run(load()) == ["m_desk"]

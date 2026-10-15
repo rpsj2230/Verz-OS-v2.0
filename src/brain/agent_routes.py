@@ -283,6 +283,7 @@ from brain.ops.attachment_store import changes_in
 from brain.ops.builtin_templates import is_built_in
 from brain.ops.leash_store import moves_in, pin_in
 from brain.ops.spend import Actual, SpendError
+from brain.ops.template_withdrawal_store import withheld_in
 from brain.routing_routes import sessions_of
 from brain.tables.agent import AgentRow
 from brain.tables.identity import PrincipalRow
@@ -1175,7 +1176,10 @@ def origin_of(published: TemplateManifest) -> Origin:
 
 
 def gallery(
-    published: Sequence[TemplateManifest], plan: Plan[TemplateEntry] | None = None
+    published: Sequence[TemplateManifest],
+    plan: Plan[TemplateEntry] | None = None,
+    *,
+    withdrawn_ids: frozenset[str] = frozenset(),
 ) -> TemplateGallery:
     """The catalogue this installation can offer: what ships, and what has been published.
 
@@ -1186,6 +1190,11 @@ def gallery(
     nothing on either saying which an install would pin. The published row wins because it is
     the one an install can actually be pinned to: `brain.agents.template.install` verifies a
     signature, and the built-in manifests carry none.
+
+    **`published` is what the install still offers.** A version withdrawn from new installs is not
+    in it (M27.15.35), and `withdrawn_ids` are the ids every stored version of which is withdrawn,
+    which the product's own card of the same id must not stand in for: it could not be installed
+    and would read as the template coming back.
 
     Ordered by name and then by id, as the roster is, so two readings of an unchanged
     catalogue are one list.
@@ -1200,7 +1209,7 @@ def gallery(
     cards.extend(
         template_entry(one, Origin.BUILT_IN)
         for one in CATALOGUE
-        if one.identity.template_id not in highest
+        if one.identity.template_id not in highest and one.identity.template_id not in withdrawn_ids
     )
     chosen = plan or TEMPLATES.plan(ListAsked(limit=MAX_TEMPLATE_ENTRIES), reader="")
     page = chosen.page(cards)
@@ -1212,12 +1221,16 @@ def gallery(
 
 
 def template_detail(
-    template_id: str, published: Sequence[TemplateManifest]
+    template_id: str,
+    published: Sequence[TemplateManifest],
+    *,
+    withdrawn_ids: frozenset[str] = frozenset(),
 ) -> TemplateDetailView | None:
     """The manifest the gallery shows for this id, as its page, or None when it shows none.
 
     `gallery`'s rule for which document an id names, applied to one id: the highest published
-    version, and the built-in one only where nothing is published under its id.
+    version, and the built-in one only where nothing is published under its id, and not where every
+    published version of it is withdrawn (M27.15.35).
     """
     chosen: TemplateManifest | None = None
     origin = Origin.PUBLISHED
@@ -1227,6 +1240,8 @@ def template_detail(
         if chosen is None or one.identity.version > chosen.identity.version:
             chosen = one
     if chosen is None:
+        if template_id in withdrawn_ids:
+            return None
         origin = Origin.BUILT_IN
         chosen = next((one for one in CATALOGUE if one.identity.template_id == template_id), None)
     elif origin_of(chosen) is Origin.BUILT_IN:
@@ -1988,8 +2003,11 @@ async def agent_templates(
     factory = _require_session_factory(request)
     async with factory() as session:
         rows = (await session.execute(published_templates())).scalars().all()
+        withdrawn, withdrawn_ids = await withheld_in(session)
     published: list[TemplateManifest] = []
     for row in rows:
+        if (row.template_id, row.version) in withdrawn:
+            continue
         try:
             published.append(manifest_of(row.document))
         except (KeyError, ValueError) as exc:
@@ -1998,7 +2016,7 @@ async def agent_templates(
                 template=row.template_id,
                 error=type(exc).__name__,
             )
-    return gallery(published, plan)
+    return gallery(published, plan, withdrawn_ids=withdrawn_ids)
 
 
 @router.get(
@@ -2014,8 +2032,11 @@ async def agent_template(request: Request, template_id: str, asked: Asked) -> Te
     factory = _require_session_factory(request)
     async with factory() as session:
         rows = (await session.execute(published_templates())).scalars().all()
+        withdrawn, withdrawn_ids = await withheld_in(session)
     published: list[TemplateManifest] = []
     for row in rows:
+        if (row.template_id, row.version) in withdrawn:
+            continue
         try:
             published.append(manifest_of(row.document))
         except (KeyError, ValueError) as exc:
@@ -2024,7 +2045,7 @@ async def agent_template(request: Request, template_id: str, asked: Asked) -> Te
                 template=row.template_id,
                 error=type(exc).__name__,
             )
-    found = template_detail(template_id, published)
+    found = template_detail(template_id, published, withdrawn_ids=withdrawn_ids)
     if found is None:
         raise _no_templates_here()
     return found

@@ -80,6 +80,7 @@ from brain.agent_routes import record_of
 from brain.agents.lifecycle import AGENT_LIFECYCLE_CAPABILITY, ARCHIVE_IS_TERMINAL
 from brain.agents.model import AgentRecord, AgentState
 from brain.agents.template import TemplateError
+from brain.agents.template_withdrawal import withdrawn_keys
 from brain.agents.upgrade import (
     Decline,
     Declines,
@@ -100,6 +101,7 @@ from brain.automation_schedule_routes import NotChangedView
 from brain.builder.agent_drafts import approval_refusal, ceiling_of, where, widenings
 from brain.builder.draft_store import _configuration
 from brain.core.errors import Absent, Failed
+from brain.ops.template_withdrawal_store import newest_in
 from brain.prompt_routes import installed, signed_of
 from brain.routing_routes import sessions_of
 from brain.tables.agent import AgentRow
@@ -320,14 +322,26 @@ class StoredAgentUpgrades:
             newest: TemplateVersionRow | None = None
             declined: list[UpgradeDeclineRow] = []
             if instance_row is not None:
-                newest = (
-                    await session.execute(
-                        select(TemplateVersionRow)
-                        .where(TemplateVersionRow.template_id == instance_row.template_id)
-                        .order_by(TemplateVersionRow.version.desc())
-                        .limit(1)
-                    )
-                ).scalar_one_or_none()
+                # The newest version this install still offers: a version withdrawn from new
+                # installs is not offered to the agents already on an older one either, and an
+                # agent already on it stays on it (M27.15.35).
+                gone = withdrawn_keys(await newest_in(session, instance_row.template_id))
+                newest = next(
+                    (
+                        one
+                        for one in (
+                            await session.execute(
+                                select(TemplateVersionRow)
+                                .where(TemplateVersionRow.template_id == instance_row.template_id)
+                                .order_by(TemplateVersionRow.version.desc())
+                            )
+                        )
+                        .scalars()
+                        .all()
+                        if (one.template_id, one.version) not in gone
+                    ),
+                    None,
+                )
                 declined = list(
                     (
                         await session.execute(

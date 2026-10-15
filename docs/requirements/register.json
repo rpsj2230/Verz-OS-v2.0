@@ -15808,7 +15808,7 @@
    "proof": [
     "M27.14.2"
    ],
-   "decision": null
+   "decision": "needs-rupash 236: a template leaves as its signed document and arrives as a version the importing install signs again, because only the install that made a signature can check it; whether installs should prove origin to each other is asked"
   },
   {
    "id": "CONA-31",

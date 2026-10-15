@@ -53,7 +53,7 @@ attached and without one.
 Scope: one read-only route. Nothing here writes, and no download is served: `may_download` is
 the question a download would ask, and serving bytes is its own review.
 
-Task ids: M27.7.23, M32.5.2.1
+Task ids: M27.7.23, M32.5.2.1, M27.15.34
 """
 
 from __future__ import annotations
@@ -75,10 +75,11 @@ from brain.console.agent_output import (
     ARTIFACTS_SCREEN,
     Artifact,
 )
-from brain.console.govern_estate import artifact_estate
+from brain.console.govern_estate import artifact_estate, artifacts_of_agent
 from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.core.errors import Absent, Failed
+from brain.estate_routes import AgentFilter
 from brain.listing import Column, ListAsked, Listing
 from brain.ops.retention import Lifetime, horizon_for
 from brain.routing_routes import sessions_of
@@ -251,7 +252,9 @@ router = APIRouter(prefix=API_PREFIX, tags=["govern"])
 
 
 @router.get("/govern/artifacts", response_model=ArtifactsView, responses=COMMON_RESPONSES)
-async def artifacts(request: Request, asked: Asked, listed: ArtifactsQuery) -> ArtifactsView:
+async def artifacts(
+    request: Request, asked: Asked, listed: ArtifactsQuery, agent: AgentFilter = None
+) -> ArtifactsView:
     """What was produced across the estate, as this reader may see it, or why nothing is listed.
 
     The screen's question first, before the source is looked for, so a caller who may not open
@@ -260,6 +263,14 @@ async def artifacts(request: Request, asked: Asked, listed: ArtifactsQuery) -> A
     without one. Then the records, the agents the reader's audience admits, and `artifact_estate`,
     which drops what has aged out and what this reader holds nothing for before anything is
     listed; the page is cut from what it leaves.
+
+    **`agent` is one agent's slice (M27.15.34), cut from that answer and never before it.** An
+    agent the reader may not see, one that produced nothing and one that does not exist are the
+    same empty list, and nothing says how many artifacts the slice left out. A reader's own
+    artifact of an agent they cannot see is still theirs, so naming that agent returns it: they
+    ran it, and the row already carries the agent id. The slice is taken before the page is cut,
+    so a page and its cursor are over the slice. See
+    `brain.console.govern_estate.AN_AGENT_FILTER_RUNS_AFTER_THE_READER_IS_ADMITTED_AND_NEVER_BEFORE`.
     """
     if not permitted(screen(THE_SCREEN).read, asked.reach, asked.now):
         log.info("artifacts screen not answerable", principal=asked.caller.principal.id)
@@ -286,7 +297,7 @@ async def artifacts(request: Request, asked: Asked, listed: ArtifactsQuery) -> A
         asked.now,
         visible_agents=visible_agent_ids(records, viewer_of(asked)),
     )
-    page = plan.page([artifact_view(one) for one in shown])
+    page = plan.page([artifact_view(one) for one in artifacts_of_agent(shown, agent)])
     return ArtifactsView(
         items=list(page.items),
         next_cursor=page.next_cursor,

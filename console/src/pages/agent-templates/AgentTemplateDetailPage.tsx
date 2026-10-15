@@ -13,9 +13,11 @@
  * and must not try. A new agent starts disabled and at Shadow, which the confirmation says in the
  * API's words, and the page then opens it.
  *
- * **Withdraw has no route**, so it is `kit/UnavailableAction` with `templateActions.ts`' sentence.
+ * **Withdraw is `TemplateTransfer.tsx`'s card, and it is drawn only for a reader the API lets read the
+ * version's withdrawal.** A reader who may only install sees none of it. It is not a header act
+ * because it asks why first.
  *
- * Task ids: M27.11.7, M27.16.1
+ * Task ids: M27.11.7, M27.16.1, M27.15.35
  */
 
 import { useId, useState, type FormEvent } from "react";
@@ -38,7 +40,6 @@ import {
   Note,
   SectionCard,
   StatCard,
-  UnavailableAction,
 } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -47,7 +48,8 @@ import { TEMPLATES_API_PATH } from "../agentTemplatesQuery";
 import { agentAddress } from "../agents/AgentsPage";
 import { readChannelChoices } from "../agents/agentDraftsQuery";
 import { ChannelChoices, ticked } from "../agents/ChannelChoices";
-import { ACT_LABELS, originWords, rungWords, UNAVAILABLE } from "./templateActions";
+import { ACT_LABELS, originWords, rungWords } from "./templateActions";
+import { WithdrawCard } from "./TemplateTransfer";
 import { TEMPLATES_HEADING } from "./AgentTemplatesPage";
 
 export type TemplateDetail = components["schemas"]["TemplateDetailView"];
@@ -253,9 +255,6 @@ function TemplateView({ template }: { readonly template: TemplateDetail }) {
               <Chip>{`Version ${String(entry.version)}`}</Chip>
             </>
           }
-          actions={
-            <UnavailableAction label={ACT_LABELS.withdraw} text={ACT_LABELS.withdraw} reason={UNAVAILABLE.withdraw.reason} />
-          }
           figures={
             <KpiStrip label="What this template asks for" count={4}>
               <StatCard label="Skills" value={String(template.skills.length)} />
@@ -270,6 +269,7 @@ function TemplateView({ template }: { readonly template: TemplateDetail }) {
       <div className="flex min-w-0 flex-col gap-4">
         {entry.summary === null || entry.summary === undefined ? null : <p className="m-0 max-w-[68ch] text-sm text-body">{entry.summary}</p>}
         <InstallCard template={template} />
+        <WithdrawCard templateId={entry.template_id} version={entry.version} name={entry.display_name} />
         <SectionCard title="What it asks for" footer={<Note>{INSTALLING_NEVER_WIDENS}</Note>}>
           <FactList>
             <Fact label="Model size">{template.tier}</Fact>

@@ -34,7 +34,7 @@ on the narrower basis. Which tiers are active is `reach_view.active_tiers` over 
 nothing on an install switches a tier off for one agent yet; tier three is never active, since a
 gated change waits for a person.
 
-Task ids: M39.4.1.1, M39.4.1.2, M39.4.1.3, M39.4.1.4, M39.4.1.5
+Task ids: M39.4.1.1, M39.4.1.2, M39.4.1.3, M39.4.1.4, M39.4.1.5, M27.15.34
 Task ids: M39.4.2.1, M39.4.2.2, M39.4.2.3, M39.4.2.4
 """
 
@@ -386,8 +386,14 @@ async def agent_entries(
 
     `learnings_stored` is the Learning screen's load, asked for this one agent; the statements
     are read from both memory tables by the learnings' ids, as that load reads the formations.
+
+    **Without the learnings formed in plain conversations** (M27.15.34): those have no agent, so
+    they are in no agent's slice. Loaded here they were handed to `split_memory` and `revisions`
+    with the rest and listed in every agent's Memory section.
     """
-    stored = await learnings_stored(session, (record,), MAX_LEARNINGS_CONSIDERED)
+    stored = await learnings_stored(
+        session, (record,), MAX_LEARNINGS_CONSIDERED, conversations=False
+    )
     ids = [one.memory_id for one in stored.learnings]
     if not ids:
         return stored, []
