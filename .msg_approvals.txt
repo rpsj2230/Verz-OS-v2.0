@@ -1,0 +1,54 @@
+The typical approval wait and the push verdict are moved to READY FOR TESTING, with a mutation table over their guards
+
+Owner decision 222 A: the install may measure how long approvals wait and show only the typical
+figure. Nearly all of it was already on main and is reused unchanged: migration 0227's view
+gate.approval_wait (raised_at and decided_at only), ops/approval_wait.py (waits_since,
+typical_wait, push_is_wanted, worded), console/installation.approval_wait_facts,
+install_routes._approval_wait_facts, the install check ops/acceptance_checks_approval_wait.py and
+tests/unit/test_approval_wait.py. What was missing, and is added here, is the route: GET /install
+tested with the wait facts in it (tests/unit/test_install_approval_wait_route.py), and the two
+progress notes.
+
+The route tests pin the disclosure and not only the figure: the body is identical whether three
+approvals were decided or thirty-one (no count, and no total key); a refused reader gets one
+answer whether the process has rows, a failing database or no database, and the database is not
+asked for them while an entitled reader's is (so the refusal does not cost a query or depend on
+how the deployment is wired); nothing decided and an unreadable view are each unknown with their
+own reason and no value, never zero, and the screen still answers; and the statement names exactly
+raised_at and decided_at of gate.approval_wait with only a start (about a quarter back) and a bound
+on rows bound, so no person is named.
+
+Mutation table (brain.ops.mutation; tests: the new route file, test_approval_wait.py,
+test_install_routes.py; all three run clean first; no survivors):
+
+  clamp of a decision stamped before its raising ........ caught
+  nothing decided has no typical wait ..................... caught
+  the typical wait is a median, not a mean ................ caught
+  no wait is never wanted ................................. caught
+  push due only strictly past the stated hours ............ caught
+  look-back of a quarter .................................. caught (route test, new)
+  select list of two columns, no more ..................... caught (route test, new)
+  the view is read, not the suspension table .............. caught (route test, new)
+  under a minute is worded as such ........................ caught
+  one hour is singular .................................... caught
+  a database that could not be asked is unknown ........... caught
+  nothing decided is unknown, not zero .................... caught
+  the push sentence follows the verdict ................... caught
+  a process with no database asks nothing ................. caught
+  an unreadable view is unknown, not an empty wait ........ caught (route test, new)
+  a failing database is caught (SQLAlchemyError) .......... caught (route test, new)
+  the install screen checks the capability ................ caught
+  the capability is checked before the view is read ....... caught (route test, new, only)
+  a decided-approvals count fact added to the page ........ caught (route test, new, only)
+
+M35.4.5 and M35.3.2.2 move from IN PROGRESS to READY FOR TESTING, each note quoting its prior-work
+text and naming the install proof: run the acceptance run and read
+the_approval_wait_is_measured_and_push_is_reported, then open Install, This install. They are not
+claimed closed: nothing here ran on an install. Not done: the facts are on This install only; they
+are not also shown on Approvals, which the triage note allowed as an alternative.
+
+A process with no database session factory is shown no wait facts at all (install_routes returns
+none), where an unreadable view is shown unknown with its reason. That is existing behaviour and is
+pinned by a test here, not changed.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
