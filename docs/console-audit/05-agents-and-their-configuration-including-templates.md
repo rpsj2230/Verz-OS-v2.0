@@ -3,13 +3,14 @@
 - **Screens:** `/agents`, `/agents/:agentId`, `/agents/:agentId/:tab`, `/agent-templates`, `/agent-templates/:templateId`, `/approvals`, `/approvals/:suspensionId`, `/agents/new`, `/agents/drafts`, `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step`
 - **Tables:** `agent.agent`, `agent.template_instance`, `agent.template_version`, `agent.template_draft`, `agent.audience_extra`, `agent.upgrade_decline`, `agent.leash_change`, `agent.supervised_action`, `agent.action_verdict`, `agent.supervision_pin`, `agent.tool_attachment`, `ops.agent_item_use`, `agent.group_install`, `ops.channel_room`, `agent.browser_envelope`, `gate.suspension`, `agent.manifest_draft`, `agent.manifest_revision`, `agent.manifest_act`, `agent.learning_pause`, `ops.agent_run`
 - **Installation values:** none
-- **Measured here:** 73 routes, 14 called by no screen; 41 write routes, 38 with all three proofs; 4 gaps.
+- **Measured here:** 76 routes, 14 called by no screen; 42 write routes, 39 with all three proofs; 4 gaps.
 
 | Route | Called by |
 | --- | --- |
 | `GET /api/v1/agent-drafts` | `/agents/drafts`, `/approvals` |
 | `GET /api/v1/agent-drafts/{draft_id}` | `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step` |
 | `GET /api/v1/agent-links/landing` | **no screen** |
+| `GET /api/v1/agent-oversight` | `/agents` |
 | `GET /api/v1/agent-templates` | `/agent-templates`, `/agents/new` |
 | `GET /api/v1/agent-templates/{template_id}` | `/agent-templates/:templateId` |
 | `GET /api/v1/agent-templates/{template_id}/versions/{version}` | `/agent-templates/:templateId` |
@@ -29,6 +30,7 @@
 | `GET /api/v1/agents/{agent_id}/manifest` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/memory` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/memory-kinds` | **no screen** |
+| `GET /api/v1/agents/{agent_id}/own-workspace` | `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/publications` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/upgrade` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/workspace` | `/agents/:agentId`, `/agents/:agentId/:tab` |
@@ -68,6 +70,7 @@
 | `POST /api/v1/agents/{agent_id}/memory-kinds` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/memory/{memory_id}/deletion` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/memory/{memory_id}/edit` | `/agents/:agentId`, `/agents/:agentId/:tab` |
+| `POST /api/v1/agents/{agent_id}/own-workspace` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/preview` | `/agents/:agentId`, `/agents/:agentId/:tab`, `/people`, `/people/:personId`, `/people/:personId/:view` |
 | `POST /api/v1/agents/{agent_id}/publish` | `/agent-templates/:templateId`, `/agents`, `/agents/:agentId`, `/agents/:agentId/:tab`, `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step`, `/department`, `/department/:view`, `/people`, `/people/:personId`, `/people/:personId/:view` |
 | `POST /api/v1/agents/{agent_id}/supervision/pin` | `/agents/:agentId`, `/agents/:agentId/:tab` |
@@ -120,6 +123,7 @@
 | `POST /api/v1/agents/{agent_id}/memory-kinds` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_leaving_a_kind_out_reaches_the_row_and_the_ledger_and_a_stale_page_writes_neither` in `tests/unit/test_agent_memory_kinds_store.py` (database, in CI) | `test_leaving_a_kind_out_reaches_the_row_and_the_ledger_and_a_stale_page_writes_neither` in `tests/unit/test_agent_memory_kinds_store.py` (database, in CI) | `test_an_agents_steward_leaves_a_kind_out_and_the_store_is_told_who_did_it` in `tests/unit/test_agent_memory_kinds_routes.py` |
 | `POST /api/v1/agents/{agent_id}/memory/{memory_id}/deletion` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_the_steward_corrects_and_the_person_deletes_and_each_reaches_the_ledger` in `tests/unit/test_agent_memory_routes.py` (database, in CI) | `test_the_steward_corrects_and_the_person_deletes_and_each_reaches_the_ledger` in `tests/unit/test_agent_memory_routes.py` (database, in CI) | `test_a_memory_the_reader_is_not_shown_cannot_be_deleted_and_is_answered_as_missing` in `tests/unit/test_agent_memory_routes.py` |
 | `POST /api/v1/agents/{agent_id}/memory/{memory_id}/edit` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_the_steward_corrects_and_the_person_deletes_and_each_reaches_the_ledger` in `tests/unit/test_agent_memory_routes.py` (database, in CI) | `test_the_steward_corrects_and_the_person_deletes_and_each_reaches_the_ledger` in `tests/unit/test_agent_memory_routes.py` (database, in CI) | `test_a_colleague_shown_a_memory_they_may_not_change_is_told_who_may` in `tests/unit/test_agent_memory_routes.py` (database, in CI) |
+| `POST /api/v1/agents/{agent_id}/own-workspace` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_on_a_real_database_oversight_and_the_owners_account_hold_and_nothing_is_left` in `tests/unit/test_acceptance_personal_agents.py` (database, in CI) | `test_on_a_real_database_oversight_and_the_owners_account_hold_and_nothing_is_left` in `tests/unit/test_acceptance_personal_agents.py` (database, in CI) | `test_the_owner_attaches_their_own_account_to_their_own_agent_and_takes_it_off` in `tests/unit/test_agent_own_workspace.py` |
 | `POST /api/v1/agents/{agent_id}/preview` | `/agents/:agentId`, `/agents/:agentId/:tab`, `/people`, `/people/:personId`, `/people/:personId/:view` | Not applicable: A preview writes no row: it asks the gate what one person's run would be handed and keeps nothing. | Not applicable: A preview changes nothing, so there is nothing for the ledger to record. | `test_a_previewer_who_may_not_read_grants_is_answered_as_a_missing_agent` in `tests/unit/test_agent_capability_routes.py` |
 | `POST /api/v1/agents/{agent_id}/publish` | `/agent-templates/:templateId`, `/agents`, `/agents/:agentId`, `/agents/:agentId/:tab`, `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step`, `/department`, `/department/:view`, `/people`, `/people/:personId`, `/people/:personId/:view` | `test_a_publication_pressed_reaches_its_row_and_one_published_entry_naming_the_person` in `tests/unit/test_agent_lifecycle_store.py` (database, in CI) | `test_a_publication_pressed_reaches_its_row_and_one_published_entry_naming_the_person` in `tests/unit/test_agent_lifecycle_store.py` (database, in CI) | `test_somebody_other_than_the_steward_publishes_a_department_agent_to_the_whole_company` in `tests/unit/test_agent_lifecycle_routes.py` |
 | `POST /api/v1/agents/{agent_id}/supervision/pin` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_a_pin_holds_the_agent_down_is_not_reviewed_early_and_extends_when_nobody_judged` in `tests/unit/test_agent_leash_routes.py` (database, in CI) | Not applicable: A verdict, a pin and a review change nobody's access, which is what the ledger records; each is a row of 0195's naming who and when, and a rung that moves because of one is a leash move, which is on the ledger. | `test_a_pin_holds_the_agent_down_is_not_reviewed_early_and_extends_when_nobody_judged` in `tests/unit/test_agent_leash_routes.py` (database, in CI) |

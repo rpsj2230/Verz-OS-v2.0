@@ -61,6 +61,7 @@ from brain.ops.acceptance import (
 from brain.ops.acceptance_run import Harness
 
 if TYPE_CHECKING:
+    from brain.agents.model import AgentAudience
     from brain.connectors.registry import ConnectorRegistry
     from brain.console.skill_library import Assignment, LibrarySkill
     from brain.core.entitlement import EntitlementSet
@@ -521,6 +522,7 @@ async def _an_agent(
     scope: Scope | None = None,
     connectors: Sequence[str] = (),
     settled: tuple[ConnectorRegistry, ToolRegistry] | None = None,
+    audience: AgentAudience | None = None,
 ) -> str:
     """An agent of acceptance_a installed from a template signed with a key made for this check.
 
@@ -535,6 +537,9 @@ async def _an_agent(
     tool registries: with them the agent is finished by `brain.agents.install.settle`, as an
     install is, so an agent naming a source the install does not serve is refused here rather
     than stored disabled and asked as if it could answer.
+
+    `audience` is the department of acceptance_a with `owner` as steward unless a check says
+    otherwise, which is how a check makes a personal agent (M39.10.4).
     """
     from brain.agents.install import settle
     from brain.agents.install_store import agent_values, version_values
@@ -575,7 +580,8 @@ async def _an_agent(
         at=h.now,
     )
     instance = install(signed, key=key, instance_id=agent_id, created_by=owner, at=h.now)
-    audience = AgentAudience(level=Visibility.DEPARTMENT, owner_id=owner, department=A)
+    if audience is None:
+        audience = AgentAudience(level=Visibility.DEPARTMENT, owner_id=owner, department=A)
     if settled is None:
         effective = materialise(signed, instance, audience=audience)
         record = effective.record

@@ -125,6 +125,13 @@ DOCUMENT: Final = "workspace_document"
 #: connect their own account at all. Declared in `brain.ops.starter.checked_elsewhere`.
 READER: Final = "read:google_workspace"
 
+#: The entity the reader capability is written against, which this connector provides so that an
+#: agent's connector list binds it. Without it `read:google_workspace` named an entity no connector
+#: provides, `brain.agents.binding.bound_capabilities` kept it in every ceiling that listed it, and
+#: a team agent naming it would have read the asker's own mail. See
+#: `brain.agents.model.A_TEAM_AGENT_NEVER_CARRIES_A_PERSONS_OWN_WORKSPACE`.
+READER_ENTITY: Final = "google_workspace"
+
 CLIENT_ID_SETTING: Final = "client_id"
 SERVICES_SETTING: Final = "services"
 DEPARTMENT_SETTING: Final = PERSONAL_DEPARTMENT_SETTING
@@ -720,6 +727,9 @@ CONNECTOR: Final = ConnectorDeclaration(
     label="Google Workspace",
     guide=GUIDE,
     console=CONSOLE,
+    # The reader capability's own entity, so an agent that does not name this connector is not
+    # left holding the read (`READER_ENTITY`).
+    provides=(READER_ENTITY,),
     read_back=ReadBack(
         reading=read_back_reading,
         recorded=(

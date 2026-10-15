@@ -232,6 +232,12 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # the page drew, so a second press finds the row already moved and writes nothing, and an
         # install or a duplicate under a minted id, where a second press is a second agent written
         # disabled at Shadow, which is what a second press asked for.
+        # A person's own account on their personal agent: one write to this system's own agent
+        # table, a compare and set on the connector list read, so a second press of the same page
+        # finds the list moved and writes nothing.
+        "brain.agent_own_workspace_routes:OwnWorkspaceStore.bind": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
         "brain.agent_lifecycle_routes:AgentLifecycles.agent": Repeat.READS,
         "brain.agent_lifecycle_routes:AgentLifecycles.version": Repeat.READS,
         "brain.agent_lifecycle_routes:AgentLifecycles.live_principal": Repeat.READS,

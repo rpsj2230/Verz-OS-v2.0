@@ -91,6 +91,14 @@ from brain.agent_memory_routes import router as agent_memory_router
 # An agent's pinned provider and model, tried before its tier. See `brain.agent_model_routes`.
 from brain.agent_model_routes import router as agent_model_router
 
+# The personal agents a reader holding the audit capability may be told exist, for oversight: a list
+# that names them and offers nothing. See `brain.agent_oversight_routes`.
+from brain.agent_oversight_routes import router as agent_oversight_router
+
+# A person's own Google account on their personal agent, attached by its owner and nobody else. See
+# `brain.agent_own_workspace_routes`.
+from brain.agent_own_workspace_routes import router as agent_own_workspace_router
+
 # The agent roster and one agent's workspace. A fourth router because the refusal differs
 # again: who may see an agent is its audience rather than a capability, and a hidden agent
 # and a missing one are one answer. The same `asking` dependency, imported.
