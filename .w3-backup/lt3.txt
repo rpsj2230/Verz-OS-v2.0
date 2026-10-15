@@ -1,0 +1,38 @@
+
+ RUN  v4.1.11 /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/trial/w3-lists/console
+
+ ❯ tests/list-tools.test.tsx (123 tests | 1 failed) 115592ms
+     × every list names why it has no bulk act that changes something, and none is excused that has one 15ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/list-tools.test.tsx > every list the console draws > every list names why it has no bulk act that changes something, and none is excused that has one
+AssertionError: lists with no bulk act and no reason for having none: expected [ '/subscribers', '/tools', …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "/subscribers",
++   "/tools",
++   "/webhooks",
++   "/webhooks/:id",
++ ]
+
+ ❯ tests/list-tools.test.tsx:283:79
+    281|     expect([...WITH_A_BULK_ACT].sort()).toEqual([...OFFERS_A_BULK_ACT]…
+    282|     const unexcused = [...WITH_A_LIST].filter((pattern) => !OFFERS_A_B…
+    283|     expect(unexcused, "lists with no bulk act and no reason for having…
+       |                                                                               ^
+    284|     for (const [pattern, reason] of Object.entries(NO_BULK_ACT)) {
+    285|       expect(WITH_A_LIST.has(pattern), `${pattern} is excused but draw…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 122 passed (123)
+   Start at  23:48:36
+   Duration  121.30s (transform 15.95s, setup 569ms, import 2.39s, tests 115.59s, environment 2.31s)
+

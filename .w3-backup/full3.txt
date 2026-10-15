@@ -1,0 +1,1019 @@
+
+ RUN  v4.1.11 /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/trial/w3-lists/console
+
+Not implemented: navigation to another Document
+ ❯ tests/agent-drafts-pages.test.tsx (20 tests | 1 failed) 34443ms
+     × Edit as a draft on an agent's page is confirmed and starts a draft of that agent 2063ms
+stderr | tests/agent-figures.test.tsx > the header's role line > it says what the agent is for, its department, its steward and its template by name and version
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+
+stderr | tests/knowledge-page.test.tsx > the Knowledge list > it draws each document by title with its department, reach, steward's name, review and state
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+
+stderr | tests/agents-page.test.tsx > the list > it draws the agents the API returned, in the order it returned them, as links to their pages
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+
+ ❯ tests/agent-figures.test.tsx (18 tests | 1 failed) 43215ms
+     × it says what the agent is for, its department, its steward and its template by name and version 23400ms
+ ❯ tests/classification-page.test.tsx (33 tests | 1 failed) 36651ms
+     × the console sends no query parameter, because the route declares none 20434ms
+ ❯ tests/knowledge-page.test.tsx (29 tests | 1 failed) 45651ms
+     × it draws each document by title with its department, reach, steward's name, review and state 27349ms
+ ❯ tests/agents-page.test.tsx (20 tests | 1 failed) 49601ms
+     × it draws the agents the API returned, in the order it returned them, as links to their pages 28209ms
+ ❯ tests/skills-page.test.tsx (25 tests | 1 failed) 25805ms
+     × the list asks the library route with parameters it declares and a page size it answers 20707ms
+ ❯ tests/lark-connect.test.tsx (15 tests | 1 failed) 29774ms
+     × the card replaces Connect Lark, says what is on and when it was tested, and offers adding a use 21548ms
+ ❯ tests/approvals-page.test.tsx (27 tests | 1 failed) 53237ms
+     × a long unbroken value breaks inside its card and the artefact keeps its own lines 20249ms
+stderr | tests/automation-gallery.test.tsx > the gallery on the Automations tab > every template the API sent is drawn in its order, with its schedule and what it offers this reader
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+
+stderr | tests/agent-knowledge.test.tsx > adding from the Knowledge section > a web page is sent to the agent's own address with the rule's department already chosen, and the answer says the agent draws on it
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+
+ ❯ tests/agent-knowledge.test.tsx (18 tests | 2 failed) 58548ms
+     × a web page is sent to the agent's own address with the rule's department already chosen, and the answer says the agent draws on it 17892ms
+     × the door's refusal is drawn in its own words and nothing is added 20896ms
+ ❯ tests/automation-gallery.test.tsx (9 tests | 2 failed) 74416ms
+     × every template the API sent is drawn in its order, with its schedule and what it offers this reader 18621ms
+     × a refused gallery is the API's own sentence and reference, and draws no card 23809ms
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+stderr | tests/agent-memory.test.tsx > the Memory section > it draws what is remembered as text, stated apart from inferred, apart from what it keeps about you
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+
+ ❯ tests/agent-memory.test.tsx (8 tests | 1 failed) 21810ms
+     × it draws what is remembered as text, stated apart from inferred, apart from what it keeps about you 12992ms
+ ❯ tests/config.test.tsx (14 tests | 1 failed) 26173ms
+     × a misconfigured console names the setting on the screen 21895ms
+ ❯ tests/screen-states-third.test.tsx (120 tests | 3 failed) 591512ms
+     × /service-accounts/:clientId says loading, empty, unreachable and failed in four different sentences 60314ms
+     × /settings says loading, empty, unreachable and failed in four different sentences 1264ms
+     × /jobs/:name shows the API's sentence and a way to sign in again when a second factor is needed 63469ms
+ ❯ tests/screen-states.test.tsx (134 tests | 3 failed) 618420ms
+     × /sign-in-links says loading, empty, unreachable and failed in four different sentences 68426ms
+     × /skills/:name/:view says loading, empty, unreachable and failed in four different sentences 69119ms
+     × /sign-in-links shows the API's sentence and a way to sign in again when a second factor is needed 37840ms
+ ❯ tests/phone-width.test.tsx (256 tests | 10 failed) 606736ms
+     × /approvals lets every value the API sent break inside the screen 27018ms
+     × /approvals/:suspensionId lets every value the API sent break inside the screen 27598ms
+     × /channels/:name lets every value the API sent break inside the screen 20839ms
+     × /elevation/:requestId lets every value the API sent break inside the screen 25466ms
+     × /errors lets every value the API sent break inside the screen 35138ms
+     × /features lets every value the API sent break inside the screen 29581ms
+     × /incidents lets every value the API sent break inside the screen 26636ms
+     × /install lets every value the API sent break inside the screen 22259ms
+     × /jobs/:name lets every value the API sent break inside the screen 51639ms
+     × /jobs/:name/:view lets every value the API sent break inside the screen 23981ms
+ ❯ tests/screen-states-second.test.tsx (120 tests | 3 failed) 628190ms
+     × /access_review shows the API's sentence and a way to sign in again when a second factor is needed 27980ms
+     × /import-export shows the API's sentence and a way to sign in again when a second factor is needed 32484ms
+     × /library/:itemId shows the API's sentence and a way to sign in again when a second factor is needed 62550ms
+ ❯ tests/console-cleanup.test.tsx (138 tests | 3 failed) 639119ms
+     × /retention/:view draws no internal identifier, no developer's word and no panel twice 61840ms
+     × /retention/holds/:holdId draws no internal identifier, no developer's word and no panel twice 70318ms
+     × /subscribers draws no internal identifier, no developer's word and no panel twice 72250ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 36 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/agent-drafts-pages.test.tsx > the ways in > Edit as a draft on an agent's page is confirmed and starts a draft of that agent
+Error: the page has not arrived
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body[39m
+    [33mstyle[39m=[32m""[39m
+  [36m>[39m
+    [36m<div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"group/sidebar-wrapper flex min-h-svh w-full has-data-[variant=inset]:bg-sidebar"[39m
+        [33mdata-slot[39m=[32m"sidebar-wrapper"[39m
+        [33mstyle[39m=[32m"--sidebar-width: 16rem; --sidebar-width-icon: 3rem;"[39m
+      [36m>[39m
+        [36m<a[39m
+          [33mclass[39m=[32m"skip-link"[39m
+          [33mhref[39m=[32m"#main"[39m
+        [36m>[39m
+          [0mSkip to content[0m
+        [36m</a>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"group peer hidden text-sidebar-foreground md:block"[39m
+          [33mdata-collapsible[39m=[32m""[39m
+          [33mdata-side[39m=[32m"left"[39m
+          [33mdata-slot[39m=[32m"sidebar"[39m
+          [33mdata-state[39m=[32m"expanded"[39m
+          [33mdata-variant[39m=[32m"sidebar"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear group-data-[collapsible=offcanvas]:w-0 group-data-[side=right]:rotate-180 group-data-[collapsible=icon]:w-(--sidebar-width-icon)"[39m
+            [33mdata-slot[39m=[32m"sidebar-gap"[39m
+          [36m/>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l"[39m
+            [33mdata-side[39m=[32m"left"[39m
+            [33mdata-slot[39m=[32m"sidebar-container"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex size-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border"[39m
+              [33mdata-sidebar[39m=[32m"sidebar"[39m
+              [33mdata-slot[39m=[32m"sidebar-inner"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"flex flex-col gap-2 p-2 border-b border-sidebar-border px-4 py-3"[39m
+                [33mdata-sidebar[39m=[32m"header"[39m
+                [33mdata-slot[39m=[32m"sidebar-header"[39m
+              [36m>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"flex items-center gap-2"[39m
+                [36m>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"min-w-0"[39m
+                  [36m>[39m
+                    [36m<div[39m
+                      [33mclass[39m=[32m"truncate font-heading text-sm font-semibold text-foreground"[39m
+                    [36m>[39m
+                      [0mCompany Brain[0m
+                    [36m</div>[39m
+                  [36m</div>[39m
+                [36m</div>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"no-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden"[39m
+                [33mdata-sidebar[39m=[32m"content"[39m
+                [33mdata-slot[39m=[32m"sidebar-content"[39m
+              [36m>[39m
+                [36m<nav[39m
+                  [33maria-label[39m=[32m"Sections"[39m
+                  [33mclass[39m=[32m"flex flex-col gap-0.5 py-2"[39m
+                [36m>[39m
+                  [36m<p[39m
+                    [33mclass[39m=[32m"px-4 text-xs text-muted-foreground"[39m
+                  [36m>[39m
+                    [0mThe rest of the menu could not be loaded, so only the screens about your own work are listed.[0m
+                  [36m</p>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"relative flex w-full min-w-0 flex-col p-2 py-1"[39m
+                    [33mdata-sidebar[39m=[32m"group"[39m
+                    [33mdata-slot[39m=[32m"sidebar-group"[39m
+                  [36m>[39m
+                    [36m<h2[39m
+                      [33mclass[39m=[32m"m-0 text-xs font-normal"[39m
+                      [33mid[39m=[32m"nav-use"[39m
+                    [36m>[39m
+                      [36m<button[39m
+                        [33maria-controls[39m=[32m"nav-use-entries"[39m
+                        [33maria-expanded[39m=[32m"true"[39m
+                        [33mclass[39m=[32m"flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left font-mono text-xs tracking-wide text-muted-foreground uppercase hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-ring md:min-h-8"[39m
+                        [33mtype[39m=[32m"button"[39m
+                      [36m>[39m
+                        [36m<svg[39m
+                          [33maria-hidden[39m=[32m"true"[39m
+                          [33mclass[39m=[32m"lucide lucide-message-square size-4 shrink-0"[39m
+                          [33mfill[39m=[32m"none"[39m
+                          [33mheight[39m=[32m"24"[39m
+                          [33mstroke[39m=[32m"currentColor"[39m
+                          [33mstroke-linecap[39m=[32m"round"[39m
+                          [33mstroke-linejoin[39m=[32m"round"[39m
+                          [33mstroke-width[39m=[32m"2"[39m
+                          [33mviewBox[39m=[32m"0 0 24 24"[39m
+                          [33mwidth[39m=[32m"24"[39m
+                          [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                        [36m>[39m
+                          [36m<path[39m
+                            [33md[39m=[32m"M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"[39m
+                          [36m/>[39m
+                        [36m</svg>[39m
+                        [36m<span[39m
+                          [33mclass[39m=[32m"flex-1"[39m
+                        [36m>[39m
+                          [0mUse[0m
+                        [36m</span>[39m
+                        [36m<svg[39m
+                          [33maria-hidden[39m=[32m"true"[39m
+                          [33mclass[39m=[32m"lucide lucide-chevron-right size-3.5 shrink-0 rotate-90 transition-transform"[39m
+                          [33mfill[39m=[32m"none"[39m
+                          [33mheight[39m=[32m"24"[39m
+                          [33mstroke[39m=[32m"currentColor"[39m
+                          [33mstroke-linecap[3...
+ ❯ tests/agent-drafts-pages.test.tsx:99:13
+     97|   await waitFor(() => {
+     98|     if (!container.querySelector("h1") || container.querySelector('[da…
+     99|       throw new Error("the page has not arrived");
+       |             ^
+    100|     }
+    101|   });
+ ❯ runWithExpensiveErrorDiagnosticsDisabled ../../../../../console/node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback ../../../../../console/node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback ../../../../../console/node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/36]⎯
+
+ FAIL  tests/agent-figures.test.tsx > the header's role line > it says what the agent is for, its department, its steward and its template by name and version
+Error: the page has not arrived
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"group/sidebar-wrapper flex min-h-svh w-full has-data-[variant=inset]:bg-sidebar"[39m
+        [33mdata-slot[39m=[32m"sidebar-wrapper"[39m
+        [33mstyle[39m=[32m"--sidebar-width: 16rem; --sidebar-width-icon: 3rem;"[39m
+      [36m>[39m
+        [36m<a[39m
+          [33mclass[39m=[32m"skip-link"[39m
+          [33mhref[39m=[32m"#main"[39m
+        [36m>[39m
+          [0mSkip to content[0m
+        [36m</a>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"group peer hidden text-sidebar-foreground md:block"[39m
+          [33mdata-collapsible[39m=[32m""[39m
+          [33mdata-side[39m=[32m"left"[39m
+          [33mdata-slot[39m=[32m"sidebar"[39m
+          [33mdata-state[39m=[32m"expanded"[39m
+          [33mdata-variant[39m=[32m"sidebar"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear group-data-[collapsible=offcanvas]:w-0 group-data-[side=right]:rotate-180 group-data-[collapsible=icon]:w-(--sidebar-width-icon)"[39m
+            [33mdata-slot[39m=[32m"sidebar-gap"[39m
+          [36m/>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l"[39m
+            [33mdata-side[39m=[32m"left"[39m
+            [33mdata-slot[39m=[32m"sidebar-container"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex size-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border"[39m
+              [33mdata-sidebar[39m=[32m"sidebar"[39m
+              [33mdata-slot[39m=[32m"sidebar-inner"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"flex flex-col gap-2 p-2 border-b border-sidebar-border px-4 py-3"[39m
+                [33mdata-sidebar[39m=[32m"header"[39m
+                [33mdata-slot[39m=[32m"sidebar-header"[39m
+              [36m>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"flex items-center gap-2"[39m
+                [36m>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"min-w-0"[39m
+                  [36m>[39m
+                    [36m<div[39m
+                      [33mclass[39m=[32m"truncate font-heading text-sm font-semibold text-foreground"[39m
+                    [36m>[39m
+                      [0mCompany Brain[0m
+                    [36m</div>[39m
+                  [36m</div>[39m
+                [36m</div>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"no-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden"[39m
+                [33mdata-sidebar[39m=[32m"content"[39m
+                [33mdata-slot[39m=[32m"sidebar-content"[39m
+              [36m>[39m
+                [36m<nav[39m
+                  [33maria-label[39m=[32m"Sections"[39m
+                  [33mclass[39m=[32m"flex flex-col gap-0.5 py-2"[39m
+                [36m>[39m
+                  [36m<p[39m
+                    [33mclass[39m=[32m"px-4 text-xs text-muted-foreground"[39m
+                    [33mrole[39m=[32m"status"[39m
+                  [36m>[39m
+                    [0mLoading the rest of the menu.[0m
+                  [36m</p>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"relative flex w-full min-w-0 flex-col p-2 py-1"[39m
+                    [33mdata-sidebar[39m=[32m"group"[39m
+                    [33mdata-slot[39m=[32m"sidebar-group"[39m
+                  [36m>[39m
+                    [36m<h2[39m
+                      [33mclass[39m=[32m"m-0 text-xs font-normal"[39m
+                      [33mid[39m=[32m"nav-use"[39m
+                    [36m>[39m
+                      [36m<button[39m
+                        [33maria-controls[39m=[32m"nav-use-entries"[39m
+                        [33maria-expanded[39m=[32m"true"[39m
+                        [33mclass[39m=[32m"flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left font-mono text-xs tracking-wide text-muted-foreground uppercase hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-ring md:min-h-8"[39m
+                        [33mtype[39m=[32m"button"[39m
+                      [36m>[39m
+                        [36m<svg[39m
+                          [33maria-hidden[39m=[32m"true"[39m
+                          [33mclass[39m=[32m"lucide lucide-message-square size-4 shrink-0"[39m
+                          [33mfill[39m=[32m"none"[39m
+                          [33mheight[39m=[32m"24"[39m
+                          [33mstroke[39m=[32m"currentColor"[39m
+                          [33mstroke-linecap[39m=[32m"round"[39m
+                          [33mstroke-linejoin[39m=[32m"round"[39m
+                          [33mstroke-width[39m=[32m"2"[39m
+                          [33mviewBox[39m=[32m"0 0 24 24"[39m
+                          [33mwidth[39m=[32m"24"[39m
+                          [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                        [36m>[39m
+                          [36m<path[39m
+                            [33md[39m=[32m"M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"[39m
+                          [36m/>[39m
+                        [36m</svg>[39m
+                        [36m<span[39m
+                          [33mclass[39m=[32m"flex-1"[39m
+                        [36m>[39m
+                          [0mUse[0m
+                        [36m</span>[39m
+                        [36m<svg[39m
+                          [33maria-hidden[39m=[32m"true"[39m
+                          [33mclass[39m=[32m"lucide lucide-chevron-right size-3.5 shrink-0 rotate-90 transition-transform"[39m
+                          [33mfill[39m=[32m"none"[39m
+                          [33mheight[39m=[32m"24"[39m
+                          [33mstroke[39m=[32m"currentColor"[39m
+                          [33mstroke-linecap[39m=[32m"round"[39m
+                          [33mstro...
+ ❯ tests/agent-figures.test.tsx:157:13
+    155|   await waitFor(() => {
+    156|     if (!container.querySelector("h1")) {
+    157|       throw new Error("the page has not arrived");
+       |             ^
+    158|     }
+    159|   });
+ ❯ runWithExpensiveErrorDiagnosticsDisabled ../../../../../console/node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback ../../../../../console/node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback ../../../../../console/node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/36]⎯
+
+ FAIL  tests/agent-knowledge.test.tsx > adding from the Knowledge section > a web page is sent to the agent's own address with the rule's department already chosen, and the answer says the agent draws on it
+Error: the Knowledge section has not arrived
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"group/sidebar-wrapper flex min-h-svh w-full has-data-[variant=inset]:bg-sidebar"[39m
+        [33mdata-slot[39m=[32m"sidebar-wrapper"[39m
+        [33mstyle[39m=[32m"--sidebar-width: 16rem; --sidebar-width-icon: 3rem;"[39m
+      [36m>[39m
+        [36m<a[39m
+          [33mclass[39m=[32m"skip-link"[39m
+          [33mhref[39m=[32m"#main"[39m
+        [36m>[39m
+          [0mSkip to content[0m
+        [36m</a>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"group peer hidden text-sidebar-foreground md:block"[39m
+          [33mdata-collapsible[39m=[32m""[39m
+          [33mdata-side[39m=[32m"left"[39m
+          [33mdata-slot[39m=[32m"sidebar"[39m
+          [33mdata-state[39m=[32m"expanded"[39m
+          [33mdata-variant[39m=[32m"sidebar"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear group-data-[collapsible=offcanvas]:w-0 group-data-[side=right]:rotate-180 group-data-[collapsible=icon]:w-(--sidebar-width-icon)"[39m
+            [33mdata-slot[39m=[32m"sidebar-gap"[39m
+          [36m/>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l"[39m
+            [33mdata-side[39m=[32m"left"[39m
+            [33mdata-slot[39m=[32m"sidebar-container"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex size-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border"[39m
+              [33mdata-sidebar[39m=[32m"sidebar"[39m
+              [33mdata-slot[39m=[32m"sidebar-inner"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"flex flex-col gap-2 p-2 border-b border-sidebar-border px-4 py-3"[39m
+                [33mdata-sidebar[39m=[32m"header"[39m
+                [33mdata-slot[39m=[32m"sidebar-header"[39m
+              [36m>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"flex items-center gap-2"[39m
+                [36m>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"min-w-0"[39m
+                  [36m>[39m
+                    [36m<div[39m
+                      [33mclass[39m=[32m"truncate font-heading text-sm font-semibold text-foreground"[39m
+                    [36m>[39m
+                      [0mCompany Brain[0m
+                    [36m</div>[39m
+                  [36m</div>[39m
+                [36m</div>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"no-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden"[39m
+                [33mdata-sidebar[39m=[32m"content"[39m
+                [33mdata-slot[39m=[32m"sidebar-content"[39m
+              [36m>[39m
+                [36m<nav[39m
+                  [33maria-label[39m=[32m"Sections"[39m
+                  [33mclass[39m=[32m"flex flex-col gap-0.5 py-2"[39m
+                [36m>[39m
+                  [36m<p[39m
+                    [33mclass[39m=[32m"px-4 text-xs text-muted-foreground"[39m
+                  [36m>[39m
+                    [0mThe rest of the menu could not be loaded, so only the screens about your own work are listed.[0m
+                  [36m</p>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"relative flex w-full min-w-0 flex-col p-2 py-1"[39m
+                    [33mdata-sidebar[39m=[32m"group"[39m
+                    [33mdata-slot[39m=[32m"sidebar-group"[39m
+                  [36m>[39m
+                    [36m<h2[39m
+                      [33mclass[39m=[32m"m-0 text-xs font-normal"[39m
+                      [33mid[39m=[32m"nav-use"[39m
+                    [36m>[39m
+                      [36m<button[39m
+                        [33maria-controls[39m=[32m"nav-use-entries"[39m
+                        [33maria-expanded[39m=[32m"true"[39m
+                        [33mclass[39m=[32m"flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left font-mono text-xs tracking-wide text-muted-foreground uppercase hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-ring md:min-h-8"[39m
+                        [33mtype[39m=[32m"button"[39m
+                      [36m>[39m
+                        [36m<svg[39m
+                          [33maria-hidden[39m=[32m"true"[39m
+                          [33mclass[39m=[32m"lucide lucide-message-square size-4 shrink-0"[39m
+                          [33mfill[39m=[32m"none"[39m
+                          [33mheight[39m=[32m"24"[39m
+                          [33mstroke[39m=[32m"currentColor"[39m
+                          [33mstroke-linecap[39m=[32m"round"[39m
+                          [33mstroke-linejoin[39m=[32m"round"[39m
+                          [33mstroke-width[39m=[32m"2"[39m
+                          [33mviewBox[39m=[32m"0 0 24 24"[39m
+                          [33mwidth[39m=[32m"24"[39m
+                          [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                        [36m>[39m
+                          [36m<path[39m
+                            [33md[39m=[32m"M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"[39m
+                          [36m/>[39m
+                        [36m</svg>[39m
+                        [36m<span[39m
+                          [33mclass[39m=[32m"flex-1"[39m
+                        [36m>[39m
+                          [0mUse[0m
+                        [36m</span>[39m
+                        [36m<svg[39m
+                          [33maria-hidden[39m=[32m"true"[39m
+                          [33mclass[39m=[32m"lucide lucide-chevron-right size-3.5 shrink-0 rotate-90 transition-transform"[39m
+                          [33mfill[39m=[32m"none"[39m
+                          [33mheight[39m=[32m"24"[39m
+                          [33mstroke[39m=[32m"currentColor"[39m
+                          [33mstroke-linecap[39m=[32m"round"[39m
+                         ...
+ ❯ timeout tests/agent-knowledge.test.tsx:121:15
+
+ ❯ runWithExpensiveErrorDiagnosticsDisabled ../../../../../console/node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback ../../../../../console/node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback ../../../../../console/node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/36]⎯
+
+ FAIL  tests/agent-knowledge.test.tsx > adding from the Knowledge section > the door's refusal is drawn in its own words and nothing is added
+Error: Test timed out in 20000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/agent-knowledge.test.tsx:248:3
+    246|   });
+    247|
+    248|   test("the door's refusal is drawn in its own words and nothing is ad…
+       |   ^
+    249|     // What breaks if this is deleted: a refused address (a private on…
+    250|     // failure, or as success.
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/36]⎯
+
+ FAIL  tests/agent-memory.test.tsx > the Memory section > it draws what is remembered as text, stated apart from inferred, apart from what it keeps about you
+Error: the Memory section has not arrived
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"group/sidebar-wrapper flex min-h-svh w-full has-data-[variant=inset]:bg-sidebar"[39m
+        [33mdata-slot[39m=[32m"sidebar-wrapper"[39m
+        [33mstyle[39m=[32m"--sidebar-width: 16rem; --sidebar-width-icon: 3rem;"[39m
+      [36m>[39m
+        [36m<a[39m
+          [33mclass[39m=[32m"skip-link"[39m
+          [33mhref[39m=[32m"#main"[39m
+        [36m>[39m
+          [0mSkip to content[0m
+        [36m</a>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"group peer hidden text-sidebar-foreground md:block"[39m
+          [33mdata-collapsible[39m=[32m""[39m
+          [33mdata-side[39m=[32m"left"[39m
+          [33mdata-slot[39m=[32m"sidebar"[39m
+          [33mdata-state[39m=[32m"expanded"[39m
+          [33mdata-variant[39m=[32m"sidebar"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear group-data-[collapsible=offcanvas]:w-0 group-data-[side=right]:rotate-180 group-data-[collapsible=icon]:w-(--sidebar-width-icon)"[39m
+            [33mdata-slot[39m=[32m"sidebar-gap"[39m
+          [36m/>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l"[39m
+            [33mdata-side[39m=[32m"left"[39m
+            [33mdata-slot[39m=[32m"sidebar-container"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex size-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border"[39m
+              [33mdata-sidebar[39m=[32m"sidebar"[39m
+              [33mdata-slot[39m=[32m"sidebar-inner"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"flex flex-col gap-2 p-2 border-b border-sidebar-border px-4 py-3"[39m
+                [33mdata-sidebar[39m=[32m"header"[39m
+                [33mdata-slot[39m=[32m"sidebar-header"[39m
+              [36m>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"flex items-center gap-2"[39m
+                [36m>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"min-w-0"[39m
+                  [36m>[39m
+                    [36m<div[39m
+                      [33mclass[39m=[32m"truncate font-heading text-sm font-semibold text-foreground"[39m
+                    [36m>[39m
+                      [0mCompany Brain[0m
+                    [36m</div>[39m
+                  [36m</div>[39m
+                [36m</div>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"no-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden"[39m
+                [33mdata-sidebar[39m=[32m"content"[39m
+                [33mdata-slot[39m=[32m"sidebar-content"[39m
+              [36m>[39m
+                [36m<nav[39m
+                  [33maria-label[39m=[32m"Sections"[39m
+                  [33mclass[39m=[32m"flex flex-col gap-0.5 py-2"[39m
+                [36m>[39m
+                  [36m<p[39m
+                    [33mclass[39m=[32m"px-4 text-xs text-muted-foreground"[39m
+                  [36m>[39m
+                    [0mThe rest of the menu could not be loaded, so only the screens about your own work are listed.[0m
+                  [36m</p>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"relative flex w-full min-w-0 flex-col p-2 py-1"[39m
+                    [33mdata-sidebar[39m=[32m"group"[39m
+                    [33mdata-slot[39m=[32m"sidebar-group"[39m
+                  [36m>[39m
+                    [36m<h2[39m
+                      [33mclass[39m=[32m"m-0 text-xs font-normal"[39m
+                      [33mid[39m=[32m"nav-use"[39m
+                    [36m>[39m
+                      [36m<button[39m
+                        [33maria-controls[39m=[32m"nav-use-entries"[39m
+                        [33maria-expanded[39m=[32m"true"[39m
+                        [33mclass[39m=[32m"flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left font-mono text-xs tracking-wide text-muted-foreground uppercase hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-ring md:min-h-8"[39m
+                        [33mtype[39m=[32m"button"[39m
+                      [36m>[39m
+                        [36m<svg[39m
+                          [33maria-hidden[39m=[32m"true"[39m
+                          [33mclass[39m=[32m"lucide lucide-message-square size-4 shrink-0"[39m
+                          [33mfill[39m=[32m"none"[39m
+                          [33mheight[39m=[32m"24"[39m
+                          [33mstroke[39m=[32m"currentColor"[39m
+                          [33mstroke-linecap[39m=[32m"round"[39m
+                          [33mstroke-linejoin[39m=[32m"round"[39m
+                          [33mstroke-width[39m=[32m"2"[39m
+                          [33mviewBox[39m=[32m"0 0 24 24"[39m
+                          [33mwidth[39m=[32m"24"[39m
+                          [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                        [36m>[39m
+                          [36m<path[39m
+                            [33md[39m=[32m"M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"[39m
+                          [36m/>[39m
+                        [36m</svg>[39m
+                        [36m<span[39m
+                          [33mclass[39m=[32m"flex-1"[39m
+                        [36m>[39m
+                          [0mUse[0m
+                        [36m</span>[39m
+                        [36m<svg[39m
+                          [33maria-hidden[39m=[32m"true"[39m
+                          [33mclass[39m=[32m"lucide lucide-chevron-right size-3.5 shrink-0 rotate-90 transition-transform"[39m
+                          [33mfill[39m=[32m"none"[39m
+                          [33mheight[39m=[32m"24"[39m
+                          [33mstroke[39m=[32m"currentColor"[39m
+                          [33mstroke-linecap[39m=[32m"round"[39m
+                         ...
+ ❯ tests/agent-memory.test.tsx:104:13
+    102|   await waitFor(() => {
+    103|     if (!container.querySelector('[data-slot="agent-memory"]')) {
+    104|       throw new Error("the Memory section has not arrived");
+       |             ^
+    105|     }
+    106|   });
+ ❯ runWithExpensiveErrorDiagnosticsDisabled ../../../../../console/node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback ../../../../../console/node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback ../../../../../console/node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/36]⎯
+
+ FAIL  tests/agents-page.test.tsx > the list > it draws the agents the API returned, in the order it returned them, as links to their pages
+Error: Test timed out in 20000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/agents-page.test.tsx:132:3
+    130|
+    131| describe("the list", () => {
+    132|   test("it draws the agents the API returned, in the order it returned…
+       |   ^
+    133|     // What breaks if this is deleted: every refusal below is satisfie…
+    134|     // The order is the API's, so the console cannot re-sort a list it…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/36]⎯
+
+ FAIL  tests/approvals-page.test.tsx > an approval card on a phone > a long unbroken value breaks inside its card and the artefact keeps its own lines
+Error: Test timed out in 20000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/approvals-page.test.tsx:341:3
+    339|   });
+    340|
+    341|   test("a long unbroken value breaks inside its card and the artefact …
+       |   ^
+    342|     // What breaks if this is deleted: a 240 character address in an a…
+    343|     // principal id, pushing the card past the screen's edge. `pre` ke…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/36]⎯
+
+ FAIL  tests/automation-gallery.test.tsx > the gallery on the Automations tab > every template the API sent is drawn in its order, with its schedule and what it offers this reader
+Error: the workspace has not arrived
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"group/sidebar-wrapper flex min-h-svh w-full has-data-[variant=inset]:bg-sidebar"[39m
+        [33mdata-slot[39m=[32m"sidebar-wrapper"[39m
+        [33mstyle[39m=[32m"--sidebar-width: 16rem; --sidebar-width-icon: 3rem;"[39m
+      [36m>[39m
+        [36m<a[39m
+          [33mclass[39m=[32m"skip-link"[39m
+          [33mhref[39m=[32m"#main"[39m
+        [36m>[39m
+          [0mSkip to content[0m
+        [36m</a>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"group peer hidden text-sidebar-foreground md:block"[39m
+          [33mdata-collapsible[39m=[32m""[39m
+          [33mdata-side[39m=[32m"left"[39m
+          [33mdata-slot[39m=[32m"sidebar"[39m
+          [33mdata-state[39m=[32m"expanded"[39m
+          [33mdata-variant[39m=[32m"sidebar"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear group-data-[collapsible=offcanvas]:w-0 group-data-[side=right]:rotate-180 group-data-[collapsible=icon]:w-(--sidebar-width-icon)"[39m
+            [33mdata-slot[39m=[32m"sidebar-gap"[39m
+          [36m/>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l"[39m
+            [33mdata-side[39m=[32m"left"[39m
+            [33mdata-slot[39m=[32m"sidebar-container"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex size-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border"[39m
+              [33mdata-sidebar[39m=[32m"sidebar"[39m
+              [33mdata-slot[39m=[32m"sidebar-inner"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"flex flex-col gap-2 p-2 border-b border-sidebar-border px-4 py-3"[39m
+                [33mdata-sidebar[39m=[32m"header"[39m
+                [33mdata-slot[39m=[32m"sidebar-header"[39m
+              [36m>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"flex items-center gap-2"[39m
+                [36m>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"min-w-0"[39m
+                  [36m>[39m
+                    [36m<div[39m
+                      [33mclass[39m=[32m"truncate font-heading text-sm font-semibold text-foreground"[39m
+                    [36m>[39m
+                      [0mCompany Brain[0m
+                    [36m</div>[39m
+                  [36m</div>[39m
+                [36m</div>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"no-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden"[39m
+                [33mdata-sidebar[39m=[32m"content"[39m
+                [33mdata-slot[39m=[32m"sidebar-content"[39m
+              [36m>[39m
+                [36m<nav[39m
+                  [33maria-label[39m=[32m"Sections"[39m
+                  [33mclass[39m=[32m"flex flex-col gap-0.5 py-2"[39m
+                [36m>[39m
+                  [36m<p[39m
+                    [33mclass[39m=[32m"px-4 text-xs text-muted-foreground"[39m
+                  [36m>[39m
+                    [0mThe rest of the menu could not be loaded, so only the screens about your own work are listed.[0m
+                  [36m</p>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"relative flex w-full min-w-0 flex-col p-2 py-1"[39m
+                    [33mdata-sidebar[39m=[32m"group"[39m
+                    [33mdata-slot[39m=[32m"sidebar-group"[39m
+                  [36m>[39m
+                    [36m<h2[39m
+                      [33mclass[39m=[32m"m-0 text-xs font-normal"[39m
+                      [33mid[39m=[32m"nav-use"[39m
+                    [36m>[39m
+                      [36m<button[39m
+                        [33maria-controls[39m=[32m"nav-use-entries"[39m
+                        [33maria-expanded[39m=[32m"true"[39m
+                        [33mclass[39m=[32m"flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left font-mono text-xs tracking-wide text-muted-foreground uppercase hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-ring md:min-h-8"[39m
+                        [33mtype[39m=[32m"button"[39m
+                      [36m>[39m
+                        [36m<svg[39m
+                          [33maria-hidden[39m=[32m"true"[39m
+                          [33mclass[39m=[32m"lucide lucide-message-square size-4 shrink-0"[39m
+                          [33mfill[39m=[32m"none"[39m
+                          [33mheight[39m=[32m"24"[39m
+                          [33mstroke[39m=[32m"currentColor"[39m
+                          [33mstroke-linecap[39m=[32m"round"[39m
+                          [33mstroke-linejoin[39m=[32m"round"[39m
+                          [33mstroke-width[39m=[32m"2"[39m
+                          [33mviewBox[39m=[32m"0 0 24 24"[39m
+                          [33mwidth[39m=[32m"24"[39m
+                          [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                        [36m>[39m
+                          [36m<path[39m
+                            [33md[39m=[32m"M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"[39m
+                          [36m/>[39m
+                        [36m</svg>[39m
+                        [36m<span[39m
+                          [33mclass[39m=[32m"flex-1"[39m
+                        [36m>[39m
+                          [0mUse[0m
+                        [36m</span>[39m
+                        [36m<svg[39m
+                          [33maria-hidden[39m=[32m"true"[39m
+                          [33mclass[39m=[32m"lucide lucide-chevron-right size-3.5 shrink-0 rotate-90 transition-transform"[39m
+                          [33mfill[39m=[32m"none"[39m
+                          [33mheight[39m=[32m"24"[39m
+                          [33mstroke[39m=[32m"currentColor"[39m
+                          [33mstroke-linecap[39m=[32m"round"[39m
+                         ...
+ ❯ tests/automation-gallery.test.tsx:174:13
+    172|   await waitFor(() => {
+    173|     if (!container.querySelector('[data-slot="detail-header"] h1')) {
+    174|       throw new Error("the workspace has not arrived");
+       |             ^
+    175|     }
+    176|   });
+ ❯ runWithExpensiveErrorDiagnosticsDisabled ../../../../../console/node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback ../../../../../console/node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback ../../../../../console/node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/36]⎯
+
+ FAIL  tests/automation-gallery.test.tsx > the gallery on the Automations tab > a refused gallery is the API's own sentence and reference, and draws no card
+Error: Test timed out in 20000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/automation-gallery.test.tsx:274:3
+    272|   });
+    273|
+    274|   test("a refused gallery is the API's own sentence and reference, and…
+       |   ^
+    275|     // What breaks if this is deleted: a refusal explained in the cons…
+    276|     // a second sentence for the one 404 the route gives a missing age…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/36]⎯
+
+ FAIL  tests/classification-page.test.tsx > what the console asks for > the console sends no query parameter, because the route declares none
+Error: Test timed out in 20000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/classification-page.test.tsx:264:3
+    262|
+    263| describe("what the console asks for", () => {
+    264|   test("the console sends no query parameter, because the route declar…
+       |   ^
+    265|     // What breaks if this is deleted: a parameter the API ignores. Fa…
+    266|     // undeclared query parameter without a word and answers 200, so a…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/36]⎯
+
+ FAIL  tests/config.test.tsx > a console that cannot work > a misconfigured console names the setting on the screen
+Error: Test timed out in 20000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/config.test.tsx:219:3
+    217|
+    218| describe("a console that cannot work", () => {
+    219|   test("a misconfigured console names the setting on the screen", asyn…
+       |   ^
+    220|     // What breaks if this is deleted: the failure becomes a redirect …
+    221|     // `undefined/.well-known/openid-configuration` and a browser erro…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/36]⎯
+
+ FAIL  tests/console-cleanup.test.tsx > what an administrator does not need is not on any page > /retention/:view draws no internal identifier, no developer's word and no panel twice
+ FAIL  tests/console-cleanup.test.tsx > what an administrator does not need is not on any page > /retention/holds/:holdId draws no internal identifier, no developer's word and no panel twice
+ FAIL  tests/console-cleanup.test.tsx > what an administrator does not need is not on any page > /subscribers draws no internal identifier, no developer's word and no panel twice
+Error: Test timed out in 60000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/console-cleanup.test.tsx:201:31
+    199|
+    200| describe("what an administrator does not need is not on any page", () …
+    201|   test.each(Object.keys(PAGES))("%s draws no internal identifier, no d…
+       |                               ^
+    202|     // What breaks if this is deleted: the cleanup stops being held. A…
+    203|     // principal's id, a table's name, "the API" or a heading twice is…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/36]⎯
+
+ FAIL  tests/knowledge-page.test.tsx > the Knowledge list > it draws each document by title with its department, reach, steward's name, review and state
+Error: Test timed out in 20000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/knowledge-page.test.tsx:242:3
+    240| // -------------------------------------------------------------------…
+    241| describe("the Knowledge list", () => {
+    242|   test("it draws each document by title with its department, reach, st…
+       |   ^
+    243|     // What breaks if this is deleted: the list goes back to three fac…
+    244|     // the principal id the owner found cluttering every page.
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/36]⎯
+
+ FAIL  tests/lark-connect.test.tsx > Lark once it is connected > the card replaces Connect Lark, says what is on and when it was tested, and offers adding a use
+Error: Test timed out in 20000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/lark-connect.test.tsx:636:3
+    634|   }
+    635|
+    636|   test("the card replaces Connect Lark, says what is on and when it wa…
+       |   ^
+    637|     // What breaks if this is deleted: the owner's finding comes back,…
+    638|     // opening the setup again after Lark was connected.
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/36]⎯
+
+ FAIL  tests/phone-width.test.tsx > every registered page at a phone's width > /approvals lets every value the API sent break inside the screen
+ FAIL  tests/phone-width.test.tsx > every registered page at a phone's width > /approvals/:suspensionId lets every value the API sent break inside the screen
+ FAIL  tests/phone-width.test.tsx > every registered page at a phone's width > /channels/:name lets every value the API sent break inside the screen
+ FAIL  tests/phone-width.test.tsx > every registered page at a phone's width > /elevation/:requestId lets every value the API sent break inside the screen
+ FAIL  tests/phone-width.test.tsx > every registered page at a phone's width > /errors lets every value the API sent break inside the screen
+ FAIL  tests/phone-width.test.tsx > every registered page at a phone's width > /features lets every value the API sent break inside the screen
+ FAIL  tests/phone-width.test.tsx > every registered page at a phone's width > /incidents lets every value the API sent break inside the screen
+ FAIL  tests/phone-width.test.tsx > every registered page at a phone's width > /install lets every value the API sent break inside the screen
+ FAIL  tests/phone-width.test.tsx > every registered page at a phone's width > /jobs/:name lets every value the API sent break inside the screen
+ FAIL  tests/phone-width.test.tsx > every registered page at a phone's width > /jobs/:name/:view lets every value the API sent break inside the screen
+Error: Test timed out in 20000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/phone-width.test.tsx:392:27
+    390|   );
+    391|
+    392|   test.each(VALUE_PATTERNS)("%s lets every value the API sent break in…
+       |                           ^
+    393|     // What breaks if this is deleted: an identifier with no space in …
+    394|     // the edge of the screen, which is what the overview and the agen…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/36]⎯
+
+ FAIL  tests/screen-states-second.test.tsx > what a failure says about itself on every registered page > /access_review shows the API's sentence and a way to sign in again when a second factor is needed
+Error: The page never stopped changing.
+ ❯ stable tests/support/screenStates.tsx:181:9
+    179|     }
+    180|   }
+    181|   throw new Error("The page never stopped changing.");
+       |         ^
+    182| }
+    183|
+ ❯ reread tests/support/screenStates.tsx:287:5
+ ❯ mountIn tests/support/screenStates.tsx:296:17
+ ❯ readingOf tests/support/screenStateRules.tsx:180:19
+ ❯ asksForASecondFactor tests/support/screenStateRules.tsx:262:16
+ ❯ tests/screen-states-second.test.tsx:51:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/36]⎯
+
+ FAIL  tests/screen-states-second.test.tsx > what a failure says about itself on every registered page > /import-export shows the API's sentence and a way to sign in again when a second factor is needed
+Error: The page never stopped changing.
+ ❯ stable tests/support/screenStates.tsx:181:9
+    179|     }
+    180|   }
+    181|   throw new Error("The page never stopped changing.");
+       |         ^
+    182| }
+    183|
+ ❯ reread tests/support/screenStates.tsx:287:5
+ ❯ mountIn tests/support/screenStates.tsx:296:17
+ ❯ readingOf tests/support/screenStateRules.tsx:180:19
+ ❯ asksForASecondFactor tests/support/screenStateRules.tsx:262:16
+ ❯ tests/screen-states-second.test.tsx:51:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/36]⎯
+
+ FAIL  tests/screen-states-second.test.tsx > what a failure says about itself on every registered page > /library/:itemId shows the API's sentence and a way to sign in again when a second factor is needed
+Error: Test timed out in 60000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/screen-states-second.test.tsx:46:24
+     44|   }, 60_000);
+     45|
+     46|   test.each(shard(1, 3))("%s shows the API's sentence and a way to sig…
+       |                        ^
+     47|     // What breaks if this is deleted: a person signed in without thei…
+     48|     // not find that" about work they hold, or told the right sentence…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/36]⎯
+
+ FAIL  tests/screen-states-third.test.tsx > loading, empty, unreachable and failed on every registered page > /service-accounts/:clientId says loading, empty, unreachable and failed in four different sentences
+Error: Test timed out in 60000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/screen-states-third.test.tsx:29:24
+     27|
+     28| describe("loading, empty, unreachable and failed on every registered p…
+     29|   test.each(shard(2, 3))("%s says loading, empty, unreachable and fail…
+       |                        ^
+     30|     // What breaks if this is deleted: a page that draws "That did not…
+     31|     // lost its network, which sends a person to ask an administrator …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/36]⎯
+
+ FAIL  tests/screen-states-third.test.tsx > loading, empty, unreachable and failed on every registered page > /settings says loading, empty, unreachable and failed in four different sentences
+AssertionError: loading: expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ holdsFourSentences tests/support/screenStateRules.tsx:235:78
+    233|     : new Set<string>();
+    234|
+    235|   expect(onlyIn(pending, [unreachable, failed, full, empty]), "loading…
+       |                                                                              ^
+    236|   expect(onlyIn(unreachable, [pending, failed, full, empty]), "unreach…
+    237|   expect(onlyIn(failed, [pending, unreachable, full, empty]), "failed"…
+ ❯ tests/screen-states-third.test.tsx:34:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/36]⎯
+
+ FAIL  tests/screen-states-third.test.tsx > what a failure says about itself on every registered page > /jobs/:name shows the API's sentence and a way to sign in again when a second factor is needed
+Error: /jobs/:name never arrived.
+ ❯ mountIn tests/support/screenStates.tsx:282:13
+    280|   while (waitForAsking ? asked.length === 0 : asked.length === 0 && ro…
+    281|     if (Date.now() > deadline) {
+    282|       throw new Error(`${pattern} never ${waitForAsking ? "asked the A…
+       |             ^
+    283|     }
+    284|     await new Promise((resolve) => setTimeout(resolve, 10));
+ ❯ readingOf tests/support/screenStateRules.tsx:180:19
+ ❯ asksForASecondFactor tests/support/screenStateRules.tsx:262:16
+ ❯ tests/screen-states-third.test.tsx:51:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/36]⎯
+
+ FAIL  tests/screen-states.test.tsx > loading, empty, unreachable and failed on every registered page > /sign-in-links says loading, empty, unreachable and failed in four different sentences
+ FAIL  tests/screen-states.test.tsx > loading, empty, unreachable and failed on every registered page > /skills/:name/:view says loading, empty, unreachable and failed in four different sentences
+Error: Test timed out in 60000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/screen-states.test.tsx:107:24
+    105|   }, 30_000);
+    106|
+    107|   test.each(shard(0, 3))("%s says loading, empty, unreachable and fail…
+       |                        ^
+    108|     // What breaks if this is deleted: a page that draws "That did not…
+    109|     // lost its network, which sends a person to ask an administrator …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/36]⎯
+
+ FAIL  tests/screen-states.test.tsx > what a failure says about itself on every registered page > /sign-in-links shows the API's sentence and a way to sign in again when a second factor is needed
+Error: The page never stopped changing.
+ ❯ stable tests/support/screenStates.tsx:181:9
+    179|     }
+    180|   }
+    181|   throw new Error("The page never stopped changing.");
+       |         ^
+    182| }
+    183|
+ ❯ reread tests/support/screenStates.tsx:287:5
+ ❯ mountIn tests/support/screenStates.tsx:296:17
+ ❯ readingOf tests/support/screenStateRules.tsx:180:19
+ ❯ asksForASecondFactor tests/support/screenStateRules.tsx:262:16
+ ❯ tests/screen-states.test.tsx:129:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/36]⎯
+
+ FAIL  tests/skills-page.test.tsx > what the Skills module asks for and sends > the list asks the library route with parameters it declares and a page size it answers
+Error: Test timed out in 20000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/skills-page.test.tsx:259:3
+    257|
+    258| describe("what the Skills module asks for and sends", () => {
+    259|   test("the list asks the library route with parameters it declares an…
+       |   ^
+    260|     // What breaks if this is deleted: a parameter the API ignores, re…
+    261|     const declared = new Set(declaredQueryParameters(`${API}${LIBRARY_…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/36]⎯
+
+
+ Test Files  17 failed | 125 passed (142)
+      Tests  36 failed | 2549 passed | 1 expected fail (2586)
+   Start at  01:00:25
+   Duration  669.47s (transform 296.74s, setup 102.65s, import 546.94s, tests 4675.54s, environment 488.61s)
+

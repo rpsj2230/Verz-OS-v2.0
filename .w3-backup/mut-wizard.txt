@@ -1,0 +1,35 @@
+### W1 draft body sends secrets
+restored byte-identically: True
+  FAILED tests/first-run-draft.test.tsx: first run keeps its place > a provider key typed on its screen is never sent to the draft route, only a blank where it goes
+  FAILED tests/setup-draft.test.ts: what the draft never carries > a secret answer is blanked in the body that keeps the draft and kept in the one that appoints
+  Tests  2 failed | 8 passed (10)
+### W2 last step offers Next
+restored byte-identically: True
+  FAILED tests/agent-templates.test.tsx: the install is a stepped wizard whose draft survives leaving the page > it asks one thing at a time, in order, and the last step is the one that installs
+  Tests  1 failed | 11 passed (12)
+### W3 draft not remembered
+restored byte-identically: True
+  FAILED tests/agent-templates.test.tsx: the install is a stepped wizard whose draft survives leaving the page > installing removes the draft, and so does signing out
+  FAILED tests/agent-templates.test.tsx: the install is a stepped wizard whose draft survives leaving the page > leaving the page and coming back finds the step and the answers, and Start again clears them
+  FAILED tests/agent-templates.test.tsx: the install is a stepped wizard whose draft survives leaving the page > the draft is kept under the person and holds a name, a tick and some channels and nothing else
+  Tests  3 failed | 9 passed (12)
+### W4 key without the person
+restored byte-identically: True
+  FAILED tests/agent-templates.test.tsx: the install is a stepped wizard whose draft survives leaving the page > the draft is kept under the person and holds a name, a tick and some channels and nothing else
+  Tests  1 failed | 11 passed (12)
+### W5 sign-out keeps flows
+restored byte-identically: True
+  FAILED tests/agent-templates.test.tsx: the install is a stepped wizard whose draft survives leaving the page > installing removes the draft, and so does signing out
+  Tests  1 failed | 11 passed (12)
+### W6 install keeps the draft
+restored byte-identically: True
+  FAILED tests/agent-templates.test.tsx: the install is a stepped wizard whose draft survives leaving the page > installing removes the draft, and so does signing out
+  Tests  1 failed | 11 passed (12)
+### W7 empty channels step
+restored byte-identically: True
+  FAILED tests/agent-templates.test.tsx: the install is a stepped wizard whose draft survives leaving the page > a version that offers no channel has no step for them
+  Tests  1 failed | 11 passed (12)
+### W8 anonymous caller keeps a draft
+restored byte-identically: True
+  FAILED tests/agent-templates.test.tsx: the install is a stepped wizard whose draft survives leaving the page > the draft is kept under the person and holds a name, a tick and some channels and nothing else
+  Tests  1 failed | 11 passed (12)

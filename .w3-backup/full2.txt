@@ -1,0 +1,26 @@
+
+ RUN  v4.1.11 /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/trial/w3-lists/console
+
+ ❯ tests/operations-pages.test.tsx (32 tests | 1 failed) 45850ms
+     × the log's export asks for the search on screen and saves the file, and a cut-off period says so 2026ms
+ ❯ tests/report-dashboards.test.tsx (27 tests | 2 failed) 31136ms
+     × a department that asked nothing keeps its line and is listed as quiet 869ms
+     × a figure the sample could not support reads Not measured, never nought 953ms
+Not implemented: navigation to another Document
+ ❯ tests/long-lists.test.tsx (98 tests | 4 failed) 214230ms
+     × every list the API says can be cut off is measured here, and nothing else is 31111ms
+     × /adoption offers what the table says it offers, and is excused for the rest 2815ms
+     × /channels/:name offers what the table says it offers, and is excused for the rest 3939ms
+     × /logs offers what the table says it offers, and is excused for the rest 2179ms
+stderr | tests/provider-register.test.tsx > an agent's pinned model > the profile draws the order a question tries, and pins a model chosen from the matrix only from the confirmation
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+
+ ❯ tests/provider-register.test.tsx (2 tests | 1 failed) 7245ms
+     × the profile draws the order a question tries, and pins a model chosen from the matrix only from the confirmation 4960ms
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+ ❯ tests/ask-citations.test.tsx (16 tests | 1 failed) 11214ms
+     × a title the reader may not read is not guessed at, and the reference is shown 943ms
+ ❯ tests/entity-detail.test.tsx (4 tests | 2 failed) 1332ms
+     × a row opens in a drawer showing every column, the hidden ones included, and nothing else 887ms
+     × closing it gives focus back to the row's control 325ms

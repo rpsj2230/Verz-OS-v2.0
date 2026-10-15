@@ -1,0 +1,23 @@
+/me
+  H1  My workspace <- ARTICLE.page
+  H2  At a glance <- SECTION.card
+  H2  My agents <- SECTION.card
+  H2  What it learned about me <- SECTION.card
+  H2  Knowledge I own <- SECTION.card
+  H2  Connected accounts <- SECTION.card
+  H2  What I can ask about <- SECTION.card
+  H2  Channels <- SECTION.card
+  H2  How I am reached <- SECTION.card
+  H3  Learning <- DIV.
+  H3  Channels <- FORM.
+  H3  Quiet hours <- FORM.
+  H2  Where I am signed in <- SECTION.card
+  H2  Who has read my record <- SECTION.card
+  H2  Made for me <- SECTION.card
+  H2  Shared with me <- SECTION.card
+  H3  I shared <- SECTION.card
+  H2  Agents I can ask for <- SECTION.card
+  H2  What is kept about me <- SECTION.card
+/ask/documents/:documentId
+  H1  UNBROKENxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx <- ARTICLE.page
+  H2  UNBROKENxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx <- SECTION.card cited__passage cited__passage--cite

@@ -1,0 +1,136 @@
+/access-requests	rows=1 toolbar=true columns=true export=true selection=true detail=true bulk=false
+/access_review	rows=1 toolbar=true columns=true export=true selection=true detail=true bulk=true
+/access_review/:kind/:rowId	NOTABLE
+/adoption	rows=1 toolbar=true columns=true export=false selection=false detail=true bulk=false
+/agent-templates	rows=1 toolbar=true columns=true export=true selection=true detail=true bulk=false
+/agent-templates/:templateId	NOTABLE
+/agents	rows=1 toolbar=true columns=true export=true selection=true detail=true bulk=false
+/agents/:agentId	NOTABLE
+/agents/:agentId/:tab	NOTABLE
+/agents/new	NOTABLE
+/agents/drafts	rows=1 toolbar=false columns=true export=false selection=false detail=true bulk=false
+/agents/drafts	rows=1 toolbar=false columns=true export=false selection=false detail=true bulk=false
+/agents/drafts/:draftId	NOTABLE
+/agents/drafts/:draftId/:step	NOTABLE
+/approvals	NOTABLE
+/approvals/:suspensionId	NOTABLE
+/artifacts	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/ask	NOTABLE
+/ask/documents/:documentId	NOTABLE
+/audit	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/audit/subject/:kind/:id	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/audit/subject/:kind/:id/:view	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/automations	rows=1 toolbar=true columns=true export=true selection=true detail=true bulk=false
+/automations/:automationId	NOTABLE
+/automations/:automationId/:view	NOTABLE
+/capabilities	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/channels	rows=2 toolbar=true columns=true export=true selection=true detail=true bulk=false
+/channels/:name	rows=1 toolbar=true columns=true export=false selection=false detail=true bulk=false
+/channels/:name/:view	NOTABLE
+/classification/:entity	NOTABLE
+/classification/:entity/:column	NOTABLE
+/company/estate	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/company/activity	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/company/consumption	NOTABLE
+/compliance	rows=2 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/compliance/:view	rows=2 toolbar=false columns=true export=false selection=false detail=true bulk=false
+/compliance/breaches/:caseId	NOTABLE
+/connections	rows=1 toolbar=false columns=true export=false selection=false detail=true bulk=false
+/connectors	rows=1 toolbar=true columns=true export=true selection=true detail=true bulk=false
+/connectors/:connector	NOTABLE
+/connectors/:connector/:view	NOTABLE
+/connectors/new-api	NOTABLE
+/corrections	NOTABLE
+/credentials	rows=1 toolbar=true columns=true export=true selection=true detail=true bulk=false
+/credentials/:family/:name	NOTABLE
+/credentials/:family/:name/:view	NOTABLE
+/department	NOTABLE
+/department/:view	NOTABLE
+/departments	rows=1 toolbar=true columns=true export=true selection=true detail=true bulk=false
+/departments/:slug	NOTABLE
+/departments/:slug/:view	NOTABLE
+/duplicates	NOTABLE
+/elevation	rows=1 toolbar=true columns=true export=true selection=true detail=true bulk=false
+/elevation	rows=1 toolbar=true columns=true export=false selection=false detail=true bulk=false
+/elevation/:requestId	NOTABLE
+/errors	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/errors	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/features	NOTABLE
+/import-export	rows=1 toolbar=false columns=true export=false selection=false detail=true bulk=false
+/import-export	rows=2 toolbar=false columns=true export=false selection=false detail=true bulk=false
+/incidents	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/incidents	rows=3 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/incidents	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/install	NOTABLE
+/jobs	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/jobs	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/jobs/:name	rows=2 toolbar=true columns=true export=true selection=true detail=true bulk=false
+/jobs/:name/:view	NOTABLE
+/learning	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/learning/:view	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/library	rows=1 toolbar=true columns=true export=false selection=true detail=true bulk=true
+/library/:itemId	NOTABLE
+/library/:itemId/:view	NOTABLE
+/limits	rows=1 toolbar=false columns=true export=false selection=false detail=true bulk=false
+/limits	rows=1 toolbar=false columns=true export=false selection=false detail=true bulk=false
+/limits	rows=1 toolbar=false columns=true export=false selection=false detail=true bulk=false
+/limits	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/logs	rows=1 toolbar=false columns=true export=false selection=false detail=true bulk=false
+/me	NOTABLE
+/memory/:subject	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/memory/:subject/:view	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/models	NOTABLE
+/models/:provider	NOTABLE
+/models/:provider/:view	NOTABLE
+/notifications	rows=2 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/	NOTABLE
+/packs	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/people	rows=1 toolbar=true columns=true export=true selection=true detail=true bulk=true
+/people/:personId	NOTABLE
+/people/:personId/:view	NOTABLE
+/prompts	NOTABLE
+/quality	rows=1 toolbar=false columns=true export=false selection=false detail=true bulk=false
+/questions	rows=1 toolbar=false columns=true export=false selection=false detail=true bulk=false
+/records/:entity	NOTABLE
+/recovery	rows=1 toolbar=false columns=true export=false selection=false detail=true bulk=false
+/referrals	rows=1 toolbar=false columns=true export=false selection=false detail=true bulk=false
+/requirement-checks	rows=2 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/requirement-checks	rows=2 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/retention	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/retention	rows=1 toolbar=false columns=true export=false selection=false detail=true bulk=false
+/retention/:view	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/retention/holds/:holdId	NOTABLE
+/retention/erasures/:requestId	NOTABLE
+/roles	rows=1 toolbar=false columns=true export=false selection=false detail=true bulk=false
+/roles	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/roles	rows=1 toolbar=false columns=true export=false selection=false detail=true bulk=false
+/roles	rows=1 toolbar=false columns=true export=false selection=false detail=true bulk=false
+/routing	NOTABLE
+/routing/:rungId	NOTABLE
+/rules	NOTABLE
+/runs	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/runs	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/scopes	rows=1 toolbar=true columns=true export=true selection=true detail=true bulk=false
+/service-accounts	rows=1 toolbar=true columns=true export=true selection=true detail=true bulk=false
+/service-accounts/:clientId	NOTABLE
+/service-levels	rows=1 toolbar=false columns=true export=false selection=false detail=true bulk=false
+/sessions	rows=1 toolbar=true columns=true export=true selection=true detail=true bulk=true
+/settings	NOTABLE
+/sign-in-links	rows=1 toolbar=true columns=true export=true selection=true detail=true bulk=false
+/skills	rows=1 toolbar=true columns=true export=true selection=true detail=true bulk=false
+/skills/:name	NOTABLE
+/skills/:name/:view	NOTABLE
+/solutions	NOTABLE
+/spend	NOTABLE
+/staff_sources	NOTABLE
+/stop	NOTABLE
+/storage	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/subscribers	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/tools	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/tools/:name	NOTABLE
+/updates	NOTABLE
+/usage	NOTABLE
+/vault	NOTABLE
+/webhooks	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/webhooks/:id	rows=1 toolbar=false columns=true export=true selection=true detail=true bulk=false
+/webhooks/:id/:view	NOTABLE

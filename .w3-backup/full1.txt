@@ -1,0 +1,187 @@
+
+ RUN  v4.1.11 /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/trial/w3-lists/console
+
+Not implemented: navigation to another Document
+ ❯ tests/report-dashboards.test.tsx (27 tests | 1 failed) 13959ms
+     × a department that asked nothing keeps its line and is listed as quiet 542ms
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+stderr | tests/provider-register.test.tsx > an agent's pinned model > the profile draws the order a question tries, and pins a model chosen from the matrix only from the confirmation
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+
+ ❯ tests/provider-register.test.tsx (2 tests | 1 failed) 6696ms
+     × the profile draws the order a question tries, and pins a model chosen from the matrix only from the confirmation 4795ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/provider-register.test.tsx > an agent's pinned model > the profile draws the order a question tries, and pins a model chosen from the matrix only from the confirmation
+Error: the profile has not opened
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"group/sidebar-wrapper flex min-h-svh w-full has-data-[variant=inset]:bg-sidebar"[39m
+        [33mdata-slot[39m=[32m"sidebar-wrapper"[39m
+        [33mstyle[39m=[32m"--sidebar-width: 16rem; --sidebar-width-icon: 3rem;"[39m
+      [36m>[39m
+        [36m<a[39m
+          [33mclass[39m=[32m"skip-link"[39m
+          [33mhref[39m=[32m"#main"[39m
+        [36m>[39m
+          [0mSkip to content[0m
+        [36m</a>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"group peer hidden text-sidebar-foreground md:block"[39m
+          [33mdata-collapsible[39m=[32m""[39m
+          [33mdata-side[39m=[32m"left"[39m
+          [33mdata-slot[39m=[32m"sidebar"[39m
+          [33mdata-state[39m=[32m"expanded"[39m
+          [33mdata-variant[39m=[32m"sidebar"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear group-data-[collapsible=offcanvas]:w-0 group-data-[side=right]:rotate-180 group-data-[collapsible=icon]:w-(--sidebar-width-icon)"[39m
+            [33mdata-slot[39m=[32m"sidebar-gap"[39m
+          [36m/>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l"[39m
+            [33mdata-side[39m=[32m"left"[39m
+            [33mdata-slot[39m=[32m"sidebar-container"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex size-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border"[39m
+              [33mdata-sidebar[39m=[32m"sidebar"[39m
+              [33mdata-slot[39m=[32m"sidebar-inner"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"flex flex-col gap-2 p-2 border-b border-sidebar-border px-4 py-3"[39m
+                [33mdata-sidebar[39m=[32m"header"[39m
+                [33mdata-slot[39m=[32m"sidebar-header"[39m
+              [36m>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"flex items-center gap-2"[39m
+                [36m>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"min-w-0"[39m
+                  [36m>[39m
+                    [36m<div[39m
+                      [33mclass[39m=[32m"truncate font-heading text-sm font-semibold text-foreground"[39m
+                    [36m>[39m
+                      [0mCompany Brain[0m
+                    [36m</div>[39m
+                  [36m</div>[39m
+                [36m</div>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"no-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden"[39m
+                [33mdata-sidebar[39m=[32m"content"[39m
+                [33mdata-slot[39m=[32m"sidebar-content"[39m
+              [36m>[39m
+                [36m<nav[39m
+                  [33maria-label[39m=[32m"Sections"[39m
+                  [33mclass[39m=[32m"flex flex-col gap-0.5 py-2"[39m
+                [36m>[39m
+                  [36m<p[39m
+                    [33mclass[39m=[32m"px-4 text-xs text-muted-foreground"[39m
+                  [36m>[39m
+                    [0mThe rest of the menu could not be loaded, so only the screens about your own work are listed.[0m
+                  [36m</p>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"relative flex w-full min-w-0 flex-col p-2 py-1"[39m
+                    [33mdata-sidebar[39m=[32m"group"[39m
+                    [33mdata-slot[39m=[32m"sidebar-group"[39m
+                  [36m>[39m
+                    [36m<h2[39m
+                      [33mclass[39m=[32m"m-0 text-xs font-normal"[39m
+                      [33mid[39m=[32m"nav-use"[39m
+                    [36m>[39m
+                      [36m<button[39m
+                        [33maria-controls[39m=[32m"nav-use-entries"[39m
+                        [33maria-expanded[39m=[32m"true"[39m
+                        [33mclass[39m=[32m"flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left font-mono text-xs tracking-wide text-muted-foreground uppercase hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-ring md:min-h-8"[39m
+                        [33mtype[39m=[32m"button"[39m
+                      [36m>[39m
+                        [36m<svg[39m
+                          [33maria-hidden[39m=[32m"true"[39m
+                          [33mclass[39m=[32m"lucide lucide-message-square size-4 shrink-0"[39m
+                          [33mfill[39m=[32m"none"[39m
+                          [33mheight[39m=[32m"24"[39m
+                          [33mstroke[39m=[32m"currentColor"[39m
+                          [33mstroke-linecap[39m=[32m"round"[39m
+                          [33mstroke-linejoin[39m=[32m"round"[39m
+                          [33mstroke-width[39m=[32m"2"[39m
+                          [33mviewBox[39m=[32m"0 0 24 24"[39m
+                          [33mwidth[39m=[32m"24"[39m
+                          [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                        [36m>[39m
+                          [36m<path[39m
+                            [33md[39m=[32m"M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"[39m
+                          [36m/>[39m
+                        [36m</svg>[39m
+                        [36m<span[39m
+                          [33mclass[39m=[32m"flex-1"[39m
+                        [36m>[39m
+                          [0mUse[0m
+                        [36m</span>[39m
+                        [36m<svg[39m
+                          [33maria-hidden[39m=[32m"true"[39m
+                          [33mclass[39m=[32m"lucide lucide-chevron-right size-3.5 shrink-0 rotate-90 transition-transform"[39m
+                          [33mfill[39m=[32m"none"[39m
+                          [33mheight[39m=[32m"24"[39m
+                          [33mstroke[39m=[32m"currentColor"[39m
+                          [33mstroke-linecap[39m=[32m"round"[39m
+                         ...
+ ❯ tests/provider-register.test.tsx:76:15
+     74|     await waitFor(() => {
+     75|       if (!container.querySelector('form[aria-label="Pin a model for t…
+     76|         throw new Error("the profile has not opened");
+       |               ^
+     77|       }
+     78|     });
+ ❯ runWithExpensiveErrorDiagnosticsDisabled ../../../../../console/node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback ../../../../../console/node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback ../../../../../console/node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/report-dashboards.test.tsx > Adoption > a department that asked nothing keeps its line and is listed as quiet
+AssertionError: expected [ …(2) ] to deeply equal [ [ 'finance', '0', '0', '0' ], …(1) ]
+
+- Expected
++ Received
+
+@@ -2,13 +2,15 @@
+    [
+      "finance",
+      "0",
+      "0",
+      "0",
++     "",
+    ],
+    [
+      "support",
+      "12",
+      "3",
+      "2",
++     "",
+    ],
+  ]
+
+ ❯ tests/report-dashboards.test.tsx:475:18
+    473|       [...row.querySelectorAll("td")].map((cell) => cell.textContent),
+    474|     );
+    475|     expect(rows).toEqual([
+       |                  ^
+    476|       ["finance", "0", "0", "0"],
+    477|       ["support", "12", "3", "2"],
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 135 passed (137)
+      Tests  2 failed | 2293 passed | 1 expected fail (2296)
+   Start at  23:20:38
+   Duration  277.73s (transform 55.40s, setup 49.40s, import 230.99s, tests 1729.39s, environment 341.86s)
+

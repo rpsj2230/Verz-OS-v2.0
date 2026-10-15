@@ -1,0 +1,38 @@
+### L3 saved filters never drawn
+restored byte-identically: True
+  FAILED tests/saved-filters.test.tsx: the control > a full list refuses the eleventh in words
+  FAILED tests/saved-filters.test.tsx: the control > a person never sees a number or a value in the control, only the names they wrote
+  FAILED tests/saved-filters.test.tsx: the control > a refused save says so in words, and saving is not offered for a list nobody has narrowed
+  FAILED tests/saved-filters.test.tsx: the control > a search is saved under a name, asked again with one press, and forgotten
+  FAILED tests/saved-filters.test.tsx: the control > applying a filter on a value nothing matches asks the route and says nothing a missing value would not
+  FAILED tests/saved-filters.test.tsx: the control > it is drawn for a known person and not at all without one
+  Tests  7 failed | 8 passed (15)
+### L4 saved key ignores the person
+restored byte-identically: True
+  FAILED tests/saved-filters.test.tsx: what is kept > a question saved by one person is read back for them and for nobody else
+  Tests  1 failed | 14 passed (15)
+### L5 no cap on saved filters
+restored byte-identically: True
+  FAILED tests/saved-filters.test.tsx: what is kept > saving under a name already kept replaces it, and an eleventh name is refused rather than dropping one
+  Tests  1 failed | 14 passed (15)
+### L6 entries not validated
+restored byte-identically: True
+  FAILED tests/saved-filters.test.tsx: what is kept > an entry that is not exactly what was written is dropped and the rest are kept
+  Tests  1 failed | 14 passed (15)
+### L11 applied filter not cut to the list
+restored byte-identically: True
+  FAILED tests/saved-filters.test.tsx: what is kept > a saved filter is cut to the columns and orders the list offers today
+  Tests  1 failed | 14 passed (15)
+### L12 an empty question can be saved
+restored byte-identically: True
+  FAILED tests/saved-filters.test.tsx: the control > a refused save says so in words, and saving is not offered for a list nobody has narrowed
+  FAILED tests/saved-filters.test.tsx: what is kept > nothing is saved without a name or without a question, and a name is cut at its limit
+  Tests  2 failed | 13 passed (15)
+### L13 drawer shows only the columns shown
+restored byte-identically: True
+  FAILED tests/entity-detail.test.tsx: the detail drawer > a row opens in a drawer showing every column, the hidden ones included, and nothing else
+  Tests  1 failed | 3 passed (4)
+### L14 drawer unmounted before focus returns
+restored byte-identically: True
+  SURVIVED (no test failed)
+  Tests  4 passed (4)

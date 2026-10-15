@@ -1,0 +1,26 @@
+
+ RUN  v4.1.11 /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/trial/w3-lists/console
+
+ ❯ tests/list-tools.test.tsx (123 tests | 1 failed) 88145ms
+     × every list names why it has no bulk act that changes something, and none is excused that has one 40ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/list-tools.test.tsx > every list the console draws > every list names why it has no bulk act that changes something, and none is excused that has one
+AssertionError: /subscribers has a list and no reason for having no bulk act: expected undefined to be defined
+ ❯ tests/list-tools.test.tsx:284:100
+    282|     for (const pattern of WITH_A_LIST) {
+    283|       if (!OFFERS_A_BULK_ACT.has(pattern)) {
+    284|         expect(NO_BULK_ACT[pattern], `${pattern} has a list and no rea…
+       |                                                                                                    ^
+    285|       }
+    286|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 122 passed (123)
+   Start at  23:46:33
+   Duration  91.25s (transform 11.66s, setup 220ms, import 1.20s, tests 88.14s, environment 1.46s)
+

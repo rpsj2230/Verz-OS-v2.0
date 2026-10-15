@@ -1,0 +1,227 @@
+
+ RUN  v4.1.11 /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/trial/w3-lists/console
+
+ ❯ tests/console-cleanup.test.tsx (138 tests | 9 failed) 89268ms
+     × /ask/documents/:documentId draws no internal identifier, no developer's word and no panel twice 224ms
+     × /channels/:name/:view draws no internal identifier, no developer's word and no panel twice 284ms
+     × /me draws no internal identifier, no developer's word and no panel twice 197ms
+     × /models/:provider/:view draws no internal identifier, no developer's word and no panel twice 416ms
+     × /storage draws no internal identifier, no developer's word and no panel twice 252ms
+     × /webhooks draws no internal identifier, no developer's word and no panel twice 166ms
+     × /webhooks/:id/:view draws no internal identifier, no developer's word and no panel twice 193ms
+     × every excuse still excuses something, and says why in a sentence 3ms
+     × each rule finds its own kind of text and none finds an ordinary sentence 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/console-cleanup.test.tsx > what an administrator does not need is not on any page > /ask/documents/:documentId draws no internal identifier, no developer's word and no panel twice
+AssertionError: /ask/documents/:documentId draws a heading twice: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "UNBROKENxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
++ ]
+
+ ❯ tests/console-cleanup.test.tsx:204:82
+    202|       const unexcused = broken.filter((one) => allowed[one.rule] === u…
+    203|       expect(unexcused, `${pattern} says what an administrator does no…
+    204|       expect(repeatedHeadings(mounted.root), `${pattern} draws a headi…
+       |                                                                                  ^
+    205|       if (mounted.root.querySelector("h1, h2") !== null) {
+    206|         HEADED.add(pattern);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  tests/console-cleanup.test.tsx > what an administrator does not need is not on any page > /channels/:name/:view draws no internal identifier, no developer's word and no panel twice
+AssertionError: /channels/:name/:view says what an administrator does not need: expected [ { rule: 'wording', …(1) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "rule": "wording",
++     "sentence": "/api/v1/channels/webhook/UNBROKENxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
++   },
++ ]
+
+ ❯ tests/console-cleanup.test.tsx:203:80
+    201|       }
+    202|       const unexcused = broken.filter((one) => allowed[one.rule] === u…
+    203|       expect(unexcused, `${pattern} says what an administrator does no…
+       |                                                                                ^
+    204|       expect(repeatedHeadings(mounted.root), `${pattern} draws a headi…
+    205|       if (mounted.root.querySelector("h1, h2") !== null) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  tests/console-cleanup.test.tsx > what an administrator does not need is not on any page > /me draws no internal identifier, no developer's word and no panel twice
+AssertionError: /me draws a heading twice: expected [ 'Channels' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "Channels",
++ ]
+
+ ❯ tests/console-cleanup.test.tsx:204:82
+    202|       const unexcused = broken.filter((one) => allowed[one.rule] === u…
+    203|       expect(unexcused, `${pattern} says what an administrator does no…
+    204|       expect(repeatedHeadings(mounted.root), `${pattern} draws a headi…
+       |                                                                                  ^
+    205|       if (mounted.root.querySelector("h1, h2") !== null) {
+    206|         HEADED.add(pattern);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  tests/console-cleanup.test.tsx > what an administrator does not need is not on any page > /models/:provider/:view draws no internal identifier, no developer's word and no panel twice
+AssertionError: /models/:provider/:view says what an administrator does not need: expected [ { rule: 'wording', …(1) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "rule": "wording",
++     "sentence": "An https link to the signed agreement, or leave it empty.",
++   },
++ ]
+
+ ❯ tests/console-cleanup.test.tsx:203:80
+    201|       }
+    202|       const unexcused = broken.filter((one) => allowed[one.rule] === u…
+    203|       expect(unexcused, `${pattern} says what an administrator does no…
+       |                                                                                ^
+    204|       expect(repeatedHeadings(mounted.root), `${pattern} draws a headi…
+    205|       if (mounted.root.querySelector("h1, h2") !== null) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  tests/console-cleanup.test.tsx > what an administrator does not need is not on any page > /storage draws no internal identifier, no developer's word and no panel twice
+AssertionError: /storage says what an administrator does not need: expected [ { rule: 'wording', …(1) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "rule": "wording",
++     "sentence": "http://UNBROKENxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:8333",
++   },
++ ]
+
+ ❯ tests/console-cleanup.test.tsx:203:80
+    201|       }
+    202|       const unexcused = broken.filter((one) => allowed[one.rule] === u…
+    203|       expect(unexcused, `${pattern} says what an administrator does no…
+       |                                                                                ^
+    204|       expect(repeatedHeadings(mounted.root), `${pattern} draws a headi…
+    205|       if (mounted.root.querySelector("h1, h2") !== null) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  tests/console-cleanup.test.tsx > what an administrator does not need is not on any page > /webhooks draws no internal identifier, no developer's word and no panel twice
+AssertionError: /webhooks says what an administrator does not need: expected [ { rule: 'wording', …(1) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "rule": "wording",
++     "sentence": "https://UNBROKENxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.example.test/",
++   },
++ ]
+
+ ❯ tests/console-cleanup.test.tsx:203:80
+    201|       }
+    202|       const unexcused = broken.filter((one) => allowed[one.rule] === u…
+    203|       expect(unexcused, `${pattern} says what an administrator does no…
+       |                                                                                ^
+    204|       expect(repeatedHeadings(mounted.root), `${pattern} draws a headi…
+    205|       if (mounted.root.querySelector("h1, h2") !== null) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  tests/console-cleanup.test.tsx > what an administrator does not need is not on any page > /webhooks/:id/:view draws no internal identifier, no developer's word and no panel twice
+AssertionError: /webhooks/:id/:view says what an administrator does not need: expected [ { rule: 'wording', …(1) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "rule": "wording",
++     "sentence": "https://UNBROKENxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.example.test/",
++   },
++ ]
+
+ ❯ tests/console-cleanup.test.tsx:203:80
+    201|       }
+    202|       const unexcused = broken.filter((one) => allowed[one.rule] === u…
+    203|       expect(unexcused, `${pattern} says what an administrator does no…
+       |                                                                                ^
+    204|       expect(repeatedHeadings(mounted.root), `${pattern} draws a headi…
+    205|       if (mounted.root.querySelector("h1, h2") !== null) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  tests/console-cleanup.test.tsx > what an administrator does not need is not on any page > every excuse still excuses something, and says why in a sentence
+AssertionError: /channels/:name/:view no longer draws route, so the excuse is stale: expected undefined to be true // Object.is equality
+
+- Expected:
+true
+
++ Received:
+undefined
+
+ ❯ tests/console-cleanup.test.tsx:218:119
+    216|       expect(PAGES[pattern], `${pattern} is excused but is not a page`…
+    217|       for (const [rule, reason] of Object.entries(byRule)) {
+    218|         expect(FOUND.get(pattern)?.has(rule as RuleId), `${pattern} no…
+       |                                                                                                                       ^
+    219|         expect((reason ?? "").split(" ").length, `${pattern}: the reas…
+    220|       }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+ FAIL  tests/console-cleanup.test.tsx > the rules refuse what they say they refuse and let plain words through > each rule finds its own kind of text and none finds an ordinary sentence
+AssertionError: expected [ { rule: 'wording', …(1) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "rule": "wording",
++     "sentence": "Coming soon: starting a rehearsal from here.",
++   },
++ ]
+
+ ❯ tests/console-cleanup.test.tsx:246:72
+    244|       expect(refusals([sentence]).map((one) => one.rule), sentence).to…
+    245|     }
+    246|     expect(refusals(["Coming soon: starting a rehearsal from here."]))…
+       |                                                                        ^
+    247|     expect(refusals(["It is coming soon to the console."]).map((one) =…
+    248|     expect(
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  9 failed | 129 passed (138)
+   Start at  00:17:23
+   Duration  91.54s (transform 9.22s, setup 336ms, import 959ms, tests 89.27s, environment 786ms)
+

@@ -1,0 +1,59 @@
+
+ RUN  v4.1.11 /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/trial/w3-lists/console
+
+ ❯ tests/list-tools.test.tsx (122 tests | 3 failed) 74446ms
+     × /logs offers every tool on every list it draws and says no number around it 510ms
+     × /requirement-checks offers every tool on every list it draws and says no number around it 341ms
+     × every list names why it has no bulk act that changes something, and none is excused that has one 55ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/list-tools.test.tsx > every list the console draws > /logs offers every tool on every list it draws and says no number around it
+AssertionError: /logs: the "Search the log" form cannot be saved: expected null not to be null
+ ❯ tests/list-tools.test.tsx:258:15
+    256|           within(form).queryByRole("button", { name: /Saved filters/ }…
+    257|           `${pattern}: the "${label}" form cannot be saved`,
+    258|         ).not.toBeNull();
+       |               ^
+    259|       }
+    260|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/list-tools.test.tsx > every list the console draws > /requirement-checks offers every tool on every list it draws and says no number around it
+AssertionError: /requirement-checks: /(?:\d|\})\s+of\s+(?:\d|\{)/i: expected 'Permissions1 of 2 recorded, 1 to chec…' not to match /(?:\d|\})\s+of\s+(?:\d|\{)/i
+
+- Expected:
+/(?:\d|\})\s+of\s+(?:\d|\{)/i
+
++ Received:
+"Permissions1 of 2 recorded, 1 to check.Search the requirementsAreaPermissions (1 to check)Models (1 to check)StandingEvery standingTo checkPassedFailed Saved filters Columns ExportRequirements in this areaRequirementProved byAutomatic checksNewest checkActions"
+
+ ❯ tests/list-tools.test.tsx:233:61
+    231|       const text = (around.textContent ?? "").replace(/\s+/g, " ");
+    232|       for (const phrasing of A_COUNT) {
+    233|         expect(text, `${pattern}: ${String(phrasing)}`).not.toMatch(ph…
+       |                                                             ^
+    234|       }
+    235|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/list-tools.test.tsx > every list the console draws > every list names why it has no bulk act that changes something, and none is excused that has one
+AssertionError: /storage has a list and no reason for having no bulk act: expected undefined to be defined
+ ❯ tests/list-tools.test.tsx:270:100
+    268|     for (const pattern of WITH_A_LIST) {
+    269|       if (!OFFERS_A_BULK_ACT.has(pattern)) {
+    270|         expect(NO_BULK_ACT[pattern], `${pattern} has a list and no rea…
+       |                                                                                                    ^
+    271|       }
+    272|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 119 passed (122)
+   Start at  23:44:48
+   Duration  77.56s (transform 9.62s, setup 279ms, import 1.02s, tests 74.45s, environment 1.52s)
+

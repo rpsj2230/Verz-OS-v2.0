@@ -1,0 +1,53 @@
+### B1 a table with no detail control
+restored byte-identically: True
+  FAILED tests/list-tools.test.tsx: every list the console draws > /referrals offers every tool on every list it draws and says no number around it
+  Tests  1 failed | 122 skipped (123)
+### B2 no export button on any table
+restored byte-identically: True
+  FAILED tests/list-tools.test.tsx: every list the console draws > /referrals offers every tool on every list it draws and says no number around it
+  Tests  1 failed | 122 skipped (123)
+### B3 a total drawn beside a list
+restored byte-identically: True
+  FAILED tests/list-tools.test.tsx: every list the console draws > /referrals offers every tool on every list it draws and says no number around it
+  Tests  1 failed | 122 skipped (123)
+### B4 a page that passes no export name
+restored byte-identically: True
+  FAILED tests/list-tools.test.tsx: every list the console draws > /referrals offers every tool on every list it draws and says no number around it
+  Tests  1 failed | 122 skipped (123)
+### B5 export file holds no rows
+restored byte-identically: True
+  FAILED tests/list-tools.test.tsx: every list the console draws > /referrals offers every tool on every list it draws and says no number around it
+  Tests  1 failed | 122 skipped (123)
+### B6 the shell never learns who is signed in
+restored byte-identically: True
+  FAILED tests/list-tools.test.tsx: every list the console draws > /audit offers every tool on every list it draws and says no number around it
+  Tests  1 failed | 122 skipped (123)
+### B7 audit filters lose saved filters
+restored byte-identically: True
+  FAILED tests/list-tools.test.tsx: every list the console draws > /audit offers every tool on every list it draws and says no number around it
+  Tests  1 failed | 122 skipped (123)
+### C1 a person's id printed again on a rule
+restored byte-identically: True
+  FAILED tests/console-cleanup.test.tsx: what an administrator does not need is not on any page > /rules draws no internal identifier, no developer's word and no panel twice
+  Tests  1 failed | 137 skipped (138)
+### C2 a card repeats its page title
+restored byte-identically: True
+  FAILED tests/console-cleanup.test.tsx: what an administrator does not need is not on any page > /subscribers draws no internal identifier, no developer's word and no panel twice
+  Tests  1 failed | 137 skipped (138)
+### C3 developer wording back on Records
+restored byte-identically: True
+  FAILED tests/console-cleanup.test.tsx: what an administrator does not need is not on any page > /records/:entity draws no internal identifier, no developer's word and no panel twice
+  Tests  1 failed | 137 skipped (138)
+### C4 the sweep refuses nothing
+restored byte-identically: True
+  FAILED tests/console-cleanup.test.tsx: the rules refuse what they say they refuse and let plain words through > each rule finds its own kind of text and none finds an ordinary sentence
+  Tests  1 failed | 1 passed | 136 skipped (138)
+Traceback (most recent call last):
+  File "/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/trial/w3-lists/.w3-backup/mut.py", line 11, in <module>
+    before = open(full, "rb").read()
+             ~~~~^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/trial/w3-lists/console/docs/console-cleanup.md'
+### C6 the document's id printed beside its title
+restored byte-identically: True
+  FAILED tests/console-cleanup.test.tsx: what an administrator does not need is not on any page > /ask/documents/:documentId draws no internal identifier, no developer's word and no panel twice
+  Tests  1 failed | 137 skipped (138)

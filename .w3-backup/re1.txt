@@ -1,0 +1,572 @@
+
+ RUN  v4.1.11 /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/trial/w3-lists/console
+
+ ❯ tests/lark-connect.test.tsx (15 tests | 1 failed) 38036ms
+     × the wiki's step offers the spaces the test saw and declares the one given a reach, confirmed 4488ms
+stderr | tests/automation-gallery.test.tsx > the gallery on the Automations tab > every template the API sent is drawn in its order, with its schedule and what it offers this reader
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+
+ ❯ tests/automation-gallery.test.tsx (9 tests | 1 failed) 46427ms
+     × every template the API sent is drawn in its order, with its schedule and what it offers this reader 19389ms
+ ❯ tests/agent-memory.test.tsx (8 tests | 1 failed) 9722ms
+     × every change is drawn with its diff and what caused it 4679ms
+ ❯ tests/agent-figures.test.tsx (18 tests | 1 failed) 14544ms
+     × a part the API did not send is left out, and a header sent none of them has no role line 4748ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/agent-figures.test.tsx > the header's role line > a part the API did not send is left out, and a header sent none of them has no role line
+Error: the page has not arrived
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"group/sidebar-wrapper flex min-h-svh w-full has-data-[variant=inset]:bg-sidebar"[39m
+        [33mdata-slot[39m=[32m"sidebar-wrapper"[39m
+        [33mstyle[39m=[32m"--sidebar-width: 16rem; --sidebar-width-icon: 3rem;"[39m
+      [36m>[39m
+        [36m<a[39m
+          [33mclass[39m=[32m"skip-link"[39m
+          [33mhref[39m=[32m"#main"[39m
+        [36m>[39m
+          [0mSkip to content[0m
+        [36m</a>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"group peer hidden text-sidebar-foreground md:block"[39m
+          [33mdata-collapsible[39m=[32m""[39m
+          [33mdata-side[39m=[32m"left"[39m
+          [33mdata-slot[39m=[32m"sidebar"[39m
+          [33mdata-state[39m=[32m"expanded"[39m
+          [33mdata-variant[39m=[32m"sidebar"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear group-data-[collapsible=offcanvas]:w-0 group-data-[side=right]:rotate-180 group-data-[collapsible=icon]:w-(--sidebar-width-icon)"[39m
+            [33mdata-slot[39m=[32m"sidebar-gap"[39m
+          [36m/>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l"[39m
+            [33mdata-side[39m=[32m"left"[39m
+            [33mdata-slot[39m=[32m"sidebar-container"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex size-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border"[39m
+              [33mdata-sidebar[39m=[32m"sidebar"[39m
+              [33mdata-slot[39m=[32m"sidebar-inner"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"flex flex-col gap-2 p-2 border-b border-sidebar-border px-4 py-3"[39m
+                [33mdata-sidebar[39m=[32m"header"[39m
+                [33mdata-slot[39m=[32m"sidebar-header"[39m
+              [36m>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"flex items-center gap-2"[39m
+                [36m>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"min-w-0"[39m
+                  [36m>[39m
+                    [36m<div[39m
+                      [33mclass[39m=[32m"truncate font-heading text-sm font-semibold text-foreground"[39m
+                    [36m>[39m
+                      [0mCompany Brain[0m
+                    [36m</div>[39m
+                  [36m</div>[39m
+                [36m</div>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"no-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden"[39m
+                [33mdata-sidebar[39m=[32m"content"[39m
+                [33mdata-slot[39m=[32m"sidebar-content"[39m
+              [36m>[39m
+                [36m<nav[39m
+                  [33maria-label[39m=[32m"Sections"[39m
+                  [33mclass[39m=[32m"flex flex-col gap-0.5 py-2"[39m
+                [36m>[39m
+                  [36m<p[39m
+                    [33mclass[39m=[32m"px-4 text-xs text-muted-foreground"[39m
+                  [36m>[39m
+                    [0mThe rest of the menu could not be loaded, so only the screens about your own work are listed.[0m
+                  [36m</p>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"relative flex w-full min-w-0 flex-col p-2 py-1"[39m
+                    [33mdata-sidebar[39m=[32m"group"[39m
+                    [33mdata-slot[39m=[32m"sidebar-group"[39m
+                  [36m>[39m
+                    [36m<h2[39m
+                      [33mclass[39m=[32m"m-0 text-xs font-normal"[39m
+                      [33mid[39m=[32m"nav-use"[39m
+                    [36m>[39m
+                      [36m<button[39m
+                        [33maria-controls[39m=[32m"nav-use-entries"[39m
+                        [33maria-expanded[39m=[32m"true"[39m
+                        [33mclass[39m=[32m"flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left font-mono text-xs tracking-wide text-muted-foreground uppercase hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-ring md:min-h-8"[39m
+                        [33mtype[39m=[32m"button"[39m
+                      [36m>[39m
+                        [36m<svg[39m
+                          [33maria-hidden[39m=[32m"true"[39m
+                          [33mclass[39m=[32m"lucide lucide-message-square size-4 shrink-0"[39m
+                          [33mfill[39m=[32m"none"[39m
+                          [33mheight[39m=[32m"24"[39m
+                          [33mstroke[39m=[32m"currentColor"[39m
+                          [33mstroke-linecap[39m=[32m"round"[39m
+                          [33mstroke-linejoin[39m=[32m"round"[39m
+                          [33mstroke-width[39m=[32m"2"[39m
+                          [33mviewBox[39m=[32m"0 0 24 24"[39m
+                          [33mwidth[39m=[32m"24"[39m
+                          [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                        [36m>[39m
+                          [36m<path[39m
+                            [33md[39m=[32m"M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"[39m
+                          [36m/>[39m
+                        [36m</svg>[39m
+                        [36m<span[39m
+                          [33mclass[39m=[32m"flex-1"[39m
+                        [36m>[39m
+                          [0mUse[0m
+                        [36m</span>[39m
+                        [36m<svg[39m
+                          [33maria-hidden[39m=[32m"true"[39m
+                          [33mclass[39m=[32m"lucide lucide-chevron-right size-3.5 shrink-0 rotate-90 transition-transform"[39m
+                          [33mfill[39m=[32m"none"[39m
+                          [33mheight[39m=[32m"24"[39m
+                          [33mstroke[39m=[32m"currentColor"[39m
+                          [33mstroke-linecap[39m=[32m"round"[39m
+                         ...
+ ❯ tests/agent-figures.test.tsx:157:13
+    155|   await waitFor(() => {
+    156|     if (!container.querySelector("h1")) {
+    157|       throw new Error("the page has not arrived");
+       |             ^
+    158|     }
+    159|   });
+ ❯ runWithExpensiveErrorDiagnosticsDisabled ../../../../../console/node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback ../../../../../console/node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback ../../../../../console/node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/agent-memory.test.tsx > the Memory section > every change is drawn with its diff and what caused it
+Error: the Memory section has not arrived
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"group/sidebar-wrapper flex min-h-svh w-full has-data-[variant=inset]:bg-sidebar"[39m
+        [33mdata-slot[39m=[32m"sidebar-wrapper"[39m
+        [33mstyle[39m=[32m"--sidebar-width: 16rem; --sidebar-width-icon: 3rem;"[39m
+      [36m>[39m
+        [36m<a[39m
+          [33mclass[39m=[32m"skip-link"[39m
+          [33mhref[39m=[32m"#main"[39m
+        [36m>[39m
+          [0mSkip to content[0m
+        [36m</a>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"group peer hidden text-sidebar-foreground md:block"[39m
+          [33mdata-collapsible[39m=[32m""[39m
+          [33mdata-side[39m=[32m"left"[39m
+          [33mdata-slot[39m=[32m"sidebar"[39m
+          [33mdata-state[39m=[32m"expanded"[39m
+          [33mdata-variant[39m=[32m"sidebar"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear group-data-[collapsible=offcanvas]:w-0 group-data-[side=right]:rotate-180 group-data-[collapsible=icon]:w-(--sidebar-width-icon)"[39m
+            [33mdata-slot[39m=[32m"sidebar-gap"[39m
+          [36m/>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l"[39m
+            [33mdata-side[39m=[32m"left"[39m
+            [33mdata-slot[39m=[32m"sidebar-container"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex size-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border"[39m
+              [33mdata-sidebar[39m=[32m"sidebar"[39m
+              [33mdata-slot[39m=[32m"sidebar-inner"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"flex flex-col gap-2 p-2 border-b border-sidebar-border px-4 py-3"[39m
+                [33mdata-sidebar[39m=[32m"header"[39m
+                [33mdata-slot[39m=[32m"sidebar-header"[39m
+              [36m>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"flex items-center gap-2"[39m
+                [36m>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"min-w-0"[39m
+                  [36m>[39m
+                    [36m<div[39m
+                      [33mclass[39m=[32m"truncate font-heading text-sm font-semibold text-foreground"[39m
+                    [36m>[39m
+                      [0mCompany Brain[0m
+                    [36m</div>[39m
+                  [36m</div>[39m
+                [36m</div>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"no-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden"[39m
+                [33mdata-sidebar[39m=[32m"content"[39m
+                [33mdata-slot[39m=[32m"sidebar-content"[39m
+              [36m>[39m
+                [36m<nav[39m
+                  [33maria-label[39m=[32m"Sections"[39m
+                  [33mclass[39m=[32m"flex flex-col gap-0.5 py-2"[39m
+                [36m>[39m
+                  [36m<p[39m
+                    [33mclass[39m=[32m"px-4 text-xs text-muted-foreground"[39m
+                  [36m>[39m
+                    [0mThe rest of the menu could not be loaded, so only the screens about your own work are listed.[0m
+                  [36m</p>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"relative flex w-full min-w-0 flex-col p-2 py-1"[39m
+                    [33mdata-sidebar[39m=[32m"group"[39m
+                    [33mdata-slot[39m=[32m"sidebar-group"[39m
+                  [36m>[39m
+                    [36m<h2[39m
+                      [33mclass[39m=[32m"m-0 text-xs font-normal"[39m
+                      [33mid[39m=[32m"nav-use"[39m
+                    [36m>[39m
+                      [36m<button[39m
+                        [33maria-controls[39m=[32m"nav-use-entries"[39m
+                        [33maria-expanded[39m=[32m"true"[39m
+                        [33mclass[39m=[32m"flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left font-mono text-xs tracking-wide text-muted-foreground uppercase hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-ring md:min-h-8"[39m
+                        [33mtype[39m=[32m"button"[39m
+                      [36m>[39m
+                        [36m<svg[39m
+                          [33maria-hidden[39m=[32m"true"[39m
+                          [33mclass[39m=[32m"lucide lucide-message-square size-4 shrink-0"[39m
+                          [33mfill[39m=[32m"none"[39m
+                          [33mheight[39m=[32m"24"[39m
+                          [33mstroke[39m=[32m"currentColor"[39m
+                          [33mstroke-linecap[39m=[32m"round"[39m
+                          [33mstroke-linejoin[39m=[32m"round"[39m
+                          [33mstroke-width[39m=[32m"2"[39m
+                          [33mviewBox[39m=[32m"0 0 24 24"[39m
+                          [33mwidth[39m=[32m"24"[39m
+                          [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                        [36m>[39m
+                          [36m<path[39m
+                            [33md[39m=[32m"M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"[39m
+                          [36m/>[39m
+                        [36m</svg>[39m
+                        [36m<span[39m
+                          [33mclass[39m=[32m"flex-1"[39m
+                        [36m>[39m
+                          [0mUse[0m
+                        [36m</span>[39m
+                        [36m<svg[39m
+                          [33maria-hidden[39m=[32m"true"[39m
+                          [33mclass[39m=[32m"lucide lucide-chevron-right size-3.5 shrink-0 rotate-90 transition-transform"[39m
+                          [33mfill[39m=[32m"none"[39m
+                          [33mheight[39m=[32m"24"[39m
+                          [33mstroke[39m=[32m"currentColor"[39m
+                          [33mstroke-linecap[39m=[32m"round"[39m
+                         ...
+ ❯ tests/agent-memory.test.tsx:104:13
+    102|   await waitFor(() => {
+    103|     if (!container.querySelector('[data-slot="agent-memory"]')) {
+    104|       throw new Error("the Memory section has not arrived");
+       |             ^
+    105|     }
+    106|   });
+ ❯ runWithExpensiveErrorDiagnosticsDisabled ../../../../../console/node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback ../../../../../console/node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback ../../../../../console/node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/automation-gallery.test.tsx > the gallery on the Automations tab > every template the API sent is drawn in its order, with its schedule and what it offers this reader
+Error: the workspace has not arrived
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"group/sidebar-wrapper flex min-h-svh w-full has-data-[variant=inset]:bg-sidebar"[39m
+        [33mdata-slot[39m=[32m"sidebar-wrapper"[39m
+        [33mstyle[39m=[32m"--sidebar-width: 16rem; --sidebar-width-icon: 3rem;"[39m
+      [36m>[39m
+        [36m<a[39m
+          [33mclass[39m=[32m"skip-link"[39m
+          [33mhref[39m=[32m"#main"[39m
+        [36m>[39m
+          [0mSkip to content[0m
+        [36m</a>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"group peer hidden text-sidebar-foreground md:block"[39m
+          [33mdata-collapsible[39m=[32m""[39m
+          [33mdata-side[39m=[32m"left"[39m
+          [33mdata-slot[39m=[32m"sidebar"[39m
+          [33mdata-state[39m=[32m"expanded"[39m
+          [33mdata-variant[39m=[32m"sidebar"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear group-data-[collapsible=offcanvas]:w-0 group-data-[side=right]:rotate-180 group-data-[collapsible=icon]:w-(--sidebar-width-icon)"[39m
+            [33mdata-slot[39m=[32m"sidebar-gap"[39m
+          [36m/>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l"[39m
+            [33mdata-side[39m=[32m"left"[39m
+            [33mdata-slot[39m=[32m"sidebar-container"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex size-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border"[39m
+              [33mdata-sidebar[39m=[32m"sidebar"[39m
+              [33mdata-slot[39m=[32m"sidebar-inner"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"flex flex-col gap-2 p-2 border-b border-sidebar-border px-4 py-3"[39m
+                [33mdata-sidebar[39m=[32m"header"[39m
+                [33mdata-slot[39m=[32m"sidebar-header"[39m
+              [36m>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"flex items-center gap-2"[39m
+                [36m>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"min-w-0"[39m
+                  [36m>[39m
+                    [36m<div[39m
+                      [33mclass[39m=[32m"truncate font-heading text-sm font-semibold text-foreground"[39m
+                    [36m>[39m
+                      [0mCompany Brain[0m
+                    [36m</div>[39m
+                  [36m</div>[39m
+                [36m</div>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"no-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden"[39m
+                [33mdata-sidebar[39m=[32m"content"[39m
+                [33mdata-slot[39m=[32m"sidebar-content"[39m
+              [36m>[39m
+                [36m<nav[39m
+                  [33maria-label[39m=[32m"Sections"[39m
+                  [33mclass[39m=[32m"flex flex-col gap-0.5 py-2"[39m
+                [36m>[39m
+                  [36m<p[39m
+                    [33mclass[39m=[32m"px-4 text-xs text-muted-foreground"[39m
+                  [36m>[39m
+                    [0mThe rest of the menu could not be loaded, so only the screens about your own work are listed.[0m
+                  [36m</p>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"relative flex w-full min-w-0 flex-col p-2 py-1"[39m
+                    [33mdata-sidebar[39m=[32m"group"[39m
+                    [33mdata-slot[39m=[32m"sidebar-group"[39m
+                  [36m>[39m
+                    [36m<h2[39m
+                      [33mclass[39m=[32m"m-0 text-xs font-normal"[39m
+                      [33mid[39m=[32m"nav-use"[39m
+                    [36m>[39m
+                      [36m<button[39m
+                        [33maria-controls[39m=[32m"nav-use-entries"[39m
+                        [33maria-expanded[39m=[32m"true"[39m
+                        [33mclass[39m=[32m"flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left font-mono text-xs tracking-wide text-muted-foreground uppercase hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-ring md:min-h-8"[39m
+                        [33mtype[39m=[32m"button"[39m
+                      [36m>[39m
+                        [36m<svg[39m
+                          [33maria-hidden[39m=[32m"true"[39m
+                          [33mclass[39m=[32m"lucide lucide-message-square size-4 shrink-0"[39m
+                          [33mfill[39m=[32m"none"[39m
+                          [33mheight[39m=[32m"24"[39m
+                          [33mstroke[39m=[32m"currentColor"[39m
+                          [33mstroke-linecap[39m=[32m"round"[39m
+                          [33mstroke-linejoin[39m=[32m"round"[39m
+                          [33mstroke-width[39m=[32m"2"[39m
+                          [33mviewBox[39m=[32m"0 0 24 24"[39m
+                          [33mwidth[39m=[32m"24"[39m
+                          [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                        [36m>[39m
+                          [36m<path[39m
+                            [33md[39m=[32m"M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"[39m
+                          [36m/>[39m
+                        [36m</svg>[39m
+                        [36m<span[39m
+                          [33mclass[39m=[32m"flex-1"[39m
+                        [36m>[39m
+                          [0mUse[0m
+                        [36m</span>[39m
+                        [36m<svg[39m
+                          [33maria-hidden[39m=[32m"true"[39m
+                          [33mclass[39m=[32m"lucide lucide-chevron-right size-3.5 shrink-0 rotate-90 transition-transform"[39m
+                          [33mfill[39m=[32m"none"[39m
+                          [33mheight[39m=[32m"24"[39m
+                          [33mstroke[39m=[32m"currentColor"[39m
+                          [33mstroke-linecap[39m=[32m"round"[39m
+                         ...
+ ❯ tests/automation-gallery.test.tsx:174:13
+    172|   await waitFor(() => {
+    173|     if (!container.querySelector('[data-slot="detail-header"] h1')) {
+    174|       throw new Error("the workspace has not arrived");
+       |             ^
+    175|     }
+    176|   });
+ ❯ runWithExpensiveErrorDiagnosticsDisabled ../../../../../console/node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback ../../../../../console/node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback ../../../../../console/node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/lark-connect.test.tsx > the knowledge steps > the wiki's step offers the spaces the test saw and declares the one given a reach, confirmed
+AssertionError: expected 'Step 1 of 6' to be 'Step 1 of 7' // Object.is equality
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body[39m
+    [33mdata-scroll-locked[39m=[32m"1"[39m
+    [33mstyle[39m=[32m"pointer-events: none;"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33maria-hidden[39m=[32m"true"[39m
+      [33mdata-aria-hidden[39m=[32m"true"[39m
+      [33mdata-radix-focus-guard[39m=[32m""[39m
+      [33mstyle[39m=[32m"outline: none; opacity: 0; position: fixed; pointer-events: none;"[39m
+      [33mtabindex[39m=[32m"0"[39m
+    [36m/>[39m
+    [36m<div[39m
+      [33maria-hidden[39m=[32m"true"[39m
+      [33mdata-aria-hidden[39m=[32m"true"[39m
+    [36m/>[39m
+    [36m<div[39m
+      [33maria-hidden[39m=[32m"true"[39m
+      [33mclass[39m=[32m"fixed inset-0 isolate z-50 bg-scrim duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0"[39m
+      [33mdata-aria-hidden[39m=[32m"true"[39m
+      [33mdata-slot[39m=[32m"dialog-overlay"[39m
+      [33mdata-state[39m=[32m"open"[39m
+      [33mstyle[39m=[32m"pointer-events: auto;"[39m
+    [36m/>[39m
+    [36m<div[39m
+      [33maria-describedby[39m=[32m"radix-«r4g»"[39m
+      [33maria-labelledby[39m=[32m"radix-«r4f»"[39m
+      [33mclass[39m=[32m"fixed top-1/2 left-1/2 z-50 [display:grid] w-full -translate-x-1/2 -translate-y-1/2 rounded-xl bg-popover text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-hidden data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 max-h-[calc(100dvh-1rem)] max-w-[calc(100%-1rem)] grid-cols-[minmax(0,1fr)] gap-4 overflow-x-hidden overflow-y-auto p-4 sm:max-h-[calc(100dvh-4rem)] sm:max-w-4xl sm:p-6"[39m
+      [33mdata-slot[39m=[32m"flow-dialog"[39m
+      [33mdata-state[39m=[32m"open"[39m
+      [33mid[39m=[32m"radix-«r4e»"[39m
+      [33mrole[39m=[32m"dialog"[39m
+      [33mstyle[39m=[32m"pointer-events: auto;"[39m
+      [33mtabindex[39m=[32m"-1"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex flex-col gap-2 pr-10"[39m
+        [33mdata-slot[39m=[32m"dialog-header"[39m
+      [36m>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"m-0 font-heading text-foreground text-base font-semibold"[39m
+          [33mdata-slot[39m=[32m"dialog-title"[39m
+          [33mid[39m=[32m"radix-«r4f»"[39m
+        [36m>[39m
+          [0mConnect Lark[0m
+        [36m</h2>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"m-0 text-sm text-muted-foreground *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground"[39m
+          [33mdata-slot[39m=[32m"dialog-description"[39m
+          [33mid[39m=[32m"radix-«r4g»"[39m
+        [36m>[39m
+          [0mOne screen at a time. Close it whenever you need to: it keeps your place, but not the App Secret.[0m
+        [36m</p>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex min-w-0 flex-col gap-4"[39m
+        [33mdata-slot[39m=[32m"connect-flow"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex min-w-0 flex-col gap-2"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex items-center justify-between gap-3"[39m
+          [36m>[39m
+            [36m<p[39m
+              [33maria-live[39m=[32m"polite"[39m
+              [33mclass[39m=[32m"m-0 text-[12.5px] font-semibold text-ink"[39m
+            [36m>[39m
+              [0mStep 1 of 6[0m
+            [36m</p>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33maria-hidden[39m=[32m"true"[39m
+            [33mclass[39m=[32m"h-1.5 w-full overflow-hidden rounded-full bg-sunk"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"h-full rounded-full bg-brand"[39m
+              [33mstyle[39m=[32m"width: 17%;"[39m
+            [36m/>[39m
+          [36m</div>[39m
+          [36m<ol[39m
+            [33maria-label[39m=[32m"Steps"[39m
+            [33mclass[39m=[32m"m-0 flex list-none flex-wrap gap-1.5 p-0"[39m
+          [36m>[39m
+            [36m<li>[39m
+              [36m<button[39m
+                [33maria-current[39m=[32m"step"[39m
+                [33maria-label[39m=[32m"Step 1 of 6: Choose what the Lark app is for"[39m
+                [33mclass[39m=[32m"inline-flex size-11 items-center justify-center rounded-full border text-[12px] font-semibold sm:size-7 border-brand bg-brand text-brand-ink"[39m
+                [33mtitle[39m=[32m"Choose what the Lark app is for"[39m
+                [33mtype[39m=[32m"button"[39m
+              [36m>[39m
+                [0m1[0m
+              [36m</button>[39m
+            [36m</li>[39m
+            [36m<li>[39m
+              [36m<button[39m
+                [33maria-label[39m=[32m"Step 2 of 6: Create the app in Lark"[39m
+                [33mclass[39m=[32m"inline-flex size-11 items-center justify-center rounded-full border text-[12px] font-semibold sm:size-7 border-line bg-panel text-body hover:bg-sunk"[39m
+                [33mtitle[39m=[32m"Create the app in Lark"[39m
+                [33mtype[39m=[32m"button"[39m
+              [36m>[39m
+                [0m2[0m
+              [36m</button>[39m
+            [36m</li>[39m
+            [36m<li>[39m
+              [36m<button[39m
+                [33maria-label[39m=[32m"Step 3 of 6: Paste the App ID and App Secret"[39m
+                [33mclass[39m=[32m"inline-flex size-11 items-center justify-center rounded-full border text-[12px] font-semibold sm:size-7 border-line bg-panel text-body hover:bg-sunk"[39m
+                [33mtitle[39m=[32m"Paste the App ID and App Secret"[39m
+                [33mtype[39m=[32m"button"[39m
+              [36m>[39m
+                [0m3[0m
+              [36m</button>[39m
+            [36m</li>[39m
+            [36m<li>[39m
+              [36m<button[39m
+                [33maria-label[39m=[32m"Step 4 of 6: Add the permissions"[39m
+                [33mclass[39m=[32m"inline-flex size-11 items-center justify-center rounded-full border text-[12px] font-semibold sm:size-7 border-line bg-panel text-body hover:bg-sunk"[39m
+                [33mtitle[39m=[32m"Add the permissions"[39m
+                [33mtype[39m=[32m"button"[39m
+              [36m>[39m
+                [0m4[0m
+              [36m</button>[39m
+            [36m</li>[39m
+            [36m<li>[39m
+              [36m<button[39m
+                [33maria-label[39m=[32m"Step 5 of 6: Release a version and have it approved"[39m
+                [33mclass[39m=[32m"inline-flex size-11 items-center justify-center rounded-full border text-[12px] font-semibold sm:size-7 border-line bg-panel text-body hover:bg-sunk"[39m
+                [33mtitle[39m=[32m"Release a version and have it approved"[39m
+       ...
+
+Expected: "Step 1 of 7"
+Received: "Step 1 of 6"
+
+ ❯ tests/lark-connect.test.tsx:685:26
+    683|     const { idp } = await openFlow({ at: "choose", add: ["knowledge_wi…
+    684|     await waitFor(() => {
+    685|       expect(stepLine()).toBe("Step 1 of 7");
+       |                          ^
+    686|     });
+    687|     fireEvent.click(screen.getByRole("button", { name: /Step 3 of 7/ }…
+ ❯ runWithExpensiveErrorDiagnosticsDisabled ../../../../../console/node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback ../../../../../console/node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback ../../../../../console/node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  4 failed | 8 passed (12)
+      Tests  4 failed | 232 passed (236)
+   Start at  01:13:48
+   Duration  117.89s (transform 61.29s, setup 8.32s, import 87.15s, tests 283.25s, environment 47.79s)
+

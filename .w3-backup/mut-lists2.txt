@@ -1,0 +1,16 @@
+### C5 an excuse not argued in the record
+restored byte-identically: True
+  FAILED tests/console-cleanup.test.tsx: every removal is recorded with its reason > docs/console-cleanup.md names what was removed, from where and why, and every excuse here is argued there
+  Tests  1 failed | 137 skipped (138)
+### B8 a list with no reason for having no bulk act
+restored byte-identically: True
+  FAILED tests/list-tools.test.tsx: every list the console draws > every list names why it has no bulk act that changes something, and none is excused that has one
+  Tests  1 failed | 122 passed (123)
+### B9 an act that changes something that nobody listed
+restored byte-identically: True
+  FAILED tests/list-tools.test.tsx: every list the console draws > every list names why it has no bulk act that changes something, and none is excused that has one
+  Tests  1 failed | 122 passed (123)
+### B10 two exports of the log
+restored byte-identically: True
+  FAILED tests/list-tools.test.tsx: every list the console draws > /logs offers every tool on every list it draws and says no number around it
+  Tests  1 failed | 122 passed (123)

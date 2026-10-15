@@ -1,0 +1,74 @@
+............................................................F........... [ 40%]
+.......F................................................................ [ 80%]
+...................................                                      [100%]
+=================================== FAILURES ===================================
+__________ test_the_screen_lists_every_feature_off_on_a_fresh_install __________
+
+served = (<starlette.testclient.TestClient object at 0x116d0ed50>, <tests.fixtures.console_http.Stub object at 0x116acc190>)
+
+    def test_the_screen_lists_every_feature_off_on_a_fresh_install(
+        served: tuple[TestClient, Stub],
+    ) -> None:
+        """Delete this and the screen can draw a feature nobody switched as on."""
+        client, _ = served
+        body = get(client, "u_admin", FEATURES_PATH).json()
+    
+>       assert [one["name"] for one in body["features"]] == [one.name for one in FEATURES]
+                                       ^^^^^^^^^^^^^^^^
+E       KeyError: 'features'
+
+tests/unit/test_features.py:210: KeyError
+---------------------------- Captured stdout setup -----------------------------
+2026-10-15 01:02:03 [info     ] starting                       commit=unknown env=development
+2026-10-15 01:02:03 [warning  ] in-app parse budget            finding='the door admits application/pdf up to 50 MiB, a declared cost of 300 MiB, and a document read inside the application may cost 20 MiB (1536 MiB limit, 1416 MiB held before any read, 6 processes), so the largest such file it can read is 3.3 MiB and a larger one is refused as too large; give the application container more memory, or read large documents in the parse worker'
+2026-10-15 01:02:03 [info     ] no secrets vault configured
+2026-10-15 01:02:03 [info     ] template signing key not held  state=no_vault
+2026-10-15 01:02:03 [info     ] join-key pepper not held       problem=no_vault
+2026-10-15 01:02:04 [info     ] tool registry frozen           rows=False tools=2
+2026-10-15 01:02:04 [info     ] model drivers built            egress_detector=rules ladder=none providers=['anthropic', 'deepseek', 'local', 'moonshot', 'openai']
+----------------------------- Captured stdout call -----------------------------
+2026-10-15 01:02:35 [warning  ] request deadline exceeded      path=/api/v1/install/features seconds=31.076020790962502 trace_id=3df9f603220a46b0988b186ba844cf35 trace_id_supplied=False
+--------------------------- Captured stdout teardown ---------------------------
+2026-10-15 01:02:36 [info     ] shutting down
+_ test_an_install_with_no_bucket_reader_is_told_nobody_looked_rather_than_nothing_copied _
+
+client = <starlette.testclient.TestClient object at 0x116d0ed50>
+
+    def test_an_install_with_no_bucket_reader_is_told_nobody_looked_rather_than_nothing_copied(
+        client: TestClient,
+    ) -> None:
+        """**The rule this whole group turns on.** A recovery panel built from no observations
+        answers `NOTHING_COPIED`, which is a statement about the install, and on a process holding
+        no reader it is a statement nobody established. Nothing copied and nobody looked are
+        different facts and the difference is the entire value of a screen somebody reads before
+        deciding whether to worry.
+    
+        The assertion is that there is no panel at all rather than that the panel says something
+        cautious, because a panel is the thing a renderer draws rows from and a cautious panel with
+        three empty coverage rows is the reassuring blank this screen exists to refuse.
+    
+        Delete this and the route may be changed to build a panel out of empty sequences, which
+        renders as an install whose backups have never run and reads as measured."""
+        response = get(client, "u_wide", RECOVERY_PATH)
+    
+>       assert response.status_code == 200
+E       assert 503 == 200
+E        +  where 503 = <Response [503 Service Unavailable]>.status_code
+
+tests/unit/test_install_routes.py:464: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+2026-10-15 01:06:30 [info     ] starting                       commit=unknown env=development
+2026-10-15 01:06:30 [warning  ] in-app parse budget            finding='the door admits application/pdf up to 50 MiB, a declared cost of 300 MiB, and a document read inside the application may cost 20 MiB (1536 MiB limit, 1416 MiB held before any read, 6 processes), so the largest such file it can read is 3.3 MiB and a larger one is refused as too large; give the application container more memory, or read large documents in the parse worker'
+2026-10-15 01:06:30 [info     ] no secrets vault configured
+2026-10-15 01:06:30 [info     ] template signing key not held  state=no_vault
+2026-10-15 01:06:30 [info     ] join-key pepper not held       problem=no_vault
+2026-10-15 01:06:31 [info     ] tool registry frozen           rows=False tools=2
+2026-10-15 01:06:31 [info     ] model drivers built            egress_detector=rules ladder=none providers=['anthropic', 'deepseek', 'local', 'moonshot', 'openai']
+----------------------------- Captured stdout call -----------------------------
+2026-10-15 01:09:36 [warning  ] request deadline exceeded      path=/api/v1/install/recovery seconds=185.42078195803333 trace_id=ca70f3e199684ddb9ca6d3314a655a24 trace_id_supplied=False
+--------------------------- Captured stdout teardown ---------------------------
+2026-10-15 01:09:40 [info     ] shutting down
+=========================== short test summary info ============================
+FAILED tests/unit/test_features.py::test_the_screen_lists_every_feature_off_on_a_fresh_install
+FAILED tests/unit/test_install_routes.py::test_an_install_with_no_bucket_reader_is_told_nobody_looked_rather_than_nothing_copied
+2 failed, 177 passed, 1 warning in 706.85s (0:11:46)

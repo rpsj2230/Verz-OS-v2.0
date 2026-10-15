@@ -1,0 +1,9 @@
+
+ RUN  v4.1.11 /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/trial/w3-lists/console
+
+
+ Test Files  5 passed (5)
+      Tests  768 passed (768)
+   Start at  01:21:35
+   Duration  203.71s (transform 42.93s, setup 2.84s, import 6.89s, tests 506.16s, environment 8.64s)
+

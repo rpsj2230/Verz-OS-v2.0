@@ -1,0 +1,38 @@
+
+ RUN  v4.1.11 /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/trial/w3-lists/console
+
+ ❯ tests/console-cleanup.test.tsx (138 tests | 1 failed) 121198ms
+     × each rule finds its own kind of text and none finds an ordinary sentence 20ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/console-cleanup.test.tsx > the rules refuse what they say they refuse and let plain words through > each rule finds its own kind of text and none finds an ordinary sentence
+AssertionError: expected [ { rule: 'wording', …(1) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "rule": "wording",
++     "sentence": "Coming soon: starting a rehearsal from here.",
++   },
++ ]
+
+ ❯ tests/console-cleanup.test.tsx:270:72
+    268|       expect(refusals([sentence]).map((one) => one.rule), sentence).to…
+    269|     }
+    270|     expect(refusals(["Coming soon: starting a rehearsal from here."]))…
+       |                                                                        ^
+    271|     expect(refusals(["It is coming soon to the console."]).map((one) =…
+    272|     expect(
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 137 passed (138)
+   Start at  00:19:51
+   Duration  123.90s (transform 10.51s, setup 307ms, import 1.05s, tests 121.20s, environment 1.15s)
+

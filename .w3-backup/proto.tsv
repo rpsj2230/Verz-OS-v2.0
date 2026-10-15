@@ -1,0 +1,99 @@
+/agents/drafts/:draftId	rows	snake	read_ticket	Each by the tool's name: helpdesk.read_ticket. Only these can be called, or drawn in a procedure.
+/approvals	rows	snake	update_status	ticket.update_status on ticket note: UNBROKENxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+/approvals/:suspensionId	rows	snake	update_status	ticket.update_status on ticket
+/approvals/:suspensionId	rows	snake	update_status	ticket.update_status on ticket note: UNBROKENxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+/artifacts	rows	DUPHEAD	Artifacts	2
+/ask/documents/:documentId	rows	DUPHEAD	UNBROKENxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx	2
+/audit/verify	rows	word	digest	Head digest
+/audit/verify	rows	word	digest	64 characters, digits and the letters a to f, the head digest in the same file.
+/channels/:name/:view	rows	route	/api/	/api/v1/channels/webhook/UNBROKENxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+/channels/:name/:view	rows	word	api	/api/v1/channels/webhook/UNBROKENxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+/channels/:name/:view	empty	route	/api/	/api/v1/channels/webhook/UNBROKENxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+/channels/:name/:view	empty	word	api	/api/v1/channels/webhook/UNBROKENxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+/classification	rows	snake	price_list	The table's name: lower-case letters, digits and underscores, starting with a letter, for example price_list.
+/classification/:entity	rows	snake	price_list	price_list
+/classification/:entity	rows	snake	price_list	How the columns of price_list are classified
+/classification/:entity	rows	snake	required_capability	required_capability
+/classification/:entity	rows	snake	derived_from	derived_from
+/classification/:entity	rows	snake	price_list	read:price_list.cost
+/classification/:entity	empty	snake	price_list	price_list
+/classification/:entity	empty	snake	price_list	How the columns of price_list are classified
+/classification/:entity	empty	snake	required_capability	required_capability
+/classification/:entity	empty	snake	derived_from	derived_from
+/classification/:entity/:column	rows	snake	price_list	price_list
+/classification/:entity/:column	rows	snake	price_list	How the columns of price_list are classified
+/classification/:entity/:column	rows	snake	required_capability	required_capability
+/classification/:entity/:column	rows	snake	derived_from	derived_from
+/classification/:entity/:column	rows	snake	price_list	read:price_list.cost
+/classification/:entity/:column	rows	snake	required_capability	required_capability (required)
+/classification/:entity/:column	rows	word	internal	internal
+/classification/:entity/:column	rows	snake	derived_from	derived_from (required)
+/classification/:entity/:column	rows	snake	derived_from	derived_from 1
+/classification/:entity/:column	empty	snake	price_list	price_list
+/classification/:entity/:column	empty	snake	price_list	How the columns of price_list are classified
+/classification/:entity/:column	empty	snake	required_capability	required_capability
+/classification/:entity/:column	empty	snake	derived_from	derived_from
+/company/estate	rows	DUPHEAD	Everything	2
+/company/activity	rows	DUPHEAD	Activity	2
+/connections	rows	word	database	What this install's size wants against what the host has, and what each database will admit.
+/connections	rows	word	Database	Database connections
+/connections	rows	word	Database	Database
+/connections	empty	word	database	What this install's size wants against what the host has, and what each database will admit.
+/connections	empty	word	Database	Database connections
+/connections	empty	word	database	No database is declared, so there are no connections to weigh.
+/connectors	rows	word	API	Add an API
+/connectors	empty	word	API	Add an API
+/connectors/new-api	rows	word	API	Add an API
+/connectors/new-api	rows	word	API	Submit an API
+/connectors/new-api	rows	word	HTTP	A key sent as the user name of HTTP Basic
+/connectors/new-api	rows	word	API	No key: the API answers anybody
+/connectors/new-api	rows	word	API	The API's OpenAPI document, as JSON
+/connectors/new-api	rows	word	API	Where it is in the API's record
+/connectors/new-api	rows	word	internal	internal
+/connectors/new-api	rows	word	internal	code (code): internal, Kept: the name a person knows it by
+/connectors/new-api	empty	word	API	Add an API
+/connectors/new-api	empty	word	API	Submit an API
+/connectors/new-api	empty	word	API	The API's OpenAPI document, as JSON
+/connectors/new-api	empty	word	API	Where it is in the API's record
+/connectors/new-api	empty	word	API	No API has been added
+/corrections	rows	DUPHEAD	Corrections	2
+/features	rows	word	JSON	Manifest (JSON)
+/features	rows	word	JSON	Plan (JSON)
+/features	rows	word	JSON	Register (JSON)
+/features	rows	word	JSON	Comparison period (JSON)
+/features	rows	word	JSON	Cutover record (JSON)
+/features	empty	word	JSON	Manifest (JSON)
+/features	empty	word	JSON	Plan (JSON)
+/features	empty	word	JSON	Register (JSON)
+/features	empty	word	JSON	Comparison period (JSON)
+/features	empty	word	JSON	Cutover record (JSON)
+/incidents	rows	word	Database	Database
+/jobs	rows	DUPHEAD	Background jobs	2
+/logs	rows	word	Exception	Exception
+/logs	rows	word	exception	A field shows its value only when it is one of the product's own words or numbers, and an exception shows its type.
+/logs	rows	word	Debug	Debug lines are never kept.
+/logs	empty	word	exception	A field shows its value only when it is one of the product's own words or numbers, and an exception shows its type.
+/logs	empty	word	Debug	Debug lines are never kept.
+/me	rows	word	digest	digest
+/me	rows	word	digest	Held: digest. UNBROKENxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+/me/undo/:memoryId	rows	word	digest	Your weekly digest named this as something the system learnt from your conversations. Undoing it marks it so it stops being used in your ans
+/models/:provider/:view	rows	word	https	An https link to the signed agreement, or leave it empty.
+/	rows	word	Database	Database: ready
+/packs	rows	DUPHEAD	Packs	2
+/records/:entity	rows	snake	customer_account	Rows of customer_account
+/records/:entity	empty	snake	customer_account	Rows of customer_account
+/recovery	rows	word	database	database
+/rules	rows	snake	acceptance_a	Asked by acceptance_a.
+/rules	rows	snake	hourly_rate	Lower-case letters, digits and underscores, such as hourly_rate.
+/rules	rows	route	{name}	The question exactly as people ask it, with the part that changes in braces, such as "what is the rate for {name}".
+/rules	empty	snake	hourly_rate	Lower-case letters, digits and underscores, such as hourly_rate.
+/rules	empty	route	{name}	The question exactly as people ask it, with the part that changes in braces, such as "what is the rate for {name}".
+/service-accounts/:clientId	rows	snake	svc_one	svc_one
+/service-accounts/:clientId	empty	snake	svc_one	svc_one
+/storage	rows	word	http	http://UNBROKENxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:8333
+/storage	empty	word	http	http://UNBROKENxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:8333
+/subscribers	rows	DUPHEAD	Subscribers	2
+/tools	rows	snake	read_note	notes.read_note
+/tools/:name	rows	snake	read_note	notes.read_note
+/webhooks	rows	word	https	https://UNBROKENxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.example.test/
+/webhooks/:id/:view	rows	word	https	https://UNBROKENxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.example.test/
