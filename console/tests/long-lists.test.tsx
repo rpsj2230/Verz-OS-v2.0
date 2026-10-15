@@ -330,6 +330,7 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   },
   "/library": {},
   "/sessions": {},
+  "/artifacts": {},
   "/sign-in-links": {},
   "/service-accounts": {},
   "/audit": {},

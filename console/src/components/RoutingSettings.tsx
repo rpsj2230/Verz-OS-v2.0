@@ -16,6 +16,8 @@ import { useState, type FormEvent } from "react";
 import { request } from "../api/client";
 import type { ApiFailure, FieldProblem } from "../api/errors";
 import { ConfirmAction } from "./ConfirmAction";
+import type { GridColumn } from "./gridFeatures";
+import { GridTable } from "./kit/GridTable";
 import { FailureNotice } from "../ui/FailureNotice";
 import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import {
@@ -63,11 +65,23 @@ import {
   tierQuestion,
   tierResetApiPath,
   TIERS_CAPTION,
+  type DepthAlert,
   type ResidencyAsked,
   type ResidencySetting,
   type TierAsked,
+  type TierSetting,
 } from "../pages/routingSettingsQuery";
 import { levelName } from "../pages/modelsQuery";
+
+/** The routing alerts, drawn through the console's one grid. Nothing on a row acts, so no closure. */
+const ALERT_COLUMNS: GridColumn<DepthAlert>[] = [
+  { id: "raised", header: "Raised", cell: ({ row }) => row.original.raised_at },
+  { id: "severity", header: "Severity", cell: ({ row }) => severityWords(row.original.level) },
+  { id: "level", header: "Level", cell: ({ row }) => levelName(row.original.tier) },
+  { id: "tries", header: "Tries", cell: ({ row }) => String(row.original.depth) },
+  { id: "what", header: "What happened", cell: ({ row }) => alertSentence(row.original) },
+  { id: "reference", header: "Reference", cell: ({ row }) => <code>{row.original.trace_id}</code> },
+];
 
 const TIER_FORM = "tier";
 const RESIDENCY_FORM = "residency";
@@ -201,6 +215,88 @@ export function RoutingSettings({
     return null;
   }
 
+  const tierColumns: GridColumn<TierSetting>[] = [
+    { id: "level", header: "Level", cell: ({ row }) => levelName(row.original.tier) },
+    { id: "size", header: "Size limit", cell: ({ row }) => `${String(row.original.context_window)} tokens` },
+    { id: "headroom", header: "Moves up past", cell: ({ row }) => headroomWords(row.original.escalation_headroom) },
+    { id: "set-by", header: "Set by", cell: ({ row }) => (row.original.configured ? SET_HERE : PRODUCT_DEFAULT) },
+  ];
+  if (settings.editable) {
+    tierColumns.push({
+      id: "actions",
+      header: "Actions",
+      cell: ({ row }) => {
+        const one = row.original;
+        return (
+          <>
+            <button
+              type="button"
+              className="button"
+              disabled={busy}
+              aria-label={`${EDIT_NUMBERS}: ${levelName(one.tier)}`}
+              onClick={() => {
+                setEditing(one.tier);
+                setTokens(String(one.context_window));
+                setHeadroom(one.configured ? String(one.escalation_headroom) : "");
+                setTierBlank([]);
+                setFailure(null);
+              }}
+            >
+              {EDIT_NUMBERS}
+            </button>
+            {one.configured ? (
+              <>
+                {" "}
+                <button
+                  type="button"
+                  className="button"
+                  disabled={busy}
+                  aria-label={`${RESET_TIER}: ${levelName(one.tier)}`}
+                  onClick={() => {
+                    setFailure(null);
+                    setPending({ kind: "reset", tier: one.tier });
+                  }}
+                >
+                  {RESET_TIER}
+                </button>
+              </>
+            ) : null}
+          </>
+        );
+      },
+    });
+  }
+
+  const residencyColumns: GridColumn<ResidencySetting>[] = [
+    { id: "applies-to", header: "Applies to", cell: ({ row }) => scopeWords(row.original.clauses) },
+    { id: "allowed", header: "Allowed", cell: ({ row }) => demandWords(row.original) },
+    { id: "note", header: "Note", cell: ({ row }) => (row.original.note === "" ? "-" : row.original.note) },
+    { id: "set-by", header: "Set by", cell: ({ row }) => <code>{row.original.created_by}</code> },
+  ];
+  if (settings.editable) {
+    residencyColumns.push({
+      id: "actions",
+      header: "Actions",
+      cell: ({ row }) => {
+        const one = row.original;
+        return (
+          <button
+            type="button"
+            className="button"
+            disabled={busy}
+            aria-label={`${RETIRE_RESIDENCY}: ${scopeWords(one.clauses)}`}
+            onClick={() => {
+              setFailure(null);
+              setPending({ kind: "retire", row: one });
+            }}
+          >
+            {RETIRE_RESIDENCY}
+          </button>
+        );
+      },
+    });
+  }
+
   return (
     <section className="card" aria-labelledby="models-routing-settings">
       <h2 id="models-routing-settings">{ROUTING_SETTINGS_HEADING}</h2>
@@ -222,66 +318,13 @@ export function RoutingSettings({
         />
       )}
 
-      <div className="grid__scroll">
-        <table className="grid__table">
-          <caption className="grid__caption">{TIERS_CAPTION}</caption>
-          <thead>
-            <tr>
-              <th scope="col">Level</th>
-              <th scope="col">Size limit</th>
-              <th scope="col">Moves up past</th>
-              <th scope="col">Set by</th>
-              {settings.editable ? <th scope="col">Actions</th> : null}
-            </tr>
-          </thead>
-          <tbody>
-            {settings.tiers.map((row) => (
-              <tr key={row.tier}>
-                <td>{levelName(row.tier)}</td>
-                <td>{String(row.context_window)} tokens</td>
-                <td>{headroomWords(row.escalation_headroom)}</td>
-                <td>{row.configured ? SET_HERE : PRODUCT_DEFAULT}</td>
-                {settings.editable ? (
-                  <td>
-                    <button
-                      type="button"
-                      className="button"
-                      disabled={busy}
-                      aria-label={`${EDIT_NUMBERS}: ${levelName(row.tier)}`}
-                      onClick={() => {
-                        setEditing(row.tier);
-                        setTokens(String(row.context_window));
-                        setHeadroom(row.configured ? String(row.escalation_headroom) : "");
-                        setTierBlank([]);
-                        setFailure(null);
-                      }}
-                    >
-                      {EDIT_NUMBERS}
-                    </button>
-                    {row.configured ? (
-                      <>
-                        {" "}
-                        <button
-                          type="button"
-                          className="button"
-                          disabled={busy}
-                          aria-label={`${RESET_TIER}: ${levelName(row.tier)}`}
-                          onClick={() => {
-                            setFailure(null);
-                            setPending({ kind: "reset", tier: row.tier });
-                          }}
-                        >
-                          {RESET_TIER}
-                        </button>
-                      </>
-                    ) : null}
-                  </td>
-                ) : null}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <GridTable
+        look="grid"
+        caption={TIERS_CAPTION}
+        columns={tierColumns}
+        rows={settings.tiers}
+        rowId={(row) => row.tier}
+      />
 
       {editing === null ? null : (
         <form className="form" aria-label={`Numbers for the ${levelName(editing)} level`} onSubmit={askTier}>
@@ -330,48 +373,13 @@ export function RoutingSettings({
       {settings.residency.length === 0 ? (
         <p className="note">{NO_RESIDENCY}</p>
       ) : (
-        <div className="grid__scroll">
-          <table className="grid__table">
-            <caption className="grid__caption">{RESIDENCY_CAPTION}</caption>
-            <thead>
-              <tr>
-                <th scope="col">Applies to</th>
-                <th scope="col">Allowed</th>
-                <th scope="col">Note</th>
-                <th scope="col">Set by</th>
-                {settings.editable ? <th scope="col">Actions</th> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {settings.residency.map((row) => (
-                <tr key={row.id}>
-                  <td>{scopeWords(row.clauses)}</td>
-                  <td>{demandWords(row)}</td>
-                  <td>{row.note === "" ? "-" : row.note}</td>
-                  <td>
-                    <code>{row.created_by}</code>
-                  </td>
-                  {settings.editable ? (
-                    <td>
-                      <button
-                        type="button"
-                        className="button"
-                        disabled={busy}
-                        aria-label={`${RETIRE_RESIDENCY}: ${scopeWords(row.clauses)}`}
-                        onClick={() => {
-                          setFailure(null);
-                          setPending({ kind: "retire", row });
-                        }}
-                      >
-                        {RETIRE_RESIDENCY}
-                      </button>
-                    </td>
-                  ) : null}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <GridTable
+          look="grid"
+          caption={RESIDENCY_CAPTION}
+          columns={residencyColumns}
+          rows={settings.residency}
+          rowId={(row) => row.id}
+        />
       )}
 
       {settings.editable ? (
@@ -459,35 +467,13 @@ export function RoutingSettings({
       {settings.alerts.length === 0 ? (
         <p className="note">{NO_ALERTS}</p>
       ) : (
-        <div className="grid__scroll">
-          <table className="grid__table">
-            <caption className="grid__caption">{ALERTS_CAPTION}</caption>
-            <thead>
-              <tr>
-                <th scope="col">Raised</th>
-                <th scope="col">Severity</th>
-                <th scope="col">Level</th>
-                <th scope="col">Tries</th>
-                <th scope="col">What happened</th>
-                <th scope="col">Reference</th>
-              </tr>
-            </thead>
-            <tbody>
-              {settings.alerts.map((row) => (
-                <tr key={`${row.trace_id}-${row.tier}-${row.raised_at}`}>
-                  <td>{row.raised_at}</td>
-                  <td>{severityWords(row.level)}</td>
-                  <td>{levelName(row.tier)}</td>
-                  <td>{String(row.depth)}</td>
-                  <td>{alertSentence(row)}</td>
-                  <td>
-                    <code>{row.trace_id}</code>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <GridTable
+          look="grid"
+          caption={ALERTS_CAPTION}
+          columns={ALERT_COLUMNS}
+          rows={settings.alerts}
+          rowId={(row) => `${row.trace_id}-${row.tier}-${row.raised_at}`}
+        />
       )}
     </section>
   );

@@ -52,7 +52,7 @@ function MoreRows<Row>({ listing }: { readonly listing: Listing<Row> }) {
   );
 }
 
-export interface ListPageProps<Row> {
+export interface ListPageProps<Row extends object> {
   readonly crumbs: readonly Crumb[];
   readonly title: string;
   readonly lede?: ReactNode | undefined;
@@ -85,7 +85,7 @@ export interface ListPageProps<Row> {
   readonly footer?: ReactNode | undefined;
 }
 
-export function ListPage<Row>({
+export function ListPage<Row extends object>({
   crumbs,
   title,
   lede,
