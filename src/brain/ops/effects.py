@@ -894,6 +894,12 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.recovery_run:QueueRows.failed": Repeat.READS,
         "brain.ops.recovery_run:QueueRows.run_again": Repeat.ENQUEUES_WORK,
         "brain.ops.recovery_run:QueueRows.set_aside": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # A person's ask to run a set-aside job again. A second put-back of a job already moved is
+        # refused by the status read before the driver is asked, and a second answer overwrites
+        # the first with the same meaning, so neither does anything twice.
+        "brain.ops.redrive_control:AskedRedrives.asks": Repeat.READS,
+        "brain.ops.redrive_control:AskedRedrives.put_back": Repeat.ENQUEUES_WORK,
+        "brain.ops.redrive_control:AskedRedrives.answer": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.recovery_run:OperationRecords.unsettled": Repeat.READS,
         "brain.ops.recovery_run:OperationRecords.settle": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         # The evening digest's destination and its send (M38.3.3): a channel's list of the

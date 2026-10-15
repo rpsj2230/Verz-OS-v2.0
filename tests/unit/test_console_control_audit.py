@@ -39,6 +39,7 @@ from typing import Any
 
 import httpx
 import psycopg
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
@@ -70,6 +71,7 @@ from brain.jobs_routes import SCHEDULE_AUTHORITY
 from brain.knowledge.visibility import Visibility
 from brain.notification_routes import EMAIL_PATH, NOTIFICATION_AUTHORITY, REMOVAL_PATH
 from brain.ops.features import SCHEDULE_CONTROL, is_on
+from brain.ops.features_declared.job_redrive import JOB_REDRIVE
 from brain.ops.matrix_gate import GateVerdict
 from brain.ops.retention import sweep
 from brain.ops.retention_store import active_holds, lift_hold, place_hold
@@ -488,6 +490,60 @@ def test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_
             "u_admin",
             recorder().setting(key=f"schedule.run_requested.{REFRESH}", change=SettingChange.SET),
         ),
+    )
+    assert attributed(found)
+    assert AuditChain(chain).verify() is None
+
+
+def test_pressing_run_again_on_a_set_aside_job_reaches_the_row_and_the_ledger() -> None:
+    """M27.13.3 for Run again on the Scheduled jobs screen, pressed over HTTP as the application
+    role: the switch is turned on, a job set aside is asked for, and the ask is one row under
+    `queue.redrive_asked`, one `setting` entry naming the person and the key and never the instant,
+    carrying the request's reach digest and trace, and the chain verifies. What the worker's minute
+    then does with the row is `tests/unit/test_dead_letter.py`'s database test.
+
+    Delete this and the control can stop reaching the ledger, or write an ask the worker cannot
+    read, while every stub test stays green. **Skips without a server and without pgvector.**"""
+    with retirable("brain_console_audit_redrive") as url:
+        if not has_pgvector(url):
+            pytest.skip("the dead letter table is a later migration than this server can run")
+        sql(
+            url,
+            "INSERT INTO ops.dead_letter (job_id, task, principal_id, traffic_class, reason, "
+            "attempts, set_aside_at) VALUES ('41', 'brain.controls.run', 'system', 'system', "
+            "'quarantined_after_a_stop', 1, now())",
+        )
+
+        async def press(client: httpx.AsyncClient) -> list[int]:
+            on = await client.post(
+                f"{API_PREFIX}/install/features/{JOB_REDRIVE.name}",
+                json={"on": True},
+                headers=headers("u_admin"),
+            )
+            asked = await client.post(
+                f"{API_PREFIX}/jobs/dead/41/redrive", headers=headers("u_admin")
+            )
+            return [on.status_code, asked.status_code]
+
+        assert pressed(url, JOB_GRANTS, press) == [200, 200]
+        rows = sql(
+            url,
+            "SELECT key, value_type, value #>> '{}', updated_by FROM ops.setting "
+            "WHERE starts_with(key, 'queue.') AND deleted_at IS NULL",
+        )
+        found = seen(url, "setting")
+        chain = entries(url)
+
+    assert [(key, kind, by) for key, kind, _, by in rows] == [
+        ("queue.redrive_asked.job_41", "string", "u_admin")
+    ]
+    assert datetime.fromisoformat(rows[0][2]).tzinfo is not None
+    assert summary(found) == wanted(
+        (
+            "u_admin",
+            recorder().setting(key=f"feature.{JOB_REDRIVE.name}", change=SettingChange.SWITCHED_ON),
+        ),
+        ("u_admin", recorder().setting(key="queue.redrive_asked.job_41", change=SettingChange.SET)),
     )
     assert attributed(found)
     assert AuditChain(chain).verify() is None
