@@ -1,0 +1,111 @@
+
+ RUN  v4.1.11 /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/console
+
+(node:7883) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:7880) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:7882) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:7879) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ❯ tests/validated-before-write.test.tsx (33 tests | 32 failed) 2373ms
+     × the question form cannot be pressed while the question is empty 4ms
+     × src/pages/connectors/CustomConnectorsPage.tsx form 0, submitted blank, sends no write and says what to fill in 1ms
+     × src/components/DataStewardCard.tsx form 1, submitted blank, sends no write and says what to fill in 0ms
+     × src/pages/MyWorkspace.tsx form 0 behind Edit, submitted blank, sends no write and says what to fill in 0ms
+     × src/pages/audit/VerifyPage.tsx form 0, submitted blank, sends no write and says what to fill in 0ms
+     × src/pages/audit/TracePage.tsx form 0, submitted blank, sends no write and says what to fill in 1ms
+     × src/pages/operations/StopPage.tsx form 0, submitted blank, sends no write and says what to fill in 0ms
+     × src/pages/operations/StopPage.tsx form 1, submitted blank, sends no write and says what to fill in 0ms
+     × src/pages/classification/ClassificationPage.tsx form 0, submitted blank, sends no write and says what to fill in 0ms
+     × src/pages/classification/ClassificationPage.tsx form 0, submitted blank, sends no write and says what to fill in 0ms
+     × src/pages/classification/ClassificationPage.tsx form 1, submitted blank, sends no write and says what to fill in 0ms
+     × src/pages/operations/DataTransferPage.tsx form 0, submitted blank, sends no write and says what to fill in 0ms
+     × src/pages/operations/LimitSettings.tsx form 0 behind Change, submitted blank, sends no write and says what to fill in 0ms
+     × src/pages/models/GoldenQuestions.tsx form 0, submitted blank, sends no write and says what to fill in 0ms
+     × src/pages/models/AddStep.tsx form 0 behind Add a step, submitted blank, sends no write and says what to fill in 0ms
+     × src/components/RoutingSettings.tsx form 1, submitted blank, sends no write and says what to fill in 0ms
+     × src/components/RoutingSettings.tsx form 1 behind Edit numbers, submitted blank, sends no write and says what to fill in 0ms
+     × src/pages/models/AddProvider.tsx form 0 behind Add a provider, submitted blank, sends no write and says what to fill in 0ms
+     × src/pages/models/ProviderProfile.tsx form 0, submitted blank, sends no write and says what to fill in 0ms
+     × src/components/ProviderKeyForm.tsx form 0 behind Replace key, submitted blank, sends no write and says what to fill in 0ms
+     × src/pages/credentials/SetValueForm.tsx form 0, submitted blank, sends no write and says what to fill in 0ms
+     × src/components/AgentModelPin.tsx form 3, submitted blank, sends no write and says what to fill in 0ms
+     × src/pages/agents/AgentCapabilities.tsx form 2, submitted blank, sends no write and says what to fill in 0ms
+     × src/pages/people/PersonPreview.tsx form 0, submitted blank, sends no write and says what to fill in 0ms
+     × src/pages/agents/AgentSpend.tsx form 0, submitted blank, sends no write and says what to fill in 0ms
+     × src/pages/company/CompanyBudgetForm.tsx form 1, submitted blank, sends no write and says what to fill in 0ms
+     × src/components/ModelPrices.tsx form 0 behind Set price, submitted blank, sends no write and says what to fill in 0ms
+     × src/pages/prompts/PromptsPage.tsx form 0 behind Edit instructions, submitted blank, sends no write and says what to fill in 0ms
+     × src/pages/staff-sources/SyncCredential.tsx form 0, submitted blank, sends no write and says what to fill in 0ms
+     × src/pages/channels/ChannelProfile.tsx form 0, submitted blank, sends no write and says what to fill in 0ms
+     × src/pages/channels/ChannelProfile.tsx form 1, submitted blank, sends no write and says what to fill in 0ms
+     × src/pages/rules/RulesPage.tsx form 0, submitted blank, sends no write and says what to fill in 0ms
+(node:7881) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 32 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > the question form cannot be pressed while the question is empty
+TypeError: Cannot read properties of undefined (reading 'clear')
+ ❯ mountIn tests/support/screenStates.tsx:216:16
+    214|   // beside the first would share its storage, where the sign-in loop …
+    215|   cleanup();
+    216|   localStorage.clear();
+       |                ^
+    217|   sessionStorage.clear();
+    218|   const idp = fakeIdentityProvider();
+ ❯ tests/validated-before-write.test.tsx:377:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/32]⎯
+
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/connectors/CustomConnectorsPage.tsx form 0, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/components/DataStewardCard.tsx form 1, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/MyWorkspace.tsx form 0 behind Edit, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/audit/VerifyPage.tsx form 0, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/audit/TracePage.tsx form 0, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/operations/StopPage.tsx form 0, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/operations/StopPage.tsx form 1, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/classification/ClassificationPage.tsx form 0, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/classification/ClassificationPage.tsx form 0, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/classification/ClassificationPage.tsx form 1, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/operations/DataTransferPage.tsx form 0, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/operations/LimitSettings.tsx form 0 behind Change, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/models/GoldenQuestions.tsx form 0, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/models/AddStep.tsx form 0 behind Add a step, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/components/RoutingSettings.tsx form 1, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/components/RoutingSettings.tsx form 1 behind Edit numbers, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/models/AddProvider.tsx form 0 behind Add a provider, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/models/ProviderProfile.tsx form 0, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/components/ProviderKeyForm.tsx form 0 behind Replace key, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/credentials/SetValueForm.tsx form 0, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/components/AgentModelPin.tsx form 3, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/agents/AgentCapabilities.tsx form 2, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/people/PersonPreview.tsx form 0, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/agents/AgentSpend.tsx form 0, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/company/CompanyBudgetForm.tsx form 1, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/components/ModelPrices.tsx form 0 behind Set price, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/prompts/PromptsPage.tsx form 0 behind Edit instructions, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/staff-sources/SyncCredential.tsx form 0, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/channels/ChannelProfile.tsx form 0, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/channels/ChannelProfile.tsx form 1, submitted blank, sends no write and says what to fill in
+ FAIL  tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/rules/RulesPage.tsx form 0, submitted blank, sends no write and says what to fill in
+TypeError: Cannot read properties of undefined (reading 'clear')
+ ❯ mountIn tests/support/screenStates.tsx:216:16
+    214|   // beside the first would share its storage, where the sign-in loop …
+    215|   cleanup();
+    216|   localStorage.clear();
+       |                ^
+    217|   sessionStorage.clear();
+    218|   const idp = fakeIdentityProvider();
+ ❯ tests/validated-before-write.test.tsx:392:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/32]⎯
+
+
+ Test Files  1 failed | 4 passed (5)
+      Tests  32 failed | 36 passed (68)
+   Start at  15:17:46
+   Duration  7.52s (transform 6.27s, setup 615ms, import 4.88s, tests 13.81s, environment 3.18s)
+
