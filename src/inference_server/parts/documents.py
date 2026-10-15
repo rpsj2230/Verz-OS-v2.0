@@ -45,6 +45,12 @@ from inference_server.worker import Answer
 #: `brain.knowledge.parse_layout.REQUEST_KEYS` and `DOCUMENT_KEYS`.
 REQUEST_KEYS: Final = ("model", "document")
 DOCUMENT_KEYS: Final = ("digest", "media_type", "content_base64")
+#: The key a request may carry beside those. Spelled as `brain.knowledge.parse_layout.
+#: OPTIONAL_REQUEST_KEYS`.
+OPTIONAL_REQUEST_KEYS: Final = ("pages",)
+
+#: The most pages a request may name, which is the most pages a part reads in one request.
+MOST_PAGES_NAMED: Final = 10_000
 
 #: The causes and the stages a part may declare, spelled as the application's closed lists
 #: (`CAUSES_A_PARSER_MAY_DECLARE` and `STAGES_A_PARSER_MAY_DECLARE`).
@@ -119,6 +125,8 @@ class Document:
     digest: str
     media_type: str
     content: bytes
+    #: The pages to read, from 1, or None for every page. Only the scanned-page part looks at it.
+    pages: frozenset[int] | None = None
 
 
 @dataclass(frozen=True)
@@ -153,7 +161,24 @@ def read_document(body: bytes) -> Document:
     except (binascii.Error, ValueError) as error:
         msg = "the document's content is not base64"
         raise BadRequest(msg) from error
-    return Document(digest=digest, media_type=media_type, content=content)
+    return Document(
+        digest=digest, media_type=media_type, content=content, pages=_pages_named(request)
+    )
+
+
+def _pages_named(request: dict[str, object]) -> frozenset[int] | None:
+    """The pages a request asks for, or None for all of them, or `BadRequest` for nonsense."""
+    named = request.get("pages")
+    if named is None:
+        return None
+    if (
+        not isinstance(named, list)
+        or not 0 < len(named) <= MOST_PAGES_NAMED
+        or not all(isinstance(one, int) and not isinstance(one, bool) and one >= 1 for one in named)
+    ):
+        msg = "the pages named are not a list of page numbers from 1"
+        raise BadRequest(msg)
+    return frozenset(int(one) for one in named)
 
 
 def bad_request(error: BadRequest) -> Answer:

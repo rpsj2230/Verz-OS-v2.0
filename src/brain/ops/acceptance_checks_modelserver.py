@@ -44,7 +44,8 @@ Task ids: M7.2.1, M7.2.3, M7.2.4, M7.3.3, M7.7.11
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Final
+import asyncio
+from typing import TYPE_CHECKING, Any, Final
 
 import structlog
 
@@ -226,26 +227,36 @@ A_DOCUMENT_PART_REFUSED_THE_PAGE: Final = (
 )
 
 
-def a_page_of_text(words: str) -> bytes:
-    """A valid one-page PDF with `words` printed on it in a standard font and nothing else.
+def pages_of_text(*lines: str) -> bytes:
+    """A valid PDF with one line of text printed on each page in a standard font, and a blank page
+    for each empty line.
 
     Written byte by byte so that it needs no library, which matters for the same reason the check
-    needs a real page: the readers it is given to are the ones that decide what a page is. The
-    words must not contain a parenthesis or a backslash, which a PDF string would need escaped.
+    needs a real page: the readers it is given to are the ones that decide what a page is. A line
+    must not contain a parenthesis or a backslash, which a PDF string would need escaped.
     """
-    stream = f"BT /F1 36 Tf 40 60 Td ({words}) Tj ET".encode("latin-1")
-    objects = [
+    font = 3 + 2 * len(lines)
+    kids = " ".join(f"{3 + 2 * index} 0 R" for index in range(len(lines)))
+    objects: list[bytes] = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
-        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 420 120] /Contents 4 0 R "
-        b"/Resources << /Font << /F1 5 0 R >> >> >>",
-        b"<< /Length "
-        + str(len(stream)).encode("ascii")
-        + b" >>\nstream\n"
-        + stream
-        + b"\nendstream",
-        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        f"<< /Type /Pages /Kids [{kids}] /Count {len(lines)} >>".encode("ascii"),
     ]
+    for index, words in enumerate(lines):
+        stream = f"BT /F1 36 Tf 40 60 Td ({words}) Tj ET".encode("latin-1") if words else b""
+        objects.append(
+            (
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 420 120] "
+                f"/Contents {4 + 2 * index} 0 R /Resources << /Font << /F1 {font} 0 R >> >> >>"
+            ).encode("ascii")
+        )
+        objects.append(
+            b"<< /Length "
+            + str(len(stream)).encode("ascii")
+            + b" >>\nstream\n"
+            + stream
+            + b"\nendstream"
+        )
+    objects.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
     out = bytearray(b"%PDF-1.4\n")
     offsets: list[int] = []
     for number, body in enumerate(objects, start=1):
@@ -259,6 +270,11 @@ def a_page_of_text(words: str) -> bytes:
         f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_at}\n%%EOF\n"
     ).encode("ascii")
     return bytes(out)
+
+
+def a_page_of_text(words: str) -> bytes:
+    """A valid one-page PDF with `words` printed on it and nothing else."""
+    return pages_of_text(words)
 
 
 def _document_parts_here() -> frozenset[Part]:
@@ -484,3 +500,148 @@ async def the_declared_embedding_revision_is_the_one_the_server_holds(h: Harness
         raise CheckFailedError(THE_SERVER_STATES_NO_REVISION)
     if held != declared:
         raise CheckFailedError(THE_DECLARED_REVISION_IS_NOT_THE_HELD_ONE)
+
+
+# ------------------------------------------------------------------------ how a passage was read
+class _MadeUpServer:
+    """A model server for the check: the layout part reads the first page of a two-page PDF and the
+    scanned-page part reads the second, with the confidence the check gives it.
+
+    **It is made up, and the check says so in its sentence.** What the check proves is the
+    product's own side on this install's own database (the route, the stamping, the chunk rows, the
+    table's constraints and the item's notice), and nothing about the parts: that is the checks
+    above, which ask the real ones.
+    """
+
+    def __init__(self, confidence: float) -> None:
+        self.confidence = confidence
+
+    def ask(self, part: object, request: object) -> object:
+        from brain.connectors.throttle import CallOutcome
+        from brain.ops.model_server import Part
+        from brain.ops.model_server_client import Reply
+
+        def block(text: str, page: int) -> dict[str, object]:
+            return {"kind": "prose", "text": text, "start": 0, "page": page, "section": ""}
+
+        if part is Part.LAYOUT:
+            return Reply(CallOutcome.OK, {"blocks": [block("First page read by layout", 1)]})
+        if part is Part.OCR:
+            answer = {
+                "blocks": [block("Second page read by recognition", 2)],
+                "pages": [{"page": 2, "confidence": self.confidence}],
+            }
+            return Reply(CallOutcome.OK, answer)
+        return Reply(CallOutcome.UNAVAILABLE)
+
+
+#: Said where the rows a document was stored as are not the ones its reading should have made.
+A_PASSAGE_WAS_STORED_WITH_THE_WRONG_READING: Final = (
+    "a document read by the layout part and the scanned-page part was stored with a path and "
+    "engine on its passages other than the ones that read each page"
+)
+
+#: Said where an unclear page was stored anyway, or its notice was not.
+AN_UNCLEAR_PAGE_WAS_NOT_LEFT_OUT_AND_NAMED: Final = (
+    "a scanned page recognised too poorly to trust was stored, or was left out with no notice "
+    "naming it on the item"
+)
+
+
+@check(
+    leaves=("M7.7.9", "M7.7.10"),
+    sentence=(
+        "A PDF with a page of text and a page with none, read over answers the check made by "
+        "the layout part and the scanned-page part, is stored on this install with each passage "
+        "saying which of the two read it, and when the scanned page is too unclear to trust it "
+        "is not stored and the item's notice names that page."
+    ),
+)
+async def a_document_read_two_ways_is_stored_passage_by_passage(h: Harness) -> None:
+    from sqlalchemy import select
+
+    from brain.knowledge.chunk_store import ingest_document, reach_of
+    from brain.knowledge.embed_policy import REVISION_SETTING, REVISION_UNSET
+    from brain.knowledge.ingest import MediaType, ParseFailure, admit_upload
+    from brain.knowledge.kinds import KnowledgeKind
+    from brain.knowledge.model_server_parsers import services_for
+    from brain.knowledge.search import CHUNK, session_settings
+    from brain.knowledge.uploads import ReadUpload, ReceivedUpload, read_for_text_path
+    from brain.knowledge.visibility import KnowledgeVisibility
+    from brain.ops.acceptance_checks import KNOWLEDGE_READS, _in
+    from brain.ops.model_server import Part
+    from brain.tables.audit import attributed_to
+    from brain.tables.knowledge import KnowledgeItemRow
+
+    await h.found_departments()
+    department = "acceptance_a"
+    owner = h.principal(department, "reader")
+    await h.person(
+        owner, department=department, grants=_in(department, *KNOWLEDGE_READS, "admin:knowledge")
+    )
+    reach = await h.reach(owner)
+
+    async def stored(confidence: float) -> tuple[ReadUpload, list[Any], str | None]:
+        body = pages_of_text(f"Acceptance {h.word()} first page", "")
+        upload = admit_upload(
+            filename="two-ways.pdf", declared_type=MediaType.PDF.value, content=body
+        )
+        services = services_for((Part.LAYOUT, Part.OCR), _MadeUpServer(confidence))  # type: ignore[arg-type]
+        read = await asyncio.to_thread(
+            read_for_text_path,
+            ReceivedUpload(upload=upload, body=body),
+            kind=KnowledgeKind.SOP,
+            placement=KnowledgeVisibility.of_department(department, owner_id=owner),
+            owner_id=owner,
+            services=services,
+        )
+        if isinstance(read, ParseFailure):
+            raise CheckFailedError(A_DOCUMENT_PART_REFUSED_THE_PAGE)
+
+        async def no_queue(job: object) -> object:
+            raise CheckFailedError("a document with no declared revision queued an embedding job")
+
+        await ingest_document(
+            h.sessions,
+            read.item,
+            enqueue=no_queue,
+            now=h.now,
+            env={REVISION_SETTING: REVISION_UNSET},
+            blocks=read.blocks,
+            attributed=attributed_to(
+                actor_id=owner, ent_hash=reach.ent_hash(), trace_id=h.trace_id
+            ),
+        )
+        async with h.sessions() as session:
+            held = await reach_of(session, owner, now=h.now)
+            if held is None:
+                raise CheckFailedError("the owner of a document reached none of it to read back")
+            for setting in session_settings(held):
+                await session.execute(setting)
+            rows = (
+                await session.execute(
+                    select(CHUNK.c.page, CHUNK.c.parse_path, CHUNK.c.parse_engine)
+                    .where(CHUNK.c.document_id == read.item.item_id)
+                    .order_by(CHUNK.c.ordinal)
+                )
+            ).all()
+            notice = (
+                await session.execute(
+                    select(KnowledgeItemRow.parse_notice).where(
+                        KnowledgeItemRow.item_id == read.item.item_id
+                    )
+                )
+            ).scalar_one_or_none()
+        return read, [tuple(one) for one in rows], notice
+
+    _, clear_rows, clear_notice = await stored(0.95)
+    pages_and_paths = [(page, path) for page, path, _ in clear_rows]
+    if pages_and_paths != [(1, "layout"), (2, "ocr")] or any(not row[2] for row in clear_rows):
+        raise CheckFailedError(A_PASSAGE_WAS_STORED_WITH_THE_WRONG_READING)
+    if clear_notice is not None:
+        raise CheckFailedError(AN_UNCLEAR_PAGE_WAS_NOT_LEFT_OUT_AND_NAMED)
+    _, unclear_rows, unclear_notice = await stored(0.2)
+    if [page for page, _, _ in unclear_rows] != [1]:
+        raise CheckFailedError(AN_UNCLEAR_PAGE_WAS_NOT_LEFT_OUT_AND_NAMED)
+    if not unclear_notice or "Page 2" not in unclear_notice:
+        raise CheckFailedError(AN_UNCLEAR_PAGE_WAS_NOT_LEFT_OUT_AND_NAMED)

@@ -1095,12 +1095,12 @@
     },
     "M7.7.9": {
      "status": "IN PROGRESS",
-     "why": "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14). The columns that say how a passage was read are added (know.chunk.parse_path and parse_engine, migration 0250); nothing writes them yet and no citation says it",
+     "why": "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14). Built: every block, passage and chunk row carries the path and engine that read it, set by the route and never by the reader's answer and closed to three words and a bounded name; a PDF read two ways (text pages by layout, a photographed page by the scanned-page part) is stored passage by passage saying which read each, written to know.chunk.parse_path and parse_engine (migration 0250) and checked against a real PostgreSQL and by an install check. Not built: **no citation or screen says how a passage was read yet**, which means carrying the column through retrieval, the field policy that decides what a reader is shown, DocumentCitation and its rendering, a change to the surface that decides what a reader may be told and wanting its own review. PRIOR WORK: knowledge.parse_paths, knowledge.parse_ocr",
      "updated": "2026-10-14"
     },
     "M7.7.10": {
      "status": "IN PROGRESS",
-     "why": "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14). Built: a scanned page under the confidence floor is left out of the index, page by page, with every later offset laid out again for what stayed, and the parser hands the pages it left out to the knowledge layer (`ReadWithGaps`, `ParsedDocument.left_out_pages`) with the uploader's wording for them (`left_out_notice`); a page with no recognised word is not named. Not built: the notice written onto the item and shown (the column `know.item.parse_notice` exists, nothing writes it yet). PRIOR WORK: knowledge.parse_ocr",
+     "why": "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14). Built: a scanned page under the confidence floor is left out of the index, page by page, with every later offset laid out again for what stayed; the parser hands the pages it left out to the knowledge layer (`ReadWithGaps`, `ParsedDocument.left_out_pages`) with the uploader's wording for them (`left_out_notice`), a page with no recognised word is not named; the pages are kept on the item (`know.item.parse_notice`) and said on the ticket (\"was added. Page 2 was not clear enough...\"); the blank pages of a PDF the layout part read are read by the scanned-page part and the same floor applies to them. Proved against a real PostgreSQL over answers made up for the test. Not built: the notice shown on a screen, and the scanned-page part run for real (needs-rupash 235). PRIOR WORK: knowledge.parse_ocr",
      "updated": "2026-10-14"
     },
     "M7.7.11": {

@@ -94,7 +94,9 @@ class PageReading:
 class Recogniser(Protocol):
     """What turns a file into pages of words. The real one is Tesseract's; a test has its own."""
 
-    def pages(self, path: Path, media_type: str) -> Iterator[PageReading]: ...
+    def pages(
+        self, path: Path, media_type: str, only: frozenset[int] | None = None
+    ) -> Iterator[PageReading]: ...
 
 
 def page_confidence(words: Sequence[Word]) -> float:
@@ -137,7 +139,7 @@ class OcrBackend:
         try:
             document = read_document(body)
             with as_file(document) as path:
-                for reading in self._recogniser.pages(path, document.media_type):
+                for reading in self._recogniser.pages(path, document.media_type, document.pages):
                     if len(pages) >= MAX_PAGES:
                         return refusal("unsupported", "ocr")
                     pages.append(
@@ -196,11 +198,13 @@ class TesseractRecogniser:
         )
         return PageReading(page=page, words=_words_from(data))
 
-    def pages(self, path: Path, media_type: str) -> Iterator[PageReading]:
+    def pages(
+        self, path: Path, media_type: str, only: frozenset[int] | None = None
+    ) -> Iterator[PageReading]:
         try:
             if media_type == "application/pdf":
-                yield from self._pdf_pages(path)
-            else:
+                yield from self._pdf_pages(path, only)
+            elif only is None or 1 in only:
                 with self._image.open(path) as image:
                     yield self._read(image.convert("RGB"), 1)
         except OUR_OWN_MISTAKES:
@@ -210,7 +214,7 @@ class TesseractRecogniser:
         except Exception as error:
             raise refusal_for(error, stage="ocr") from None
 
-    def _pdf_pages(self, path: Path) -> Iterator[PageReading]:
+    def _pdf_pages(self, path: Path, only: frozenset[int] | None) -> Iterator[PageReading]:
         try:
             document = self._pdfium.PdfDocument(str(path))
         except self._pdfium.PdfiumError as error:
@@ -221,6 +225,8 @@ class TesseractRecogniser:
         try:
             scale = RENDER_DPI / PDF_POINTS_PER_INCH
             for number in range(len(document)):
+                if only is not None and number + 1 not in only:
+                    continue
                 page = document[number]
                 width, height = page.get_size()
                 if width * scale * height * scale > MAX_PAGE_PIXELS:
