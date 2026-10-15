@@ -45,7 +45,8 @@ import { useResource } from "../../api/useResource";
 import {
   Advanced,
   ConfirmDialog,
-  EmptyState,
+  BY_THE_INSTALL,
+  EmptyList,
   Fact,
   FactList,
   FailureState,
@@ -219,7 +220,14 @@ function PairList({ body, onDecided }: { readonly body: ReviewQueueBody; readonl
   }
 
   if (body.cards.length === 0) {
-    return <EmptyState title={NOTHING_WAITING_TITLE} description={NOTHING_WAITING} />;
+    return (
+      <EmptyList
+        title={NOTHING_WAITING_TITLE}
+        description={NOTHING_WAITING}
+        adds="The Brain adds a pair when it finds two records it cannot be sure are the same."
+        by={BY_THE_INSTALL}
+      />
+    );
   }
   const summary = strengthSummary(body.by_strongest);
   const unmeasured = body.cards.some((card) => !card.calibrated);

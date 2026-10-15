@@ -14,7 +14,7 @@
 
 import { useState } from "react";
 import { useResource } from "../../api/useResource";
-import { EmptyState, SectionCard, StatCard, StatsStrip } from "../../components/kit";
+import { EmptyList, SectionCard, StatCard, StatsStrip } from "../../components/kit";
 import { cn } from "../../lib/utils";
 import { basisWords, rangeWords } from "../agents/agentStats";
 import {
@@ -102,7 +102,12 @@ export function AutomationDashboard({ detail }: { readonly detail: AutomationDet
       <Figures detail={detail} />
       <SectionCard title={RECENT_HEADING} lede={ONLY_TO_WHOM}>
         {detail.runs.length === 0 ? (
-          <EmptyState title={NO_RUNS} description={NO_RUNS_DESCRIPTION} />
+          <EmptyList
+            title={NO_RUNS}
+            description={NO_RUNS_DESCRIPTION}
+            adds="Resume the automation, and a run is recorded each time its time comes."
+            by={["super_admin", "department_admin"]}
+          />
         ) : (
           <ol className="m-0 flex list-none flex-col gap-3 p-0">
             {detail.runs.slice(0, 10).map((run) => (

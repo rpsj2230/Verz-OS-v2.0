@@ -27,6 +27,8 @@ import { narrows, NO_QUESTION } from "../../components/listing";
 import { useListing } from "../../components/useListing";
 import {
   Chip,
+  BY_THE_INSTALL,
+  EmptyList,
   EmptyState,
   EntityTable,
   FailureState,
@@ -154,7 +156,12 @@ function Departments({ lines }: { readonly lines: NonNullable<UsageBody["departm
       </SectionCard>
       <SectionCard title={PEOPLE_HEADING}>
         {asking.length === 0 ? (
-          <Quiet>Nobody asked a question in this period.</Quiet>
+          <EmptyList
+            compact
+            title="Nobody asked a question in this period."
+            adds="A person is listed once they ask a question, and none is added by hand."
+            by={BY_THE_INSTALL}
+          />
         ) : (
           <BarList
             caption={PEOPLE_HEADING}
@@ -206,7 +213,12 @@ export function AdoptionPage() {
         }
       />
     ) : (
-      <EmptyState title={NO_ADOPTION} description={NO_ADOPTION_MORE} />
+      <EmptyList
+        title={NO_ADOPTION}
+        description={NO_ADOPTION_MORE}
+        adds="Found a department on the Departments screen, and it is listed here once you may read its usage."
+        by={["super_admin"]}
+      />
     );
   } else {
     list = (

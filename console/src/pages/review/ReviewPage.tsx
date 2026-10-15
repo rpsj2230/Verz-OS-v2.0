@@ -250,6 +250,8 @@ export function ReviewPage() {
       loading={READING_REVIEW}
       emptyTitle={NOTHING_TO_REVIEW}
       emptyDescription={NOTHING_TO_REVIEW_MORE}
+      emptyAdds="A grant is reviewed here once somebody is given it, on the People or Roles screen."
+      emptyBy={["super_admin", "department_admin"]}
       emptyIcon={<ShieldCheck aria-hidden />}
       footer={review.truncated ? <Note>{MORE_GRANTS}</Note> : undefined}
     />

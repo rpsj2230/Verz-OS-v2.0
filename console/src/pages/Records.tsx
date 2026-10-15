@@ -54,6 +54,7 @@ import { useResource } from "../api/useResource";
 import { FailureNotice } from "../ui/FailureNotice";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { DataTable } from "../components/DataTable";
+import { BY_THE_INSTALL } from "../components/kit/states";
 import { SchemaForm } from "../components/SchemaForm";
 import { useServerPage } from "../components/useServerPage";
 import {
@@ -110,6 +111,8 @@ function RecordRows({ entity, limit }: { readonly entity: string; readonly limit
       rows={page.rows}
       rowId={(row) => identity.get(row) ?? ""}
       lockedCells={page.lockedCells}
+      emptyAdds="Rows are read from the source this entity comes from, and none is added here."
+      emptyBy={BY_THE_INSTALL}
       failure={page.failure}
       busy={page.busy}
       // The route takes `cursor` for the one page shape and refuses every value, because the row

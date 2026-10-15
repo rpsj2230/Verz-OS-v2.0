@@ -26,6 +26,7 @@ import { Brain } from "lucide-react";
 import { useCallback, useId, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { request } from "../../api/client";
+import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
 import { ConfirmDialog, FailureState, LoadingState, Note, SectionCard } from "../../components/kit";
 import { Button } from "../../components/ui/button";
@@ -119,7 +120,7 @@ function MemoryRow({
               Correct
             </Button>
             <Button variant="ghost" size="xs" onClick={() => onAsk({ kind: "delete", item })}>
-              Delete
+              Retire
             </Button>
           </span>
         ) : null}
@@ -279,7 +280,7 @@ export function AgentMemory({ agentId }: { readonly agentId: string }) {
   const answer = useResource<unknown>(agentMemoryApiPath(agentId), version);
   const [asking, setAsking] = useState<Asking | null>(null);
   const [busy, setBusy] = useState(false);
-  const [said, setSaid] = useState<string | null>(null);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [told, setTold] = useState<string | null>(null);
   const onAsk = useCallback((next: Asking) => {
     setAsking(next);
@@ -297,7 +298,7 @@ export function AgentMemory({ agentId }: { readonly agentId: string }) {
             : await request<unknown>(UNDO_API_PATH, { method: "POST", body: undoBody(one.memoryId) });
     setBusy(false);
     setAsking(null);
-    setSaid(result.ok ? null : result.failure.message);
+    setFailure(result.ok ? null : result.failure);
     setTold(result.ok && one.kind === "promote" ? pressedWords(result.data) : null);
     setVersion((count) => count + 1);
   };
@@ -311,11 +312,7 @@ export function AgentMemory({ agentId }: { readonly agentId: string }) {
   }
   return (
     <div data-slot="agent-memory" className="flex min-w-0 flex-col gap-4">
-      {said === null ? null : (
-        <p role="alert" className="m-0 text-[12.5px] text-crit">
-          {said}
-        </p>
-      )}
+      {failure === null ? null : <FailureState failure={failure} />}
       {told === null ? null : (
         <p role="status" className="m-0 text-[12.5px] text-ink">
           {told}
@@ -352,7 +349,7 @@ export function AgentMemory({ agentId }: { readonly agentId: string }) {
           asking === null
             ? ""
             : asking.kind === "delete"
-              ? "Delete this memory?"
+              ? "Retire this memory?"
               : asking.kind === "edit"
                 ? "Save this correction?"
                 : asking.kind === "promote"
@@ -361,7 +358,7 @@ export function AgentMemory({ agentId }: { readonly agentId: string }) {
         }
         consequence={
           asking?.kind === "delete"
-            ? "It stops being recalled for everybody from now on. It stays on the record, and the delete is on the audit log."
+            ? "It stops being recalled for everybody from now on. It stays on the record, and the retirement is on the audit log."
             : asking?.kind === "edit"
               ? "The corrected words replace what it said from now on. The earlier words stay in the history, and the change is on the audit log."
               : asking?.kind === "promote"
@@ -369,7 +366,7 @@ export function AgentMemory({ agentId }: { readonly agentId: string }) {
                 : "The change stops taking effect from now on, and the undo is on the audit log."
         }
         details={asking?.kind === "edit" ? <p className="m-0 text-[13px] text-ink">{asking.statement}</p> : undefined}
-        confirmLabel={asking?.kind === "delete" ? "Delete" : asking?.kind === "edit" ? "Save correction" : asking?.kind === "promote" ? PROMOTE : "Undo"}
+        confirmLabel={asking?.kind === "delete" ? "Retire" : asking?.kind === "edit" ? "Save correction" : asking?.kind === "promote" ? PROMOTE : "Undo"}
         cancelLabel="Keep it"
         danger={asking?.kind !== "edit" && asking?.kind !== "promote"}
         busy={busy}

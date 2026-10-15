@@ -100,7 +100,7 @@ export function AskDictation({
   );
 
   if (recognition === null) {
-    return <p className="note ask__dictation-note">{NO_DICTATION_HERE}</p>;
+    return <p className="note">{NO_DICTATION_HERE}</p>;
   }
 
   const toggle = () => {
@@ -151,7 +151,7 @@ export function AskDictation({
       >
         {DICTATE_LABEL}
       </button>
-      <p id={NOTE_ID} className="note ask__dictation-note">
+      <p id={NOTE_ID} className="note">
         {DICTATION_PRIVACY}
       </p>
       <p className="note ask__dictation-status" role="status">

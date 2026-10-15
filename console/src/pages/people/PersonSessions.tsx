@@ -27,7 +27,8 @@ import { useResource } from "../../api/useResource";
 import {
   ConfirmDialog,
   Drawer,
-  EmptyState,
+  BY_THE_INSTALL,
+  EmptyList,
   Fact,
   FactList,
   FailureState,
@@ -278,7 +279,15 @@ export function PersonSessions({ detail }: { readonly detail: PersonDetail }) {
   } else if (sessions.data === null) {
     sessionBody = <LoadingState label="Loading their open sessions." rows={2} />;
   } else if (open.length === 0) {
-    sessionBody = <EmptyState title={NO_SESSIONS} description="A session appears here from its first request, and goes when it ends or lapses." icon={<LogIn aria-hidden />} />;
+    sessionBody = (
+      <EmptyList
+        title={NO_SESSIONS}
+        description="A session appears here from its first request, and goes when it ends or lapses."
+        adds="A session is opened by the person signing in, and none is added by hand."
+        by={BY_THE_INSTALL}
+        icon={<LogIn aria-hidden />}
+      />
+    );
   } else {
     sessionBody = (
       <ul className="m-0 flex list-none flex-col divide-y divide-line p-0">

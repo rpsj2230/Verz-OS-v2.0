@@ -24,7 +24,8 @@ import {
   Advanced,
   Chip,
   ConfirmDialog,
-  EmptyState,
+  BY_THE_INSTALL,
+  EmptyList,
   Fact,
   FactList,
   FailureState,
@@ -120,7 +121,14 @@ function FeatureList({ body, onSwitched }: { readonly body: FeaturesBody; readon
   const saysBoth = body.components_are_chosen_by_the_profile !== false && body.plugins_have_no_loader !== false;
   return (
     <>
-      {body.features.length === 0 ? <EmptyState title={NO_FEATURES_TITLE} description={NO_FEATURES} /> : null}
+      {body.features.length === 0 ? (
+        <EmptyList
+          title={NO_FEATURES_TITLE}
+          description={NO_FEATURES}
+          adds="A release declares a feature that can be switched, and none is added by hand."
+          by={BY_THE_INSTALL}
+        />
+      ) : null}
       {body.features.map((row) => (
         <FeatureCard
           key={row.name}

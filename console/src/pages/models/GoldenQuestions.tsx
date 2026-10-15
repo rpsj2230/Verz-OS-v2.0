@@ -15,7 +15,7 @@ import { useState, type FormEvent } from "react";
 import { request } from "../../api/client";
 import type { ApiFailure, FieldProblem } from "../../api/errors";
 import { useResource, type Resource } from "../../api/useResource";
-import { ConfirmDialog, FailureState, LoadingState, Note, SectionCard } from "../../components/kit";
+import { ConfirmDialog, Explanation, FailureState, LoadingState, Note, SectionCard } from "../../components/kit";
 import type { GridColumn } from "../../components/gridFeatures";
 import { GridTable } from "../../components/kit/GridTable";
 import { Button } from "../../components/ui/button";
@@ -36,7 +36,6 @@ import {
   KEEP_GOLDEN,
   MORE_PEOPLE,
   NOBODY_LISTED,
-  NO_GOLDEN,
   readAskers,
   readGolden,
   RETIRE_GOLDEN,
@@ -167,7 +166,7 @@ export function GoldenQuestions({
           <LoadingState label={LOADING_GOLDEN} rows={2} />
         ) : rows.length === 0 ? (
           <div className="flex flex-col gap-2">
-            <Note kind="not-yet">{NO_GOLDEN}</Note>
+            <Explanation form="note" act="routing.no_golden" />
             <StepsToPass />
           </div>
         ) : (

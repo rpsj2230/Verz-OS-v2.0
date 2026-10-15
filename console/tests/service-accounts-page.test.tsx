@@ -17,11 +17,12 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import { HINTS, KEPT_LABEL, REVIEW } from "../src/pages/service-accounts/AccountActs";
-import { ACT_LABELS, NOT_HELD_MARK, UNAVAILABLE } from "../src/pages/service-accounts/serviceAccountActions";
+import { ACT_LABELS, NOT_HELD_MARK } from "../src/pages/service-accounts/serviceAccountActions";
 import { BLANK_SENTENCES } from "../src/pages/serviceAccountsQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { apiDocument, declaredPropertyNames, declaredRequestBodySchema } from "./support/openapi";
 import { installRadixStubs } from "./support/radix";
+import { noRouteRetires, retiringPattern } from "./support/explanations";
 
 const CONSOLE_ORIGIN = "https://console.test";
 const SECRET = "brn.KEY-SENTINEL.9f3c";
@@ -123,10 +124,8 @@ describe("what this module agrees with the API about", () => {
     // What breaks if this is deleted: "coming soon" said after the route lands, or a registration
     // that sends an owner field the route would take as lending somebody else's reach.
     const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
-    for (const [one, { retiredBy }] of Object.entries(UNAVAILABLE)) {
-      expect(paths.filter((path) => retiredBy.test(path)), one).toEqual([]);
-    }
-    expect(UNAVAILABLE.changeEnd.retiredBy.test("/api/v1/govern/service-accounts/{client_id}/end")).toBe(true);
+    noRouteRetires(["service_account.change_end"]);
+    expect(retiringPattern("service_account.change_end").test("/api/v1/govern/service-accounts/{client_id}/end")).toBe(true);
     expect(paths).toContain("/api/v1/govern/service-accounts/{client_id}");
     const registration = declaredPropertyNames(declaredRequestBodySchema("/api/v1/govern/service-accounts", "post"));
     expect(registration).not.toContain("owner");

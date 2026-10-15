@@ -19,6 +19,7 @@ import {
   Advanced,
   DetailHeader,
   DetailPage,
+  Explanation,
   Fact,
   FactList,
   FailureState,
@@ -28,7 +29,6 @@ import {
   PageHeader,
   SectionCard,
   StatCard,
-  UnavailableAction,
 } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { subjectAddress } from "../auditQuery";
@@ -125,7 +125,7 @@ function Case({ caseId, onDone, told, version }: { readonly caseId: string; read
                       {CLOSE_LABEL}
                     </Button>
                   ) : (
-                    <UnavailableAction label={CLOSE_LABEL} text={CLOSE_LABEL} reason={answer.data.closing} />
+                    <Explanation form="action" told={answer.data.closing} label={CLOSE_LABEL} text={CLOSE_LABEL} />
                   )
                 ) : null}
               </>

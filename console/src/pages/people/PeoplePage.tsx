@@ -281,6 +281,8 @@ export function PeoplePage() {
         loading={LOADING_PEOPLE}
         emptyTitle={NO_PEOPLE}
         emptyDescription={NO_PEOPLE_DESCRIPTION}
+        emptyAdds="On an install with no staff source, add a person here; otherwise the staff source or the identity provider brings them in."
+        emptyBy={["super_admin", "department_admin"]}
         emptyIcon={<Users aria-hidden />}
         footer={
           <>

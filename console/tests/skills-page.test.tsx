@@ -24,14 +24,13 @@ import { beforeAll, describe, expect, test } from "vitest";
 import { NOT_RECORDED, UNAVAILABLE_MARK } from "../src/components/kit";
 import { LIST_PAGE_SIZE } from "../src/components/listing";
 import { SKILLS_HEADING } from "../src/pages/Skills";
-import { HISTORY_ELSEWHERE } from "../src/pages/skills/SkillAbout";
 import { LAST_USED_LABEL, NOT_USED, RUNS_LABEL } from "../src/pages/skills/SkillDashboard";
 import { NO_SUCH_SKILL } from "../src/pages/skills/SkillDetailPage";
 import { DESCRIBE_FORMAT, DRAFT_IT, EXAMPLES_HINT, FROM_ADDRESS, FROM_REPOSITORY, IMPORT_PROCEDURE, PACKAGE_FORMAT, PROCEDURE_FORMAT } from "../src/pages/skills/SkillForms";
 import { RETIRE, REINSTATE, DETACH, APPROVE, FINDINGS_HEADING } from "../src/pages/skills/SkillProfile";
 import { EXPORT, exportedSentence, NOT_YET_REHEARSED, REHEARSAL_FAILED, REHEARSAL_PASSED, REHEARSE } from "../src/pages/skillsQuery";
 import { DESCRIBE_TAB, PROCEDURE_TAB, queueWords, readLibraryRows } from "../src/pages/skills/SkillsPage";
-import { REVIEW_PILL, UNAVAILABLE } from "../src/pages/skills/skillActions";
+import { REVIEW_PILL } from "../src/pages/skills/skillActions";
 import { readHistory, readSkillDetail } from "../src/pages/skills/skillDetailQuery";
 import {
   CONCERN_WORDS,
@@ -54,6 +53,7 @@ import { apiDocument, declaredParameterSchema, declaredPropertyNames, declaredRe
 import { backendEnumMembers, backendModelFields } from "./support/python";
 import { installRadixStubs } from "./support/radix";
 import { extractOne, readRepoFile } from "./support/repo";
+import { noRouteRetires, retiringPattern, sentenceFor } from "./support/explanations";
 
 const CONSOLE_ORIGIN = "https://console.test";
 const API = "/api/v1";
@@ -307,10 +307,8 @@ describe("what the Skills module asks for and sends", () => {
     // What breaks if this is deleted: "coming soon" said about an act that has arrived. The positive
     // sibling is that the pattern matches the path it is written for.
     const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
-    for (const [act, { retiredBy }] of Object.entries(UNAVAILABLE)) {
-      expect(paths.filter((path) => retiredBy.test(path)), act).toEqual([]);
-    }
-    expect(UNAVAILABLE.tryOut.retiredBy.test("/api/v1/skills/{digest}/rehearsal")).toBe(true);
+    noRouteRetires(["skill.try_out"]);
+    expect(retiringPattern("skill.try_out").test("/api/v1/skills/{digest}/rehearsal")).toBe(true);
   });
 
   test("an address this module builds stays inside the console", () => {
@@ -844,7 +842,7 @@ describe("one skill's page", () => {
       [`GET ${API}/audit`]: { status: 404, body: { message: "the audit screen is not answerable for this caller" } },
     }));
     await waitFor(() => {
-      expect(refused.container.textContent).toContain(HISTORY_ELSEWHERE);
+      expect(refused.container.textContent).toContain(sentenceFor("skill.history_elsewhere"));
     });
   });
 

@@ -14,7 +14,7 @@
  */
 
 import { useResource } from "../../api/useResource";
-import { Note, type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, Note, type EntityColumn } from "../../components/kit";
 import {
   becauseWords,
   isHeld,
@@ -110,6 +110,8 @@ export function SystemHealthSection() {
         rowLabel={(row) => jobName(row.name)}
         exportName="system-health-parts"
         empty={NO_PARTS}
+        emptyAdds="A part is listed for each service a release declares, and none is added by hand."
+        emptyBy={BY_THE_INSTALL}
         footer={
           <Line>
             {page.worker.last_seen
@@ -133,6 +135,8 @@ export function SystemHealthSection() {
         rowLabel={(row) => jobName(row.control)}
         exportName="system-health-guarantees"
         empty={NO_GUARANTEES}
+        emptyAdds="A guarantee is listed for each control a release declares, and none is added by hand."
+        emptyBy={BY_THE_INSTALL}
       />
     </section>
   );

@@ -32,7 +32,7 @@ import {
   type Connected,
   type Connectors,
 } from "../src/pages/connectorsQuery";
-import { ACT_LABELS, UNAVAILABLE } from "../src/pages/connectors/connectorActions";
+import { ACT_LABELS } from "../src/pages/connectors/connectorActions";
 import { LAST_LIVE_READ_LABEL, LIVE_READS_LABEL, NO_LIVE_READ, NOT_CONNECTED_TITLE } from "../src/pages/connectors/ConnectorDashboard";
 import { NO_AGENT, STEWARD_LABEL } from "../src/pages/connectors/ConnectorProfile";
 import { TESTING_WORDS, VERDICT_WORDS } from "../src/pages/connectors/connectorProbe";
@@ -50,6 +50,7 @@ import { backendModelFields } from "./support/python";
 import { readConnectorStats, shareWords } from "../src/pages/connectors/connectorStats";
 import { installRadixStubs } from "./support/radix";
 import { readConsoleFile } from "./support/repo";
+import { registered } from "./support/explanations";
 
 const ROUTES = "src/brain/connector_routes.py";
 const STATS_ROUTES = "src/brain/console_stats_routes.py";
@@ -431,11 +432,9 @@ describe("what this module agrees with the API about", () => {
     // What breaks if this is deleted: "coming soon" said about testing a connection after its route
     // lands, so a person is told they cannot do what they can.
     const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
-    for (const [one, { retiredBy }] of Object.entries(UNAVAILABLE)) {
-      expect(paths.filter((path) => retiredBy.test(path)), one).toEqual([]);
-    }
-    // The positive sibling: every act on a source has its route now, testing a connection included.
-    expect(Object.keys(UNAVAILABLE)).toEqual([]);
+    // The positive sibling: every act on a source has its route now, testing a connection included,
+    // so no explanation is registered for a source's act.
+    expect(registered().filter((one) => one.act.startsWith("connector."))).toEqual([]);
     expect(paths).toContain("/api/v1/connectors/{connector}/probe");
     expect(paths).toContain("/api/v1/console/connectors/{connector}/probe");
   });

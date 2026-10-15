@@ -41,6 +41,7 @@ from brain.identity.directory import (
 )
 from brain.identity.oidc import GroupRoleRule
 from brain.identity.roles import IdentityError, Role, RoleGrant, standing_super_admins
+from brain.ops.hard_deletes import DESIGNED_HARD_DELETES
 from brain.tables.identity import ROLE_CHARS, SOURCE_GROUP_CHARS, DirectoryRoleGrantRow
 
 REPO = Path(__file__).resolve().parents[2]
@@ -577,18 +578,11 @@ def test_the_sync_may_delete_from_its_own_table() -> None:
     assert expected in grants
 
 
-#: The tables the application role may delete from, each argued in the test below. The last three
-#: are a person's own record: a setting they keep (`0229`), erased with them, an artifact they
-#: handed to a colleague (`0230`), which only they may withdraw, and an entry on the list of a
-#: project of theirs (`0233`), which only the project's owner may take out. None is anybody's audit
-#: trail: the entry is a reference, and the thread or file it names stays exactly where it was.
-DELETE_GRANTED = (
-    "auth.directory_role_grant",
-    "obs.application_log",
-    "auth.member_preference",
-    "agent.artifact_share",
-    "agent.project_item",
-)
+#: The tables the application role may delete from, each argued in `brain.ops.hard_deletes`, which
+#: is the one list (it had a copy here that missed `obs.trace_step`, 0226's, until 2026-10-14).
+#: The derived comparison against the rendered migrations is `tests/unit/test_hard_deletes.py`;
+#: this file keeps the line scan, which a reader can follow to the line.
+DELETE_GRANTED = tuple(DESIGNED_HARD_DELETES)
 
 
 def test_no_other_table_in_any_migration_grants_delete() -> None:

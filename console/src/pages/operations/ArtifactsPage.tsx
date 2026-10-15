@@ -26,7 +26,7 @@
  */
 
 import { FETCHING_MORE, NOTHING_MATCHES, SHOW_MORE } from "../../components/ListControls";
-import { EmptyState, EntityTable, FailureState, ListToolbar, LoadingState, PageHeader, RESET_LABEL, SectionCard, type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, EmptyList, EmptyState, EntityTable, FailureState, ListToolbar, LoadingState, PageHeader, RESET_LABEL, SectionCard, type EntityColumn } from "../../components/kit";
 import { narrows, NO_QUESTION } from "../../components/listing";
 import { Button } from "../../components/ui/button";
 import { useListing } from "../../components/useListing";
@@ -132,7 +132,12 @@ export function ArtifactsPage() {
         }
       />
     ) : (
-      <EmptyState title={NO_ARTIFACTS} description={NO_ARTIFACTS_MORE} />
+      <EmptyList
+        title={NO_ARTIFACTS}
+        description={NO_ARTIFACTS_MORE}
+        adds="An artifact is listed when an agent produces a document, a deck, a report or an image for somebody."
+        by={BY_THE_INSTALL}
+      />
     );
   } else {
     list = (

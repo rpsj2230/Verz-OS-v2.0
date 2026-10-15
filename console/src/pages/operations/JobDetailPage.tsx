@@ -12,8 +12,8 @@
  * searchable by report and kind of failure, filtered by outcome, and paged with no count.
  *
  * **Every act whose route exists works.** Pause, resume and run now are confirmed through
- * `JobActs.tsx`; stopping a run already going has no route and is `kit/UnavailableAction` with the
- * sentence `operationsActions.ts` gives, drawn only while a run is going (`runIsGoing`): a job with
+ * `JobActs.tsx`; stopping a run already going has no route and is a `kit/Explanation` of the
+ * `action` form (`operations.stop_run`), drawn only while a run is going (`runIsGoing`): a job with
  * no run in progress has nothing to stop, and offering to stop one read as a live button beside a
  * sentence saying it was not available. The identifier is in Advanced.
  *
@@ -30,10 +30,15 @@ import { useResource } from "../../api/useResource";
 import { FETCHING_MORE, NOTHING_MATCHES, SHOW_MORE } from "../../components/ListControls";
 import {
   Advanced,
+  BY_THE_INSTALL,
   DetailHeader,
   DetailPage,
+  type DetailView,
+  EmptyList,
   EmptyState,
+  type EntityColumn,
   EntityTable,
+  Explanation,
   Fact,
   FactList,
   FailureState,
@@ -43,10 +48,7 @@ import {
   Note,
   SectionCard,
   StatCard,
-  UnavailableAction,
   ViewSwitch,
-  type DetailView,
-  type EntityColumn,
 } from "../../components/kit";
 import { narrows, type FilterChoice, type SortChoice } from "../../components/listing";
 import { useListing } from "../../components/useListing";
@@ -54,7 +56,6 @@ import { Button } from "../../components/ui/button";
 import {
   ACTION_LABELS,
   actionsFor,
-  CONTROLS_SWITCHED_OFF,
   EVERY_CHANGE_IS_IN_THE_AUDIT_TRAIL,
   everyWords,
   jobAddress,
@@ -75,9 +76,9 @@ import {
   type JobRun,
 } from "../jobsQuery";
 import { useJobActs } from "./JobActs";
-import { UNAVAILABLE } from "./operationsActions";
 import { at, jobName, Line, OPERATIONS, UNREADABLE } from "./parts";
 import { JobStatePills, OutcomePill } from "./pills";
+import { ACT_LABELS } from "./operationsActions";
 
 /** The three views, in the owner's order. The first is where the bare address lands. */
 export const VIEWS = ["dashboard", "profile", "about"] as const;
@@ -189,7 +190,12 @@ function RunHistory({ control }: { readonly control: string }) {
     body = narrows(listing.question) ? (
       <EmptyState title={NOTHING_MATCHES} description="Change the search or clear a filter." />
     ) : (
-      <EmptyState title={NO_RUNS} description={NO_RUNS_MORE} />
+      <EmptyList
+        title={NO_RUNS}
+        description={NO_RUNS_MORE}
+        adds="A run is recorded each time the worker starts this job."
+        by={BY_THE_INSTALL}
+      />
     );
   } else {
     body = (
@@ -382,11 +388,12 @@ export function JobDetailPage({ control, tab }: { readonly control: string; read
                 </Button>
               ))}
               {runIsGoing(job) ? (
-                <UnavailableAction
-                  label={UNAVAILABLE.stopRun.label}
-                  text={UNAVAILABLE.stopRun.label}
+                <Explanation
+                  form="action"
+                  act="operations.stop_run"
+                  label={ACT_LABELS.stopRun}
+                  text={ACT_LABELS.stopRun}
                   icon={<Ban aria-hidden />}
-                  reason={UNAVAILABLE.stopRun.reason}
                 />
               ) : null}
             </>
@@ -401,7 +408,7 @@ export function JobDetailPage({ control, tab }: { readonly control: string; read
             </KpiStrip>
           }
           footnote={
-            detail.may_control && !detail.controls_switched_on ? <Note kind="not-yet">{CONTROLS_SWITCHED_OFF}</Note> : undefined
+            detail.may_control && !detail.controls_switched_on ? <Explanation form="note" act="job.controls_switched_off" /> : undefined
           }
         />
       }

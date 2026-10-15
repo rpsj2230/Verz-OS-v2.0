@@ -964,6 +964,8 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
   "POST /api/v1/answer": "The answer lane behind Ask, which writes no row an administrator manages.",
   "GET /api/v1/welcome":
     "The starter questions a person is offered on their first visit to Ask, for their own department and kept to what they may ask; it reads nothing an administrator manages and writes nothing.",
+  "GET /api/v1/console/explanations/{act}":
+    "The sentence that explains one act the console cannot offer, the same for every reader and read from the product's own registry (brain.console.explanations); it reads nothing an administrator manages and writes nothing, so no administrator manages a row of it.",
   "POST /api/v1/answer/mark":
     "A person marking an answer they were given helpful or not, one bit against its reference, which no administrator manages and nothing that answers reads.",
   "POST /api/v1/answer/copied":

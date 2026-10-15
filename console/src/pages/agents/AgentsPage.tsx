@@ -358,6 +358,8 @@ export function AgentsPage() {
       loading={LOADING_AGENTS}
       emptyTitle={NO_AGENTS}
       emptyDescription={NO_AGENTS_DESCRIPTION}
+      emptyAdds="Build one with New agent, then publish it so it is offered."
+      emptyBy={["super_admin", "department_admin", "member"]}
       emptyIcon={<Bot aria-hidden />}
       emptyAction={
         <Button asChild variant="outline" className="text-ink no-underline">

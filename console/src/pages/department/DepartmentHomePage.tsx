@@ -35,25 +35,27 @@ import type { ApiFailure } from "../../api/errors";
 import { useResource, type Resource } from "../../api/useResource";
 import {
   Advanced,
+  BY_THE_INSTALL,
   Chip,
   DetailHeader,
   DetailPage,
+  type DetailView,
+  EmptyList,
   EmptyState,
+  type EntityColumn,
   EntityTable,
+  Explanation,
   Fact,
   FactList,
   FailureState,
   KpiStrip,
   LoadingState,
   Note,
-  NotOffered,
   PageHeader,
   SectionCard,
   StatCard,
   StatsStrip,
   ViewSwitch,
-  type DetailView,
-  type EntityColumn,
 } from "../../components/kit";
 import { listPath, NO_QUESTION } from "../../components/listing";
 import { Button } from "../../components/ui/button";
@@ -119,8 +121,6 @@ export const MORE_AGENTS = "There are more agents than are listed here.";
 export const NO_DOCUMENT = "No document you may open is filed under this department.";
 export const NO_GAP = "There is no gap to show here.";
 export const NO_HISTORY = "No change to this department that you may see is recorded.";
-export const PROFILE_ELSEWHERE =
-  "Its lead, teams and scopes are managed on Departments by somebody who may open it.";
 export const HOW_IT_WORKS =
   "A department is where people sit and what a scope can name. Its lead is appointed and confers nothing: what anybody may see comes only from their own grants.";
 
@@ -216,7 +216,12 @@ function Dashboard({ slug, people }: { readonly slug: string; readonly people: R
           {() => {
             const rows = readPeople(people.data);
             return rows.length === 0 ? (
-              <p className="m-0 text-[13px] text-dim">{NO_PERSON}</p>
+              <EmptyList
+                compact
+                title={NO_PERSON}
+                adds="Place a person in the department from the People screen with Move to a department."
+                by={["super_admin", "department_admin"]}
+              />
             ) : (
               <ul className="m-0 flex list-none flex-col divide-y divide-line p-0">
                 {rows.map((one) => (
@@ -236,7 +241,12 @@ function Dashboard({ slug, people }: { readonly slug: string; readonly people: R
             return (
               <>
                 {found === null || found.entries.length === 0 ? (
-                  <p className="m-0 text-[13px] text-dim">{NO_AGENT}</p>
+                  <EmptyList
+                    compact
+                    title={NO_AGENT}
+                    adds="Build an agent for the department and publish it, and it is listed here."
+                    by={["super_admin", "department_admin"]}
+                  />
                 ) : (
                   <ul className="m-0 flex list-none flex-col divide-y divide-line p-0">
                     {found.entries.map((entry) => (
@@ -257,7 +267,12 @@ function Dashboard({ slug, people }: { readonly slug: string; readonly people: R
           {() => {
             const rows = readDocRows(documents.data);
             return rows.length === 0 ? (
-              <p className="m-0 text-[13px] text-dim">{NO_DOCUMENT}</p>
+              <EmptyList
+                compact
+                title={NO_DOCUMENT}
+                adds="Add a document to the department from the Knowledge screen."
+                by={["super_admin", "department_admin", "member"]}
+              />
             ) : (
               <ul className="m-0 flex list-none flex-col divide-y divide-line p-0">
                 {rows.map((one) => (
@@ -348,7 +363,12 @@ function Dashboard({ slug, people }: { readonly slug: string; readonly people: R
             }
             const area = body.areas[0];
             return area === undefined ? (
-              <p className="m-0 text-[13px] text-dim">{NO_COVERAGE}</p>
+              <EmptyList
+                compact
+                title={NO_COVERAGE}
+                adds="Add a document to the department from the Knowledge screen, and it is counted here."
+                by={["super_admin", "department_admin", "member"]}
+              />
             ) : (
               <FactList>
                 <Fact label="Documents">{String(area.items)}</Fact>
@@ -389,7 +409,7 @@ function Profile({ slug, name, row }: { readonly slug: string; readonly name: st
         lede="Its name, who leads it and how it is organised."
         footer={
           row.data === null && !notTheirs(row.failure) ? undefined : department === null ? (
-            <NotOffered>{PROFILE_ELSEWHERE}</NotOffered>
+            <Explanation form="line" act="department.profile_elsewhere" />
           ) : (
             <p className="m-0 text-[12.5px]">
               <Link to={departmentAddress(slug, "teams")} className="text-acc-text underline-offset-4 hover:underline">
@@ -462,7 +482,13 @@ function About({ slug }: { readonly slug: string }) {
       >
         {() =>
           rows.length === 0 ? (
-            <EmptyState title="No history to show" description={NO_HISTORY} icon={<History aria-hidden />} />
+            <EmptyList
+              title="No history to show"
+              description={NO_HISTORY}
+              adds="An entry is written whenever somebody changes the department, its teams or its people."
+              by={BY_THE_INSTALL}
+              icon={<History aria-hidden />}
+            />
           ) : (
             <div className="flex min-w-0 flex-col gap-2">
               <EntityTable caption="Changes to this department" columns={columns} rows={rows} rowId={(row) => `${row.at} ${row.action} ${row.actor_id}`} rowLabel={(row) => whenWords(row.at)} />

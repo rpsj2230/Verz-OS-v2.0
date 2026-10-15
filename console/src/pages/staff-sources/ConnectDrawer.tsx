@@ -19,7 +19,7 @@ import { useCallback, useId, useState, type FormEvent, type ReactNode } from "re
 import { request } from "../../api/client";
 import type { ApiFailure, FieldProblem } from "../../api/errors";
 import { useResource } from "../../api/useResource";
-import { ConfirmDialog, Drawer, Fact, FactList, FailureState, LoadingState, Note } from "../../components/kit";
+import { ConfirmDialog, Drawer, Explanation, Fact, FactList, FailureState, LoadingState, Note } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
@@ -442,7 +442,7 @@ export function ConnectDrawer({
             <li key={step}>{step}</li>
           ))}
         </ol>
-        {guide.connectable ? null : <Note kind="not-yet">{guide.unavailable}</Note>}
+        {guide.connectable ? null : <Explanation form="note" lead="not-yet" told={guide.unavailable} />}
         {!mayConnect ? (
           <Note>{STEPS_ONLY}</Note>
         ) : guide.connectable ? (

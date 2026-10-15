@@ -132,13 +132,13 @@ export function GlobalSearch() {
             setOpen(false);
           }
         }}
-        className="h-8 w-48 rounded-md border border-line bg-surface px-2 text-[13px] text-ink md:w-64"
+        className="h-8 w-48 rounded-md border border-line bg-panel px-2 text-[13px] text-ink md:w-64"
       />
       {found === null ? null : (
         <div
           role="region"
           aria-label="Search results"
-          className="absolute right-0 z-20 mt-1 max-h-[70vh] w-80 max-w-[90vw] overflow-auto rounded-md border border-line bg-surface p-2 shadow-md"
+          className="absolute right-0 z-20 mt-1 max-h-[70vh] w-80 max-w-[90vw] overflow-auto rounded-md border border-line bg-panel p-2 shadow-md"
         >
           {found.length === 0 ? (
             <p className="m-0 p-1 text-[13px] text-dim">{NOTHING_MATCHES}</p>

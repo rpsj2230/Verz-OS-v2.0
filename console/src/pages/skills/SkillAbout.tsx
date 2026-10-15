@@ -16,7 +16,7 @@
 import { ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
-import { FailureState, LoadingState, Note, SectionCard } from "../../components/kit";
+import { Explanation, FailureState, LoadingState, SectionCard } from "../../components/kit";
 import { readLedgerPage } from "../auditQuery";
 import { WORKS_AT } from "./skillActions";
 import { dayWords, headlineVersion, historyApiPaths, readHistory, type SkillDetail } from "./skillDetailQuery";
@@ -25,9 +25,6 @@ export const ABOUT_HEADING = "What it is for";
 export const HISTORY_HEADING = "History";
 export const LOADING_HISTORY = "Loading this skill's history.";
 export const NO_HISTORY = "Nothing is recorded about this skill that you can see.";
-export const HISTORY_ELSEWHERE =
-  "the history of a skill is read from the activity log, which your account cannot open.";
-
 export function SkillAbout({ detail, profileAddress }: { readonly detail: SkillDetail; readonly profileAddress: string }) {
   const [ownPath, assignedPath] = historyApiPaths(detail.name);
   const own = useResource<unknown>(ownPath);
@@ -37,7 +34,7 @@ export function SkillAbout({ detail, profileAddress }: { readonly detail: SkillD
   let history;
   if (failure !== null) {
     history =
-      failure.status === 404 ? <Note kind="not-yet">{HISTORY_ELSEWHERE}</Note> : <FailureState failure={failure} />;
+      failure.status === 404 ? <Explanation form="note" act="skill.history_elsewhere" /> : <FailureState failure={failure} />;
   } else if (own.busy || assigned.busy) {
     history = <LoadingState label={LOADING_HISTORY} rows={3} />;
   } else {

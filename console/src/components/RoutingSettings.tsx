@@ -16,6 +16,7 @@ import { useState, type FormEvent } from "react";
 import { request } from "../api/client";
 import type { ApiFailure, FieldProblem } from "../api/errors";
 import { ConfirmAction } from "./ConfirmAction";
+import { BY_THE_INSTALL, EmptyList } from "./kit/states";
 import type { GridColumn } from "./gridFeatures";
 import { GridTable } from "./kit/GridTable";
 import { FailureNotice } from "../ui/FailureNotice";
@@ -465,7 +466,12 @@ export function RoutingSettings({
       <h3>{ALERTS_HEADING}</h3>
       <p className="note">{ALERTS_LEDE}</p>
       {settings.alerts.length === 0 ? (
-        <p className="note">{NO_ALERTS}</p>
+        <EmptyList
+          compact
+          title={NO_ALERTS}
+          adds="An alert is raised when a question needs a later step of its level, and none is added by hand."
+          by={BY_THE_INSTALL}
+        />
       ) : (
         <GridTable
           look="grid"

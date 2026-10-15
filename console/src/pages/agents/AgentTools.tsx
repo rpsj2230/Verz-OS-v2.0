@@ -19,6 +19,7 @@
 
 import { useId, useState } from "react";
 import { request } from "../../api/client";
+import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
 import { ConfirmDialog, FailureState, LoadingState, Note } from "../../components/kit";
 import { Button } from "../../components/ui/button";
@@ -141,7 +142,7 @@ export function AgentTools({ agentId }: { readonly agentId: string }) {
   const answer = useResource<unknown>(agentAttachmentsApiPath(agentId), version);
   const [asking, setAsking] = useState<Press | null>(null);
   const [busy, setBusy] = useState(false);
-  const [said, setSaid] = useState<string | null>(null);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
 
   if (answer.failure !== null) {
     return <FailureState failure={answer.failure} />;
@@ -156,18 +157,14 @@ export function AgentTools({ agentId }: { readonly agentId: string }) {
     const result = await request<unknown>(agentAttachmentsApiPath(agentId), { method: "POST", body: one });
     setBusy(false);
     setAsking(null);
-    setSaid(result.ok ? null : result.failure.message);
+    setFailure(result.ok ? null : result.failure);
     setVersion((count) => count + 1);
   };
 
   const toolWords = (one: Named) => (one.description === "" ? one.name : `${one.description} (${one.name})`);
   return (
     <div data-slot="agent-tools" className="flex min-w-0 flex-col gap-2 text-[12.5px]">
-      {said === null ? null : (
-        <p role="alert" className="m-0 text-crit">
-          {said}
-        </p>
-      )}
+      {failure === null ? null : <FailureState failure={failure} />}
       {attachments.carried.length === 0 ? (
         <Note>{NOTHING_CARRIED}</Note>
       ) : (

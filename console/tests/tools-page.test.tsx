@@ -15,7 +15,6 @@ import {
   A_SWITCH_ONLY_NARROWS,
   EFFECT_SENTENCES,
   KEEP_IT,
-  NO_LONGER_OFFERED,
   SENSITIVE_EFFECT_SENTENCES,
   SWITCH_OFF_FOR_THE_INSTALL,
   SWITCH_ON_FOR_THE_INSTALL,
@@ -28,6 +27,7 @@ import { NO_SUCH_TOOL } from "../src/pages/tools/ToolDetailPage";
 import { json, mountPage, type Answer } from "./support/pageHarness";
 import { backendModelFields } from "./support/python";
 import { installRadixStubs } from "./support/radix";
+import { sentenceFor } from "./support/explanations";
 
 beforeAll(() => {
   installRadixStubs();
@@ -158,7 +158,9 @@ describe("a tool's page", () => {
     expect(labels.some((one) => one.startsWith(SWITCH_OFF_FOR_THE_INSTALL))).toBe(false);
 
     const gone = await toolPage({ [LIST]: () => json(page({}, { registered: false })) });
-    expect(gone.container.textContent).toContain(NO_LONGER_OFFERED);
+    await waitFor(() => {
+      expect(gone.container.textContent).toContain(sentenceFor("tool.no_longer_offered"));
+    });
     expect([...gone.container.querySelectorAll("button")].filter((one) => (one.getAttribute("aria-label") ?? "").includes("drive.delete_file"))).toEqual([]);
   });
 

@@ -18,7 +18,7 @@
  */
 
 import { useResource } from "../../api/useResource";
-import { SectionCard } from "../../components/kit";
+import { BY_THE_INSTALL, EmptyList, SectionCard } from "../../components/kit";
 import { moneyWords, spendDetailPath, type CostPerAnswerBody, type SpendShapesBody, type SpendStopsBody } from "../spendQuery";
 import { Quiet } from "./reportParts";
 
@@ -45,7 +45,12 @@ function AnswerCost({ days, currency }: { readonly days: number; readonly curren
       {answer.failure !== null ? (
         <Quiet>{NOT_READ}</Quiet>
       ) : answer.data === null ? null : answer.data.answers === 0 || answer.data.mean_minor === null ? (
-        <Quiet>{NO_ANSWERS}</Quiet>
+        <EmptyList
+          compact
+          title={NO_ANSWERS}
+          adds="A cost is recorded each time a model answers a question, and none is added by hand."
+          by={BY_THE_INSTALL}
+        />
       ) : (
         <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[13px]">
           <dt className="text-dim">Answers</dt>
@@ -71,7 +76,12 @@ function Shapes({ days, currency }: { readonly days: number; readonly currency: 
       {answer.failure !== null ? (
         <Quiet>{NOT_READ}</Quiet>
       ) : answer.data === null ? null : answer.data.dearest.length === 0 ? (
-        <Quiet>{NO_SHAPES}</Quiet>
+        <EmptyList
+          compact
+          title={NO_SHAPES}
+          adds="A shape is listed once questions of that shape have been answered, and none is added by hand."
+          by={BY_THE_INSTALL}
+        />
       ) : (
         <ol className="m-0 flex list-none flex-col gap-1 p-0 text-[13px]">
           {answer.data.dearest.map((one) => (
@@ -93,7 +103,12 @@ function Stops() {
       {answer.failure !== null ? (
         <Quiet>{NOT_READ}</Quiet>
       ) : answer.data === null ? null : answer.data.stops.length === 0 ? (
-        <Quiet>{NO_STOPS}</Quiet>
+        <EmptyList
+          compact
+          title={NO_STOPS}
+          adds="A budget is stopped when its ceiling is reached, and none is added by hand."
+          by={BY_THE_INSTALL}
+        />
       ) : (
         <ul className="m-0 flex list-none flex-col gap-1 p-0 text-[13px]">
           {answer.data.stops.map((one) => (

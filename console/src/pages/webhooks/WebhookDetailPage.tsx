@@ -27,11 +27,15 @@ import { useCallback, useMemo, useState } from "react";
 import { useResource } from "../../api/useResource";
 import {
   Advanced,
+  BY_THE_INSTALL,
   Chip,
   DetailHeader,
   DetailPage,
-  EmptyState,
+  type DetailView,
+  EmptyList,
+  type EntityColumn,
   EntityTable,
+  Explanation,
   Fact,
   FactList,
   FailureState,
@@ -42,8 +46,6 @@ import {
   SectionCard,
   StatCard,
   ViewSwitch,
-  type DetailView,
-  type EntityColumn,
 } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { at, Line } from "../operations/parts";
@@ -130,7 +132,12 @@ function Dashboard({ row, onReplay }: { readonly row: SubscriberRow; readonly on
   return (
     <SectionCard title={DELIVERIES_HEADING}>
       {row.deliveries.length === 0 ? (
-        <EmptyState title={NO_DELIVERIES} description={NO_DELIVERIES_DESCRIPTION} />
+        <EmptyList
+          title={NO_DELIVERIES}
+          description={NO_DELIVERIES_DESCRIPTION}
+          adds="A delivery is recorded each time something the subscriber is told about happens."
+          by={BY_THE_INSTALL}
+        />
       ) : (
         <EntityTable
           caption={`Recent deliveries to ${row.subscriber_id}`}
@@ -204,7 +211,7 @@ function Profile({ row, page, onAct }: { readonly row: SubscriberRow; readonly p
         </FactList>
         {page.vault === "ready" ? null : (
           <div className="mt-2">
-            <Note kind="not-yet">{page.vault_told}</Note>
+            <Explanation form="note" lead="not-yet" told={page.vault_told} />
           </div>
         )}
       </SectionCard>

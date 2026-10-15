@@ -24,7 +24,8 @@ import { BookOpen, Plus, Sparkles, X } from "lucide-react";
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { request } from "../../api/client";
-import { Chip, ConfirmDialog, Note, SectionCard } from "../../components/kit";
+import type { ApiFailure } from "../../api/errors";
+import { Chip, ConfirmDialog, FailureState, Note, SectionCard } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
@@ -144,7 +145,7 @@ export function SkillsDetail({
 }) {
   const [adding, setAdding] = useState(false);
   const [asking, setAsking] = useState<Asking | null>(null);
-  const [said, setSaid] = useState<string | null>(null);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [busy, setBusy] = useState(false);
   // Sent only from the confirmation below, which names the skill and the agent.
   const decide = async (one: Asking): Promise<void> => {
@@ -154,10 +155,10 @@ export function SkillsDetail({
     setBusy(false);
     setAsking(null);
     if (!result.ok) {
-      setSaid(result.failure.message);
+      setFailure(result.failure);
       return;
     }
-    setSaid(null);
+    setFailure(null);
     onChanged();
   };
   if (skills.length === 0 && offers.length === 0) {
@@ -222,11 +223,7 @@ export function SkillsDetail({
           ) : null}
         </div>
       )}
-      {said === null ? null : (
-        <p role="alert" className="m-0 text-[12px] text-crit">
-          {said}
-        </p>
-      )}
+      {failure === null ? null : <FailureState failure={failure} />}
       {editable || asking !== null ? (
         <ConfirmDialog
           open={asking !== null}
@@ -236,7 +233,7 @@ export function SkillsDetail({
               ? "The agent is pinned to this approved version and can use it from its next run. The attachment is recorded on the audit log."
               : "The agent stops using this skill from its next run. The version stays in the library, and the removal is recorded on the audit log."
           }
-          confirmLabel={asking?.kind === "attach" ? "Attach" : "Take it off"}
+          confirmLabel={asking?.kind === "attach" ? "Attach" : "Detach"}
           cancelLabel="Keep it as it is"
           danger={asking?.kind === "detach"}
           busy={busy}
@@ -302,6 +299,7 @@ export function PreviewForm({ agentId }: { readonly agentId: string }) {
   const inputId = useId();
   const [person, setPerson] = useState("");
   const [said, setSaid] = useState<string | null>(null);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [busy, setBusy] = useState(false);
   const [shown, setShown] = useState<Preview | null>(null);
   const submit = async (event: FormEvent) => {
@@ -315,10 +313,12 @@ export function PreviewForm({ agentId }: { readonly agentId: string }) {
     setBusy(false);
     if (!result.ok) {
       setShown(null);
-      setSaid(result.failure.message);
+      setSaid(null);
+      setFailure(result.failure);
       return;
     }
     setSaid(null);
+    setFailure(null);
     setShown(readPreview(result.data));
   };
   return (
@@ -340,6 +340,7 @@ export function PreviewForm({ agentId }: { readonly agentId: string }) {
           {said}
         </p>
       )}
+      {failure === null ? null : <FailureState failure={failure} />}
       {shown === null ? null : (
         <div data-slot="preview-result" className="rounded-md border border-line p-3 text-[13px]">
           {shown.tools.length === 0 ? (

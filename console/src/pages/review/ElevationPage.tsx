@@ -247,6 +247,8 @@ export function ElevationPage() {
         loading={READING_ELEVATION}
         emptyTitle={NO_REQUESTS}
         emptyDescription={NO_REQUESTS_MORE}
+        emptyAdds="Somebody who needs more access than they hold asks for it for a few hours."
+        emptyBy={["member"]}
         emptyIcon={<KeyRound aria-hidden />}
         footer={
           <>

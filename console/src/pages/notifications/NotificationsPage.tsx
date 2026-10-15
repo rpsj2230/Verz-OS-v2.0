@@ -28,7 +28,16 @@
 import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
-import { Advanced, Fact, FactList, Note, SectionCard, type EntityColumn } from "../../components/kit";
+import {
+  Advanced,
+  BY_THE_INSTALL,
+  type EntityColumn,
+  Explanation,
+  Fact,
+  FactList,
+  Note,
+  SectionCard,
+} from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { GROUP_LABEL } from "../channelsQuery";
 import { at, Line, OpsPage, WholeList } from "../operations/parts";
@@ -143,6 +152,8 @@ function Body({ page, onAct }: { readonly page: NotificationsBody; readonly onAc
           rowId={(row) => `${row.subject}:${row.raised_at}`}
           rowLabel={(row) => personWords(page.people, row.subject)}
           empty={ALERTS_HEADING}
+          emptyAdds="An alert is raised when an alert condition holds for a person, and none is added by hand."
+          emptyBy={BY_THE_INSTALL}
         />
       ) : null}
       <WholeList
@@ -170,6 +181,8 @@ function Body({ page, onAct }: { readonly page: NotificationsBody; readonly onAc
         }
         exportName="notices"
         empty={NO_NOTICES}
+        emptyAdds="A release declares each notice, and none is added by hand."
+        emptyBy={BY_THE_INSTALL}
         footer={
           <>
             <Line>{page.only_the_last_change_is_kept}</Line>
@@ -217,7 +230,7 @@ function Body({ page, onAct }: { readonly page: NotificationsBody; readonly onAc
           ) : (
             <Note>{RELAY_NOT_SAVED}</Note>
           )}
-          {email.password.vault === "ready" ? null : <Note kind="not-yet">{email.password.vault_told}</Note>}
+          {email.password.vault === "ready" ? null : <Explanation form="note" lead="not-yet" told={email.password.vault_told} />}
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"

@@ -24,7 +24,7 @@ import { Link } from "react-router-dom";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
-import { Drawer, EmptyState, Fact, FactList, FailureState, LoadingState, PageHeader, SectionCard } from "../../components/kit";
+import { Drawer, EmptyList, Fact, FactList, FailureState, LoadingState, PageHeader, SectionCard } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Textarea } from "../../components/ui/textarea";
@@ -311,7 +311,13 @@ export function SolutionsPage() {
       <>
         <SectionCard title={WAITING_HEADING}>
           {found.waiting.length === 0 ? (
-            <EmptyState title={NONE_WAITING} description={NONE_WAITING_DESCRIPTION} icon={<Lightbulb aria-hidden />} />
+            <EmptyList
+              title={NONE_WAITING}
+              description={NONE_WAITING_DESCRIPTION}
+              adds="Somebody captures a solution from a conversation in a department where you add documents."
+              by={["member"]}
+              icon={<Lightbulb aria-hidden />}
+            />
           ) : (
             <ul className="m-0 flex list-none flex-col gap-4 p-0">
               {found.waiting.map((one) => (
@@ -325,7 +331,12 @@ export function SolutionsPage() {
         </SectionCard>
         <SectionCard title={YOURS_HEADING}>
           {found.yours.length === 0 ? (
-            <EmptyState title={NONE_YOURS} description={NONE_YOURS_DESCRIPTION} />
+            <EmptyList
+              title={NONE_YOURS}
+              description={NONE_YOURS_DESCRIPTION}
+              adds="Capture one from a conversation that fixed something, with Capture a solution."
+              by={["member"]}
+            />
           ) : (
             <ul className="m-0 flex list-none flex-col gap-4 p-0">
               {found.yours.map((one) => (

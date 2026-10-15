@@ -21,7 +21,7 @@
 
 import { useState } from "react";
 import { useResource } from "../../api/useResource";
-import { EmptyState, EntityTable, FailureState, KpiStrip, LoadingState, Note, SectionCard, StatCard, type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, EmptyList, EntityTable, FailureState, KpiStrip, LoadingState, Note, SectionCard, StatCard, type EntityColumn } from "../../components/kit";
 import { cn } from "../../lib/utils";
 import { whenWords } from "../agents/agentStats";
 import { cadence, qualityApiPathFor, readQuality, resultWords, runCounts, type CanaryRunBody, type QualityBody } from "../qualityQuery";
@@ -142,7 +142,12 @@ function Runs({ body }: { readonly body: QualityBody }) {
   return (
     <SectionCard title={RUNS_HEADING} footer={<Note>{FINDINGS_GO_TO_THE_ALERT}</Note>}>
       {body.runs.length === 0 ? (
-        <Quiet>{NO_RUN_IN_PERIOD}</Quiet>
+        <EmptyList
+          compact
+          title={NO_RUN_IN_PERIOD}
+          adds="A run is recorded each time a canary runs, and none is added by hand."
+          by={BY_THE_INSTALL}
+        />
       ) : (
         <div className="flex min-w-0 flex-col gap-3">
           <RunStrip runs={body.runs} />
@@ -165,7 +170,14 @@ export function QualityPage() {
   } else if (answer.busy) {
     content = <LoadingState label={LOADING_QUALITY} />;
   } else if (body === null) {
-    content = <EmptyState title={NO_QUALITY} description={NO_QUALITY_MORE} />;
+    content = (
+      <EmptyList
+        title={NO_QUALITY}
+        description={NO_QUALITY_MORE}
+        adds="A figure is recorded each time a canary runs, and none is added by hand."
+        by={BY_THE_INSTALL}
+      />
+    );
   } else {
     content = (
       <>

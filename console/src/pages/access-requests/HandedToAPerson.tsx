@@ -18,7 +18,7 @@
  */
 
 import { useResource } from "../../api/useResource";
-import { Chip, FailureState, LoadingState, Note, SectionCard } from "../../components/kit";
+import { BY_THE_INSTALL, Chip, EmptyList, FailureState, LoadingState, Note, SectionCard } from "../../components/kit";
 import { whenWords } from "../review/parts";
 
 export const ESCALATIONS_API_PATH = "/escalations";
@@ -105,7 +105,12 @@ export function HandedToAPersonSection() {
         <section aria-label={HANDED_TO_YOU} className="flex min-w-0 flex-col gap-2">
           <h3 className="m-0 text-[13px] font-semibold text-ink">{HANDED_TO_YOU}</h3>
           {found.handed.length === 0 ? (
-            <p className="m-0 text-dim">{NOTHING_HANDED}</p>
+            <EmptyList
+              compact
+              title={NOTHING_HANDED}
+              adds="A question is handed to a person when it names a topic somebody is appointed for."
+              by={BY_THE_INSTALL}
+            />
           ) : (
             <ul className="m-0 flex list-none flex-col gap-3 p-0">
               {found.handed.map((one) => (
@@ -117,7 +122,12 @@ export function HandedToAPersonSection() {
         <section aria-label={YOURS_HANDED_ON} className="flex min-w-0 flex-col gap-2">
           <h3 className="m-0 text-[13px] font-semibold text-ink">{YOURS_HANDED_ON}</h3>
           {found.asked.length === 0 ? (
-            <p className="m-0 text-dim">{NOTHING_OF_YOURS}</p>
+            <EmptyList
+              compact
+              title={NOTHING_OF_YOURS}
+              adds="A question of yours is handed to a person when it names a topic somebody is appointed for."
+              by={BY_THE_INSTALL}
+            />
           ) : (
             <ul className="m-0 flex list-none flex-col gap-3 p-0">
               {found.asked.map((one) => (

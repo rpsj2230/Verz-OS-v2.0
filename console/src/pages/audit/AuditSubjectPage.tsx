@@ -27,7 +27,9 @@ import {
   Advanced,
   Chip,
   DetailHeader,
+  BY_THE_INSTALL,
   DetailPage,
+  EmptyList,
   EmptyState,
   EntityTable,
   Fact,
@@ -91,7 +93,14 @@ function Permissions({ kind, id }: { readonly kind: string; readonly id: string 
   }
   const history = readHistory(answer.data);
   if (history.events.length === 0) {
-    return <EmptyState title={NO_PERMISSION_CHANGES} description={NO_PERMISSION_CHANGES_MORE} />;
+    return (
+      <EmptyList
+        title={NO_PERMISSION_CHANGES}
+        description={NO_PERMISSION_CHANGES_MORE}
+        adds="An entry is written whenever a grant, a removal, a leash change or emergency access is made."
+        by={BY_THE_INSTALL}
+      />
+    );
   }
   const placed = history.events.map((event, at) => ({ event, at }));
   const columns: EntityColumn<{ event: PermissionEvent; at: number }>[] = [
@@ -180,7 +189,12 @@ export function AuditSubjectPage({
     entries = narrowed(filters, ALL_OF_IT) ? (
       <EmptyState title={NOTHING_MATCHES} description={NOTHING_MATCHES_MORE} />
     ) : (
-      <EmptyState title={NOTHING_RECORDED} description={NOTHING_RECORDED_MORE} />
+      <EmptyList
+        title={NOTHING_RECORDED}
+        description={NOTHING_RECORDED_MORE}
+        adds="An entry is written whenever something about this changes."
+        by={BY_THE_INSTALL}
+      />
     );
   } else {
     entries = (

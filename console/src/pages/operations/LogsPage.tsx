@@ -30,14 +30,15 @@ import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
 import {
   EmptyState,
+  type EntityColumn,
   EntityTable,
+  Explanation,
   FailureState,
   LoadingState,
   Note,
   PageHeader,
   saveCsv,
   SectionCard,
-  type EntityColumn,
 } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -46,7 +47,6 @@ import {
   ALL_LEVELS,
   DEBUG_IS_NOT_KEPT,
   ENTRIES_LABEL,
-  EXPORT_CUT_OFF,
   EXPORT_LOG,
   EXPORT_LOG_TITLE,
   EXPORT_NOT_SAVED,
@@ -365,7 +365,7 @@ function ExportButton({ filters, now, onDone }: { readonly filters: LogFilters; 
       onDone(
         <div role="status" className="flex flex-col gap-1">
           <Note>{saved ? EXPORT_SAVED : EXPORT_NOT_SAVED}</Note>
-          {taken.cutOff ? <Note kind="not-yet">{EXPORT_CUT_OFF}</Note> : null}
+          {taken.cutOff ? <Explanation form="note" act="log.export_cut_off" /> : null}
         </div>,
       );
     })();

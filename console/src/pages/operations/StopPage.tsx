@@ -22,7 +22,7 @@ import { useState, type FormEvent } from "react";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
-import { ConfirmDialog, EmptyState, FailureState, LoadingState, Note, PageHeader, SectionCard } from "../../components/kit";
+import { ConfirmDialog, EmptyList, FailureState, LoadingState, Note, PageHeader, SectionCard } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Field, FormProblem, NativeSelect, whenWords } from "../access/formParts";
@@ -255,7 +255,14 @@ function Stopped({ body, onChanged }: { readonly body: HaltsBody; readonly onCha
   return (
     <>
       {body.known ? null : <Note>{CANNOT_TELL}</Note>}
-      {body.known && body.halts.length === 0 ? <EmptyState title={NOTHING_STOPPED_TITLE} description={NOTHING_STOPPED} /> : null}
+      {body.known && body.halts.length === 0 ? (
+        <EmptyList
+          title={NOTHING_STOPPED_TITLE}
+          description={NOTHING_STOPPED}
+          adds="Stop an agent, a connector or a whole scope with the form above, and it is listed here until it is resumed."
+          by={["super_admin", "department_admin"]}
+        />
+      ) : null}
       {body.halts.map((row) => (
         <ResumeCard key={`${row.scope}:${row.target}`} row={row} onResumed={onChanged} />
       ))}

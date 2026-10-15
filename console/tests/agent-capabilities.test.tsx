@@ -327,7 +327,8 @@ describe("the preview", () => {
       fireEvent.submit(second);
     });
     await waitFor(() => {
-      expect(again.querySelector('[role="alert"]')?.textContent).toBe("I could not find that.");
+      // Drawn by the one failure component, so it carries the heading and the reference as well.
+      expect(again.querySelector('[data-slot="failure-state"]')?.textContent).toContain("I could not find that.");
     });
   });
 });

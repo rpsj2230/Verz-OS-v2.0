@@ -7,23 +7,12 @@
  * live. Authoring a template from an agent through the leak scan and withdrawing a published
  * version have no route: `brain.agents.authoring` holds the scan and nothing calls it over HTTP,
  * and `agent.template_version` is insert-only, so a withdrawal needs somewhere to be recorded
- * first. Each is an `UNAVAILABLE` sentence, and `tests/agent-templates.test.tsx` reads every
- * `retiredBy` against the API document so the sentence goes when the route arrives.
+ * first. Each is a `kit/Explanation` of the `action` form (`template.author`, `template.withdraw`), and
+ * `tests/unit/test_console_explanations.py` reads every expiry against the routes the application
+ * mounts so the sentence goes when the route arrives.
  *
  * Task ids: M27.11.7, M27.16.1
  */
-
-export const UNAVAILABLE = Object.freeze({
-  author: {
-    reason:
-      "Coming soon: publishing a template from one of your agents. It will be checked for company details before anyone can install it.",
-    retiredBy: /^\/api\/v1\/(agent-templates\/(author|drafts?|publish)|agents\/\{[^}]+\}\/(template|publish-template))\b/,
-  },
-  withdraw: {
-    reason: "Coming soon: withdrawing a published version so it can no longer be installed. Agents already installed keep running.",
-    retiredBy: /^\/api\/v1\/agent-templates\/\{[^}]+\}\/versions\/\{[^}]+\}\/(withdraw|withdrawal|retire)\b/,
-  },
-});
 
 export const ACT_LABELS = Object.freeze({
   author: "Publish from an agent",

@@ -16,7 +16,6 @@ import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { beforeAll, describe, expect, test } from "vitest";
 import {
   EDIT,
-  EDITING_SWITCHED_OFF,
   GIVE_BACK,
   NO_MODEL_IS_CALLED_YET,
   NOT_INSTALLED,
@@ -29,6 +28,7 @@ import {
 import { button, json, mountPage, settled, type Answer } from "./support/pageHarness";
 import { backendModelFields } from "./support/python";
 import { installRadixStubs } from "./support/radix";
+import { sentenceFor } from "./support/explanations";
 
 beforeAll(() => {
   installRadixStubs();
@@ -118,7 +118,9 @@ describe("what the Prompts screen draws", () => {
     });
 
     expect(container.textContent).toContain(NOT_INSTALLED);
-    expect(container.textContent).toContain(EDITING_SWITCHED_OFF);
+    await waitFor(() => {
+      expect(container.textContent).toContain(sentenceFor("prompt.editing_switched_off"));
+    });
     expect(container.querySelectorAll("button")).toHaveLength(0);
   });
 });

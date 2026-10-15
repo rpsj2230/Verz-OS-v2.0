@@ -16,8 +16,8 @@
  * confirmed Edit as a draft. Where the agent answers is its own card (`AgentChannels.tsx`), switched
  * by its steward or an administrator through a confirmation. A rung is changed, and supervision
  * pinned and reviewed, in the leash block (`AgentLeash.tsx`) for a holder of the leash role.
- * Changing who can find it and browser use have no route and are `UnavailableAction`s with
- * `agentActions.ts`' sentences. Computer use is a sentence, because the product has nothing behind a
+ * Changing who can find it and browser use have no route and are `Explanation`s with
+ * the server's sentences (`agent.level`, `agent.browser`). Computer use is a sentence, because the product has nothing behind a
  * switch.
  *
  * **Identifiers are in the Advanced section.** The agent's slug, the steward's and builder's
@@ -40,12 +40,11 @@ import type { AgentIdentity, DiffRow } from "../../components/agentWorkspaceStat
 import {
   Advanced,
   Chip,
+  Explanation,
   Fact,
   FactList,
   Note,
-  NotOffered,
   SectionCard,
-  UnavailableAction,
 } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Switch } from "../../components/ui/switch";
@@ -53,7 +52,7 @@ import type { ModelChoice } from "../agentModelPinQuery";
 import { ConnectorsDetail, KnowledgeCard, PreviewForm, SkillsDetail } from "./AgentCapabilities";
 import type { AgentCapabilities } from "./agentCapabilitiesQuery";
 import type { ChannelOffer, ConnectorStrip, SkillPin } from "../agentQuery";
-import { LEVEL_WORDS, RUNGS_EXPLAINED, rungWords, TIER_WORDS, UNAVAILABLE, WORKS_AT } from "./agentActions";
+import { LEVEL_WORDS, RUNGS_EXPLAINED, rungWords, TIER_WORDS, WORKS_AT } from "./agentActions";
 import { leashRowId, type HeaderFacts, type ProfileShown } from "./agentDetailQuery";
 import { AgentLeash } from "./AgentLeash";
 import { AgentTools } from "./AgentTools";
@@ -223,7 +222,7 @@ function Capabilities({
               Assign a skill
             </Link>
           }
-          note={<Note kind="not-yet">using skills when the agent answers. An assignment is saved and changes no answer today.</Note>}
+          note={<Explanation form="note" act="agent.skills_not_used" />}
         >
           {skills.map((one) => (
             <Chip key={one.digest} mono tone="brand">
@@ -338,7 +337,7 @@ function Availability({
           <Fact label="Level">
             <span className="flex flex-wrap items-center gap-2">
               <Chip>{LEVEL_WORDS[profile.audienceLevel] ?? profile.audienceLevel}</Chip>
-              <UnavailableAction size="xs" text="Change" label="Change who can find this agent" reason={UNAVAILABLE.level.reason} />
+              <Explanation form="action" act="agent.level" size="xs" text="Change" label="Change who can find this agent" />
             </span>
           </Fact>
         )}
@@ -363,10 +362,7 @@ function Availability({
           </Fact>
         )}
         <Fact label="People">
-          <NotOffered>
-            Not a list of people. Who can find it is set by the level: Personal is the steward only, Department is everyone in it, Company
-            is everyone.
-          </NotOffered>
+          <Explanation form="line" act="agent.people_not_a_list" />
         </Fact>
       </FactList>
     </SectionCard>
@@ -400,7 +396,7 @@ function ModelAndAutonomy({
               <span className="flex flex-wrap items-center gap-1.5">
                 <Chip tone="brand">{TIER_WORDS[profile.tier] ?? profile.tier}</Chip>
               </span>
-              <Note kind="not-yet">the size is saved and not yet used when it answers.</Note>
+              <Explanation form="note" act="agent.size_not_used" />
             </span>
           </Fact>
         )}
@@ -498,7 +494,7 @@ function BrowserUse() {
         <Switch id="agent-browser-use" disabled aria-describedby="agent-browser-use-why" />
       </div>
       <div id="agent-browser-use-why" className="mt-2">
-        <Note kind="not-yet">{UNAVAILABLE.browser.reason.replace(/^Not available yet: /, "")}</Note>
+        <Explanation form="note" act="agent.browser" />
       </div>
     </SectionCard>
   );
@@ -507,10 +503,7 @@ function BrowserUse() {
 function ComputerUse() {
   return (
     <SectionCard title={COMPUTER_HEADING} action={<MonitorX aria-hidden className="size-4 text-dim" />}>
-      <NotOffered>
-        Not offered. Nothing in the product controls a computer's screen, keyboard or mouse, so there is no switch. An agent acts only
-        through actions the product checks first.
-      </NotOffered>
+      <Explanation form="line" act="agent.computer_use" />
     </SectionCard>
   );
 }

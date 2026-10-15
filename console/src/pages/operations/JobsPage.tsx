@@ -20,7 +20,7 @@ import { MoreHorizontal } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
-import { Note, type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, type EntityColumn, Explanation } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import {
   DropdownMenu,
@@ -32,7 +32,6 @@ import {
 import {
   ACTION_LABELS,
   actionsFor,
-  CONTROLS_SWITCHED_OFF,
   DEAD_LETTERS_API_PATH,
   DEAD_LETTERS_CAPTION,
   DEAD_LETTERS_LABEL,
@@ -164,6 +163,8 @@ function DeadLetters() {
       exportName="jobs-set-aside"
       empty={NO_DEAD_LETTERS}
       emptyDescription={NO_DEAD_LETTERS_MORE}
+      emptyAdds="A job is set aside when it fails every attempt, and none is added by hand."
+      emptyBy={BY_THE_INSTALL}
       footer={body.items.some((row) => !row.actionable) ? <Line>{REFERENCES_OUTLIVED}</Line> : null}
     />
   );
@@ -246,7 +247,7 @@ export function JobsPage() {
         const anyFailed = page.jobs.some((row) => row.last_outcome === "failed");
         return (
           <>
-            {page.may_control && !page.controls_switched_on ? <Note kind="not-yet">{CONTROLS_SWITCHED_OFF}</Note> : null}
+            {page.may_control && !page.controls_switched_on ? <Explanation form="note" act="job.controls_switched_off" /> : null}
             <WholeList
               title={JOBS_LABEL}
               caption={JOBS_CAPTION}
@@ -265,6 +266,8 @@ export function JobsPage() {
               exportName="background-jobs"
               empty={NO_JOBS}
               emptyDescription={NO_JOBS_MORE}
+              emptyAdds="A job is listed for each scheduled control a release declares, and none is added by hand."
+              emptyBy={BY_THE_INSTALL}
               footer={
                 <>
                   {page.no_run_can_be_stopped === false ? null : <Line>{NO_RUN_CAN_BE_STOPPED}</Line>}

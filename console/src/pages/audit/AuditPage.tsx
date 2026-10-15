@@ -30,7 +30,7 @@
 import { ScrollText, ShieldAlert, ShieldCheck, X } from "lucide-react";
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
-import { EmptyState, Fact, FactList, FailureState, LoadingState, PageHeader, SectionCard } from "../../components/kit";
+import { BY_THE_INSTALL, EmptyList, EmptyState, Fact, FactList, FailureState, LoadingState, PageHeader, SectionCard } from "../../components/kit";
 import { useResource } from "../../api/useResource";
 import { SEARCH_LABEL } from "../../components/ListControls";
 import { Button } from "../../components/ui/button";
@@ -283,9 +283,11 @@ function Entries({ filters, search }: { readonly filters: AuditFilters; readonly
         }
       />
     ) : (
-      <EmptyState
+      <EmptyList
         title={NO_ENTRIES}
         description={NO_ENTRIES_MORE}
+        adds="An entry is written whenever somebody grants or removes access or changes a setting."
+        by={BY_THE_INSTALL}
         icon={<ScrollText aria-hidden />}
         action={
           <Button asChild variant="outline" className="text-ink no-underline">
@@ -352,7 +354,12 @@ function Statistics() {
       ) : (
         <div className="flex min-w-0 flex-col gap-3">
           {found.refusals.length === 0 ? (
-            <p className="m-0 text-[13px] text-dim">{NO_PATTERN}</p>
+            <EmptyList
+              compact
+              title={NO_PATTERN}
+              adds="A pattern is listed when refusals of one shape repeat, and none is added by hand."
+              by={BY_THE_INSTALL}
+            />
           ) : (
             <ul className="m-0 flex list-none flex-col divide-y divide-line p-0">
               {found.refusals.map((one) => (

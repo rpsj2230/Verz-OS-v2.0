@@ -13,7 +13,7 @@
  * and must not try. A new agent starts disabled and at Shadow, which the confirmation says in the
  * API's words, and the page then opens it.
  *
- * **Withdraw has no route**, so it is `kit/UnavailableAction` with `templateActions.ts`' sentence.
+ * **Withdraw has no route**, so it is a `kit/Explanation` of the `action` form (`template.withdraw`).
  *
  * Task ids: M27.11.7, M27.16.1
  */
@@ -30,6 +30,7 @@ import {
   ConfirmDialog,
   DetailHeader,
   DetailPage,
+  Explanation,
   Fact,
   FactList,
   FailureState,
@@ -38,7 +39,6 @@ import {
   Note,
   SectionCard,
   StatCard,
-  UnavailableAction,
 } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -47,7 +47,7 @@ import { TEMPLATES_API_PATH } from "../agentTemplatesQuery";
 import { agentAddress } from "../agents/AgentsPage";
 import { readChannelChoices } from "../agents/agentDraftsQuery";
 import { ChannelChoices, ticked } from "../agents/ChannelChoices";
-import { ACT_LABELS, originWords, rungWords, UNAVAILABLE } from "./templateActions";
+import { ACT_LABELS, originWords, rungWords } from "./templateActions";
 import { TEMPLATES_HEADING } from "./AgentTemplatesPage";
 
 export type TemplateDetail = components["schemas"]["TemplateDetailView"];
@@ -133,7 +133,7 @@ function InstallCard({ template }: { readonly template: TemplateDetail }) {
   if (found.unavailable !== null && found.unavailable !== undefined) {
     return (
       <SectionCard title={INSTALL_HEADING}>
-        <Note kind="not-yet">{found.unavailable}</Note>
+        <Explanation form="note" lead="not-yet" told={found.unavailable} />
       </SectionCard>
     );
   }
@@ -254,7 +254,7 @@ function TemplateView({ template }: { readonly template: TemplateDetail }) {
             </>
           }
           actions={
-            <UnavailableAction label={ACT_LABELS.withdraw} text={ACT_LABELS.withdraw} reason={UNAVAILABLE.withdraw.reason} />
+            <Explanation form="action" act="template.withdraw" label={ACT_LABELS.withdraw} text={ACT_LABELS.withdraw} />
           }
           figures={
             <KpiStrip label="What this template asks for" count={4}>

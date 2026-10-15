@@ -7,8 +7,8 @@
  * with install, start and stop, the instruction override (`/govern/prompts/{agent_id}`, drawn on the
  * Prompts page) and skill assignment (`/skills/{digest}/assignments`, drawn on the Skills page). It
  * served no route that changes an agent's audience or its leash, previews it as a person, or installs
- * it into a chat group then. Each of those is an `UNAVAILABLE` sentence below and is drawn as
- * `kit/UnavailableAction`, so the page shows the act exists and is coming rather than hiding it or
+ * it into a chat group then. Each of those is a `kit/Explanation` (`agent.level`,
+ * `agent.browser`), so the page shows the act exists and is coming rather than hiding it or
  * faking it. Switching on and off, archiving, duplicating and handing on arrived with
  * `brain.agent_lifecycle_routes` on 2026-09-29 and are live acts (`LifecycleActs.tsx`); creating an
  * agent, editing one as a draft and changing its permissions through that draft arrived with
@@ -28,20 +28,6 @@
  *
  * Task ids: M27.10.2, M27.11.6
  */
-
-/** Why each act that has no route cannot be pressed, and the shape of the API path whose arrival retires it. */
-export const UNAVAILABLE = Object.freeze({
-  level: {
-    reason: "Coming soon: changing who can find this agent.",
-    retiredBy: /^\/api\/v1\/agents\/\{[^}]+\}\/(audience|availability)\b/,
-  },
-  browser: {
-    reason: "Not available yet: browser use. It is built and tested, and has never been switched on for any agent.",
-    retiredBy: /^\/api\/v1\/agents\/\{[^}]+\}\/browser\b/,
-  },
-});
-
-export type UnavailableAct = keyof typeof UNAVAILABLE;
 
 /** Where the acts that do work are done, as console addresses. */
 export const WORKS_AT = Object.freeze({

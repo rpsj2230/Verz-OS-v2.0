@@ -21,7 +21,8 @@ import { useResource } from "../../api/useResource";
 import {
   Advanced,
   ConfirmDialog,
-  EmptyState,
+  EmptyList,
+  Explanation,
   Fact,
   FactList,
   FailureState,
@@ -41,7 +42,6 @@ import {
   editConsequence,
   editPath,
   editQuestion,
-  EDITING_SWITCHED_OFF,
   EVERY_CHANGE_IS_IN_THE_AUDIT_TRAIL,
   GIVE_BACK,
   giveBackConsequence,
@@ -273,12 +273,17 @@ function PromptList({ body, onDone }: { readonly body: PromptsBody; readonly onD
   return (
     <>
       <SystemInstructions body={body} />
-      {body.editing_switched_on ? null : <Note kind="not-yet">{EDITING_SWITCHED_OFF}</Note>}
+      {body.editing_switched_on ? null : <Explanation form="note" act="prompt.editing_switched_off" />}
       {failure === null ? null : (
         <FailureNotice failure={failure.failure} {...(failure.edited === null ? {} : { fields: [INSTRUCTIONS_NAME] })} />
       )}
       {body.agents.length === 0 ? (
-        <EmptyState title={NO_AGENTS_TITLE} description={NO_AGENTS} />
+        <EmptyList
+          title={NO_AGENTS_TITLE}
+          description={NO_AGENTS}
+          adds="Build an agent and publish it, and its instructions are listed here."
+          by={["super_admin", "department_admin", "member"]}
+        />
       ) : (
         body.agents.map((row) => (
           <AgentCard
