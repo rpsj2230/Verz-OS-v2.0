@@ -75,9 +75,11 @@ and `tests/unit/test_wiring.py` holds the two copies equal, so neither can move 
 `set_breaches` costs a named set against the whole of what wave 2 may spend with nothing else
 of ours deployed. Asked on 2026-09-06 about the five services in `docker-compose.langfuse.yml`
 it answered 2304 MiB against 1720, over by 584, and the leaf was blocked on arithmetic. Asked
-on 2026-10-05 it answers 2304 against 6200 and returns nothing. That is the most generous host
-the set will ever be offered, so it is the condition for starting it and not the proof that it
-runs: M32.1.1.1 is claimed by an install check that sees it running, never by this file. See
+on 2026-10-05 it answered 2304 against 6200, and since 2026-10-14, when the application's limit
+was raised by 512 MiB, it answers 2304 against 5688, and returns nothing. That is the most
+generous host the set will ever be offered, so it is the condition for starting it and not the
+proof that it runs: M32.1.1.1 is claimed by an install check that sees it running, never by
+this file. See
 `A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING`.
 
 Task ids: M32.1.1.4, M32.1.2.6
@@ -138,8 +140,9 @@ A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING: Final = (
     "is removed, so the answer cannot be reached by shrinking a neighbour. That is why the "
     "trace ledger's refusal on 2026-09-06 was not a statement about the inference server: the "
     "ledger is 2048 MiB of containers, 2304 with the object store it needs, and the whole of "
-    "wave 2 had 1720 MiB on this host then. It has 6200 since the neighbours' reservations "
-    "went on 2026-10-05, and the same question answered yes."
+    "wave 2 had 1720 MiB on this host then. It has 5688 since the neighbours' reservations "
+    "went on 2026-10-05 and the application's limit rose by 512 MiB on 2026-10-14, and the same "
+    "question answers yes."
 )
 
 #: What this system's declared limits may add up to on the shared host, in mebibytes.
@@ -174,7 +177,11 @@ HOST_HEADROOM_MIB: Final = 10168
 #: `docker-compose.yml`, which is what is deployed today. Asserted against that file by
 #: the test suite rather than trusted, because the whole value of the number is that it
 #: stops matching when somebody changes the file.
-PRODUCTION_BASELINE_MIB: Final = 3712
+#:
+#: **4,224 since 2026-10-14**, when the application's limit went from 1,024 to 1,536 MiB: the
+#: owner's install measured it at 705 MB in use, and with the old limit the runtime could start
+#: no more web workers (`brain.runtime`). The other three are 128 + 2,048 + 512.
+PRODUCTION_BASELINE_MIB: Final = 4224
 
 #: Left for the host: the kernel, the page cache, the Docker daemon, and the SSH session
 #: an operator needs in order to fix whatever went wrong. Spending the last megabyte of a
@@ -577,9 +584,9 @@ LITE_KEEPS_THE_AUDIT_LEDGER = (
 #: spend, so the set had never been started anywhere, and a compose file that has never run is
 #: a design rather than a deployment. It was claimed on 2026-09-08 by somebody who had read the
 #: services block and not the header, and taken back the same hour. The arithmetic now says yes
-#: (6200 MiB to spend), and the claim still belongs to an install check that sees the set
-#: running. What is here is a property of the declaration: it is the sizing claim M32.1.1.2
-#: rests on, extended to the set.
+#: (5688 MiB to spend since 2026-10-14, 6200 before), and the claim still belongs to an install
+#: check that sees the set running. What is here is a property of the declaration: it is the
+#: sizing claim M32.1.1.2 rests on, extended to the set.
 TRACE_STACK_ROLES: Final[Mapping[str, str]] = MappingProxyType(
     {
         "web": "langfuse-web",

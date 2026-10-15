@@ -442,9 +442,9 @@ def test_what_the_store_keeps_is_what_the_artifacts_screen_lists_to_each_reader(
         wide = get(c, "u_admin").json()
         refused = get(c, "u_none")
 
-    assert [one["agent_id"] for one in narrow["artifacts"]] == ["quoting"]
-    assert sorted(one["agent_id"] for one in wide["artifacts"]) == ["hiring", "quoting"]
-    row = next(one for one in wide["artifacts"] if one["agent_id"] == "quoting")
+    assert [one["agent_id"] for one in narrow["items"]] == ["quoting"]
+    assert sorted(one["agent_id"] for one in wide["items"]) == ["hiring", "quoting"]
+    row = next(one for one in wide["items"] if one["agent_id"] == "quoting")
     assert (row["produced_for"], row["run_id"], row["agent_version"]) == (CALLER, "run-1", "1.4.2")
     assert row["kept_as"] == DataClass.PAYLOAD.value
     assert row["kept_until"] != ""

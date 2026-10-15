@@ -30,12 +30,17 @@ import { Status } from "../src/ui/Status";
 import { backendPublicMessages } from "./support/python";
 import {
   callOptionsOf,
+  consoleSourcePaths,
   interfaceMemberNames,
   namedImportsFrom,
   parseConsoleSource,
 } from "./support/typescript";
 
 const TABLE_MODULE = "src/components/DataTable.tsx";
+/** Where the one feature set is declared, and where the library is turned into markup. */
+const FEATURES_MODULE = "src/components/gridFeatures.ts";
+const MARKUP_MODULE = "src/components/kit/GridTable.tsx";
+const LIST_TABLE_MODULE = "src/components/kit/EntityTable.tsx";
 const STOCK_FEATURES =
   "node_modules/@tanstack/table-core/dist/features/stockFeatures.d.ts";
 
@@ -103,7 +108,7 @@ describe("what the grid is capable of", () => {
     expect(stock).toContain("columnFilteringFeature");
 
     const registered = Object.keys(
-      callOptionsOf(parseConsoleSource(TABLE_MODULE), "tableFeatures"),
+      callOptionsOf(parseConsoleSource(FEATURES_MODULE), "tableFeatures"),
     );
     expect(registered.filter((name) => stock.includes(name))).toEqual([]);
     expect(registered.filter((name) => !TYPE_ONLY_SLOTS.includes(name))).toEqual([]);
@@ -114,11 +119,47 @@ describe("what the grid is capable of", () => {
     // feature slot reduces rows without the feature name appearing in the object above, and
     // `createPaginatedRowModel` reads as plumbing rather than as a decision. The positive
     // half is asserted too, because a test that only forbids things passes for a file that
-    // imports nothing and renders no table at all.
-    const imported = namedImportsFrom(parseConsoleSource(TABLE_MODULE), "@tanstack/react-table");
-    expect(imported).toContain("useTable");
-    expect(imported).toContain("tableFeatures");
-    expect(imported.filter((name) => /RowModel/.test(name))).toEqual([]);
+    // imports nothing and renders no table at all: the markup module must build a table and
+    // draw cells with the library, and the feature module must be what declares the set.
+    const drawn = namedImportsFrom(parseConsoleSource(MARKUP_MODULE), "@tanstack/react-table");
+    expect(drawn).toContain("useTable");
+    // Cells are drawn by `drawn` and not by the library's `flexRender`, which would mount an inline
+    // render function as a component and lose the focus on every render (`tests/grid-table.test.tsx`).
+    expect(drawn).not.toContain("flexRender");
+    expect(namedImportsFrom(parseConsoleSource(FEATURES_MODULE), "@tanstack/react-table")).toContain(
+      "tableFeatures",
+    );
+    for (const module of [TABLE_MODULE, MARKUP_MODULE, FEATURES_MODULE, LIST_TABLE_MODULE]) {
+      const imported = namedImportsFrom(parseConsoleSource(module), "@tanstack/react-table");
+      expect(imported.filter((name) => /RowModel/.test(name)), module).toEqual([]);
+    }
+  });
+
+  test("every file that uses the table library draws it through the one feature set", () => {
+    // What breaks if this is deleted: "every grid" stops being a property and becomes the list of
+    // grids somebody remembered. A third grid written next month can call `tableFeatures` with
+    // `rowPaginationFeature` in its own file and nothing above looks at it, because the checks
+    // above name the modules that exist today. This reads every hand-written source file: the
+    // only ones that may import the library are the feature module, the markup, the paged grid
+    // and the list table, none outside the feature module may declare a feature set, none may
+    // import a row model, and the three renderers must reach `gridFeatures`. The positive half is
+    // the length: a scan that found no file would pass the loop vacuously.
+    const importers = consoleSourcePaths("src").filter(
+      (path) => namedImportsFrom(parseConsoleSource(path), "@tanstack/react-table").length > 0,
+    );
+    expect(importers.sort()).toEqual(
+      [FEATURES_MODULE, LIST_TABLE_MODULE, MARKUP_MODULE, TABLE_MODULE].sort(),
+    );
+    for (const path of importers) {
+      const imported = namedImportsFrom(parseConsoleSource(path), "@tanstack/react-table");
+      expect(imported.includes("tableFeatures"), path).toBe(path === FEATURES_MODULE);
+      expect(imported.filter((name) => /RowModel/.test(name)), path).toEqual([]);
+    }
+    for (const renderer of [MARKUP_MODULE, LIST_TABLE_MODULE]) {
+      expect(namedImportsFrom(parseConsoleSource(renderer), "./gridFeatures").concat(
+        namedImportsFrom(parseConsoleSource(renderer), "../gridFeatures"),
+      )).toContain("gridFeatures");
+    }
   });
 
   test("the grid renders every row it was given, in the order it was given them", () => {

@@ -67,7 +67,7 @@ APP_SERVICE: Final = "app"
 
 #: `deploy.resources.limits.memory` on `APP_SERVICE` in `docker-compose.yml`, in MiB. Held to the
 #: file by `tests/unit/test_app_parse_budget.py`.
-APP_MEMORY_MIB: Final = 1024
+APP_MEMORY_MIB: Final = 1536
 
 #: What the deployed application container was measured to hold before it read any document, in
 #: MiB: cgroup `memory.peak` on a staging install on 2026-09-29, 955 and then 954 after the next
