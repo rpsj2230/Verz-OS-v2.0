@@ -16,8 +16,9 @@ import { request } from "../../api/client";
 import type { ApiFailure, FieldProblem } from "../../api/errors";
 import { useResource, type Resource } from "../../api/useResource";
 import { ConfirmDialog, Explanation, FailureState, LoadingState, Note, SectionCard } from "../../components/kit";
+import type { GridColumn } from "../../components/gridFeatures";
+import { GridTable } from "../../components/kit/GridTable";
 import { Button } from "../../components/ui/button";
-import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 import { problemAttributes } from "../../ui/FieldProblems";
 import {
   ADD_GOLDEN,
@@ -120,6 +121,42 @@ export function GoldenQuestions({
     })();
   };
 
+  const goldenColumns: GridColumn<GoldenRow>[] = [
+    {
+      id: "question",
+      header: "Question",
+      cell: ({ row }) => row.original.question,
+      meta: { cellClassName: "[overflow-wrap:anywhere] whitespace-normal" },
+    },
+    {
+      id: "asked-as",
+      header: ASKED_AS_LABEL,
+      cell: ({ row }) => askedAsWords(row.original),
+      meta: { cellClassName: "[overflow-wrap:anywhere] whitespace-normal" },
+    },
+    { id: "expected", header: "Expected", cell: ({ row }) => expectWords(row.original.expect) },
+    {
+      id: "actions",
+      header: () => <span className="sr-only">Actions</span>,
+      cell: ({ row }) => (
+        <Button
+          variant="outline"
+          size="sm"
+          className="min-h-11 sm:min-h-8"
+          disabled={busy}
+          aria-label={`${RETIRE_GOLDEN}: ${row.original.question}`}
+          onClick={() => {
+            setFailure(null);
+            setPending({ kind: "retire", row: row.original });
+          }}
+        >
+          {RETIRE_GOLDEN}
+        </Button>
+      ),
+      meta: { cellClassName: "text-right" },
+    },
+  ];
+
   return (
     <SectionCard title={GOLDEN_HEADING} lede={GOLDEN_LEDE}>
       <div className="flex flex-col gap-4">
@@ -133,43 +170,17 @@ export function GoldenQuestions({
             <StepsToPass />
           </div>
         ) : (
-          <Table className="text-[13px]">
-            <TableCaption className="sr-only">{GOLDEN_HEADING}</TableCaption>
-            <TableHeader className="bg-sunk">
-              <TableRow className="hover:bg-transparent">
-                <TableHead scope="col">Question</TableHead>
-                <TableHead scope="col">{ASKED_AS_LABEL}</TableHead>
-                <TableHead scope="col">Expected</TableHead>
-                <TableHead scope="col">
-                  <span className="sr-only">Actions</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell className="[overflow-wrap:anywhere] whitespace-normal">{row.question}</TableCell>
-                  <TableCell className="[overflow-wrap:anywhere] whitespace-normal">{askedAsWords(row)}</TableCell>
-                  <TableCell>{expectWords(row.expect)}</TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="min-h-11 sm:min-h-8"
-                      disabled={busy}
-                      aria-label={`${RETIRE_GOLDEN}: ${row.question}`}
-                      onClick={() => {
-                        setFailure(null);
-                        setPending({ kind: "retire", row });
-                      }}
-                    >
-                      {RETIRE_GOLDEN}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <GridTable
+            look="kit"
+            caption={GOLDEN_HEADING}
+            captionHidden
+            className="text-[13px]"
+            headClassName="bg-sunk"
+            headRowClassName="hover:bg-transparent"
+            columns={goldenColumns}
+            rows={rows}
+            rowId={(row) => row.id}
+          />
         )}
 
         <form aria-label="Add a golden question" className="flex flex-col gap-3 border-t border-line pt-3" onSubmit={ask} noValidate>

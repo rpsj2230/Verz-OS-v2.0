@@ -68,7 +68,9 @@ from pathlib import Path
 from typing import Final
 
 from brain.ops.test_selection import changed_files, select
-from brain.ops.test_shards import REPO, ShardError, collected, partition, shard, weight
+from brain.ops.test_shards import REPO, ShardError, arguments, collected, partition, shard
+from brain.ops.test_timings import units
+from brain.ops.test_timings import weights as recorded_weights
 
 #: How far through the import graph a pull request's selection reaches.
 PLAN_DEPTH: Final[int] = 1
@@ -143,8 +145,8 @@ def plan(
         chosen = select(names, depth=depth, suite=everything)
         if chosen.full:
             return whole("the diff touches something the import graph cannot see")
-        weights = {name: weight(root / name) for name in chosen.files}
-        mine = partition(weights, of, allow_empty=True)[number - 1]
+        weights = recorded_weights(units(chosen.files), root)
+        mine = arguments(partition(weights, of, allow_empty=True)[number - 1])
     except ShardError:
         raise
     except Exception as error:  # the planner must never be why the tests do not run

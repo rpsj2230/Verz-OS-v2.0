@@ -46,6 +46,8 @@ import {
   MyStored,
 } from "../components/MyAccountCards";
 import { MyChannels } from "../components/MyChannels";
+import type { GridColumn } from "../components/gridFeatures";
+import { GridTable } from "../components/kit/GridTable";
 import { MyPreferences } from "../components/MyPreferences";
 import { BY_THE_INSTALL, ConfirmDialog, EmptyList } from "../components/kit";
 import { Button } from "../components/ui/button";
@@ -160,6 +162,34 @@ function Figures({ workspace }: { readonly workspace: Workspace }) {
   );
 }
 
+type OwnAgent = Workspace["agents"][number];
+type OwnItem = Workspace["knowledge"][number];
+
+const AGENT_COLUMNS: GridColumn<OwnAgent>[] = [
+  { id: "agent", header: "Agent", cell: ({ row }) => <code>{row.original.agent_id}</code> },
+  {
+    id: "source",
+    header: "Source",
+    cell: ({ row }) => PROVISION_WORDS[row.original.provision] ?? row.original.provision,
+  },
+  { id: "where", header: "Where it runs", cell: ({ row }) => whereItRuns(row.original) },
+  { id: "uses", header: "Used 30d", cell: ({ row }) => String(row.original.uses) },
+];
+
+const ITEM_COLUMNS: GridColumn<OwnItem>[] = [
+  { id: "item", header: "Item", cell: ({ row }) => <code>{row.original.item_id}</code> },
+  {
+    id: "visible-to",
+    header: "Visible to",
+    cell: ({ row }) => (
+      <>
+        <code>{row.original.department ?? row.original.level}</code>
+        {row.original.department === null ? null : <span className="note"> {row.original.level}</span>}
+      </>
+    ),
+  },
+];
+
 function MyAgents({ workspace }: { readonly workspace: Workspace }) {
   return (
     <section className="card">
@@ -172,30 +202,13 @@ function MyAgents({ workspace }: { readonly workspace: Workspace }) {
           by={["super_admin", "department_admin", "member"]}
         />
       ) : (
-        <div className="grid__scroll">
-          <table className="grid__table" aria-label={AGENTS_CAPTION}>
-            <thead>
-              <tr>
-                <th scope="col">Agent</th>
-                <th scope="col">Source</th>
-                <th scope="col">Where it runs</th>
-                <th scope="col">Used 30d</th>
-              </tr>
-            </thead>
-            <tbody>
-              {workspace.agents.map((one) => (
-                <tr key={one.agent_id}>
-                  <td>
-                    <code>{one.agent_id}</code>
-                  </td>
-                  <td>{PROVISION_WORDS[one.provision] ?? one.provision}</td>
-                  <td>{whereItRuns(one)}</td>
-                  <td>{String(one.uses)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <GridTable
+          look="grid"
+          label={AGENTS_CAPTION}
+          columns={AGENT_COLUMNS}
+          rows={workspace.agents}
+          rowId={(one) => one.agent_id}
+        />
       )}
     </section>
   );
@@ -426,29 +439,13 @@ function KnowledgeIOwn({ workspace }: { readonly workspace: Workspace }) {
           by={["super_admin", "department_admin", "member"]}
         />
       ) : (
-        <div className="grid__scroll">
-          <table className="grid__table" aria-label={ITEMS_CAPTION}>
-            <thead>
-              <tr>
-                <th scope="col">Item</th>
-                <th scope="col">Visible to</th>
-              </tr>
-            </thead>
-            <tbody>
-              {workspace.knowledge.map((one) => (
-                <tr key={one.item_id}>
-                  <td>
-                    <code>{one.item_id}</code>
-                  </td>
-                  <td>
-                    <code>{one.department ?? one.level}</code>
-                    {one.department === null ? null : <span className="note"> {one.level}</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <GridTable
+          look="grid"
+          label={ITEMS_CAPTION}
+          columns={ITEM_COLUMNS}
+          rows={workspace.knowledge}
+          rowId={(one) => one.item_id}
+        />
       )}
       {workspace.knowledge_truncated ? <p className="note">{MORE_ITEMS}</p> : null}
       <p className="note">{workspace.knowledge_not_shown}</p>

@@ -12,6 +12,8 @@
  */
 
 import { Link } from "react-router-dom";
+import type { GridColumn } from "../../components/gridFeatures";
+import { GridTable } from "../../components/kit/GridTable";
 import {
   Advanced,
   BY_THE_INSTALL,
@@ -24,8 +26,32 @@ import {
   SectionCard,
 } from "../../components/kit";
 import { WORKS_AT } from "./credentialActions";
-import { READ_BY_WORDS, stateWords, whenWords, type CredentialDetail } from "./credentialRows";
+import { READ_BY_WORDS, stateWords, whenWords, type CredentialChange, type CredentialDetail } from "./credentialRows";
 import { SetValueForm } from "./SetValueForm";
+
+/** One change with its place in the list, since the ledger gives a change no id of its own. */
+interface HistoryRow {
+  readonly one: CredentialChange;
+  readonly index: number;
+}
+
+const HISTORY_COLUMNS: GridColumn<HistoryRow>[] = [
+  {
+    id: "when",
+    header: "When",
+    cell: ({ row }) => whenWords(row.original.one.at),
+    meta: {
+      headerClassName: "py-1.5 pr-3 font-medium",
+      cellClassName: "py-1.5 pr-3 font-mono text-[12px] whitespace-nowrap tabular-nums",
+    },
+  },
+  {
+    id: "by",
+    header: "Written by",
+    cell: ({ row }) => row.original.one.by,
+    meta: { headerClassName: "py-1.5 font-medium", cellClassName: "py-1.5 text-ink" },
+  },
+];
 
 export const WHERE_IT_STANDS = "Where it stands";
 export const WHAT_IT_IS_FOR = "What it is for";
@@ -201,26 +227,15 @@ export function CredentialAbout({ detail }: { readonly detail: CredentialDetail 
           />
         ) : (
           <div className="overflow-x-auto">
-            <table aria-label={HISTORY_HEADING} className="w-full min-w-[20rem] border-collapse text-[13px]">
-              <thead>
-                <tr className="border-b border-line text-left text-[11px] text-dim">
-                  <th scope="col" className="py-1.5 pr-3 font-medium">
-                    When
-                  </th>
-                  <th scope="col" className="py-1.5 font-medium">
-                    Written by
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {detail.history.map((one, index) => (
-                  <tr key={`${one.at}-${String(index)}`} className="border-b border-line last:border-b-0">
-                    <td className="py-1.5 pr-3 font-mono text-[12px] whitespace-nowrap tabular-nums">{whenWords(one.at)}</td>
-                    <td className="py-1.5 text-ink">{one.by}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <GridTable
+              label={HISTORY_HEADING}
+              className="w-full min-w-[20rem] border-collapse text-[13px]"
+              headRowClassName="border-b border-line text-left text-[11px] text-dim"
+              rowClassName={() => "border-b border-line last:border-b-0"}
+              columns={HISTORY_COLUMNS}
+              rows={detail.history.map((one, index) => ({ one, index }))}
+              rowId={(entry) => `${entry.one.at}-${String(entry.index)}`}
+            />
           </div>
         )}
       </SectionCard>

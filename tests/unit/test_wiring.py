@@ -134,6 +134,29 @@ def test_every_declared_component_states_a_limit_and_a_readiness_check() -> None
 
 
 # ------------------------------------------------------- the budget
+@pytest.mark.parametrize(
+    "compose", ["docker-compose.yml", "docker-compose.lite.yml", "docker-compose.full.yml"]
+)
+def test_every_profile_gives_the_application_the_limit_the_budget_is_costed_at(
+    compose: str,
+) -> None:
+    """The application's limit is one figure in three files, because a profile is one file or a
+    merge and each of them carries the service. The baseline and the in-app parse budget are
+    costed at `APP_MEMORY_MIB`, and the figure the owner's install measured the need for is
+    1536 MiB (705 MB in use of 1024 with the old limit, and the runtime spends a larger container
+    on more workers). Written as the fact and not imported, so that the three files and the
+    constant cannot all move to a figure nobody decided.
+
+    The disposable staging stack is left out on purpose: it runs the application at 512 MiB
+    against demonstration data and shares nothing with an install's budget.
+
+    Delete this and `docker-compose.lite.yml`, which no budget test reads, keeps the old limit
+    while the baseline says the new one, so a lite install runs at a figure no arithmetic holds."""
+    from brain.knowledge.app_parse_budget import APP_MEMORY_MIB
+
+    assert _compose_memory_limits(compose)["app"] == 1536 == APP_MEMORY_MIB
+
+
 def test_the_baseline_matches_the_compose_file_it_claims_to_describe() -> None:
     """`PRODUCTION_BASELINE_MIB` is the only reason the budget means anything: it is the
     memory already spent. Delete this and the constant becomes a number somebody typed
@@ -252,17 +275,22 @@ def test_the_standard_profile_is_over_by_the_identity_provider_and_the_inference
     process at about 339 MB of anonymous memory (`brain-worker` in `COMPONENTS` says how that was
     read).
 
+    **And a seventh time on 2026-10-14, by the baseline, from 1288 to 1800.** The application's
+    limit went from 1024 to 1536 MiB, so the baseline this wave 2 is spent beside went from 3712
+    to 4224 and the room from 6200 to 5688; the owner's install measured the application at 705
+    MB in use, and the runtime spends a larger container on more web workers.
+
     Delete this and the overrun stops being visible anywhere, which means it is discovered by
     deploying it."""
     breaches = budget_breaches("standard")
 
     assert len(breaches) == 1, breaches
     assert "inference-server" in breaches[0]
-    assert "over by 1288 MiB" in breaches[0], (
+    assert "over by 1800 MiB" in breaches[0], (
         "the standard overrun has moved; something has grown or shrunk and this test is the "
         "only place that would have said so"
     )
-    assert wave_two_mib("standard") - spendable_mib() == 1288
+    assert wave_two_mib("standard") - spendable_mib() == 1800
 
 
 def test_the_full_profile_does_not_fit_and_names_the_component_that_does_not() -> None:
@@ -351,11 +379,15 @@ def test_removing_the_other_project_is_what_makes_the_full_set_fit() -> None:
 
     assert without_them - with_them == NEIGHBOUR_MIB
 
-    # Standard is the profile the answer is about: it does not fit today and it does fit
-    # once the neighbours go, which is what makes "remove the other project" a real answer
-    # rather than a hope.
+    # Standard is the profile the answer is about: it does not fit today and, until the
+    # application's limit was raised on 2026-10-14, it did fit once the neighbours went, which
+    # is what made "remove the other project" a real answer rather than a hope. Asked of the
+    # baseline of that day, it still does; asked of today's, it is over by exactly the 264 MiB
+    # that remain after the application's extra 512, and that is the finding to read.
     assert budget_breaches("standard", headroom_mib=with_them)
-    assert not budget_breaches("standard", headroom_mib=without_them)
+    assert not budget_breaches("standard", headroom_mib=without_them, baseline_mib=3712)
+    today = budget_breaches("standard", headroom_mib=without_them)
+    assert len(today) == 1 and "over by 264 MiB" in today[0], today
 
     # Full still does not, and this is asserted rather than left out because the first draft
     # of item 25 said everything would fit and this test is what corrected it. An assertion
@@ -667,6 +699,11 @@ def _langfuse_services() -> list[str]:
 #: still asserted exactly, on the host where it was true.
 CAP_BESIDE_THE_OLD_NEIGHBOURS_MIB = 5688
 
+#: What the deployed four containers' limits added up to on that host, before the application's
+#: went from 1024 to 1536 MiB on 2026-10-14. A fact about the host of that day, written here and
+#: not imported, so that raising the baseline cannot rewrite the refusal asserted against it.
+BASELINE_ON_THAT_HOST_MIB = 3712
+
 
 def test_the_trace_ledger_service_set_did_not_fit_beside_the_old_neighbours() -> None:
     """**The finding M32.1.1.1 was blocked on from 2026-09-06 to 2026-10-05, computed rather
@@ -691,9 +728,18 @@ def test_the_trace_ledger_service_set_did_not_fit_beside_the_old_neighbours() ->
 
     assert len(services) == 5, services
     assert set_cost_mib(services) == 2304
-    assert spendable_mib(headroom_mib=CAP_BESIDE_THE_OLD_NEIGHBOURS_MIB) == 1720
+    assert (
+        spendable_mib(
+            headroom_mib=CAP_BESIDE_THE_OLD_NEIGHBOURS_MIB, baseline_mib=BASELINE_ON_THAT_HOST_MIB
+        )
+        == 1720
+    )
 
-    breaches = set_breaches(services, headroom_mib=CAP_BESIDE_THE_OLD_NEIGHBOURS_MIB)
+    breaches = set_breaches(
+        services,
+        headroom_mib=CAP_BESIDE_THE_OLD_NEIGHBOURS_MIB,
+        baseline_mib=BASELINE_ON_THAT_HOST_MIB,
+    )
     assert len(breaches) == 1, breaches
     assert "over by 584 MiB" in breaches[0]
     # The whole phrase, not the name on its own. The message lists every service in the set,
@@ -716,7 +762,9 @@ def test_rows_one_and_three_of_item_120_are_eight_mib_over_the_static_cap() -> N
     fit beside row 1, which is why it waits. The spare was 632 MiB until 2026-10-06, 376 after
     the identity provider's limit went from 768 to 1024 MiB, measured, and is **minus 8 since
     2026-10-13**, when the worker went from 384 to 768 MiB because it was being OOM-killed: rows
-    1 and 3 together are now 8 MiB over this static cap. The cap is one fixed figure for a
+    1 and 3 together were then 8 MiB over this static cap, and are **520 over since 2026-10-14**,
+    when the application's limit went from 1024 to 1536 MiB and the static room from 6200 to
+    5688. The cap is one fixed figure for a
     machine this repository measured. Whether the two still start on a given server is decided
     at every deploy from that server's own facts (`brain.ops.overlays.plan`), and on the host
     these figures were measured on the plan still has room, so this is a finding to read and
@@ -734,9 +782,9 @@ def test_rows_one_and_three_of_item_120_are_eight_mib_over_the_static_cap() -> N
     row_three = set_cost_mib(_langfuse_services())
     row_two = set_cost_mib(("inference-server", "brain-parse-worker"))
 
-    assert spendable_mib() == 6200
+    assert spendable_mib() == 5688
     assert running + vault_mib == 2368
-    assert spendable_mib() - running - vault_mib - row_one - row_three == -8
+    assert spendable_mib() - running - vault_mib - row_one - row_three == -520
     assert row_two > spendable_mib() - running - vault_mib - row_one
 
 
@@ -814,10 +862,10 @@ def test_the_written_reason_carries_the_figures_the_arithmetic_actually_produces
 
     assert f"{set_cost_mib(TRACE_LEDGER)} MiB of containers" in reason
     assert f"{set_cost_mib(_langfuse_services())} with the object store" in reason
-    assert (
-        f"had {spendable_mib(headroom_mib=CAP_BESIDE_THE_OLD_NEIGHBOURS_MIB)} MiB on this host"
-        in reason
+    then = spendable_mib(
+        headroom_mib=CAP_BESIDE_THE_OLD_NEIGHBOURS_MIB, baseline_mib=BASELINE_ON_THAT_HOST_MIB
     )
+    assert f"had {then} MiB on this host" in reason
     assert f"It has {spendable_mib()} since" in reason
 
 

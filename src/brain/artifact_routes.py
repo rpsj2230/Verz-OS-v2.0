@@ -37,22 +37,32 @@ showing them unnarrowed is `PROVENANCE_IS_THE_PRODUCERS_REACH_WRITTEN_DOWN`. The
 does not travel either: it is provenance for two people comparing what they saw, and a column of
 digests on a screen is a column nobody reads until it is quoted wrongly.
 
+**The list pages, searches, filters and orders on the server** (M32.5.2.1), in `brain.listing`'s
+convention and for its reason. The screen narrowed the whole estate in the browser until
+2026-10-14, which narrows only what arrived and looks identical to the server's answer. The page
+is cut from the rows `artifact_estate` already decided this reader may see, and `next_cursor`
+is present exactly when a further row the reader may see matches the question, so it says
+nothing about what the decision withheld. A search reads only the columns the row shows
+(`A_SEARCH_READS_ONLY_WHAT_THE_ROW_SHOWS`), and the question is checked from the parameters and
+the reader before any record is read, so a malformed cursor is answered the same with a store
+attached and without one.
+
 **Nothing here computes a reach.** There is no `.intersect(` in this module, and
 `brain.console.workspace.intersections_in` is run over this source by its test.
 
 Scope: one read-only route. Nothing here writes, and no download is served: `may_download` is
 the question a download would ask, and serving bytes is its own review.
 
-Task ids: M27.7.23
+Task ids: M27.7.23, M32.5.2.1
 """
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Iterable
-from typing import Final, Protocol, cast
+from typing import Annotated, Final, Protocol, cast
 
 import structlog
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -69,6 +79,7 @@ from brain.console.govern_estate import artifact_estate
 from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.core.errors import Absent, Failed
+from brain.listing import Column, ListAsked, Listing
 from brain.ops.retention import Lifetime, horizon_for
 from brain.routing_routes import sessions_of
 
@@ -157,24 +168,30 @@ class ArtifactView(BaseModel):
 class ArtifactsView(BaseModel):
     """The estate a reader may see, or the admission that nothing here records one.
 
-    Exactly one of `artifacts` and `unread` is set, refused here rather than left to whatever
-    draws it, for `brain.install_routes.RecoveryView`'s reason. No total and no count of what
-    `artifact_estate` withheld: the list is the answer.
+    An answer that carries an `unread` reason carries no items, refused here rather than left to
+    whatever draws it, for `brain.install_routes.RecoveryView`'s reason. No total and no count of
+    what `artifact_estate` withheld: the list is the answer.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    artifacts: list[ArtifactView] | None = None
+    #: Always a list, as the paged-answer convention requires (`tests/unit/test_api_paging.py`).
+    #: Empty with `unread` set means nothing here could look; empty with `unread` blank is a true
+    #: empty estate. The two are told apart by `unread`, never by the list.
+    items: list[ArtifactView] = []
+    #: A cursor for the page after this one, present exactly when a further row this reader may see
+    #: matches the question. Never a count. See `brain.listing`.
+    next_cursor: str | None = None
     unread: str = ""
     #: How an artifact's window is chosen. Sent whatever the list holds.
     kept_rule: str
 
     @model_validator(mode="after")
     def _exactly_one(self) -> ArtifactsView:
-        if (self.artifacts is None) == (not self.unread):
+        if self.unread and (self.items or self.next_cursor is not None):
             msg = (
-                "an artifacts answer must carry a list or a reason for having none, and never "
-                "both: an empty list reads as an estate that produced nothing"
+                "an artifacts answer that says nothing could look must carry no items and no "
+                "cursor: a list beside that sentence reads as an estate that produced something"
             )
             raise ValueError(msg)
         return self
@@ -204,6 +221,26 @@ def artifact_view(one: Artifact) -> ArtifactView:
     )
 
 
+#: What the Artifacts screen may search, filter and order by. Every column is a field of the row
+#: the reader is sent (`A_SEARCH_READS_ONLY_WHAT_THE_ROW_SHOWS`): the artifact, the agent and the
+#: person it was produced for are searched, as the browser's own search did; a kind, an agent and a
+#: state are filtered by; and the order is when it was produced, newest first unless asked.
+ARTIFACTS: Final[Listing[ArtifactView]] = Listing(
+    name="artifacts",
+    columns=(
+        Column("artifact_id", lambda row: row.artifact_id, search=True, sort=True),
+        Column("kind", lambda row: row.kind, filter=True, sort=True),
+        Column("agent_id", lambda row: row.agent_id, search=True, filter=True, sort=True),
+        Column("produced_for", lambda row: row.produced_for, search=True, sort=True),
+        Column("produced_at", lambda row: row.produced_at, sort=True),
+        Column("state", lambda row: row.state, filter=True, sort=True),
+    ),
+    key=lambda row: row.artifact_id,
+    order="-produced_at",
+)
+ArtifactsQuery = Annotated[ListAsked, Depends(ARTIFACTS.query())]
+
+
 # ------------------------------------------------------------------------ the route
 def _not_answerable() -> Absent:
     """The refusal the screen makes to a caller who may not open it. Names no row."""
@@ -214,17 +251,20 @@ router = APIRouter(prefix=API_PREFIX, tags=["govern"])
 
 
 @router.get("/govern/artifacts", response_model=ArtifactsView, responses=COMMON_RESPONSES)
-async def artifacts(request: Request, asked: Asked) -> ArtifactsView:
+async def artifacts(request: Request, asked: Asked, listed: ArtifactsQuery) -> ArtifactsView:
     """What was produced across the estate, as this reader may see it, or why nothing is listed.
 
     The screen's question first, before the source is looked for, so a caller who may not open
-    the screen is refused identically whether or not anything is attached. Then the records, the
-    agents the reader's audience admits, and `artifact_estate`, which drops what has aged out and
-    what this reader holds nothing for before anything is listed.
+    the screen is refused identically whether or not anything is attached. Then the question is
+    checked from its parameters alone, so a malformed cursor is the same refusal with a store and
+    without one. Then the records, the agents the reader's audience admits, and `artifact_estate`,
+    which drops what has aged out and what this reader holds nothing for before anything is
+    listed; the page is cut from what it leaves.
     """
     if not permitted(screen(THE_SCREEN).read, asked.reach, asked.now):
         log.info("artifacts screen not answerable", principal=asked.caller.principal.id)
         raise _not_answerable()
+    plan = ARTIFACTS.plan(listed, reader=asked.caller.principal.id)
 
     source = artifact_source_of(request)
     if source is None:
@@ -246,7 +286,9 @@ async def artifacts(request: Request, asked: Asked) -> ArtifactsView:
         asked.now,
         visible_agents=visible_agent_ids(records, viewer_of(asked)),
     )
+    page = plan.page([artifact_view(one) for one in shown])
     return ArtifactsView(
-        artifacts=[artifact_view(one) for one in shown],
+        items=list(page.items),
+        next_cursor=page.next_cursor,
         kept_rule=AN_ARTIFACT_MAY_NOT_OUTLIVE_THE_THING_IT_WAS_BUILT_FROM,
     )

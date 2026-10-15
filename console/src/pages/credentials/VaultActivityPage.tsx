@@ -19,12 +19,14 @@
 
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
+import type { GridColumn } from "../../components/gridFeatures";
+import { GridTable } from "../../components/kit/GridTable";
 import { BY_THE_INSTALL, EmptyList, Fact, FactList, Note, PageHeader, SectionCard } from "../../components/kit";
 import { FailureNotice } from "../../ui/FailureNotice";
 import { Notice } from "../../ui/Notice";
 import { CREDENTIALS_ADDRESS } from "./credentialRows";
 import { SOMETHING_DID_NOT_WORK } from "../Overview";
-import { VAULT_API_PATH, readVault } from "../vaultQuery";
+import { VAULT_API_PATH, readVault, type LeaseRow } from "../vaultQuery";
 
 export const VAULT_HEADING = "Vault activity";
 export const VAULT_LEDE =
@@ -34,6 +36,34 @@ export const CREDENTIALS_LINK = "The vault's state and every slot are on Credent
 export const READING_VAULT = "Reading the vault.";
 export const NOTHING_SHIPPED_YET = "Nothing shipped in the last 24 hours";
 export const NO_LEASES = "No connector run held a lease in the last 24 hours.";
+
+/** How each source's run tokens ended. The figures sit on the right, as a column of numbers should. */
+const LEASE_COLUMNS: GridColumn<LeaseRow>[] = [
+  {
+    id: "connector",
+    header: "Source",
+    cell: ({ row }) => row.original.connector,
+    meta: { headerClassName: "py-1.5 pr-3 font-medium", cellClassName: "py-1.5 pr-3 text-ink" },
+  },
+  ...(
+    [
+      ["issued", "Issued", "issued"],
+      ["revoked", "Revoked at the end", "revoked"],
+      ["expired", "Expired first", "expired"],
+      ["not_revoked", "Not revoked", "not_revoked"],
+    ] as const
+  ).map(
+    ([id, header, field], at): GridColumn<LeaseRow> => ({
+      id,
+      header,
+      cell: ({ row }) => row.original[field],
+      meta: {
+        headerClassName: `py-1.5 text-right font-medium${at === 3 ? "" : " pr-3"}`,
+        cellClassName: `py-1.5 text-right tabular-nums${at === 3 ? "" : " pr-3"}`,
+      },
+    }),
+  ),
+];
 
 function when(stamp: string): string {
   return new Date(stamp).toISOString().replace("T", " ").slice(0, 16) + " UTC";
@@ -72,38 +102,15 @@ function VaultBody() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table aria-label="Leases" className="w-full min-w-[20rem] border-collapse text-[13px]">
-              <thead>
-                <tr className="border-b border-line text-left text-[11px] text-dim">
-                  <th scope="col" className="py-1.5 pr-3 font-medium">
-                    Source
-                  </th>
-                  <th scope="col" className="py-1.5 pr-3 text-right font-medium">
-                    Issued
-                  </th>
-                  <th scope="col" className="py-1.5 pr-3 text-right font-medium">
-                    Revoked at the end
-                  </th>
-                  <th scope="col" className="py-1.5 pr-3 text-right font-medium">
-                    Expired first
-                  </th>
-                  <th scope="col" className="py-1.5 text-right font-medium">
-                    Not revoked
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {page.leases.map((row) => (
-                  <tr key={row.connector} className="border-b border-line last:border-b-0">
-                    <td className="py-1.5 pr-3 text-ink">{row.connector}</td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums">{row.issued}</td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums">{row.revoked}</td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums">{row.expired}</td>
-                    <td className="py-1.5 text-right tabular-nums">{row.not_revoked}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <GridTable
+              label="Leases"
+              className="w-full min-w-[20rem] border-collapse text-[13px]"
+              headRowClassName="border-b border-line text-left text-[11px] text-dim"
+              rowClassName={() => "border-b border-line last:border-b-0"}
+              columns={LEASE_COLUMNS}
+              rows={page.leases}
+              rowId={(row) => row.connector}
+            />
           </div>
         )}
       </SectionCard>

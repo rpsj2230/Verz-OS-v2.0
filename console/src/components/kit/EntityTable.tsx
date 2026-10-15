@@ -9,12 +9,14 @@
  * of rows the reader was not shown. So there is no total, no page count and no "showing 1 to 20";
  * the pager is "Show more" and says only whether there is more.
  *
- * **Why not TanStack here.** `DataTable.tsx` registers none of TanStack's features on purpose, so
- * the library is a renderer there; selection and column choice are two pieces of state, and doing
- * them here keeps every list page importable from the entry chunk without the table library, which
- * `tests/bundle-split.test.ts` would otherwise require to be a lazy route. Rejected: registering
+ * **It renders through TanStack Table, as a renderer, and that is M32.5.2.1.** This file drew its own
+ * `<table>` until 2026-10-14 to keep the library out of the entry chunk, which left the leaf ("TanStack
+ * Table for every grid") untrue for every module list. The rows, the headings and the cells now come
+ * from the library's core model (`gridFeatures.ts`, no feature registered, the set `DataTable.tsx` and
+ * `GridTable.tsx` use too), and the entry chunk carries the core, measured at 10.7 kB gzipped there.
+ * Selection and column choice stay two pieces of state beside it. Rejected: registering
  * `rowSelectionFeature` and `columnVisibilityFeature`, which is what the design spike did. It works,
- * and it puts 40 kB in front of a page that needs two sets.
+ * puts 40 kB in front of a page that needs two sets, and is the first step to a client-side page.
  *
  * **The bulk bar counts the reader's own selection and nothing else.** "3 selected" is three rows
  * the reader ticked, which are rows they were shown. It never says "of 47". Bulk acts are only the
@@ -26,12 +28,14 @@
  * column they hid is left out. A cell that begins with a formula character is prefixed so a
  * spreadsheet opens it as text, because a value from the API is data and never a formula.
  *
- * Task ids: M27.10.2
+ * Task ids: M27.10.2, M32.5.2.1
  */
 
+import { useTable } from "@tanstack/react-table";
 import { Columns3, Download, X } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
+import { drawn, gridFeatures, type GridColumn } from "../gridFeatures";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import {
@@ -109,7 +113,7 @@ export function saveCsv(filename: string, csv: string, into: Document = globalTh
   return true;
 }
 
-interface EntityTableProps<Row> {
+interface EntityTableProps<Row extends object> {
   /** What the table is, for a screen reader. */
   readonly caption: string;
   readonly columns: readonly EntityColumn<Row>[];
@@ -126,7 +130,7 @@ interface EntityTableProps<Row> {
   readonly rowActions?: ((row: Row) => ReactNode) | undefined;
 }
 
-export function EntityTable<Row>({
+export function EntityTable<Row extends object>({
   caption,
   columns,
   rows,
@@ -147,6 +151,27 @@ export function EntityTable<Row>({
   const selected = rows.filter((row) => picked.has(rowId(row)));
   const selectedIds = new Set([...picked].filter((id) => drawnIds.has(id)));
   const shown = columns.filter((column) => !hidden.has(column.id));
+  // The columns the reader chose, as the library takes them. Visibility stays two sets of state
+  // above (see the docstring), so the library is handed only what is to be drawn.
+  const definitions = useMemo(
+    () =>
+      shown.map(
+        (column): GridColumn<Row> => ({
+          id: column.id,
+          header: column.header,
+          cell: (context) => column.cell(context.row.original),
+        }),
+      ),
+    // `shown` is derived from these two, and a new array each render would rebuild the model.
+    [columns, hidden],
+  );
+  const table = useTable({
+    features: gridFeatures,
+    columns: definitions,
+    data: rows as Row[],
+    getRowId: (row: Row) => rowId(row),
+  });
+  const placement = new Map(columns.map((column) => [column.id, column]));
   const selectable = bulkActions !== undefined || exportName !== undefined;
   const allPicked = rows.length > 0 && selectedIds.size === rows.length;
   const somePicked = selectedIds.size > 0 && !allPicked;
@@ -260,16 +285,16 @@ export function EntityTable<Row>({
                   />
                 </TableHead>
               ) : null}
-              {shown.map((column) => (
+              {table.getFlatHeaders().map((header) => (
                 <TableHead
-                  key={column.id}
+                  key={header.id}
                   scope="col"
                   className={cn(
                     "h-9 font-mono text-[10px] tracking-[0.09em] text-dim uppercase",
-                    column.align === "end" && "text-right",
+                    placement.get(header.column.id)?.align === "end" && "text-right",
                   )}
                 >
-                  {column.header}
+                  {drawn(header.column.columnDef.header, header.getContext())}
                 </TableHead>
               ))}
               {rowActions === undefined ? null : (
@@ -280,8 +305,9 @@ export function EntityTable<Row>({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((row) => {
-              const id = rowId(row);
+            {table.getRowModel().rows.map((modelRow) => {
+              const row = modelRow.original;
+              const id = modelRow.id;
               const ticked = selectedIds.has(id);
               return (
                 <TableRow key={id} data-state={ticked ? "selected" : undefined}>
@@ -302,14 +328,17 @@ export function EntityTable<Row>({
                       />
                     </TableCell>
                   ) : null}
-                  {shown.map((column) => (
-                    <TableCell
-                      key={column.id}
-                      className={cn("py-2 align-top", column.align === "end" && "text-right", column.className)}
-                    >
-                      {column.cell(row)}
-                    </TableCell>
-                  ))}
+                  {modelRow.getAllCells().map((cell) => {
+                    const column = placement.get(cell.column.id);
+                    return (
+                      <TableCell
+                        key={cell.id}
+                        className={cn("py-2 align-top", column?.align === "end" && "text-right", column?.className)}
+                      >
+                        {drawn(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    );
+                  })}
                   {rowActions === undefined ? null : <TableCell className="w-12 py-1.5">{rowActions(row)}</TableCell>}
                 </TableRow>
               );

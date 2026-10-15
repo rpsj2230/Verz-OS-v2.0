@@ -1,9 +1,12 @@
 /**
- * Every grid in this console. One page of rows, rendered exactly as they arrived.
+ * A paged grid: one page of rows, rendered exactly as they arrived, with its filter boxes and
+ * its pager. The markup is `GridTable.tsx`' (the same one every embedded table is drawn from); this
+ * adds what a list over a route needs: the failure, the empty sentence, the loading line and the
+ * "Previous" and "Next" the cursor allows.
  *
  * **This table cannot page, filter or sort. That is the mechanism, not a limitation.**
  * TanStack Table v9 registers features explicitly, and this one registers none: the
- * `features` object below carries only type-only slots. The consequence is stronger than a
+ * feature set in `gridFeatures.ts` carries only type-only slots. The consequence is stronger than a
  * convention, and stronger than v8's `manualPagination: true` would have been, because a
  * boolean is a thing somebody can flip. With no feature registered, `pageCount`, `rowCount`
  * and `manualPagination` are not options this table has. Writing one is a type error, not a
@@ -48,18 +51,14 @@
  * Task ids: M32.5.2.1
  */
 
-import {
-  flexRender,
-  tableFeatures,
-  useTable,
-  type ColumnDef,
-  type RowData,
-} from "@tanstack/react-table";
+import type { RowData } from "@tanstack/react-table";
 import type { ApiFailure } from "../api/errors";
-import { Lock } from "../ui/Lock";
 import { EmptyList, type EmptyBy } from "./kit/states";
-import { filterValueBudget, lockedCellKey } from "./paging";
 import { FailureNotice, THAT_DID_NOT_WORK } from "../ui/FailureNotice";
+import { GridTable } from "./kit/GridTable";
+import type { GridColumn } from "./gridFeatures";
+
+export type { GridColumn, GridColumnMeta, GridFeatures } from "./gridFeatures";
 
 /**
  * Written down because a footer count is the single most natural addition to a table and
@@ -76,39 +75,6 @@ export const NOTHING_TO_SHOW = "Nothing to show.";
 
 /** The one heading over any failure. The API's own sentence goes underneath it. */
 export const SOMETHING_DID_NOT_WORK = THAT_DID_NOT_WORK;
-
-/** Per-column settings this console adds. A type-only slot; it registers no feature. */
-export interface GridColumnMeta {
-  /**
-   * The name of the column in a filter box's label. Its presence is what gives the column
-   * a filter box, so a column with no server-side filter behind it cannot grow one here by
-   * accident.
-   */
-  readonly filterLabel?: string;
-}
-
-/**
- * The feature set: none.
- *
- * `columnMeta` is a type-only slot rather than a feature. Every optional feature is left
- * out, and the two that matter are `rowPaginationFeature` and `columnFilteringFeature`:
- * registering either would put a second, client-side answer to a question the API has
- * already answered, and the two answers look identical on screen.
- */
-const features = tableFeatures({ columnMeta: {} as GridColumnMeta });
-
-/** The feature set every column definition and every grid in this console is typed against. */
-export type GridFeatures = typeof features;
-
-/**
- * A column, typed against the feature set above so a feature-only option cannot be written.
- *
- * `RowData` is the library's own constraint on what a row may be, and it is repeated on
- * every generic here rather than relaxed: a row in this console is an object out of a
- * payload, and widening it would only move the failure to the first cell that tried to read
- * a field off something that has none.
- */
-export type GridColumn<T extends RowData> = ColumnDef<GridFeatures, T>;
 
 interface DataTableProps<T extends RowData> {
   /** What the table is, for a screen reader and for anybody reading it. */
@@ -164,17 +130,6 @@ export function DataTable<T extends RowData>({
   emptyAdds,
   emptyBy,
 }: DataTableProps<T>) {
-  const table = useTable({
-    features,
-    columns: [...columns],
-    data: rows,
-    getRowId: (row: T) => rowId(row),
-  });
-
-  const filterable = table
-    .getFlatHeaders()
-    .some((header) => header.column.columnDef.meta?.filterLabel !== undefined);
-
   return (
     <div className="grid">
       {/*
@@ -184,66 +139,19 @@ export function DataTable<T extends RowData>({
        * body scroll instead: the reader loses the navigation and the pager off the side of
        * the screen, and on a touch device they cannot get them back without scrolling the
        * document. Wrapping the whole grid would take the pager and the status line with it,
-       * which is the version that looks fixed and hides the controls.
+       * which is the version that looks fixed and hides the controls. `GridTable` draws the
+       * container around the table alone.
        */}
-      <div className="grid__scroll">
-        <table className="grid__table">
-        <caption className="grid__caption">{caption}</caption>
-        <thead>
-          {table.getHeaderGroups().map((group) => (
-            <tr key={group.id}>
-              {group.headers.map((header) => (
-                <th key={header.id} scope="col">
-                  {flexRender(header.column.columnDef.header, header.getContext())}
-                </th>
-              ))}
-            </tr>
-          ))}
-          {filterable ? (
-            <tr className="grid__filters">
-              {table.getFlatHeaders().map((header) => {
-                const label = header.column.columnDef.meta?.filterLabel;
-                return (
-                  <td key={header.id}>
-                    {label === undefined ? null : (
-                      <input
-                        type="text"
-                        className="grid__filter"
-                        aria-label={`Filter by ${label}`}
-                        // The term the route accepts, less what the column name and the
-                        // separator take. Spent here rather than on the way out, because a
-                        // term trimmed as it is sent asks a different question and answers it
-                        // convincingly; one a person cannot finish typing is visible.
-                        maxLength={filterValueBudget(header.column.id)}
-                        value={filters[header.column.id] ?? ""}
-                        onChange={(event) => {
-                          onFilterChange?.(header.column.id, event.target.value);
-                        }}
-                      />
-                    )}
-                  </td>
-                );
-              })}
-            </tr>
-          ) : null}
-        </thead>
-        <tbody>
-          {table.getRowModel().rows.map((row) => (
-            <tr key={row.id}>
-              {row.getAllCells().map((cell) => (
-                <td key={cell.id}>
-                  {lockedCells.has(lockedCellKey(row.id, cell.column.id)) ? (
-                    <Lock />
-                  ) : (
-                    flexRender(cell.column.columnDef.cell, cell.getContext())
-                  )}
-                </td>
-              ))}
-            </tr>
-          ))}
-          </tbody>
-        </table>
-      </div>
+      <GridTable
+        look="grid"
+        caption={caption}
+        columns={columns}
+        rows={rows}
+        rowId={rowId}
+        lockedCells={lockedCells}
+        filters={filters}
+        onFilterChange={onFilterChange}
+      />
 
       {failure ? (
         <FailureNotice failure={failure} />

@@ -64,7 +64,7 @@ export const NOT_AN_EMPTY_LIST: Readonly<Record<string, string>> = {
     "A narrowed result: the reader's own choices matched nothing in the tier.",
   "src/pages/memory/MemoryDetailPage.tsx NOTHING_MATCHES":
     "A narrowed result: the reader's own search or kind matched nothing they may read.",
-  "src/pages/operations/ArtifactsPage.tsx NONE_MATCH":
+  "src/pages/operations/ArtifactsPage.tsx NOTHING_MATCHES":
     "A narrowed result: the reader's own search or kind matched no artifact.",
   "src/pages/operations/JobDetailPage.tsx NOTHING_MATCHES":
     "A narrowed result: the reader's own search or filter matched no run of this job.",

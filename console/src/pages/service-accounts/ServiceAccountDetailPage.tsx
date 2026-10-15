@@ -35,8 +35,9 @@ import {
   SectionCard,
   StatCard,
 } from "../../components/kit";
+import type { GridColumn } from "../../components/gridFeatures";
+import { GridTable } from "../../components/kit/GridTable";
 import { Button } from "../../components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 import { accountName, SERVICE_ACCOUNTS_API_PATH, SERVICE_ACCOUNTS_LABEL, when, type AccountRow } from "../serviceAccountsQuery";
 import { EndingDialog, IssueKeyDrawer, type Ending } from "./AccountActs";
 import { ACT_LABELS, NOT_HELD_MARK } from "./serviceAccountActions";
@@ -72,6 +73,47 @@ function AccountView({ account, onChanged }: { readonly account: AccountRow; rea
   const [ending, setEnding] = useState<Ending | null>(null);
   const name = accountName(account);
   const headingId = "service-account-heading";
+  const keyColumns: GridColumn<AccountRow["keys"][number]>[] = [
+    {
+      id: "key",
+      header: "Key",
+      cell: ({ row }) => (row.original.label.trim() === "" ? "Unnamed key" : row.original.label),
+      meta: { cellClassName: "whitespace-normal" },
+    },
+    {
+      id: "issued",
+      header: "Issued",
+      cell: ({ row }) => when(row.original.issued_at),
+      meta: { cellClassName: "font-mono text-[12px]" },
+    },
+    {
+      id: "stops",
+      header: "Stops working",
+      cell: ({ row }) => when(row.original.lapses_at),
+      meta: { cellClassName: "font-mono text-[12px]" },
+    },
+    {
+      id: "actions",
+      header: () => <span className="sr-only">Actions</span>,
+      cell: ({ row }) => {
+        const key = row.original;
+        return (
+          <Button
+            variant="outline"
+            size="sm"
+            className="min-h-11 sm:min-h-8"
+            aria-label={`${ACT_LABELS.revoke} ${key.label.trim() === "" ? "unnamed key" : key.label}`}
+            onClick={() => {
+              setEnding({ kind: "revoke", account, key });
+            }}
+          >
+            {ACT_LABELS.revoke}
+          </Button>
+        );
+      },
+      meta: { headerClassName: "text-right", cellClassName: "text-right" },
+    },
+  ];
   return (
     <DetailPage
       crumbs={[{ label: SERVICE_ACCOUNTS_LABEL, to: "/service-accounts" }, { label: name }]}
@@ -128,40 +170,14 @@ function AccountView({ account, onChanged }: { readonly account: AccountRow; rea
               icon={<KeyRound aria-hidden />}
             />
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Key</TableHead>
-                  <TableHead>Issued</TableHead>
-                  <TableHead>Stops working</TableHead>
-                  <TableHead className="text-right">
-                    <span className="sr-only">Actions</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {account.keys.map((key) => (
-                  <TableRow key={key.handle}>
-                    <TableCell className="whitespace-normal">{key.label.trim() === "" ? "Unnamed key" : key.label}</TableCell>
-                    <TableCell className="font-mono text-[12px]">{when(key.issued_at)}</TableCell>
-                    <TableCell className="font-mono text-[12px]">{when(key.lapses_at)}</TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="min-h-11 sm:min-h-8"
-                        aria-label={`${ACT_LABELS.revoke} ${key.label.trim() === "" ? "unnamed key" : key.label}`}
-                        onClick={() => {
-                          setEnding({ kind: "revoke", account, key });
-                        }}
-                      >
-                        {ACT_LABELS.revoke}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <GridTable
+              look="kit"
+              caption={KEYS_HEADING}
+              captionHidden
+              columns={keyColumns}
+              rows={account.keys}
+              rowId={(key) => key.handle}
+            />
           )}
         </SectionCard>
         <SectionCard title={CAPABILITIES_HEADING} lede={CAPABILITIES_LEDE}>
