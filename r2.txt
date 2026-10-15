@@ -1,0 +1,33 @@
+E501 Line too long (115 > 100)
+   --> tests/unit/test_acceptance_company_views.py:116:101
+    |
+114 | ) -> None:
+115 |     """The department and person filters dropped, then the reader's reach dropped (a kind kept).
+116 |     Delete this and M33.1.1.1 closes on a list that shows every department to everybody, or ignores the filters."""
+    |                                                                                                     ^^^^^^^^^^^^^^^
+117 |     from brain import company_routes
+118 |     from brain.console.global_surfaces import visible_estate
+    |
+
+E501 Line too long (111 > 100)
+   --> tests/unit/test_acceptance_company_views.py:145:101
+    |
+143 | ) -> None:
+144 |     """The lens never applied to the ledger or to what it loads, then the Activity screen's read
+145 |     given to every reader. Delete this and M33.1.1.2 closes on a lens that shows everything or a screen anybody
+    |                                                                                                     ^^^^^^^^^^^
+146 |     may read."""
+147 |     from brain import company_routes
+    |
+
+E501 Line too long (101 > 100)
+   --> tests/unit/test_acceptance_company_views.py:178:101
+    |
+176 | ) -> None:
+177 |     """Everybody made a head of everything, then the department's spend read as nought. Delete this
+178 |     and M33.2.1.3 and M33.2.1.4 close on a page any member may open, or a pace that is always nil."""
+    |                                                                                                     ^
+179 |     from brain import department_view_routes
+    |
+
+Found 3 errors.
