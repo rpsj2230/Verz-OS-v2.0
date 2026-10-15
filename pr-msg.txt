@@ -1,0 +1,13 @@
+A follow-up saying the answer was wrong is noticed as a signal, and four memory leaves are shown on the install
+
+M16.2.3 (contradicting follow-up): `signals.is_contradiction` was written and tested and nothing called it, so a CONTRADICTED signal came only from the mark-wrong button. `StoredThreads.record` now asks it of each follow-up in the asker's own session, where both texts are, and keeps a signal naming the answer the follow-up follows and none of its words. Same shape and same place as the re-ask, and like it counted and acted on by nothing.
+
+Install checks, each over the product's own route, tables and stores inside the check's rolled-back transaction, each shown failing with the product broken:
+- M16.2.3: a plain follow-up is no signal, a correction in words is one signal naming the answer before it, none holds the planted word, and said again after the next answer it names that one.
+- M16.2.1: the existing re-ask check now also asks the same question again in other words after the window has closed and asserts no signal is kept (a break that judges the words and never the time fails it).
+- M16.1.1 and M16.3.1: a statement made for one conversation is kept in the install's own cache and shown to the model, under the heading only the session store uses, on that conversation's next turn and on no other conversation, to nobody else and not after the conversation is retired; keeping it changes no memory, learning, correction or rule. The check is not run where the process has no cache address, and deletes by name the keys it wrote. The words alone would be found in the thread's earlier turns with the store switched off, so the check holds the heading rather than the words.
+- M16.6.4: a web answer is marked through `POST /answer/mark` and a chat answer by replying the word and the reference the answer itself offered (read off the reply, not built), each counted once against its own answer; a colleague is refused; the marks table holds no column that could keep words.
+
+Not claimed here: M16.2.4 (escalation signal) needs the escalating-skill machinery of `acceptance_escalation` and is the next package; M16.2.2, M16.2.5, M16.2.6 and M16.2.7 have no writer at all (nothing records a copy, a takeover, a reopen or a rejection as a signal, and `mem.signal` has nowhere to name an approval or a ticket).
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
