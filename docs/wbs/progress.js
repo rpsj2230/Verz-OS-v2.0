@@ -2184,6 +2184,21 @@ const PROGRESS = {
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_agent_console); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
+  "M27.11.12": {
+    status: "READY FOR TESTING",
+    why: "built (M27/agent-profile-and-personal-agents): an agent's Profile lists its sources, its skills and its channels each with its state. A channel is drawn as on or as off in words and a dashed edge (AgentChannels, from the lifecycle read), a source is attached or requested with the Connectors page's health, and a skill is drawn with its review and its runs. A skill no run of the agent could use says so in a sentence from the API (brain.console.agent_behaviour.skill_standing: not in the library, waiting for review, rejected, changed since it was approved, or naming a tool the agent may not call), checked against the run path's own skills_offered; the old sentence that an assignment changes no answer was false since M27.12.1 and is gone. Skills and channels hold the same overflow list as sources, the first five and the rest behind N more. Add and remove: a skill is attached and taken off through a confirmation, a source through a draft of the agent, a channel through the Change where it answers confirmation. Install check a_pinned_skill_no_run_could_use_is_said_so_on_the_profile. To prove on the install: sign in as an administrator, open an agent's Profile; the Capabilities card lists its skills, and under them a line for any skill no run uses, for example a skill still waiting for review; the card Where it answers shows each channel as on or as off",
+    updated: "2026-10-15",
+  },
+  "M27.11.13": {
+    status: "READY FOR TESTING",
+    why: "built (M27/agent-profile-and-personal-agents), behind the agent_audience_extras switch which ships off: the Availability card shows who can find the agent (level, department, steward, whether you are included) and, to its steward and to the holder of the lifecycle authority over it, the further departments and named people it is offered to, each with a Withdraw control and, for the holder, an Offer control (a department chosen from the install's own list, a person typed by user id), each confirmed first. GET /agents/{id}/audience, POST /audience/additions and /audience/removals (brain.agent_audience_routes). A reader who answers for the agent in no way is sent no name and no sentence saying names exist, so an agent offered to nobody and to many read the same; a personal agent takes no offer; the row stays on withdrawal with who and when. Install check an_agent_is_offered_to_more_than_its_level_from_its_profile. Needs-rupash 201 question 1 (one choice or several) is still unanswered, which is why the controls are behind a switch. NOT BUILT: a ledger entry per offer (the table has no ledger trigger; its own rows say who and when). To prove on the install: Features, switch on Offer an agent to more departments and to named people; sign in as the department administrator of an agent, open its Profile, Availability: choose a department and press Offer then confirm, the agent appears for that department's members; Withdraw it and it stops appearing",
+    updated: "2026-10-15",
+  },
+  "M27.11.14": {
+    status: "READY FOR TESTING",
+    why: "built (M27/agent-profile-and-personal-agents) to the owner's recommendation on needs-rupash 201 question 2, which is not yet answered: the Learning card on the Profile carries a switch Let this agent learn from its conversations, which pauses and resumes what the agent's runs teach it (GET and POST /agents/{id}/learning, the lifecycle authority, a reason required and written to the row), each direction confirmed. Resuming lets each tier go on doing what it already checks, so it cannot let anything be learnt unchecked. The browsing switch is on the Profile as a switch that is off and cannot be pressed, with its reason, and computer use as a sentence: nothing is offered for browsing until the sealed browser has run on an install (question 2 option A). Install check an_agents_learning_is_paused_and_resumed_from_its_profile; what a pause does to what forms is acceptance_checks_signals. To prove on the install: sign in as the administrator of an agent, open its Profile, Learning from conversations: press the switch, give a reason, confirm; the card reads Paused; press it again, give a reason, confirm; it reads On",
+    updated: "2026-10-15",
+  },
   "M27.11.15": {
     status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_routes, console.agent_profile); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-agent-api",
@@ -2323,6 +2338,11 @@ const PROGRESS = {
     status: "OPEN",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in agent_builder_routes, builder.agent_drafts, ops.acceptance_skill_console +5 more; NOT wired: pages/Approvals.tsx",
     updated: "2026-10-06",
+  },
+  "M27.15.32": {
+    status: "READY FOR TESTING",
+    why: "built (M27/agent-profile-and-personal-agents): the Profile's computer use card is the sentence the API sends (GET /agents/{id}/capabilities, computer_use, from brain.console.agent_behaviour), which says computer use is not offered because the product has no isolated desktop runner, and nothing is drawn to switch. Whether a runner exists is asked of the import machinery for the module brain.browsing.desktop and not of a constant, so the day it is added the sentence changes and the install check says not run until a person looks again; even then offered stays false until a per-agent switch is built. A reader sent no detail is drawn no card. Install check computer_use_is_not_offered_until_a_desktop_runner_exists. To prove on the install: open any agent's Profile; the card Computer use reads Not offered, with the reason, and holds no button or switch",
+    updated: "2026-10-15",
   },
   "M27.15.33": {
     status: "READY FOR TESTING",
