@@ -7,7 +7,7 @@ they tell whom, and that a refusal says nothing about what exists. The personas 
 are `tests/unit/test_automation_schedule_routes.py`'s, so the two automation surfaces are held to
 one set of people.
 
-Task ids: M27.12.3, M27.15.37, M39.6.1.4, M39.6.1.5
+Task ids: M27.12.3, M27.15.37, M39.6.1.4, M39.6.1.5, M39.9.2.3
 """
 
 from __future__ import annotations
@@ -27,12 +27,21 @@ from brain.agents.model import AgentAudience, AgentRecord
 from brain.api import API_PREFIX
 from brain.api_routes import GateWiring
 from brain.app import Settings, create_app
+from brain.console.automation_authoring import (
+    SKILLS_ARE_THE_AGENTS_TO_CHANGE,
+    WHAT_IT_MAY_USE_IS_THE_AGENTS_FOR_THIS_PERSON,
+    Authored,
+    TriggerChoice,
+)
 from brain.console.automation_gallery import Cadence, Every
 from brain.console.automations import Change, folded, shown
+from brain.gate.runtime import RUNTIME_WRITES_ALWAYS_WAIT_FOR_A_PERSON
 from brain.identity.bearer import TokenAuthority
 from brain.knowledge.visibility import Visibility
 from brain.ops.automation_run import PausedBecause, RunOutcome, RunRecord, run_id
 from brain.ops.automation_run_store import RUNS_ON_ITS_PAGE, Detailed, Listed
+from brain.orchestration.unattended import TriggerKind
+from brain.tools.skills import SkillCard
 from tests.fixtures.http_client import Response
 from tests.unit.test_api_routes import AUDIENCE, ISSUER, Keys, NoCache, Versions, verifier
 from tests.unit.test_automation_schedule_routes import (
@@ -305,6 +314,70 @@ def test_the_page_offers_only_the_changes_this_reader_may_make(client: TestClien
     )
     assert admin["schedule_accepts"] == routes.SCHEDULE_ACCEPTS
     assert "u_narrow" not in (admin["automation"]["owner_name"], admin["installed_by_name"])
+
+
+@dataclass
+class Skills:
+    """`brain.automation_authoring_routes.AutomationSkills` in memory."""
+
+    asked: list[str] = field(default_factory=list)
+
+    async def offered(
+        self, agent: AgentRecord, *, reach: Any, now: datetime
+    ) -> tuple[SkillCard, ...]:
+        self.asked.append(reach.principal_id)
+        return (
+            SkillCard(name="overdue_chase", description="Chase an overdue ticket", version="1.0.0"),
+        )
+
+
+def test_the_page_of_an_automation_a_person_wrote_names_what_it_may_use_and_what_waits(
+    client: TestClient, book: Book
+) -> None:
+    """An instruction a person wrote shows its words, the tools it names, the rule about skills
+    and the runtime's sentence that a write waits for a person, to everybody who may see it; the
+    skills themselves are named only to its owner, who is the one reach they can be read at.
+    An automation installed from a template as it comes has none of it. Delete this and the card
+    of what a person wrote says nothing of what it may use, or names an owner's skills to somebody
+    whose reach they were not read at."""
+    skills = Skills()
+    client.app.state.automation_skills = skills  # type: ignore[attr-defined]
+    listed = book.rows["auto_one"].listed
+    words = Authored(
+        name=listed.automation.name,
+        instruction="Look at the tickets and tell me which are overdue by more than a week.",
+        guards=listed.guards,
+        trigger=TriggerChoice(kind=TriggerKind.SCHEDULE, cadence=MONDAYS),
+        tools=("desk.search_tickets",),
+    )
+    book.rows["auto_words"] = replace(
+        book.rows["auto_one"],
+        listed=replace(
+            listed,
+            authored=words,
+            automation=replace(listed.automation, automation_id="auto_words"),
+        ),
+    )
+
+    owner = page(client, "u_narrow", "auto_words").json()
+    other = page(client, "u_admin", "auto_words").json()
+    template = page(client, "u_narrow", "auto_one").json()
+
+    for body in (owner, other):
+        assert body["instruction"] == words.instruction
+        assert body["tools"] == ["desk.search_tickets"]
+        assert body["may_use"] == WHAT_IT_MAY_USE_IS_THE_AGENTS_FOR_THIS_PERSON
+        assert body["skills_rule"] == SKILLS_ARE_THE_AGENTS_TO_CHANGE
+        assert body["writes_wait"] == RUNTIME_WRITES_ALWAYS_WAIT_FOR_A_PERSON
+    assert owner["skills"] == ["overdue_chase"]
+    assert other["skills"] == []
+    assert skills.asked == ["u_narrow"]
+    assert (template["instruction"], template["tools"], template["skills"]) == (None, [], [])
+    assert (template["may_use"], template["skills_rule"], template["writes_wait"]) == (
+        None,
+        None,
+        None,
+    )
 
 
 def test_a_pause_is_written_confirmed_and_a_stale_or_raced_one_writes_nothing(

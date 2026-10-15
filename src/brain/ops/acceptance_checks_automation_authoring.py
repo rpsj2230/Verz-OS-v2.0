@@ -25,10 +25,23 @@ run to decide a condition. The second check proves the three kinds as the owner 
 webhook is refused when written, and a row a change starts is never claimed by the clock. That a
 change actually starts a run is `brain.ops.acceptance_checks_automation_event`'s.
 
+**What an automation may use is proved at the install's own agent.** The third check names tools in
+words against an agent whose manifest lists a read, another read it then has detached and a write
+above its ceiling, and holds the one place the routes read an agent through
+(`brain.automation_gallery_routes.StoredAgentRecords`, which folds the stored attachments over the
+manifest) to the list a run would be handed: only the read that is still attached is usable, the
+other two are refused in the one sentence a tool that does not exist gets, and what was saved is
+read back from the stored row. It also holds the saved automation to what the card says, that it
+cannot be started yet, by asking the one function a start asks. **It does not start a run, and it
+does not decide needs-rupash 210**: whether an instruction may call a model with nobody present is
+the owner's, and a check that ran one would answer it. Skills are not proved here: an agent with a
+skill pinned, approved and offered needs the library and a reviewed skill, which is
+`brain.ops.acceptance_workspace`'s and is routes-tested for this card.
+
 **Nothing leaves the transaction.** Every row is a reserved person's, an agent of acceptance_a named
 for the run, and an automation of that agent, all rolled back with the check; nothing is sent.
 
-Task ids: M39.9.2.1, M39.9.2.2, M39.9.2.4, M39.9.2.5, M17.4.1, M17.4.2
+Task ids: M39.9.2.1, M39.9.2.2, M39.9.2.3, M39.9.2.4, M39.9.2.5, M17.4.1, M17.4.2
 """
 
 from __future__ import annotations
@@ -60,6 +73,25 @@ A_KIND_HAD_THE_WRONG_CADENCE: Final = "a trigger carried a cadence its kind does
 A_KIND_RAN: Final = "the clock ran an automation that something other than the clock starts"
 A_KIND_WAS_STARTABLE: Final = "a webhook was offered a start"
 A_WEBHOOK_WAS_WRITTEN: Final = "a webhook was written, though nothing starts work from outside"
+THE_AGENT_READ_ITS_MANIFEST: Final = (
+    "the agent the routes read did not carry the tools attached and detached since its manifest"
+)
+A_TOOL_OUT_OF_REACH_WAS_USABLE: Final = (
+    "a tool no run of the agent could be handed was listed as one an automation may use"
+)
+A_TOOL_OUT_OF_REACH_WAS_NAMED: Final = (
+    "an automation named a tool beyond the agent's ceiling, or one detached from it"
+)
+A_REFUSAL_TOLD_WHICH: Final = (
+    "the refusal of a tool said more than the tool the person wrote, or said it differently"
+)
+A_TOOL_WITHIN_THE_CEILING_WAS_REFUSED: Final = (
+    "a tool the agent's ceiling admits could not be named"
+)
+THE_TOOLS_DID_NOT_READ_BACK: Final = "the tools an automation names did not read back as written"
+AN_INSTRUCTION_COULD_BE_STARTED: Final = (
+    "an automation written in words could be started, though nothing here can run one yet"
+)
 
 
 def _field() -> object:
@@ -468,3 +500,150 @@ async def each_kind_of_trigger_is_saved_and_a_webhook_is_refused(h: Harness) -> 
     for kind in quiet:
         if after[ids[kind]].runs or after[ids[kind]].automation.next_run_at != h.now:
             raise CheckFailedError(A_KIND_RAN)
+
+
+@check(
+    leaves=("M39.9.2.3",),
+    sentence=(
+        "An automation a person writes in words can name only a tool a run of the agent could be "
+        "handed at that person's reach: the agent's own tools as its attachments stand, within its "
+        "ceiling. A write above the ceiling and a tool detached since the manifest are refused in "
+        "one sentence that names only what the person wrote, the tool left is saved and read back, "
+        "and the saved automation cannot be started."
+    ),
+)
+async def an_automation_names_only_what_the_agents_ceiling_lets_a_run_use(h: Harness) -> None:
+    from brain.agent_attachment_routes import FROM_THE_AGENT_PAGE
+    from brain.automation_gallery_routes import StoredAgentRecords
+    from brain.console.automation_authoring import (
+        A_TOOL_IS_NOT_THIS_AUTOMATIONS,
+        Authored,
+        AuthoringRefusedError,
+        TriggerChoice,
+        authoring_of,
+        compose,
+        preview,
+        run_reach,
+        usable_tools,
+    )
+    from brain.console.automation_gallery import AUTOMATION_AUTHORITY, Cadence, Every
+    from brain.console.automation_gallery import new_automation_id as new_id
+    from brain.console.automation_schedule import may_start
+    from brain.console.questions_view import QUESTION_AUTHORITY
+    from brain.console.workspace import Tab, tab
+    from brain.identity.principal_store import StoredPrincipals
+    from brain.ops.acceptance_run import SET_UP_REACH
+    from brain.ops.acceptance_workspace import (
+        _attachable_tools,
+        _everywhere,
+        _planes,
+        installed_agent,
+    )
+    from brain.ops.agent_automation_store import StoredAgentAutomations
+    from brain.ops.attachment_store import StoredAttachments
+    from brain.ops.automation_run_store import StoredAutomationSchedules
+    from brain.orchestration.unattended import TriggerKind
+    from brain.tables.attachment import AttachmentPart
+
+    await h.found_departments()
+    owner, approver = h.principal(A, "writer"), h.principal(A, "approver")
+    tab_read = tab(Tab.AUTOMATIONS).read.requires.value
+    reaches = ("read:note.body", "read:deal.stage", "write:deal.stage")
+    grants = _everywhere(
+        AUTOMATION_AUTHORITY.value, tab_read, QUESTION_AUTHORITY.value, *reaches, *_planes()
+    )
+    await h.person(owner, department=A, grants=grants)
+    await h.person(approver, department=A, grants=grants)
+    read_note, read_deal, update_deal = (
+        "acceptance.read_note",
+        "acceptance.read_deal",
+        "acceptance.update_deal",
+    )
+    agent_id = await installed_agent(
+        h,
+        owner,
+        capabilities=reaches,
+        allowed_tools=(read_note, read_deal, update_deal),
+        suffix="_uses",
+        scope=Scope.unrestricted(),
+    )
+    registry = _attachable_tools()
+    principal = await StoredPrincipals(h.sessions).live_principal(owner)
+    if principal is None:
+        raise CheckFailedError("a reserved person did not read back")
+    # The manifest lists three tools; one is then detached by a press, which is what a person on the
+    # agent's page does, and a run of the agent is handed what is left.
+    await StoredAttachments(h.sessions).press(
+        agent_id=agent_id,
+        part=AttachmentPart.TOOL,
+        reference=read_deal,
+        attached=False,
+        tools=(read_deal,),
+        by=owner,
+        reason_code=FROM_THE_AGENT_PAGE,
+        ent_hash=SET_UP_REACH,
+        trace_id=h.trace_id,
+        at=h.now,
+    )
+    record = await StoredAgentRecords(h.sessions).agent(agent_id)
+    if record is None or record.authority.allowed_tools != {read_note, update_deal}:
+        raise CheckFailedError(THE_AGENT_READ_ITS_MANIFEST)
+    reach = await h.reach(owner)
+    usable = usable_tools(record, registry, run_reach(reach, record), now=h.now)
+    if usable != {read_note}:
+        raise CheckFailedError(A_TOOL_OUT_OF_REACH_WAS_USABLE)
+
+    template_words = {
+        "agent": record,
+        "name": "I check each morning whether any note needs an answer",
+        "instruction": "Read the notes and tell me which are waiting for an answer from us.",
+        "guards": "Without it a note nobody answered is found when the client chases us.",
+        "trigger": TriggerChoice(
+            kind=TriggerKind.SCHEDULE, cadence=Cadence(every=Every.WEEKDAY, hour_utc=8)
+        ),
+        "condition": None,
+        "fields": {},
+        "usable": usable,
+    }
+    said: set[str] = set()
+    for refused in (update_deal, read_deal):
+        try:
+            compose(tools=(refused,), **template_words)  # type: ignore[arg-type]
+        except AuthoringRefusedError as found:
+            if len(found.findings) != 1:
+                raise CheckFailedError(A_REFUSAL_TOLD_WHICH) from found
+            said.add(found.findings[0].replace(refused, "<tool>"))
+        else:
+            raise CheckFailedError(A_TOOL_OUT_OF_REACH_WAS_NAMED)
+    if said != {A_TOOL_IS_NOT_THIS_AUTOMATIONS.format(tool="<tool>")}:
+        raise CheckFailedError(A_REFUSAL_TOLD_WHICH)
+    try:
+        authored = compose(tools=(read_note,), **template_words)  # type: ignore[arg-type]
+    except AuthoringRefusedError as found:
+        raise CheckFailedError(A_TOOL_WITHIN_THE_CEILING_WAS_REFUSED) from found
+
+    shown = preview(authored, record, author=principal, author_reach=reach, now=h.now)
+    automation_id = await StoredAgentAutomations(h.sessions).author(
+        authoring_of(shown, confirmation=shown.confirmation, automation_id=new_id()),
+        ent_hash=reach.ent_hash(),
+        trace_id=h.trace_id,
+    )
+    listed = await StoredAutomationSchedules(h.sessions).listed(agent_id)
+    held = next((one for one in listed if one.automation.automation_id == automation_id), None)
+    if (
+        held is None
+        or not isinstance(held.authored, Authored)
+        or held.authored.tools != (read_note,)
+    ):
+        raise CheckFailedError(THE_TOOLS_DID_NOT_READ_BACK)
+    # What the card says, held to the function a start asks: it cannot be started here yet, by a
+    # second person who holds the authority, and the preview said so before it was saved.
+    approver_reach = await h.reach(approver)
+    if shown.cannot_run is None or may_start(
+        held.automation,
+        approver_reach,
+        agent=record,
+        becomes=h.now,
+        now=h.now,
+    ):
+        raise CheckFailedError(AN_INSTRUCTION_COULD_BE_STARTED)

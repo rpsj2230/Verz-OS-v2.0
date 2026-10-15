@@ -24,11 +24,21 @@ happened, when, and how it ended, and not what it found. See
 matches what would change, and a change that lost a race with a run or another person, which is the
 store finding the automation no longer has the next run that was shown.
 
-Task ids: M39.6.1.4, M39.6.1.5, M39.6.2.2, M38.2.2.5
+**The card names the skills only to the person it runs as.** What a run may use is the agent's tools
+(stored on the automation) and the skills the agent has attached and approved on the day it starts,
+and a skill is read at a reach: for an automation that runs as somebody else the only reach the
+card could read it at is the reader's, which is not the reach the run will have. So `owner_skills`
+asks only when something in the list is the reader's own, and the card says whose the skills are
+for everybody else (`brain.console.automation_authoring.SKILLS_ARE_THE_AGENTS_TO_CHANGE`).
+Rejected: reading them at the reader's reach for every automation, which shows a colleague skills
+an automation could never be offered.
+
+Task ids: M39.6.1.4, M39.6.1.5, M39.6.2.2, M38.2.2.5, M39.9.2.3
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import datetime
 from typing import Final, Protocol, runtime_checkable
@@ -43,6 +53,7 @@ from brain.agents.model import AgentRecord, visible_agent_ids
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked, Asking
 from brain.automation_gallery_routes import CONFIRMATION, agent_records_of
+from brain.automation_skills import skills_of
 from brain.console.agent_automations import (
     SchedulerChange,
     automations_for,
@@ -52,8 +63,10 @@ from brain.console.agent_automations import (
 from brain.console.automation_authoring import (
     EVENTS_ARE_OFF,
     NOTHING_FIRES_THIS_YET,
+    SKILLS_ARE_THE_AGENTS_TO_CHANGE,
     WRITES_WAIT_FOR_A_PERSON,
     Authored,
+    admitted_reach,
 )
 from brain.console.automation_gallery import Cadence, may_open_gallery, template_by_id
 from brain.console.automation_schedule import (
@@ -164,9 +177,14 @@ class AuthoredCardView(BaseModel):
     condition: str | None = None
     instruction: str
     tools: list[str]
+    #: The skills a run would be offered at its owner's reach, by name, sent only when the reader
+    #: is the owner, who is the one reach they can be read at. For anybody else it is empty and
+    #: `skills_rule` says whose skills they are.
+    skills: list[str] = []
     #: The template it began from, or null when it began from words.
     from_template: str | None = None
     writes_wait: str = WRITES_WAIT_FOR_A_PERSON
+    skills_rule: str = SKILLS_ARE_THE_AGENTS_TO_CHANGE
 
 
 class AutomationView(BaseModel):
@@ -304,16 +322,37 @@ async def _visible(
     return record, tuple(one for one in every if one.automation.automation_id in seen)
 
 
-def authored_view(one: Authored) -> AuthoredCardView:
-    """What a person wrote, as the card says it."""
+def authored_view(one: Authored, skills: Sequence[str] = ()) -> AuthoredCardView:
+    """What a person wrote, as the card says it, with the skills a run would be offered when the
+    caller has them for the reader the card is drawn for."""
     return AuthoredCardView(
         trigger=one.trigger.words(),
         fires=one.trigger.fires,
         condition=None if one.condition is None else one.condition.words(),
         instruction=one.instruction_text,
         tools=list(one.tools),
+        skills=sorted(skills),
         from_template=one.template_id,
     )
+
+
+async def owner_skills(
+    request: Request, agent: AgentRecord, asked: Asking, listed: Sequence[Listed]
+) -> tuple[str, ...]:
+    """The skills a run would be offered, read at the reader's own reach, and only when something
+    here is the reader's own to be told them about.
+
+    A skill is read at a reach, and the reach a card can read it at is the one reading it: for an
+    automation that runs as somebody else the answer would be that other person's, which this
+    reader may not be told, so nothing is asked and the card gives the rule alone.
+    """
+    mine = asked.caller.principal.id
+    if not any(one.authored is not None and one.automation.runs_as.id == mine for one in listed):
+        return ()
+    offered = await skills_of(request).offered(
+        agent, reach=admitted_reach(asked.reach), now=asked.now
+    )
+    return tuple(card.name for card in offered)
 
 
 def _schedule_words(listed: Listed, cadence: Cadence | None) -> str:
@@ -333,12 +372,19 @@ def run_view(run: RunRecord, asked: Asking) -> RunView:
 
 
 def automation_view(
-    listed: Listed, agent: AgentRecord, asked: Asking, *, events_on: bool = False
+    listed: Listed,
+    agent: AgentRecord,
+    asked: Asking,
+    *,
+    events_on: bool = False,
+    skills: Sequence[str] = (),
 ) -> AutomationView | None:
     """One automation as this reader sees it, or None when its template is gone.
 
     `events_on` is whether the install has switched on starting by a change. It decides only
     whether an automation a change starts is offered a start: a stop is offered either way.
+    `skills` is `owner_skills`, and is named on the card only when the automation is the
+    reader's own.
     """
     one = listed.automation
     template = template_by_id(listed.template_id)
@@ -401,7 +447,13 @@ def automation_view(
             else None
         ),
         cannot_start=cannot_start,
-        authored=None if listed.authored is None else authored_view(listed.authored),
+        authored=(
+            None
+            if listed.authored is None
+            else authored_view(
+                listed.authored, skills if one.runs_as.id == asked.caller.principal.id else ()
+            )
+        ),
     )
 
 
@@ -423,7 +475,8 @@ async def agent_automations(request: Request, agent_id: str, asked: Asked) -> Au
     """This agent's automations this reader may see, each with its last run and its controls."""
     agent, seen = await _visible(request, agent_id, asked)
     events_on = await events_are_on(request)
-    views = (automation_view(one, agent, asked, events_on=events_on) for one in seen)
+    skills = await owner_skills(request, agent, asked, seen)
+    views = (automation_view(one, agent, asked, events_on=events_on, skills=skills) for one in seen)
     return AutomationsView(items=[one for one in views if one is not None])
 
 
@@ -491,7 +544,13 @@ async def _change(
         automation=after,
         stopped_because=STARTED if starting else PausedBecause.STOPPED.value,
     )
-    view = automation_view(moved, agent, asked, events_on=events_on)
+    view = automation_view(
+        moved,
+        agent,
+        asked,
+        events_on=events_on,
+        skills=await owner_skills(request, agent, asked, (moved,)),
+    )
     return JSONResponse(
         status_code=200, content=None if view is None else view.model_dump(mode="json")
     )

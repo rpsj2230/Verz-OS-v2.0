@@ -190,6 +190,9 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.automation_authoring_routes:AutomationAuthors.author": (
             Repeat.WRITES_THIS_SYSTEMS_DATABASE
         ),
+        # The skills a run of an automation would be offered: the answer lane's own read of an
+        # agent's pins and the library, nothing written.
+        "brain.automation_skills:AutomationSkills.offered": Repeat.READS,
         # Starting and stopping an installed automation: a read of an agent's automations and a
         # write of its next run and the schedule row beside it, conditional on the next run shown,
         # so a second press finds the automation already moved and writes nothing.

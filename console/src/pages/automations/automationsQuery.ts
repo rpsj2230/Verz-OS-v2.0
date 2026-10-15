@@ -214,6 +214,15 @@ export interface AutomationDetail {
   readonly task: string;
   readonly templateId: string;
   readonly ownerId: string;
+  /** What a person wrote it to do, when they wrote it. Absent for a template installed as it comes. */
+  readonly instruction?: string;
+  /** The tools it names, as they were admitted. */
+  readonly tools: readonly string[];
+  /** The skills a run would be offered at its owner's reach, named only to its owner. */
+  readonly skills: readonly string[];
+  readonly mayUse?: string;
+  readonly skillsRule?: string;
+  readonly writesWait?: string;
 }
 
 function readRun(value: unknown): AutomationRun | null {
@@ -269,6 +278,10 @@ export function readAutomationDetail(payload: unknown): AutomationDetail | null 
   const installedAt = instant(fields["installed_at"]);
   const resumeBecomes = instant(fields["resume_becomes"]);
   const basis = said(fields["basis"]);
+  const instruction = said(fields["instruction"]);
+  const mayUse = said(fields["may_use"]);
+  const skillsRule = said(fields["skills_rule"]);
+  const writesWait = said(fields["writes_wait"]);
   return {
     row,
     guards: said(fields["guards"]) ?? "",
@@ -299,6 +312,12 @@ export function readAutomationDetail(payload: unknown): AutomationDetail | null 
     task: said(fields["task"]) ?? "",
     templateId: said(fields["template_id"]) ?? "",
     ownerId: said(fields["owner_id"]) ?? "",
+    tools: strings(fields["tools"]),
+    skills: strings(fields["skills"]),
+    ...(instruction === undefined ? {} : { instruction }),
+    ...(mayUse === undefined ? {} : { mayUse }),
+    ...(skillsRule === undefined ? {} : { skillsRule }),
+    ...(writesWait === undefined ? {} : { writesWait }),
     ...(stoppedBecause === undefined ? {} : { stoppedBecause }),
     ...(cannotRun === undefined ? {} : { cannotRun }),
     ...(cadence === undefined ? {} : { cadence }),

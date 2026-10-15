@@ -46,6 +46,9 @@ export interface AuthoredShown {
   readonly condition?: string;
   readonly instruction: string;
   readonly tools: readonly string[];
+  /** The skills a run would be offered at its owner's reach: named only to the owner, else empty. */
+  readonly skills: readonly string[];
+  readonly skillsRule: string;
   readonly writesWait: string;
 }
 
@@ -108,14 +111,19 @@ function authoredOf(value: unknown): AuthoredShown | undefined {
   const trigger = said(fields?.["trigger"]);
   const instruction = said(fields?.["instruction"]);
   const writesWait = said(fields?.["writes_wait"]);
+  const skillsRule = said(fields?.["skills_rule"]);
   const tools = fields?.["tools"];
+  const skills = fields?.["skills"];
   if (
     trigger === undefined ||
     instruction === undefined ||
     writesWait === undefined ||
+    skillsRule === undefined ||
     typeof fields?.["fires"] !== "boolean" ||
     !Array.isArray(tools) ||
-    !(tools as readonly unknown[]).every((one) => said(one) !== undefined)
+    !(tools as readonly unknown[]).every((one) => said(one) !== undefined) ||
+    !Array.isArray(skills) ||
+    !(skills as readonly unknown[]).every((one) => said(one) !== undefined)
   ) {
     return undefined;
   }
@@ -125,6 +133,8 @@ function authoredOf(value: unknown): AuthoredShown | undefined {
     fires: fields["fires"],
     instruction,
     writesWait,
+    skillsRule,
+    skills: skills as readonly string[],
     tools: tools as readonly string[],
     ...(condition === undefined ? {} : { condition }),
   };
