@@ -1,0 +1,3 @@
+Install checks (CHECK_ORDER 835 and 845) naming M39.2.4.1, M39.2.4.2 and M39.1.2.4, with failing-product tests. No migration, no route change, no flag.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
