@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-14T17:12:01.810713+00:00",
-  "commit": "94bcd7ca",
-  "commit_subject": "The application's memory limit is 1536 MiB, held equal to the budget in every place that costs it (#608)",
+  "generated_at": "2026-10-15T04:15:18.017076+00:00",
+  "commit": "2a58d07f",
+  "commit_subject": "Every grid in the console is drawn through TanStack Table, and the Artifacts list pages on the server (M32.5.2.1) (#605)",
   "total": 1626,
-  "done": 1134,
-  "percent": 69.7,
-  "built": 1282,
-  "built_percent": 78.8,
+  "done": 1135,
+  "percent": 69.8,
+  "built": 1283,
+  "built_percent": 78.9,
   "built_unproven": 148,
   "built_task_ids": [
     "M1.1.8",
@@ -196,16 +196,16 @@
       "wave": 2,
       "name": "Data, channels, retrieval",
       "total": 274,
-      "done": 197,
-      "percent": 71.9,
+      "done": 198,
+      "percent": 72.3,
       "in_progress": 0,
       "ready_for_testing": 57,
       "blocked": 12,
-      "open": 8,
+      "open": 7,
       "acts": 0,
       "decided": 20,
-      "built": 255,
-      "built_percent": 93.1
+      "built": 256,
+      "built_percent": 93.4
     },
     {
       "wave": 3,
@@ -594,10 +594,10 @@
       "name": "Component deployment and wiring",
       "wave": 2,
       "total": 45,
-      "done": 29,
+      "done": 30,
       "acts": 0,
       "decided": 3,
-      "built": 40
+      "built": 41
     },
     {
       "module": "M33",
@@ -1453,6 +1453,7 @@
     "M32.5.1.2",
     "M32.5.1.3",
     "M32.5.1.4",
+    "M32.5.2.1",
     "M32.5.2.2",
     "M32.5.2.3",
     "M32.5.2.4",
@@ -3145,11 +3146,6 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.object_store, ops.storage); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
-    "M32.5.2.1": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in api_routes, components/DataTable.tsx, components/paging.ts +2 more; NOT wired: pages/Records.tsx. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-w1-1; old backup branch recovery/from-windows-20260928-wt-w1-2; old backup branch recovery/from-windows-20260928-wt-w1-2a",
-      "updated": "2026-10-06"
-    },
     "M32.6.1.1": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.automation); open for proof on the install or a decision, not for code",
@@ -3958,11 +3954,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 270,
+  "closed_today": 1,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "2a58d07",
+      "at": "2026-10-15T04:08:12+00:00",
+      "subject": "Every grid in the console is drawn through TanStack Table, and the Artifacts list pages on the server (M32.5.2.1) (#605)",
+      "closed": "M32.5.2.1"
+    },
     {
       "sha": "33065e9",
       "at": "2026-10-14T14:34:09+00:00",
@@ -4076,12 +4078,6 @@
       "at": "2026-09-29T15:26:04+00:00",
       "subject": "Wave 1 is complete: Moonshot answers end to end on the install, and six deployment tasks close on the same run (#262)",
       "closed": "M32.1.2.1,M32.1.2.2,M32.1.2.5,M32.2.2.4,M32.4.1.4,M32.7.3,M5.6.1"
-    },
-    {
-      "sha": "b07fd59",
-      "at": "2026-09-29T12:10:52+00:00",
-      "subject": "Nineteen tasks close on the install's acceptance run: audit and tracing, the routing proof, retrieval, connectors and capacity (#244)",
-      "closed": "M11.1.6,M11.3.4,M15.1.1,M15.1.2,M15.1.4,M15.2.1,M15.2.2,M15.2.3,M15.2.4,M15.2.5,M15.2.6,M15.2.7,M15.3.2,M15.4.3,M22.3.1,M22.3.2,M22.3.4,M24.3.4,M5.6.3"
     }
   ]
 }
