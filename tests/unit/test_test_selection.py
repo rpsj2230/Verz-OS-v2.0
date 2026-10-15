@@ -37,7 +37,8 @@ from brain.ops.test_selection import (
     select,
     support_readers,
 )
-from brain.ops.test_shards import ShardError, collected, partition
+from brain.ops.test_shards import ShardError, collected, partition, units_run
+from brain.ops.test_timings import units
 
 REPO = Path(__file__).resolve().parents[2]
 SUITE = collected()
@@ -316,14 +317,14 @@ def test_the_shares_between_them_are_exactly_the_selection_and_the_full_suite_in
     this and a partition bug drops a selected file from every shard, with every shard green."""
     changed = ["src/brain/ops/limits.py"]
     shares = [plan(n, SHARDS, base="x", head="HEAD", changed=changed) for n in range(1, SHARDS + 1)]
-    listed = [name for one in shares for name in one.files]
-    expected = select(changed, depth=PLAN_DEPTH, suite=SUITE).files
+    listed = [name for one in shares for name in sorted(units_run(one.files))]
+    expected = units(select(changed, depth=PLAN_DEPTH, suite=SUITE).files)
     assert not any(one.full for one in shares)
     assert sorted(listed) == sorted(expected) and len(listed) == len(set(listed))
     assert 0 < len(listed) < len(SUITE)
     whole = [plan(n, SHARDS, base="", head="HEAD") for n in range(1, SHARDS + 1)]
     assert all(one.full for one in whole)
-    assert sorted(name for one in whole for name in one.files) == sorted(SUITE)
+    assert sorted(name for one in whole for name in units_run(one.files)) == sorted(units(SUITE))
 
 
 @pytest.mark.parametrize(
@@ -533,7 +534,7 @@ def test_a_merge_train_plans_every_shards_full_share_whatever_the_diff() -> None
         for n in range(1, SHARDS + 1)
     ]
     assert all(one.full and one.reason == WHOLE_SUITE_REQUESTED for one in asked)
-    assert sorted(name for one in asked for name in one.files) == sorted(SUITE)
+    assert sorted(name for one in asked for name in units_run(one.files)) == sorted(units(SUITE))
     plain = [plan(n, SHARDS, base="x", head="HEAD", changed=changed) for n in range(1, SHARDS + 1)]
     assert not any(one.full for one in plain)
     assert sum(len(one.files) for one in plain) < len(SUITE)
