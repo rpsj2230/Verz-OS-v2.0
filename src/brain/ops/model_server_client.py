@@ -40,7 +40,7 @@ from typing import Final
 import structlog
 
 from brain.connectors.throttle import CallOutcome, classify, connector_breaker, record_outcome
-from brain.knowledge.embed_policy import embedding_endpoint, endpoint_refusals
+from brain.knowledge.embed_policy import EmbeddingUnavailable, embedding_endpoint, endpoint_refusals
 from brain.models.routing import CircuitBreaker
 from brain.ops.inference_client import (
     BREAKER_NAME,
@@ -206,3 +206,28 @@ def held_embedding_revision(body: Mapping[str, object]) -> str | None:
         return None
     held = revisions.get("embedding")
     return held if isinstance(held, str) and held else None
+
+
+def entity_endpoint(
+    env: Mapping[str, str] | None = None, saved: Mapping[str, str] | None = None
+) -> str | None:
+    """Where the install's entity model answers, or None where it runs none.
+
+    **Decided from two settings and no database**: the model server is one of the install's optional
+    services and the entity part is one of its chosen parts. Both are things a person set on
+    purpose (the default is neither), so an install that did nothing sends nothing here. This is
+    read when the process starts, as the analyser's address is, because the detector is built once
+    with the model driver; a change reaches it at the next start. A setting that cannot be read is
+    no entity model, and the rules' scrub stands.
+    """
+    from brain.ops.inference import is_switched_on
+    from brain.ops.model_server import ModelServerError, read_config
+
+    if not is_switched_on(env, saved):
+        return None
+    try:
+        if Part.ENTITIES not in read_config(env, saved).parts:
+            return None
+        return embedding_endpoint(env)
+    except (ModelServerError, EmbeddingUnavailable):
+        return None

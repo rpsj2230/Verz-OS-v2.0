@@ -502,6 +502,72 @@ async def the_declared_embedding_revision_is_the_one_the_server_holds(h: Harness
         raise CheckFailedError(THE_DECLARED_REVISION_IS_NOT_THE_HELD_ONE)
 
 
+# ------------------------------------------------------------------------ the entity part
+#: A name no pattern describes: three ordinary capitalised words with no connector, the case
+#: `brain.ops.pii.GLINER_LABELS` gives for asking a model at all. Invented here, and nobody's.
+NAME_NO_PATTERN_DESCRIBES: Final = "Tan Wei Ling"
+
+#: Said where the install did not choose the entity part.
+NO_ENTITY_PART_HERE: Final = (
+    "this install's model server does not run the entity part: INSTALL_MODEL_PARTS does not name "
+    "entities"
+)
+
+#: Said where the entity part could not be asked, or did not give a reading.
+THE_ENTITY_PART_DID_NOT_ANSWER: Final = (
+    "the entity part of the model server this install chose did not give a readable answer to a "
+    "sentence with a name in it; it may still be loading, and the next run asks again"
+)
+
+#: Said where it answered and the name is still in the text once the scrub has run.
+THE_ENTITY_PART_LEFT_THE_NAME: Final = (
+    "the entity part of the model server this install chose was sent a sentence with a name no "
+    "pattern describes in it, and that name is still in the text after the scrub"
+)
+
+#: How long the check waits for the entity part, in seconds: long enough for a cold load of the
+#: model, which is the one thing this check may be the first to ask for.
+ENTITY_PART_WAIT_SECONDS: Final = 180.0
+
+
+@check(
+    leaves=("M32.2.1.2",),
+    sentence=(
+        "The entity part of the model server this install chose is sent a sentence with a "
+        "three-word name no pattern describes in it, and the name is gone from the text once the "
+        "application's own scrub has folded in what the part found."
+    ),
+)
+async def the_entity_part_finds_a_name_no_pattern_describes(h: Harness) -> None:
+    import asyncio
+
+    import httpx
+
+    from brain.ops.egress import AnalyserUnavailableError, entities
+    from brain.ops.model_server_client import entity_endpoint
+    from brain.ops.overlays import BY_NAME, switched_on_here
+    from brain.ops.pii import PiiError, detect, merge_detections, scrub
+
+    if BY_NAME["modelserver"] not in switched_on_here():
+        raise CheckNotRunError(NO_MODEL_SERVER_HERE)
+    address = entity_endpoint()
+    if address is None:
+        raise CheckNotRunError(NO_ENTITY_PART_HERE)
+    text = f"Please send the signed lease to {NAME_NO_PATTERN_DESCRIBES} before Friday."
+
+    def ask() -> str:
+        with httpx.Client(follow_redirects=False) as client:
+            found = entities(address, client)(text, timeout_seconds=ENTITY_PART_WAIT_SECONDS)
+        return scrub(text, merge_detections(detect(text), found))
+
+    try:
+        scrubbed = await asyncio.to_thread(ask)
+    except (AnalyserUnavailableError, PiiError) as error:
+        raise CheckFailedError(THE_ENTITY_PART_DID_NOT_ANSWER) from error
+    if any(word in scrubbed for word in NAME_NO_PATTERN_DESCRIBES.split()):
+        raise CheckFailedError(THE_ENTITY_PART_LEFT_THE_NAME)
+
+
 # ------------------------------------------------------------------------ how a passage was read
 class _MadeUpServer:
     """A model server for the check: the layout part reads the first page of a two-page PDF and the
