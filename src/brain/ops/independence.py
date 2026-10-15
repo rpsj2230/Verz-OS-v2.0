@@ -317,6 +317,11 @@ ALLOWED_HOSTS: Final[frozenset[str]] = frozenset(
         # Trivy's signed apt repository, from which CI's vulnerability job installs the scanner.
         # A tool's package source, like the two above; never a client's.
         "aquasecurity.github.io",
+        # The public source the model server fetches the open weights it runs from, when the
+        # install first starts a part (`inference_server.fetch`). A model hub is a publisher of
+        # the same checkpoint for everyone, so it is a package source like the two indexes above
+        # and never one company's host.
+        "huggingface.co",
         # This product's own provenance, and the two entries are one fact in two halves.
         # `ops/deploy.sh` and `ops/watch-and-deploy.sh` verify the image's signature before
         # running it, and a Sigstore verification is an assertion about two fixed strings:

@@ -48,6 +48,20 @@ sentence the deploy would have written. Rejected: a second sum at save, which is
 for the budget to be subtly wrong; and refusing with no measurement, which blocks the first
 switch-on of every install. See `THE_SAVE_CHECK_USES_THE_ROOM_THE_SERVER_LAST_MEASURED`.
 
+**One overlay's limit is the install's own choice, and the one costing charges that figure.** The
+model server's memory depends on which of its parts an install chose and how large a document it
+is sized for (`brain.ops.model_server`), so a number in `brain.ops.wiring` alone cannot be what
+the plan charges or the compose file starts it with. `tuned_for` reads the install's settings and
+answers three things for an overlay: the limits its containers are costed at, the variables its
+compose file is started with, and a sentence when what the install chose cannot be started as it
+is. `plan_in_room` charges the limits, `render` hands the variables to the step as `ENV` lines,
+and an overlay with a sentence is refused with it. The wiring row stays the default choice's
+figure and is held equal to the compose file's default by test; the install's figure flows through
+the same costing at deploy and at save, so neither can be refused by arithmetic the other would
+not repeat. **A choice that cannot be started refuses that overlay and no other**: a typo in the
+model server's settings must not take the personal data detector away. See
+`A_BAD_CHOICE_REFUSES_ITS_OWN_OVERLAY_ONLY`.
+
 **An overlay that does not fit is refused in words, and the ones before it still start.**
 Overlays are costed in declaration order, which is the order item 120 gave the room in, so a
 refusal names exactly the one that did not fit and what it would have needed. A plan the
@@ -106,7 +120,7 @@ object store are one container (`docker-compose.objectstore.yml` describes it an
 file only refers to it), so an install that names both runs one store and the plan pays for one.
 See `A_SHARED_CONTAINER_IS_PAID_FOR_ONCE`.
 
-Task ids: M32.2.1.1, M32.1.1.1, M32.1.1.2, M32.1.2.6, M22.2.2, M32.3.1.1, M32.6.1.1
+Task ids: M32.2.1.1, M32.1.1.1, M32.1.1.2, M32.1.2.6, M22.2.2, M32.3.1.1, M32.6.1.1, M7.2.1, M7.3.3
 """
 
 from __future__ import annotations
@@ -179,8 +193,65 @@ A_SHARED_CONTAINER_IS_PAID_FOR_ONCE: Final = (
 )
 
 
+#: Why a setting that cannot be started as written refuses its own overlay and nothing else.
+A_BAD_CHOICE_REFUSES_ITS_OWN_OVERLAY_ONLY: Final = (
+    "A plan that cannot be made stops nothing, because the script stops an overlay that is no "
+    "longer switched on. A plan that can be made for every overlay but one is a different case: "
+    "the one whose own settings cannot be started as written is refused in words and left out, "
+    "and the others are planned and started as if it had not been named. Failing the whole plan "
+    "for it would take the personal data detector away on the day somebody mistyped how many "
+    "minutes a model should stay loaded."
+)
+
+
 class OverlayError(Exception):
     """A setting names a service nobody declared, or the server's facts cannot be read."""
+
+
+@dataclass(frozen=True)
+class Tuned:
+    """What an install's own settings change about one overlay, as the plan reads it.
+
+    `limits` are the memory limits its containers are costed and started at, by component name;
+    a component not named is costed at what `brain.ops.wiring` says. `environment` are the
+    variables its compose file is started with, which the step exports before compose runs. A
+    non-empty `problem` is a sentence saying why the overlay cannot be started as the install
+    chose, and the plan refuses it with that sentence.
+    """
+
+    limits: Mapping[str, int] = field(default_factory=dict)
+    environment: tuple[tuple[str, str], ...] = ()
+    problem: str = ""
+
+
+def tuned_for(name: str, saved: Mapping[str, str] | None = None) -> Tuned:
+    """What this install's settings make of the overlay of that name: limits, variables, problem.
+
+    Only the model server is tuned today, and every other overlay answers with nothing, which is
+    what keeps their plans exactly as they were. Read through `value_of`, so a saved value outranks
+    the environment as it does everywhere else.
+    """
+    if name != "modelserver":
+        return Tuned()
+    from brain.ops.model_server import (
+        ModelServerError,
+        effective_limit_mib,
+        environment,
+        limit_problem,
+        read_config,
+    )
+
+    try:
+        config = read_config(saved=saved)
+    except ModelServerError as error:
+        return Tuned(problem=str(error))
+    problem = limit_problem(config)
+    if problem:
+        return Tuned(problem=problem)
+    return Tuned(
+        limits={"inference-server": effective_limit_mib(config)},
+        environment=environment(config),
+    )
 
 
 @dataclass(frozen=True)
@@ -276,6 +347,20 @@ OVERLAYS: Final[tuple[Overlay, ...]] = (
         # The detector's one network is internal, so the application and the worker are joined
         # to it rather than the detector being joined to anything with a route off the host.
         joins=(("pii", ("app", "brain-worker")),),
+    ),
+    Overlay(
+        name="modelserver",
+        what="the model server, which reads documents and finds passages by meaning",
+        # One container whose limit is the install's own choice of parts, not a fixed figure: see
+        # `brain.ops.model_server` and `tuned_for`, which is where the figure the plan costs and the
+        # compose file is started with comes from. `wiring`'s row is the default choice.
+        components=("inference-server",),
+        files=("docker-compose.inference.yml",),
+        prepare=("modelserver.prepare.sh",),
+        # Its one network is internal, so the application and the workers are joined to it rather
+        # than the server being joined to anything with a route off the host. The application
+        # finds it by the service name `INSTALL_MODEL_ENDPOINT` defaults to, which compose gives it.
+        joins=(("inference", ("app", "brain-worker", "brain-parse-worker")),),
     ),
     Overlay(
         name="langfuse",
@@ -457,13 +542,20 @@ def room_in(value: object) -> int | None:
     return room
 
 
-async def memory_problem(session: AsyncSession, value: str) -> str:
+async def memory_problem(
+    session: AsyncSession, value: str, saved: Mapping[str, str] | None = None
+) -> str:
     """Why a value naming more services than the server has room for may not be saved, or empty.
 
     From the room the deploy step last measured (`ROOM_KEY`), through `plan_in_room`, the costing
     the deploy itself uses, so it names the same service the deploy would leave out. A service
     that needs a runtime the server lacks is `runtime_problem`'s to refuse and is not counted
     twice. See `THE_SAVE_CHECK_USES_THE_ROOM_THE_SERVER_LAST_MEASURED`.
+
+    `saved` is the installation values as they would stand once this save is made, so a choice
+    that changes what an overlay costs (the model server's parts, its largest document, its limit)
+    is costed at what it would then be and not at what it was. Without it the saved values as they
+    stand are read.
     """
     from brain.ops.setting_store import read_namespace
 
@@ -480,9 +572,10 @@ async def memory_problem(session: AsyncSession, value: str) -> str:
     every_runtime = frozenset({"runc", *(one.needs_runtime for one in OVERLAYS)})
     # The overlay the product always runs is costed first, as it is on the server, and is never
     # named: it is not what the person chose, and a room too small for it holds nothing else.
+    tuning = {one.name: tuned_for(one.name, saved) for one in wanting}
     refused = [
         reason
-        for one, reason in plan_in_room(planned(wanting), room, every_runtime).refused
+        for one, reason in plan_in_room(planned(wanting), room, every_runtime, tuning).refused
         if not one.always
     ]
     if not refused:
@@ -614,6 +707,8 @@ class Plan:
     refused: tuple[tuple[Overlay, str], ...]
     available_mib: int
     costs: Mapping[str, int] = field(default_factory=dict)
+    #: The variables each started overlay's compose file is started with, by overlay name.
+    environment: Mapping[str, tuple[tuple[str, str], ...]] = field(default_factory=dict)
 
 
 def runtime_refusal(one: Overlay) -> str:
@@ -634,35 +729,57 @@ def shortfall(cost_mib: int, remaining_mib: int) -> str:
     return f"needs {cost_mib} MiB and this server has {max(remaining_mib, 0)} MiB left for it"
 
 
-def plan(switched: Sequence[Overlay], host: Host) -> Plan:
+def plan(
+    switched: Sequence[Overlay], host: Host, tuning: Mapping[str, Tuned] | None = None
+) -> Plan:
     """Each switched-on overlay started while it fits, in declaration order, or refused in words.
 
     A container an overlay shares with one already started is not charged again. See
     `A_SHARED_CONTAINER_IS_PAID_FOR_ONCE`.
     """
-    return plan_in_room(switched, host.available_mib, host.runtimes)
+    return plan_in_room(switched, host.available_mib, host.runtimes, tuning)
 
 
-def plan_in_room(switched: Sequence[Overlay], available_mib: int, runtimes: frozenset[str]) -> Plan:
+def plan_in_room(
+    switched: Sequence[Overlay],
+    available_mib: int,
+    runtimes: frozenset[str],
+    tuning: Mapping[str, Tuned] | None = None,
+) -> Plan:
     """`plan` from the two facts it reads of a server, so a saved report can be asked it too.
 
     **There is one costing and this is it.** The deploy step asks it of a measured `Host` and the
     Settings screen asks it of the room the step last kept (`memory_problem`), so a save can never
     be refused by arithmetic the next deploy would not repeat.
+
+    `tuning` is what the install's own settings make of an overlay (`tuned_for`): the limits its
+    containers are charged at in place of the budget's own rows, the variables it is started with,
+    and a sentence when it cannot be started as chosen, which refuses it alone. See
+    `A_BAD_CHOICE_REFUSES_ITS_OWN_OVERLAY_ONLY`.
     """
     remaining = available_mib
     start: list[Overlay] = []
     refused: list[tuple[Overlay, str]] = []
     costs: dict[str, int] = {}
+    environment: dict[str, tuple[tuple[str, str], ...]] = {}
     running: set[str] = set()
     for one in switched:
+        tuned = (tuning or {}).get(one.name, Tuned())
+        if tuned.problem:
+            refused.append((one, f"{one.what} ({one.name}) is not started: {tuned.problem}"))
+            continue
         if one.needs_runtime and one.needs_runtime not in runtimes:
             refused.append((one, runtime_refusal(one)))
             continue
-        cost = set_cost_mib(name for name in one.components if name not in running)
+        cost = sum(
+            tuned.limits.get(name, component(name).memory_mib)
+            for name in one.components
+            if name not in running
+        )
         if cost <= remaining:
             start.append(one)
             costs[one.name] = cost
+            environment[one.name] = tuned.environment
             running.update(one.components)
             remaining -= cost
             continue
@@ -674,16 +791,18 @@ def plan_in_room(switched: Sequence[Overlay], available_mib: int, runtimes: froz
         refused=tuple(refused),
         available_mib=available_mib,
         costs=costs,
+        environment=environment,
     )
 
 
 def render(planned: Plan, host: Host) -> str:
     """The plan as the script reads it, one fact per line.
 
-    `START` opens an overlay and the `PREPARE`, `FILE`, `JOIN`, `JOIN_AS_SERVICE`, `WAIT` and
-    `AFTER` lines after it are that overlay's, so the script can leave out one whose preparation
-    failed and start the rest. `JOIN_AS_SERVICE` is a `JOIN` that also gives each container its
-    compose service name on that network.
+    `START` opens an overlay and the `ENV`, `PREPARE`, `FILE`, `JOIN`, `JOIN_AS_SERVICE`, `WAIT`
+    and `AFTER` lines after it are that overlay's, so the script can leave out one whose
+    preparation failed and start the rest. `JOIN_AS_SERVICE` is a `JOIN` that also gives each
+    container its compose service name on that network. `ENV` is a variable its compose file is
+    started with, as `NAME=value`, and a value never carries a space or a quote.
     `SAY` lines go to the deploy's journal as they are.
     """
     lines = [
@@ -696,6 +815,9 @@ def render(planned: Plan, host: Host) -> str:
         lines.append(f"START {one.name}")
         charged = planned.costs.get(one.name, one.cost_mib)
         lines.append(f"SAY starting {one.what} ({one.name}) at {charged} MiB")
+        # Before the preparations, so a script that fetches what a chosen part needs is told which
+        # parts were chosen: the step exports each `ENV` line as it reads it.
+        lines.extend(f"ENV {key}={value}" for key, value in planned.environment.get(one.name, ()))
         lines.extend(f"PREPARE {name}" for name in one.prepare)
         lines.extend(f"FILE {name}" for name in one.files)
         lines.extend(
@@ -924,13 +1046,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 64
     try:
         host = read_host(sys.stdin, project=args[2])
-        switched = switched_on_here(saved=_saved_from_database())
+        saved = _saved_from_database()
+        switched = switched_on_here(saved=saved)
+        tuning = {one.name: tuned_for(one.name, saved) for one in switched}
     except Exception as error:
         from brain.ops.safe_error import describe
 
         print(f"SAY no plan was made, so nothing is started or stopped: {describe(error)}")
         return 1
-    sys.stdout.write(render(plan(planned(switched), host), host))
+    sys.stdout.write(render(plan(planned(switched), host, tuning), host))
     _keep_room(host)
     return 0
 
