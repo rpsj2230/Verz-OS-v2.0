@@ -1,0 +1,7 @@
+The install's newest complete acceptance run (94bcd7c, 2026-10-14 17:17 UTC) recorded all 574 checks with no failure: 530 passed and 44 were not run. The proof sweep (brain.ops.proof_sweep) wrote the evidence row in docs/tracker-audit-2026-09-28.md and this line.
+
+Closes: M12.3.5
+Proved-on-install: the acceptance run at 94bcd7c (2026-10-14 17:17 UTC), complete with every registered check recorded, passed every install check naming each of these tasks; evidence rows in docs/tracker-audit-2026-09-28.md
+Proved-in-ci: "Unit tests" runs tests/unit/test_acceptance*.py, which run each of these checks against PostgreSQL at head and the breaks that fail them
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

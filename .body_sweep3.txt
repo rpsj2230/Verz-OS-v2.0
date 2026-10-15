@@ -1,0 +1,9 @@
+The install's newest complete acceptance run (5fae091, 2026-10-14 12:16 UTC, after the vault token and update mode fixes) recorded all 573 checks: 529 passed, 43 were not run and 1 failed. The one failure is the named-release image check, which ran before the owner saved How this install updates, so it names two tasks that stay open. The proof sweep wrote the evidence rows in docs/tracker-audit-2026-09-28.md and these lines.
+
+Closes: M18.1.3, M18.2.1, M18.2.2, M18.2.3, M18.2.4, M18.4.1, M18.4.2, M18.4.3
+Closes: M37.1.1.1, M37.1.1.2, M37.1.1.3, M37.1.3.2, M37.1.3.3, M37.1.4.1, M37.1.4.2, M37.1.4.3, M37.1.4.4, M37.7.5
+Closes: M42.1.2, M42.5.2
+Proved-on-install: the acceptance run at 5fae091 (2026-10-14 12:16 UTC), complete with every registered check recorded, passed every install check naming each of these tasks; evidence rows in docs/tracker-audit-2026-09-28.md
+Proved-in-ci: "Unit tests" runs tests/unit/test_acceptance*.py, which run each of these checks against PostgreSQL at head and the breaks that fail them
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
