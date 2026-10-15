@@ -214,7 +214,15 @@ def test_a_stored_row_is_read_back_only_for_the_release_that_wrote_it_and_in_its
     value = observation(facts, commit=RELEASE)
     assert facts_in(value, commit=RELEASE) == facts
     assert facts_in(value, commit="another") is None
-    for bad in (None, "text", [], {}, {**value, "networks": "not a list"}, {**value, "probe": 3}):
+    wrong: tuple[object, ...] = (
+        None,
+        "text",
+        [],
+        {},
+        {**value, "networks": "not a list"},
+        {**value, "probe": 3},
+    )
+    for bad in wrong:
         assert facts_in(bad, commit=RELEASE) is None
     assert facts_in({**value, "default_routes": True}, commit=RELEASE) == replace(
         facts, default_routes=None
