@@ -39,6 +39,8 @@ import {
   PageHeader,
   SectionCard,
 } from "../../components/kit";
+import type { GridColumn } from "../../components/gridFeatures";
+import { GridTable } from "../../components/kit/GridTable";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
@@ -372,6 +374,12 @@ export function SubmitForm({ page, onKept }: { readonly page: DefinitionsPage; r
   );
 }
 
+/** One field of an entity with its place in the list, which is its identity while it is being edited. */
+interface FieldRow {
+  readonly one: FieldBody;
+  readonly fieldAt: number;
+}
+
 function EntityFields({
   at,
   entity,
@@ -390,6 +398,62 @@ function EntityFields({
   readonly onField: (fieldAt: number, change: Partial<FieldBody>) => void;
 }) {
   const id = `${FORM}-entity-${String(at)}`;
+  const fieldColumns: GridColumn<FieldRow>[] = [
+    {
+      id: "target",
+      header: "Our name",
+      cell: ({ row: { original: { one, fieldAt } } }) => (
+        <Input aria-label={`Field ${String(fieldAt + 1)} name`} value={one.target} onChange={(e) => { onField(fieldAt, { target: e.target.value }); }} />
+      ),
+    },
+    {
+      id: "source",
+      header: "Where it is in the API's record",
+      cell: ({ row: { original: { one, fieldAt } } }) => (
+        <Input aria-label={`Field ${String(fieldAt + 1)} path`} value={one.source_path} onChange={(e) => { onField(fieldAt, { source_path: e.target.value }); }} />
+      ),
+    },
+    {
+      id: "classification",
+      header: "Classification",
+      cell: ({ row: { original: { one, fieldAt } } }) => (
+        <select aria-label={`Field ${String(fieldAt + 1)} classification`} className={SELECT_CLASS} value={one.classification} onChange={(e) => { onField(fieldAt, { classification: e.target.value as Classification }); }}>
+          {page.classifications.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+      ),
+    },
+    {
+      id: "kept",
+      header: "Kept or read live",
+      cell: ({ row: { original: { one, fieldAt } } }) => (
+        <select
+          aria-label={`Field ${String(fieldAt + 1)} kept`}
+          className={SELECT_CLASS}
+          value={one.kept ?? "live"}
+          onChange={(e) => { onField(fieldAt, { kept: e.target.value === "live" ? null : (e.target.value as Shape) }); }}
+        >
+          <option value="live">{SHAPE_WORDS.live}</option>
+          {page.shapes.map((s) => <option key={s} value={s}>{SHAPE_WORDS[s]}</option>)}
+        </select>
+      ),
+    },
+    {
+      id: "remove",
+      header: () => <span className="sr-only">Remove</span>,
+      cell: ({ row: { original: { fieldAt } } }) => (
+        <Button
+          type="button"
+          variant="quiet"
+          size="sm"
+          aria-label={`Remove field ${String(fieldAt + 1)}`}
+          disabled={entity.fields.length === 1}
+          onClick={() => { onChange({ fields: entity.fields.filter((_, f) => f !== fieldAt) }); }}
+        >
+          <Trash2 aria-hidden />
+        </Button>
+      ),
+    },
+  ];
   return (
     <fieldset className="grid gap-3 rounded-md border border-border p-3">
       <legend className="px-1 text-sm font-medium">Entity {at + 1}</legend>
@@ -430,54 +494,15 @@ function EntityFields({
           </select>
         </Field>
       </div>
-      <table className="w-full text-sm">
-        <caption className="text-left text-dim">Fields, each with who may see it and whether it is kept</caption>
-        <thead>
-          <tr className="text-left">
-            <th scope="col">Our name</th>
-            <th scope="col">Where it is in the API's record</th>
-            <th scope="col">Classification</th>
-            <th scope="col">Kept or read live</th>
-            <th scope="col"><span className="sr-only">Remove</span></th>
-          </tr>
-        </thead>
-        <tbody>
-          {entity.fields.map((one, fieldAt) => (
-            <tr key={fieldAt}>
-              <td><Input aria-label={`Field ${String(fieldAt + 1)} name`} value={one.target} onChange={(e) => { onField(fieldAt, { target: e.target.value }); }} /></td>
-              <td><Input aria-label={`Field ${String(fieldAt + 1)} path`} value={one.source_path} onChange={(e) => { onField(fieldAt, { source_path: e.target.value }); }} /></td>
-              <td>
-                <select aria-label={`Field ${String(fieldAt + 1)} classification`} className={SELECT_CLASS} value={one.classification} onChange={(e) => { onField(fieldAt, { classification: e.target.value as Classification }); }}>
-                  {page.classifications.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </td>
-              <td>
-                <select
-                  aria-label={`Field ${String(fieldAt + 1)} kept`}
-                  className={SELECT_CLASS}
-                  value={one.kept ?? "live"}
-                  onChange={(e) => { onField(fieldAt, { kept: e.target.value === "live" ? null : (e.target.value as Shape) }); }}
-                >
-                  <option value="live">{SHAPE_WORDS.live}</option>
-                  {page.shapes.map((s) => <option key={s} value={s}>{SHAPE_WORDS[s]}</option>)}
-                </select>
-              </td>
-              <td>
-                <Button
-                  type="button"
-                  variant="quiet"
-                  size="sm"
-                  aria-label={`Remove field ${String(fieldAt + 1)}`}
-                  disabled={entity.fields.length === 1}
-                  onClick={() => { onChange({ fields: entity.fields.filter((_, f) => f !== fieldAt) }); }}
-                >
-                  <Trash2 aria-hidden />
-                </Button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <GridTable
+        caption="Fields, each with who may see it and whether it is kept"
+        captionClassName="text-left text-dim"
+        className="w-full text-sm"
+        headRowClassName="text-left"
+        columns={fieldColumns}
+        rows={entity.fields.map((one, fieldAt) => ({ one, fieldAt }))}
+        rowId={(row) => String(row.fieldAt)}
+      />
       <div>
         <Button type="button" variant="outline" size="sm" className="min-h-11 sm:min-h-8" onClick={() => { onChange({ fields: [...entity.fields, blankField()] }); }}>
           <Plus aria-hidden />

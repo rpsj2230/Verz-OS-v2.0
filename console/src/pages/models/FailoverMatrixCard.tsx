@@ -23,7 +23,9 @@
  */
 
 import { ArrowDown, ArrowUp, Info, MoreHorizontal } from "lucide-react";
-import { Fragment, useId, type ReactNode } from "react";
+import { useId, type ReactNode } from "react";
+import type { GridColumn } from "../../components/gridFeatures";
+import { GridTable } from "../../components/kit/GridTable";
 import { Button } from "../../components/ui/button";
 import {
   DropdownMenu,
@@ -32,7 +34,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
-import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
+import { TableCell, TableRow } from "../../components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../components/ui/tooltip";
 import { NO_STEP_FOR_THE_LEVEL } from "../modelsQuery";
 import { MarkerPill, RolePill } from "./pills";
@@ -169,6 +171,75 @@ function oneLine(name: string): string {
 const HEAD = "h-9 px-2 text-[12px] font-normal text-dim first:pl-3 sm:px-4 sm:first:pl-4";
 const CELL = "px-2 py-2 align-middle whitespace-normal first:pl-3 sm:px-4 sm:first:pl-4";
 
+/** The columns of the failover matrix. Which are drawn depends on whether the reader may act on a step. */
+function matrixColumns(acts: MatrixActs | undefined): GridColumn<MatrixLine>[] {
+  const columns: GridColumn<MatrixLine>[] = [
+    {
+      id: "complexity",
+      header: "Complexity",
+      cell: ({ row }) => row.original.level ?? "",
+      meta: {
+        headerClassName: `${HEAD} hidden sm:table-cell sm:w-[16%]`,
+        cellClassName: `${CELL} hidden text-ink sm:table-cell`,
+      },
+    },
+    {
+      id: "step",
+      header: "Step",
+      cell: ({ row }) => (row.original.step === null ? "" : String(row.original.step)),
+      meta: { headerClassName: `${HEAD} sm:w-[9%]`, cellClassName: `${CELL} text-acc-text tabular-nums` },
+    },
+    {
+      id: "provider",
+      header: "Provider",
+      // A level with no step in use says so across the rest of the row, from this column.
+      cell: ({ row }) => (row.original.rung === null ? NO_STEP_FOR_THE_LEVEL : row.original.provider),
+      meta: {
+        headerClassName: `${HEAD} hidden sm:table-cell sm:w-[25%]`,
+        cellClassName: `${CELL} hidden text-body [overflow-wrap:anywhere] sm:table-cell`,
+      },
+    },
+    {
+      id: "model",
+      header: "Model",
+      cell: ({ row }) => {
+        const line = row.original;
+        return (
+          <>
+            <span className={`block font-mono text-[11.5px] text-ink ${oneLine(line.model)}`}>{line.model}</span>
+            {/* A phone has no room for the Provider column, so the provider goes under its model;
+                at each width exactly one of the two is displayed, and so read. */}
+            <span data-slot="provider-under-model" className={`block text-[11.5px] text-dim sm:hidden ${oneLine(line.provider)}`}>
+              {line.provider}
+            </span>
+          </>
+        );
+      },
+      meta: { headerClassName: `${HEAD} sm:w-[21%]`, cellClassName: CELL },
+    },
+    {
+      id: "role",
+      header: "Role",
+      cell: ({ row }) => (
+        <span className="flex flex-wrap items-center gap-1.5">
+          <RolePill role={row.original.role} />
+          {row.original.marker === null ? null : <MarkerPill marker={row.original.marker} />}
+        </span>
+      ),
+      meta: { headerClassName: HEAD, cellClassName: CELL },
+    },
+  ];
+  if (acts !== undefined) {
+    columns.push({
+      id: "actions",
+      header: () => <span className="sr-only">Actions</span>,
+      cell: ({ row }) => <StepMenu line={row.original} acts={acts} />,
+      meta: { headerClassName: "h-9 w-14 px-1 sm:w-12", cellClassName: "px-1 py-1 text-right sm:py-0.5" },
+    });
+  }
+  return columns;
+}
+
 function MatrixTable({
   lines,
   acts,
@@ -178,100 +249,55 @@ function MatrixTable({
   readonly acts: MatrixActs | undefined;
   readonly openId: string | undefined;
 }) {
+  const span = acts === undefined ? 3 : 4;
   return (
-    <Table className="table-auto text-[13px] sm:table-fixed">
-      <TableCaption className="sr-only">{FAILOVER_MATRIX}</TableCaption>
-      <TableHeader className="bg-sunk [&_tr]:border-line">
-        <TableRow className="hover:bg-transparent">
-          <TableHead scope="col" className={`${HEAD} hidden sm:table-cell sm:w-[16%]`}>
-            Complexity
-          </TableHead>
-          <TableHead scope="col" className={`${HEAD} sm:w-[9%]`}>
-            Step
-          </TableHead>
-          <TableHead scope="col" className={`${HEAD} hidden sm:table-cell sm:w-[25%]`}>
-            Provider
-          </TableHead>
-          <TableHead scope="col" className={`${HEAD} sm:w-[21%]`}>
-            Model
-          </TableHead>
-          <TableHead scope="col" className={HEAD}>
-            Role
-          </TableHead>
-          {acts === undefined ? null : (
-            <TableHead className="h-9 w-14 px-1 sm:w-12">
-              <span className="sr-only">Actions</span>
-            </TableHead>
-          )}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {lines.map((line) => {
-          const rung = line.rung;
-          const opens = acts !== undefined && rung !== null;
-          const row = (
-            <TableRow
-              key={line.key}
-              data-slot="matrix-row"
-              data-state={rung !== null && rung.id === openId ? "selected" : undefined}
-              className={opens ? "group cursor-pointer border-line hover:bg-sunk/60" : "group border-line hover:bg-transparent"}
-              onClick={
-                opens
-                  ? () => {
-                      acts.open(line);
-                    }
-                  : undefined
+    <GridTable
+      look="kit"
+      caption={FAILOVER_MATRIX}
+      captionHidden
+      className="table-auto text-[13px] sm:table-fixed"
+      headClassName="bg-sunk [&_tr]:border-line"
+      headRowClassName="hover:bg-transparent"
+      columns={matrixColumns(acts)}
+      rows={lines}
+      rowId={(line) => line.key}
+      rowProps={(line) => {
+        const rung = line.rung;
+        const opens = acts !== undefined && rung !== null;
+        return {
+          "data-slot": "matrix-row",
+          "data-state": rung !== null && rung.id === openId ? "selected" : undefined,
+          className: opens ? "group cursor-pointer border-line hover:bg-sunk/60" : "group border-line hover:bg-transparent",
+          onClick: opens
+            ? () => {
+                acts.open(line);
               }
-            >
-              <TableCell className={`${CELL} hidden text-ink sm:table-cell`}>{line.level ?? ""}</TableCell>
-              <TableCell className={`${CELL} text-acc-text tabular-nums`}>{line.step === null ? "" : String(line.step)}</TableCell>
-              {rung === null ? (
-                <TableCell colSpan={acts === undefined ? 3 : 4} className={`${CELL} text-dim`}>
-                  {NO_STEP_FOR_THE_LEVEL}
-                </TableCell>
-              ) : (
-                <>
-                  <TableCell className={`${CELL} hidden text-body [overflow-wrap:anywhere] sm:table-cell`}>{line.provider}</TableCell>
-                  <TableCell className={CELL}>
-                    <span className={`block font-mono text-[11.5px] text-ink ${oneLine(line.model)}`}>{line.model}</span>
-                    {/* A phone has no room for the Provider column, so the provider goes under its model;
-                        at each width exactly one of the two is displayed, and so read. */}
-                    <span data-slot="provider-under-model" className={`block text-[11.5px] text-dim sm:hidden ${oneLine(line.provider)}`}>
-                      {line.provider}
-                    </span>
-                  </TableCell>
-                  <TableCell className={CELL}>
-                    <span className="flex flex-wrap items-center gap-1.5">
-                      <RolePill role={line.role} />
-                      {line.marker === null ? null : <MarkerPill marker={line.marker} />}
-                    </span>
-                  </TableCell>
-                  {acts === undefined ? null : (
-                    <TableCell className="px-1 py-1 text-right sm:py-0.5">
-                      <StepMenu line={line} acts={acts} />
-                    </TableCell>
-                  )}
-                </>
-              )}
-            </TableRow>
-          );
-          // A phone has no room for the Complexity column, so a level is named on a row of its
-          // own above its first step; at each width exactly one of the two is displayed.
-          return line.level === null ? (
-            row
-          ) : (
-            <Fragment key={line.key}>
-              <TableRow data-slot="level-row" className="border-line bg-sunk/40 hover:bg-transparent sm:hidden">
-                <TableCell colSpan={acts === undefined ? 3 : 4} className="px-3 pt-2.5 pb-1.5 text-[12.5px] font-medium text-ink">
-                  {line.level}
-                </TableCell>
-              </TableRow>
-              {row}
-            </Fragment>
-          );
-        })}
-      </TableBody>
-    </Table>
+            : undefined,
+        };
+      }}
+      // A level with no step in use has one cell across the rest of its row, so the cells
+      // after the first of those are covered and not drawn.
+      cellProps={(line, column) => {
+        if (line.rung !== null) {
+          return undefined;
+        }
+        if (column === "provider") {
+          return { colSpan: span, className: `${CELL} text-dim` };
+        }
+        return column === "model" || column === "role" || column === "actions" ? { covered: true } : undefined;
+      }}
+      // A phone has no room for the Complexity column, so a level is named on a row of its
+      // own above its first step; at each width exactly one of the two is displayed.
+      rowBefore={(line) =>
+        line.level === null ? null : (
+          <TableRow data-slot="level-row" className="border-line bg-sunk/40 hover:bg-transparent sm:hidden">
+            <TableCell colSpan={span} className="px-3 pt-2.5 pb-1.5 text-[12.5px] font-medium text-ink">
+              {line.level}
+            </TableCell>
+          </TableRow>
+        )
+      }
+    />
   );
 }
 

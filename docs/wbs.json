@@ -6844,9 +6844,9 @@
      "updated": "2026-10-06"
     },
     "M32.5.2.1": {
-     "status": "OPEN",
-     "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in api_routes, components/DataTable.tsx, components/paging.ts +2 more; NOT wired: pages/Records.tsx. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-w1-1; old backup branch recovery/from-windows-20260928-wt-w1-2; old backup branch recovery/from-windows-20260928-wt-w1-2a",
-     "updated": "2026-10-06"
+     "status": "READY FOR TESTING",
+     "why": "built (M32/tanstack-table-every-grid): every list and every table in the console is now drawn through TanStack Table from one feature set, and the Artifacts list, the one list that narrowed the whole estate in the browser, now pages, searches, filters and orders on the server; to prove on the install: open Knowledge and data then Artifacts, type part of an agent's name in the search box and see the list narrow to that agent's artifacts (it asks the server, so one on a later page is found), choose a kind and an order, press Show more until it goes; then open Models and see the failover matrix, the prices and the routing tables read as before, and on Custom connectors type a whole word into a field name without the cursor leaving the box",
+     "updated": "2026-10-14"
     },
     "M32.5.2.3": {
      "status": "READY FOR TESTING",

@@ -22,6 +22,8 @@
 
 import { Download } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import type { GridColumn } from "../../components/gridFeatures";
+import { GridTable } from "../../components/kit/GridTable";
 import { PageHeader, saveCsv, toCsv, type Crumb } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../components/ui/dropdown-menu";
@@ -218,6 +220,40 @@ export function barWidth(value: number, largest: number): string {
   return `${String(Math.min(100, Math.round((value / largest) * 1000) / 10))}%`;
 }
 
+/** The two columns of a bar list: the name, as the row's header, and the figure with its bar. */
+function barColumns(keyHeading: string, valueHeading: string, largest: number): GridColumn<Bar>[] {
+  return [
+    {
+      id: "label",
+      header: keyHeading,
+      cell: ({ row }) => row.original.label,
+      meta: {
+        rowHeader: true,
+        cellClassName: "w-[38%] py-2 pr-3 text-left align-middle font-normal text-ink [overflow-wrap:anywhere]",
+      },
+    },
+    {
+      id: "figure",
+      header: valueHeading,
+      cell: ({ row }) => {
+        const bar = row.original;
+        return (
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <span aria-hidden className="relative block h-2 min-w-16 flex-1 overflow-hidden rounded-full bg-sunk">
+              <span className="absolute inset-y-0 left-0 block rounded-full bg-brand" style={{ width: barWidth(bar.value, largest) }} />
+              {bar.mark === undefined ? null : (
+                <span className="absolute inset-y-[-2px] block w-0.5 bg-ink" style={{ left: barWidth(bar.mark, largest) }} />
+              )}
+            </span>
+            <span className="min-w-0 text-right text-[12.5px] text-ink tabular-nums [overflow-wrap:anywhere]">{bar.figure}</span>
+          </div>
+        );
+      },
+      meta: { cellClassName: "py-2 align-middle" },
+    },
+  ];
+}
+
 /**
  * Names and figures as a table, with a bar behind each figure. `limit` draws the first rows and a
  * button for the rest, which are rows the reader was sent and are in the export whichever is open.
@@ -241,35 +277,16 @@ export function BarList({
   const shown = cut && !open ? bars.slice(0, limit) : bars;
   return (
     <div data-slot="bar-list" className="flex min-w-0 flex-col gap-2">
-      <table className="w-full table-fixed border-collapse text-[13px]">
-        <caption className="sr-only">{caption}</caption>
-        <thead className="sr-only">
-          <tr>
-            <th scope="col">{keyHeading}</th>
-            <th scope="col">{valueHeading}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {shown.map((bar) => (
-            <tr key={bar.key} className="border-b border-line last:border-b-0">
-              <th scope="row" className="w-[38%] py-2 pr-3 text-left align-middle font-normal text-ink [overflow-wrap:anywhere]">
-                {bar.label}
-              </th>
-              <td className="py-2 align-middle">
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                  <span aria-hidden className="relative block h-2 min-w-16 flex-1 overflow-hidden rounded-full bg-sunk">
-                    <span className="absolute inset-y-0 left-0 block rounded-full bg-brand" style={{ width: barWidth(bar.value, largest) }} />
-                    {bar.mark === undefined ? null : (
-                      <span className="absolute inset-y-[-2px] block w-0.5 bg-ink" style={{ left: barWidth(bar.mark, largest) }} />
-                    )}
-                  </span>
-                  <span className="min-w-0 text-right text-[12.5px] text-ink tabular-nums [overflow-wrap:anywhere]">{bar.figure}</span>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <GridTable
+        caption={caption}
+        captionHidden
+        className="w-full table-fixed border-collapse text-[13px]"
+        headClassName="sr-only"
+        rowClassName={() => "border-b border-line last:border-b-0"}
+        columns={barColumns(keyHeading, valueHeading, largest)}
+        rows={shown}
+        rowId={(bar) => bar.key}
+      />
       {cut ? (
         <div>
           <Button

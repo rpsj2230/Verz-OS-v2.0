@@ -145,7 +145,7 @@ export function OpsPage<Body>({
 }
 
 /** A list answered whole, in a headed card: the table, or one sentence saying there is nothing. */
-export function WholeList<Row>({
+export function WholeList<Row extends object>({
   title,
   hideTitle,
   lede,

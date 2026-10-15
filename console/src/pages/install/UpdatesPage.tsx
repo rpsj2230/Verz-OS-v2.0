@@ -24,7 +24,8 @@
 
 import { useResource } from "../../api/useResource";
 import { Chip, Fact, FailureState, LoadingState, Note, PageHeader, SectionCard } from "../../components/kit";
-import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
+import type { GridColumn } from "../../components/gridFeatures";
+import { GridTable } from "../../components/kit/GridTable";
 import { UPDATES_API_PATH, type Updates as UpdatesPanel } from "../installQuery";
 import { InstallFacts } from "./InstallFacts";
 
@@ -105,31 +106,15 @@ function Panel({ panel }: { readonly panel: UpdatesPanel }) {
                 </div>
               )}
               {history.deploys.length ? (
-                <Table aria-label={DEPLOYS_CAPTION}>
-                  <TableCaption className="sr-only">{DEPLOYS_CAPTION}</TableCaption>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>When</TableHead>
-                      <TableHead>Commit</TableHead>
-                      <TableHead>Outcome</TableHead>
-                      <TableHead>Tasks in this release</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {history.deploys.map((deploy) => (
-                      <TableRow key={deploy.seq}>
-                        <TableCell className="font-mono text-[12px]">{deploy.at}</TableCell>
-                        <TableCell className="font-mono text-[12px]">{deploy.commit}</TableCell>
-                        <TableCell>
-                          <Chip>{deploy.outcome}</Chip>
-                        </TableCell>
-                        <TableCell className="whitespace-normal font-mono text-[12px] [overflow-wrap:anywhere]">
-                          {deploy.task_ids.join(", ")}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <GridTable
+                  look="kit"
+                  label={DEPLOYS_CAPTION}
+                  caption={DEPLOYS_CAPTION}
+                  captionHidden
+                  columns={DEPLOY_COLUMNS}
+                  rows={history.deploys}
+                  rowId={(deploy) => String(deploy.seq)}
+                />
               ) : null}
             </>
           ) : (
@@ -140,6 +125,21 @@ function Panel({ panel }: { readonly panel: UpdatesPanel }) {
     </>
   );
 }
+
+type Deploy = NonNullable<NonNullable<UpdatesPanel["history"]>["deploys"]>[number];
+
+/** The deploys this install has had, drawn through the console's one grid. */
+const DEPLOY_COLUMNS: GridColumn<Deploy>[] = [
+  { id: "when", header: "When", cell: ({ row }) => row.original.at, meta: { cellClassName: "font-mono text-[12px]" } },
+  { id: "commit", header: "Commit", cell: ({ row }) => row.original.commit, meta: { cellClassName: "font-mono text-[12px]" } },
+  { id: "outcome", header: "Outcome", cell: ({ row }) => <Chip>{row.original.outcome}</Chip> },
+  {
+    id: "tasks",
+    header: "Tasks in this release",
+    cell: ({ row }) => row.original.task_ids.join(", "),
+    meta: { cellClassName: "whitespace-normal font-mono text-[12px] [overflow-wrap:anywhere]" },
+  },
+];
 
 export function UpdatesPage() {
   const answer = useResource<UpdatesPanel>(UPDATES_API_PATH);
