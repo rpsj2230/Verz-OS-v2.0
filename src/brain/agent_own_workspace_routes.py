@@ -40,6 +40,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.agent_lifecycle_routes import _no_agent_here, _trace_id, lifecycles_of, visible
+from brain.agents.attachments import connectors_of
 from brain.agents.own_workspace import (
     ATTACHED_REASON,
     CONNECTOR,
@@ -230,7 +231,7 @@ async def attach_own_workspace(
         return _refused(refusal)
     written = await store_of(request).bind(
         agent_id=agent_id,
-        was=record.authority.connectors,
+        was=connectors_of(record),
         becomes=becomes,
         by=asked.caller.principal.id,
         reason_code=reason,

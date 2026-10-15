@@ -42,6 +42,7 @@ from __future__ import annotations
 
 from typing import Final
 
+from brain.agents.attachments import connectors_of
 from brain.agents.model import AgentRecord
 from brain.knowledge.visibility import Visibility
 
@@ -101,7 +102,7 @@ def owns(record: AgentRecord, principal_id: str) -> bool:
 def is_attached(record: AgentRecord) -> bool:
     """Whether the agent names the person's own account. A team agent's name for it is inert, so
     it is not attached however it is named."""
-    return is_personal(record) and CONNECTOR in record.authority.connectors
+    return is_personal(record) and CONNECTOR in connectors_of(record)
 
 
 def attach_refusal(record: AgentRecord, *, offered: bool, switched_on: bool) -> str | None:
@@ -129,9 +130,9 @@ def detach_refusal(record: AgentRecord) -> str | None:
 
 def after_attach(record: AgentRecord) -> tuple[str, ...]:
     """The agent's connector list with the person's own account added."""
-    return (*record.authority.connectors, CONNECTOR)
+    return (*connectors_of(record), CONNECTOR)
 
 
 def after_detach(record: AgentRecord) -> tuple[str, ...]:
     """The agent's connector list with the person's own account taken out."""
-    return tuple(one for one in record.authority.connectors if one != CONNECTOR)
+    return tuple(one for one in connectors_of(record) if one != CONNECTOR)
