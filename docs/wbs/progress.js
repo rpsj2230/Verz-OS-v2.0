@@ -1919,6 +1919,16 @@ const PROGRESS = {
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_builder_routes, builder.agent_drafts, builder.publish); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
+  "M20.5.1": {
+    status: "READY FOR TESTING",
+    why: "Built: a department's administrator can no longer publish an agent to the whole company or approve a knowledge item to it alone; that needs the authority held over everything, and for a department it needs the authority held in that department. The skill library is one company-wide object, so only the authority over everything decides about a skill. The publications queue offers each administrator only the requests they could decide. To prove it on the install: after the release, open Install, Acceptance, run the checks and read the row 'a department admin decides only for their department', which should pass in the two newest runs.",
+    updated: "2026-10-15",
+  },
+  "M20.5.2": {
+    status: "IN PROGRESS",
+    why: "Built: behind the switch 'Hold an agent that costs more than its department allows' (ships off), publishing an agent to a department whose per-run ceiling is below what one run costs waits for that department's administrator, tells the author both figures in the install's currency, and the publish record carries the cost of each version. Not what the leaf says in two ways: the figure is the run's price from the product's own estimator (the same one the pre-flight uses) and not the median of rehearsed runs, because rehearsals record no cost yet (needs-you question); and no screen writes a department's per-run ceiling yet (M21.1.2), so on an install the hold fires only for a ceiling written some other way. The check 'a costly publish waits for a colleague in the department' proves the hold over a ceiling it writes itself.",
+    updated: "2026-10-15",
+  },
   "M21.1.1": {
     status: "IN PROGRESS",
     why: "TRIAGE 2026-10-13 class 2 (partly built): Ceiling stored and versioned: PUT company budget (company_routes.set_company_budget, ops.budgets.BudgetRow, test_company_routes). Hard stop is ops.budget_stop_store.budget_refusal_for in api_routes, flag budget_enforcement off (needs 169 A). alert_fractions stored, nothing fires them. NEXT: Wire alert_fractions to a notice when spend crosses one (spend.alerts_for exists but is only called by unwired preflight); then write a check naming M21.1.1 that sets a ceiling with alerts and reads the stop record.",
