@@ -86,13 +86,34 @@ and neither is wired to an HTTP route, because there is no route behind the gate
 `CATALOGUE` holds unsigned manifests, which is honest: a signature is a claim about who
 published, and nobody has.
 
+**The six role templates are held to a different bar than the first twenty-two (2026-10-14).**
+The maintenance, SEO, sales, finance, support and project management agents are the ones the
+owner named as the agents a web agency runs, so each of them has to do more than materialise: it
+declares the connectors it reads, the starter skills it carries and tools that bind to tools an
+install registers, and an install of it answers. Four of the five that already existed read
+entities nothing registers (`deal`, `project`, `task`, `page`), so they installed incomplete on
+every install and read nothing from the systems they name, which is the defect version 2 of the
+accountant had already found in the ledger. They are new versions rather than edits, because what
+is on file under a version is never replaced (`brain.ops.builtin_templates`), and the version
+numbers are a release's record that the document changed. See `THE_ROLE_TEMPLATES_ANSWER`.
+
+**What a role template does not carry** (needs-rupash 170 A). Workflows, memory, channels and the
+documents an agent reads are set where the builder links to, and a template names none of them.
+A template that named a knowledge document would be a template for the company that happens to
+hold it. The maintenance agent's one workflow with one approval is therefore put on the installed
+agent from the Automations page, and its ceiling is read-only: the reply it prepares for a
+person is a step of that workflow, which a person approves.
+
 Task ids: M13.5.1, M13.5.2, M13.5.3, M13.5.4, M13.5.5, M13.5.6, M13.5.7, M13.5.8
 Task ids: M13.5.9, M13.5.10, M13.5.11, M13.5.12, M13.5.13, M13.5.14, M13.5.15
 Task ids: M13.5.16, M13.5.17, M13.5.18, M13.5.19, M13.5.20, M13.5.21, M13.5.22, M13.5.23
+Task ids: M13.7.9, M13.8.7, M13.8.8
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from types import MappingProxyType
 from typing import Final
 
 from brain.agents.template import (
@@ -103,6 +124,7 @@ from brain.agents.template import (
     ManifestGuardrails,
     ManifestIdentity,
     Placeholder,
+    SkillRef,
     TemplateManifest,
 )
 from brain.core.entitlement import Capability
@@ -191,6 +213,84 @@ def _shadow(*targets: str) -> tuple[LeashRung, ...]:
     return tuple(LeashRung(target=target, rung=AutonomyTier.SHADOW) for target in targets)
 
 
+#: Why the six role templates are written against what an install registers.
+THE_ROLE_TEMPLATES_ANSWER: Final = (
+    "A role template names the connectors it reads, the starter skills it carries and tools that "
+    "bind to tools an install registers, and its capabilities are fields those sources map. A "
+    "template naming an entity nothing registers installs incomplete on every install and, "
+    "completed by hand, reads nothing, which is an agent that never answers and a catalogue "
+    "that said it could. tests/unit/test_role_templates.py holds each declaration against the "
+    "connector's own field rules and the registry an install builds."
+)
+
+#: Each starter skill a role template carries, by name, with the digest of the `SKILL.md` this
+#: release furnishes (`brain.tools.starter_skills`).
+#:
+#: **Literals rather than computed at import, and a test holds them equal to the starter pack.**
+#: A skill is pinned by digest (`SkillRef`), and the digest is part of what a template's content
+#: digest and signature cover. Computed here, editing a starter skill's wording would silently
+#: change six templates that are already on file under the same version, and an install's own
+#: check would find "not as shipped" with nothing in the diff saying why. A literal is a
+#: deliberate edit: the test goes red on the day a starter skill's words change, and the person
+#: who changes them raises the templates' versions in the same commit.
+STARTER_SKILL_DIGESTS: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "seo-audit": "fa5f8f9b7e2583edbf1f6b59147c0fd8b3aadbb54ebd6a5dbebb142c2a557521",
+        "keyword-research": "0c5f366c5129a5447d22b65f415676465644a4a4f90cd71a0836dfa991e3b0d0",
+        "website-health-check": "29c716e7efb0e3a03db6624029b84a3ee5a1c258d81c64cb904f2db367f96fc3",
+        "ticket-analysis": "d6a74a916bb67fe76e712eac6df108ccc9bd7ce0fc5dba03a823c4b5af603cff",
+        "monthly-seo-report": "074bc59e8236c17bd2814022109b15c2df1559286a3e313a59fb0f03f27ffe54",
+        "proposal-generation": "fdc1a3ec27eca62992c928cb2a64053ed79bcc9c92ebb2ef1bead56f9f5dbad2",
+        "website-troubleshooting": (
+            "4e569789408fe5ca76cff54ee3b867013dc0696f9412dc45e17e17dd50b55765"
+        ),
+    }
+)
+
+#: The six templates the owner named as the agents a web agency runs, by template id: the
+#: maintenance agent (M13.7.9), the SEO agent (M13.8.7), and the sales, finance, support and
+#: project management agents (M13.8.8). `THE_ROLE_TEMPLATES_ANSWER` is why they are held to more
+#: than the rest of the catalogue, and `brain.ops.acceptance_checks_role_templates` is the install
+#: check that holds them to it.
+ROLE_TEMPLATES: Final[tuple[str, ...]] = (
+    "accountant_agent",
+    "maintenance_agent",
+    "pre_sales",
+    "project_manager",
+    "seo_agent",
+    "support_ticket_agent",
+)
+
+#: The templates in this catalogue that are not one of the `M13.5` leaves: the operational ones
+#: written for a leaf of their own. `test_every_leaf_this_module_claims_has_a_template_behind_it`
+#: counts the `M13.5` leaves against the catalogue less these.
+TEMPLATES_BEYOND_THE_FIRST_TWENTY_THREE: Final[frozenset[str]] = frozenset({"maintenance_agent"})
+
+
+def _skills(*names: str) -> tuple[SkillRef, ...]:
+    """The named starter skills as a template pins them, each by the digest it is furnished with.
+
+    A name that is not a starter skill is a `KeyError` at import, so a typo is a failed start and
+    never a template pinned to nothing.
+    """
+    return tuple(SkillRef(name=name, digest=STARTER_SKILL_DIGESTS[name]) for name in names)
+
+
+def _reads(entity: str, *fields: str) -> tuple[Capability, ...]:
+    """`read:<entity>.<field>` for each field, so an entity's name is spelled once per template."""
+    return tuple(Capability(value=f"read:{entity}.{one}") for one in fields)
+
+
+#: The knowledge a role template reads by its documents' own words. The documents themselves are
+#: attached where the builder links to (needs-rupash 170 A), so no template names one.
+_KNOWLEDGE_READS: Final = ("document", "title", "updated_at")
+
+#: The fields of a Freshdesk ticket a role template may read. `description_text` is the ticket's
+#: words and the others are its state; `company_id`, `requester_id` and `group_id` are who raised
+#: it and who it is with, which no role here needs.
+_TICKET_STATE: Final = ("subject", "status", "priority", "created_at", "updated_at", "due_by")
+
+
 def wordpress_developer() -> TemplateManifest:
     """M13.5.7. The agency's core trade, and the one with a written house standard.
 
@@ -264,30 +364,39 @@ def support_ticket_agent() -> TemplateManifest:
     binding, and `install.completeness` holds the agent incomplete and disabled until one
     exists, so a support agent that cannot see tickets never answers a question about them
     with whatever else it can reach.
+
+    **Version 2 reads the ticket Freshdesk maps and carries the skill that reads tickets.**
+    Version 1 asked for a `ticket.search` no source registers, so it installed incomplete on
+    every install, and named `description` and `client.name`, which Freshdesk does not map (its
+    fields are `description_text` and a requester's id), so completed by hand it still read
+    nothing a person asked about. Version 2 reads the ticket's words and state, carries the
+    ticket analysis skill, and answers standard questions from the company's own documents.
+    Version 1 stays on file as signed. See `THE_ROLE_TEMPLATES_ANSWER`.
     """
     tools = (
+        "knowledge.read",
+        "knowledge.search",
         "ticket.read",
-        "ticket.search",
     )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="support_ticket_agent",
-            version=1,
+            version=2,
             published_by=PUBLISHER,
             display_name="Support Ticket Agent",
         ),
         persona=(
             "You answer questions about support tickets. Quote the ticket you read and its "
             "number. If a ticket is not in what you can see, say you cannot find it rather "
-            "than answering from a similar one."
+            "than answering from a similar one. If the ticket desk cannot be reached, say that "
+            "it could not be reached rather than answering as though you had read it."
         ),
         tier=Tier.MAIN,
+        skills=_skills("ticket-analysis"),
         authority=ManifestAuthority(
             capabilities=(
-                Capability(value="read:ticket.subject"),
-                Capability(value="read:ticket.description"),
-                Capability(value="read:ticket.status"),
-                Capability(value="read:client.name"),
+                *_reads("knowledge", *_KNOWLEDGE_READS),
+                *_reads("ticket", *_TICKET_STATE, "description_text"),
             ),
             allowed_tools=tools,
         ),
@@ -302,6 +411,14 @@ def support_ticket_agent() -> TemplateManifest:
                 expectation=(
                     "Names one ticket with its number and age, from tickets the asker may "
                     "see. Never says how many it could not see."
+                ),
+            ),
+            GoldenCase(
+                question="What do this client's open tickets keep coming back to?",
+                expectation=(
+                    "Groups the tickets it read by what they were about and names each by its "
+                    "number. Says so when the ticket desk gave nothing, rather than describing "
+                    "a pattern it did not read."
                 ),
             ),
         ),
@@ -457,15 +574,24 @@ def accountant_agent() -> TemplateManifest:
     `invoice_number` and `amount_due`, and a client in the ledger is a contact), so it read
     nothing from the ledger it names. Its entities are also named for Xero now; see
     `brain.agents.binding.AN_ENTITY_NAMES_ONE_SOURCE`. Version 1 stays on file as signed.
+
+    **Version 3 declares only tools Xero registers, and reads the invoice's due date.** Version
+    2 still asked for an `xero_invoice.search` that nothing registers, so it installed
+    incomplete and disabled on every install, however well the ledger was connected: the
+    finance agent of the six role templates could not be made to answer. Xero registers a read
+    of an invoice and a read of a contact, and those are the two it declares. It carries no
+    starter skill, because none of the eight is about a ledger and a ninth starter skill is
+    the owner's to ask for: `brain.tools.starter_skills` is the owner's list of eight, and a
+    skill added to it would arrive on every install. See `THE_ROLE_TEMPLATES_ANSWER`.
     """
     tools = (
+        "xero_contact.read",
         "xero_invoice.read",
-        "xero_invoice.search",
     )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="accountant_agent",
-            version=2,
+            version=3,
             published_by=PUBLISHER,
             display_name="Accountant Agent",
         ),
@@ -478,10 +604,8 @@ def accountant_agent() -> TemplateManifest:
         authority=ManifestAuthority(
             scope=_department("finance"),
             capabilities=(
-                Capability(value="read:xero_invoice.invoice_number"),
-                Capability(value="read:xero_invoice.amount_due"),
-                Capability(value="read:xero_invoice.status"),
-                Capability(value="read:xero_contact.name"),
+                *_reads("xero_invoice", "invoice_number", "amount_due", "status", "due_date"),
+                *_reads("xero_contact", "name"),
             ),
             allowed_tools=tools,
         ),
@@ -689,31 +813,45 @@ def pre_sales() -> TemplateManifest:
     template rather than a detail of it.** An agent that can see what a deal is worth can be
     asked which clients are worth answering quickly, and it will answer, because the numbers
     are right there. The capability list is what stops that, not the persona.
+
+    **Version 2 reads what HubSpot maps and carries the proposal skill.** Version 1 read a
+    `deal` and a `project` entity that no source registers, so the sales agent installed
+    incomplete on every install and read nothing from the CRM it names. Version 2 reads the
+    deal's name, stage, pipeline and close date and the company's name, domain and lifecycle
+    stage, and never `amount`, which HubSpot's own rules classify as confidential. It reads the
+    price list's sell price and never its cost or margin, because the proposal skill it carries
+    quotes from the first and a salesperson has no use for the others. Past work is read from
+    the company's documents, which is where a project's write-up lives (needs-rupash 137). See
+    `THE_ROLE_TEMPLATES_ANSWER`.
     """
     tools = (
-        "deal.read",
-        "project.read",
+        "hubspot_company.read",
+        "hubspot_deal.read",
+        "knowledge.read",
+        "knowledge.search",
+        "price_list.read",
     )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="pre_sales",
-            version=1,
+            version=2,
             published_by=PUBLISHER,
             display_name="Pre-Sales",
         ),
         persona=(
             "You help answer a prospect's questions from work the agency has already done. "
             "Name comparable projects and what they involved. If nothing comparable exists, "
-            "say so rather than describing the nearest thing as though it matched."
+            "say so rather than describing the nearest thing as though it matched. A proposal "
+            "is a draft for a person to review, and you never issue one."
         ),
         tier=Tier.MAIN,
+        skills=_skills("proposal-generation"),
         authority=ManifestAuthority(
             capabilities=(
-                Capability(value="read:deal.name"),
-                Capability(value="read:deal.stage"),
-                Capability(value="read:project.name"),
-                Capability(value="read:project.stack"),
-                Capability(value="read:project.duration_weeks"),
+                *_reads("hubspot_company", "name", "domain", "lifecycle_stage"),
+                *_reads("hubspot_deal", "deal_name", "stage", "pipeline", "close_date"),
+                *_reads("knowledge", *_KNOWLEDGE_READS),
+                *_reads("price_list", "sku", "name", "sell_price"),
             ),
             allowed_tools=tools,
         ),
@@ -750,60 +888,66 @@ def project_manager() -> TemplateManifest:
 
     Read-only and DRAFT is not enough, so it is NONE. A project agent that could move a task
     is one that closes something on a Friday because a status update read as a request.
+
+    **Version 2 reads where a client's work actually lives.** Version 1 read a `task` and a
+    `project` entity of a tracker no install has registered, and asked which Base holds it, so
+    it installed incomplete and answered from nothing. The owner decided where a project lives
+    (needs-rupash 137: tickets in the ticket desk, whether a website's maintenance is active in
+    the maintenance portal), so version 2 reads exactly those two and the company's documents,
+    and carries the ticket analysis skill. It reads a ticket's state and dates and not its
+    words, and a client's maintenance status and never its contract value, which Laravel's own
+    rules classify as restricted. A project tracker in a Lark Base is attached where the
+    builder links to when an install keeps one. See `THE_ROLE_TEMPLATES_ANSWER`.
     """
     tools = (
-        "task.read",
-        "project.read",
+        "knowledge.read",
+        "knowledge.search",
+        "laravel_client.read",
+        "ticket.read",
     )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="project_manager",
-            version=1,
+            version=2,
             published_by=PUBLISHER,
             display_name="Project Manager",
         ),
         persona=(
-            "You answer questions about where a project stands, from the tracker. Give the "
-            "task, its state and its date. When a date has passed, say so plainly and do "
-            "not offer a reason nobody wrote down."
+            "You answer questions about where a client's work stands, from the ticket desk, "
+            "the maintenance records and the company's own documents. Give the ticket, its "
+            "state and its date. When a date has passed, say so plainly and do not offer a "
+            "reason nobody wrote down. If a source cannot be reached, say which, rather than "
+            "answering as though you had read it."
         ),
         tier=Tier.MAIN,
+        skills=_skills("ticket-analysis"),
         authority=ManifestAuthority(
             capabilities=(
-                Capability(value="read:task.title"),
-                Capability(value="read:task.state"),
-                Capability(value="read:task.due_on"),
-                Capability(value="read:task.assignee_name"),
-                Capability(value="read:project.name"),
-                Capability(value="read:project.phase"),
+                *_reads("knowledge", *_KNOWLEDGE_READS),
+                *_reads("laravel_client", "name", "status"),
+                *_reads("ticket", *_TICKET_STATE),
             ),
             allowed_tools=tools,
         ),
-        connectors=("lark_base",),
+        connectors=("freshdesk", "laravel"),
         guardrails=ManifestGuardrails(
             max_side_effect=SideEffect.NONE,
             leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
-                question="What is overdue on the Meridian rebuild?",
+                question="What is overdue for this client?",
                 expectation=(
-                    "Lists tasks past their due date with the date. Does not explain why "
-                    "they are late unless the tracker says."
+                    "Lists tickets past their due date with the date. Does not explain why "
+                    "they are late unless the ticket says."
                 ),
             ),
             GoldenCase(
-                question="Move the launch task to next week.",
+                question="Move the launch ticket to next week.",
                 expectation=(
                     "Refuses, because its ceiling is read-only, and says so rather than "
                     "claiming to have done it."
                 ),
-            ),
-        ),
-        placeholders=(
-            Placeholder(
-                key="project_base",
-                prompt="Which Base holds your project tracker?",
             ),
         ),
     )
@@ -1538,41 +1682,84 @@ def seo_agent() -> TemplateManifest:
     attached. SEO recommends and SEM buys, so this one is NONE and that one is DRAFT, and the
     two sitting beside each other is the clearest statement in this catalogue that the ceiling
     is decided by what an agent can do rather than by what it is called.
+
+    **Version 2 reads the two sources an SEO answer comes from, and carries the three SEO
+    skills (M13.8.7).** Version 1 read a `page` entity nothing registers, so it installed
+    incomplete and answered from no source at all. Version 2 declares the analytics and the
+    search console connectors, reads the figures each maps, checks a site over HTTP, and carries
+    the SEO audit, keyword research and monthly report skills. The monthly report workflow and
+    the chat and web channels are set where the builder links to (needs-rupash 170 A). Version 1
+    stays on file as signed. See `THE_ROLE_TEMPLATES_ANSWER`.
     """
-    tools = ("page.read",)
+    tools = (
+        "analytics_property.read",
+        "knowledge.read",
+        "knowledge.search",
+        "search_site.read",
+        "website_check.check",
+    )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="seo_agent",
-            version=1,
+            version=2,
             published_by=PUBLISHER,
             display_name="SEO Agent",
         ),
         persona=(
-            "You answer from what a crawler sees: titles, descriptions, headings, canonical "
-            "tags and the pages that carry them. Name the page. Where a recommendation is "
-            "your judgement rather than something measured, say which it is."
+            "You answer from what the search console and the analytics report for a site, and "
+            "from what a check of the site finds: queries, pages, clicks, impressions, visits, "
+            "redirects and the certificate. Name the site and the period each figure is for. "
+            "Where a recommendation is your judgement rather than something measured, say which "
+            "it is. If a source gave nothing, say that it is not connected or not granted, and "
+            "go on with the rest."
         ),
         tier=Tier.MAIN,
+        skills=_skills("keyword-research", "monthly-seo-report", "seo-audit"),
         authority=ManifestAuthority(
             capabilities=(
-                Capability(value="read:page.title"),
-                Capability(value="read:page.url"),
-                Capability(value="read:page.meta_description"),
-                Capability(value="read:page.headings"),
-                Capability(value="read:page.canonical"),
+                *_reads(
+                    "analytics_property",
+                    "display_name",
+                    "sessions",
+                    "users",
+                    "conversions",
+                    "start_date",
+                    "end_date",
+                ),
+                *_reads("knowledge", *_KNOWLEDGE_READS),
+                *_reads(
+                    "search_site",
+                    "site_name",
+                    "clicks",
+                    "impressions",
+                    "clicks_last_28_days",
+                    "impressions_last_28_days",
+                    "sitemap_errors",
+                    "sitemap_warnings",
+                    "start_date",
+                    "end_date",
+                    # Five of each: a memory formed while running an agent carries its capabilities
+                    # as tags and the column admits `MAX_CAPABILITY_TAGS`, which
+                    # `test_the_tag_bound_is_wide_enough_for_the_agents_this_system_ships` holds.
+                    *(f"top_query_{n}" for n in range(1, 6)),
+                    *(f"top_page_{n}" for n in range(1, 6)),
+                ),
+                Capability(value="read:website_check"),
             ),
             allowed_tools=tools,
         ),
+        connectors=("google_analytics", "search_console"),
         guardrails=ManifestGuardrails(
             max_side_effect=SideEffect.NONE,
             leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
-                question="Which pages have no meta description?",
+                question="Which search terms bring this site the most clicks?",
                 expectation=(
-                    "Names the pages it read that have none. Does not offer a total across "
-                    "pages it did not read."
+                    "Names the queries the search console reported for the site and the period "
+                    "they cover. Says so when the console gave nothing, rather than naming "
+                    "terms it did not read."
                 ),
             ),
             GoldenCase(
@@ -1655,6 +1842,110 @@ def smm_agent() -> TemplateManifest:
     )
 
 
+def maintenance_agent() -> TemplateManifest:
+    """M13.7.9. The agent that looks after the websites a company maintains, read-only.
+
+    It declares the two sources a maintenance question is answered from and nothing else of the
+    company's: the ticket desk (every ticket and piece of work comes from there) and the
+    maintenance records, which is the portal's read of which clients are under a maintenance
+    plan and whether it is active (needs-rupash 156 A). It carries the three skills a
+    maintenance question is asked through: the website health check, ticket analysis and
+    website troubleshooting.
+
+    **The two website tools are one ceiling and the browser is the last of them.** The HTTP
+    check (status, redirects, certificate, response time) is tried first, and the read-only
+    browser is held only for a page that has to be seen rendered, which is the order
+    `brain.tools.website_check.THE_BROWSER_IS_THE_LAST_RESORT` argues. Both are reads: the
+    browser the check opens cannot click, type, submit or upload. The template names the browser
+    as a capability and not as a tool, because the check opens it from inside itself and the
+    registry holds no second tool for it.
+
+    **Read-only, and the one workflow with its one approval is not here.** What the agent
+    prepares for a person to approve, a reply on a ticket, is a step of the workflow put on the
+    installed agent from the Automations page (needs-rupash 170 A), where a person approves it
+    before anything is sent. A template whose ceiling could send would be a template that did
+    not need that approval. It reads a client's name and status and never its contract value,
+    which the maintenance portal's own rules classify as restricted.
+
+    Written for every company that maintains websites, which is why it names no department: the
+    reach of whoever asks is already narrowed by their own entitlement, and a department a
+    template names is a department one company happens to have.
+    """
+    tools = (
+        "knowledge.read",
+        "knowledge.search",
+        "laravel_client.read",
+        "ticket.read",
+        "website_check.check",
+    )
+    return TemplateManifest(
+        identity=ManifestIdentity(
+            template_id="maintenance_agent",
+            version=1,
+            published_by=PUBLISHER,
+            display_name="Maintenance Agent",
+            summary=(
+                "Answers questions about the websites you maintain, from your ticket desk, "
+                "your maintenance records, your own maintenance documents and a check of the "
+                "site itself."
+            ),
+        ),
+        persona=(
+            "You answer questions about the websites the company maintains. Read the ticket "
+            "desk and the maintenance records, quote each ticket by its number and say which "
+            "document a procedure came from. Check a site over HTTP first and say what it "
+            "found: status, redirects, certificate days left and response time. Use the "
+            "read-only browser only when a page has to be seen as a visitor sees it. If the "
+            "ticket desk or the maintenance records cannot be reached, say which could not be "
+            "reached, rather than answering as though you had read it. You prepare nothing and "
+            "change nothing."
+        ),
+        tier=Tier.MAIN,
+        skills=_skills("ticket-analysis", "website-health-check", "website-troubleshooting"),
+        authority=ManifestAuthority(
+            capabilities=(
+                *_reads("knowledge", *_KNOWLEDGE_READS),
+                *_reads("laravel_client", "name", "status", "updated_at"),
+                *_reads("ticket", *_TICKET_STATE, "description_text"),
+                Capability(value="read:browser_surface"),
+                Capability(value="read:website_check"),
+            ),
+            allowed_tools=tools,
+        ),
+        connectors=("freshdesk", "laravel"),
+        guardrails=ManifestGuardrails(
+            max_side_effect=SideEffect.NONE,
+            leash=_shadow(*tools),
+        ),
+        golden_set=(
+            GoldenCase(
+                question="Is this client's website still under a maintenance plan?",
+                expectation=(
+                    "Gives the client's maintenance status from the maintenance records and "
+                    "when it last changed. Says the records could not be reached if they "
+                    "could not, and does not answer from a ticket instead."
+                ),
+            ),
+            GoldenCase(
+                question="What is open on this client's tickets?",
+                expectation=(
+                    "Names each open ticket by its number with its status and age, from the "
+                    "ticket desk. Says that the ticket desk could not be reached when it "
+                    "could not, and never says how many tickets it could not see."
+                ),
+            ),
+            GoldenCase(
+                question="Is this client's website up?",
+                expectation=(
+                    "Runs the HTTP check and gives the status, the redirects, the days left on "
+                    "the certificate and the response time. Opens the read-only browser only "
+                    "if the question needed a rendered page."
+                ),
+            ),
+        ),
+    )
+
+
 #: Every template this module offers, in one order.
 #:
 #: A tuple rather than a dict keyed by id, because the id is already inside each manifest and
@@ -1670,6 +1961,7 @@ CATALOGUE: tuple[TemplateManifest, ...] = (
     internal_helpdesk(),
     knowledge_gap_curator(),
     laravel_developer(),
+    maintenance_agent(),
     pre_sales(),
     project_manager(),
     project_status_reporter(),
