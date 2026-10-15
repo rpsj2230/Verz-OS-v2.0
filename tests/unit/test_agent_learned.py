@@ -279,7 +279,7 @@ def test_the_prompts_screens_view_says_who_wrote_the_instructions_and_whether_a_
     def seen(instance: TemplateInstance) -> tuple[str, bool, str]:
         record = materialise(signed, instance, audience=audience).record
         view = instructions_view(record, (signed, instance), effective_hash="h", editable=True)
-        return view.source, view.machine_authored, view.set_by or ""
+        return view.source or "", view.machine_authored, view.set_by or ""
 
     template = seen(_instance(signed))
     by_a_person = seen(set_field(_instance(signed), "persona", ADMIN_WORDS, by=ADMIN, at=LATER))
