@@ -1,0 +1,96 @@
+A person's own Google account can be attached to their personal agent, an auditor is told personal agents exist, and a team agent can never carry either
+
+The owner's direction on needs item 173 (2026-10-12) is that a person connects their own Google
+account to their own agent, that nobody else can ask for it, and that a reader who holds the audit
+capability may be shown a personal agent for oversight. Three leaves were open for it. This builds
+M39.10.3 and M39.10.4 up to the real Google sign-in, which is the owner's step on item 173, and the
+part of M39.10.5 that holds under every answer to item 189. It does not decide item 189.
+
+What was found first, and it is the load-bearing change. `read:google_workspace`, the capability a
+person needs to be read anything from Workspace, names an entity ("google_workspace") that no
+connector provided. `brain.agents.binding.bound_capabilities` keeps a capability on an entity nobody
+provides in every ceiling that lists it, so the strip a team agent got in 491629be (bound_connectors)
+removed the connector and left the read. A department's agent that named the capability read the
+asker's own mail into answers other people read, and the M11.9.12 install check passed BECAUSE of
+that: it bound a department's agent and watched it read one person's mailbox. The Google connector
+now provides the entity, so the read is bound like every other, and that check binds the owner's own
+personal agent instead and asserts a department's agent naming Workspace is handed nothing. This
+replaces what the check asserted; it was asserting the leak.
+
+M39.10.4. Attaching is naming the connector on the agent's own list, and a personal agent that names
+a connector of its owner's own accounts carries that connector's read in its ceiling, derived from the
+one list (agents.model.own_reads). The alternative, also writing the read into the agent's
+capabilities, is a second record of the same attachment. The owner attaches and detaches from the
+agent's Profile (new route /agents/{id}/own-workspace, confirmed in the page); a colleague, an
+administrator and a team agent's page get the 404 an agent never made gets, and a press on a team
+agent the reader can see is the one sentence. The connector administrator is deliberately not given
+this: an administrator's press is never a person's consent. The write is the existing compare and set
+on the connector list (StoredAttachments.bind_connectors), one ledger entry naming the owner and
+carrying own_workspace_attached or own_workspace_detached. Behind the switch
+personal_agent_own_workspace, which ships off; detaching never needs it.
+
+M39.10.3. Oversight is a view of its own and never a wider audience: widening visible_to would have
+made who may see an agent and who may use it the same answer, the conflation AUDIENCE_IS_NOT_AUTHORITY
+refuses. GET /agent-oversight tells a reader holding read:audit.agent (the existing capability, in the
+scope their grant carries, asked through audit.view.may_audit in the owner's name so a department head's
+people-scoped grant covers those people's agents) that another person's personal agent exists, its
+name, owner and state, and offers nothing: not on the roster, its page refused as for an agent never
+made. No count; every reader gets 200 and the same two fields. Behind personal_agent_oversight (off).
+Two leaks found while checking every list follow the owner-only scope: a department or person named
+beside a personal audience made the agent findable (visible_to now ignores them at that level), and a
+leaver's personal agent was offered for adoption to whoever may adopt agents (transfers_for skips it).
+A source-walking test requires every module that reads agents in bulk to call the audience question or
+be listed with a reason. NOT done and a question for the owner: the Usage and Spend breakdowns by
+agent name every agent to a reader of those screens, personal ones included.
+
+M39.10.5, the part that holds under A, B and C: a team agent can never carry a person's own account
+(above). Not built, waiting on item 189: a shared mailbox an administrator connects, and a person's
+own mail inside their private conversation only. The leaf stays open.
+
+Install checks: an_auditor_is_told_of_a_personal_agent_and_may_not_use_it and
+a_persons_own_google_account_is_on_their_agent_for_them_alone, over reserved people and a made-up
+Google, NOT_RUN on an install with Workspace connected already. The second claims M39.10.4 only, and
+M39.10.4 is held in docs/proof-sweep-holds.d until the owner's real sign-in has been read.
+
+Mutation (brain.ops.mutation, thirty rows, tests run clean first; one survivor on the first run, caught after a test was added):
+
+  a row beside a personal audience makes the agent findable | caught | test_a_person_named_beside_a_personal_audience_still_does_not_find_the_agent
+  a team agent keeps the connectors that read one person's own accounts | caught | test_a_team_agent_never_carries_the_read_however_it_is_written
+  a personal agent carries the own read without naming the connector | caught | test_naming_the_connector_on_a_personal_agent_is_the_whole_of_attaching_it
+  an agent that also lists the read carries it twice | caught | test_naming_the_connector_on_a_personal_agent_is_the_whole_of_attaching_it
+  the own read is spelled differently from the connector's | caught | test_naming_the_connector_on_a_personal_agent_is_the_whole_of_attaching_it
+  the connector no longer provides the read's entity | caught | test_a_team_agent_never_carries_the_read_however_it_is_written
+  the read's entity is spelled differently from the capability's noun | caught | test_a_team_agent_never_carries_the_read_however_it_is_written
+  oversight lists the reader's own agents | caught | test_a_team_agent_and_the_readers_own_agents_are_not_listed
+  oversight lists team agents | caught | test_a_team_agent_and_the_readers_own_agents_are_not_listed
+  the audit question is asked in the agent's own name, not its owner's | caught | test_a_grant_scoped_to_a_departments_people_covers_the_agents_those_people_own
+  oversight is not in name order | caught | test_a_reader_holding_the_audit_capability_is_told_of_other_peoples_personal_agents
+  oversight asks only the lifecycle action | caught | test_the_two_actions_the_ledger_records_an_agent_under_are_the_ones_asked
+  the capability is asked after the estate is read | caught | test_a_reader_outside_every_audit_reach_makes_the_route_read_no_agent
+  oversight ignores its switch | caught | test_with_the_switch_off_even_an_auditor_is_told_of_none
+  oversight is unbounded | caught | test_the_page_is_bounded_and_says_only_that_there_is_more_to_tell
+  oversight never says there is more | caught | test_the_page_is_bounded_and_says_only_that_there_is_more_to_tell
+  a team agent may be given a person's own account | caught | test_a_team_agent_a_reader_can_see_is_told_the_rule_and_a_read_of_it_is_the_404
+  an account can be attached twice | caught | test_the_owner_attaches_their_own_account_to_their_own_agent_and_takes_it_off
+  attaching ignores the switch | caught | test_with_the_switch_off_attaching_is_refused_and_detaching_still_works
+  attaching ignores whether the person may have the account | caught | test_a_person_who_may_not_have_the_account_is_told_so_and_nothing_is_written
+  an account that is not attached can be detached | caught | test_attaching_twice_and_detaching_what_is_not_attached_are_each_told_and_write_nothing
+  ownership is only that the agent is personal | caught | test_a_person_who_is_not_the_owner_is_refused_even_where_the_audience_check_said_yes
+  a team agent counts as having the account attached | SURVIVED, then caught by test_a_name_for_the_connector_on_a_team_agent_is_inert_and_is_not_an_attachment
+  detaching leaves the connector named | caught | test_the_owner_attaches_their_own_account_to_their_own_agent_and_takes_it_off
+  the read answers a person who is not the owner | caught | test_a_team_agent_a_reader_can_see_is_told_the_rule_and_a_read_of_it_is_the_404
+  a press by a person who is not the owner is decided | caught | test_a_person_who_is_not_the_owner_is_refused_even_where_the_audience_check_said_yes
+  a stale press writes anyway | caught | test_a_stale_page_is_told_the_agent_moved_and_nothing_is_written
+  a refused press is written | caught | test_a_team_agent_a_reader_can_see_is_told_the_rule_and_a_read_of_it_is_the_404
+  the audit question is asked in the subject's name for an agent | caught | test_a_grant_scoped_to_a_departments_people_covers_the_agents_those_people_own
+  a leaver's personal agent is offered for adoption | caught | test_a_leavers_personal_agent_is_not_offered_to_whoever_may_adopt_agents
+
+
+Reused: agents.kinds / model (AgentAudience, visible_to, entitlement_ceiling, bound_connectors),
+agents.attachments and ops.attachment_store.bind_connectors (the write and its ledger entry),
+audit.view.may_audit (extended with an actor), connector_routes._personal_sources and _connected_for,
+ops.google_workspace_live.WorkspacePassages, the M11.9.12 readiness check's connection walk,
+acceptance_checks_agent_kinds._made, the Memory kinds card for the console shape. Replaced: the
+M11.9.12 check's department agent bound to Workspace, for the reason above.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
