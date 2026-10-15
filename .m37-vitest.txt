@@ -1,0 +1,12 @@
+
+ RUN  v4.1.11 /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wl-m37/console
+
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+
+ Test Files  135 passed (135)
+      Tests  2261 passed | 1 expected fail (2262)
+   Start at  10:10:29
+   Duration  109.42s (transform 25.18s, setup 15.42s, import 81.55s, tests 624.82s, environment 97.35s)
+

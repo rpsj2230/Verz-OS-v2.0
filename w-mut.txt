@@ -1,0 +1,6 @@
+mutation: 2 mutation(s) in /var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/brain-mutate-145e8dc3da50; running the unmutated tests
+mutation: unmutated tests clean in 28.9s
+mutation: [1/2] a write declared as changing nothing is refused | caught    | test_the_cloudflare_checks_fail_where_the_path_is_broken[a_connector_write_is_a_declared_tool_off_until_its_key_is_given-tool-a connector's write is not declared as a tool that changes] (21.9s)
+mutation: [2/2] turning a write on must leave a ledger entry by its giver | caught    | test_the_cloudflare_checks_fail_where_the_path_is_broken[a_connector_write_is_a_declared_tool_off_until_its_key_is_given-unrecorded-turning a connector's write on left no ledger entry by its giver] (21.8s)
+a write declared as changing nothing is refused           | caught    | test_the_cloudflare_checks_fail_where_the_path_is_broken[a_connector_write_is_a_declared_tool_off_until_its_key_is_given-tool-a connector's write is not declared as a tool that changes]
+turning a write on must leave a ledger entry by its giver | caught    | test_the_cloudflare_checks_fail_where_the_path_is_broken[a_connector_write_is_a_declared_tool_off_until_its_key_is_given-unrecorded-turning a connector's write on left no ledger entry by its giver]

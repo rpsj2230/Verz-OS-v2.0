@@ -1,0 +1,43 @@
+Install checks for Sync now, what People says about the staff list, adding a work email and departments managed on People
+
+Five install acceptance checks (module acceptance_checks_people, keys 600 to 699), each calling
+the route its page calls as a reserved person, inside the harness's rolled-back transaction:
+
+- sync_now_asks_the_worker_for_the_scheduled_staff_sync (M1.10.2): a reader who may connect a
+  source presses Sync now, one run request is left for the worker whatever the number of presses,
+  the page says it is waiting and when the last and next scheduled runs are; a reader who only
+  opens the page is refused. The worker's own run is deliberately not made here (a second way to
+  apply the list with the credential the worker keeps). Said NOT_RUN, in a literal sentence, on an
+  install whose chosen source the worker does not read, rather than choosing one for it.
+- people_says_where_the_staff_list_puts_each_person (M1.6.13): roster rows written for reserved
+  people under the install's own source are listed with status and type, each filter returns
+  exactly the people it names, somebody unlisted carries neither, a suspended person's page says
+  why in words. NOT_RUN where no list is read.
+- a_work_email_joins_the_list_person_only_where_nothing_is_lost (M1.10.4) and
+  the_first_administrator_adds_a_work_email_and_the_duplicate_goes (M1.10.5): the list's person is
+  made by provide_people, the sync's own function, then joined by the route in every case the leaf
+  names: at once, after a confirmation, never when they sign in on their own, never by a matching
+  name; and the administrator's own page ends with the duplicate no longer listed.
+- departments_managed_on_people_are_not_the_staff_sync_s (M1.6.19): with the setting held as
+  console and then as staff_source, the sync's own question places nobody or somebody, the list's
+  departments are offered or not, a move on People is made or refused, and the pack follows
+  People's department with no team or lead. The setting is process state, put back by
+  Harness.removes; the test asserts it is.
+
+Product change, small and the reason the last check is not a copy of the sync's glue: the question
+the people step and the accounts step both asked inline (`console is STAFF_SOURCE`) is now one
+function, `departments_from.the_list_places_people`, used by staff_sync_run twice and by the check.
+
+Proof-sweep holds: M1.6.13, M1.10.4, M1.10.5 and M1.6.19 are added to docs/proof-sweep-holds.json
+with the reason their sibling leaves already carry, because each passes against a roster the check
+made. M1.10.2 is not held: it reads no stand-in.
+
+Mutation (brain.ops.mutation, three rows, unmutated tests clean first):
+| mutation | result |
+| the_list_places_people inverted | caught by test_the_sync_places_the_people_it_makes_only_where_departments_come_from_the_list (four cases) |
+| Sync now's no-source guard removed | caught by test_an_install_with_no_source_the_worker_reads_says_so_instead_of_failing |
+| People's standing read under another source | caught by test_every_people_check_passes_on_an_install_and_leaves_nothing and test_people_that_names_nobody_or_filters_on_nothing_fails_the_people_check |
+
+No Closes line: the leaves close from the install's results.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

@@ -1,0 +1,18 @@
+{
+ "leaves": [
+  "The website widget's answer is written by the model from the passages an administrator marked public and from nothing else, with those passages shown beside it, when the owner has switched model answers on; with the switch off, or when the model cannot answer, the visitor is given the passages themselves",
+  "What the website widget's model answers may cost a day is a figure the owner sets on the Rate limits screen, each answer's cost is counted from the spend ledger under the widget's own name, and once the day's figure is used up the widget answers with the passages until midnight UTC",
+  "Proved on the install: with model answers switched on and a cap, a visitor's question is answered by the model from the public passage alone, the cost is on the spend ledger under the widget, and the answer after the cap is used up is the passages"
+ ],
+ "rows": [
+  {
+   "id": "DEC-139B",
+   "source": "needs-rupash 139 (decided 2026-10-13, option B)",
+   "area": "Channels",
+   "requirement": "The website widget's answers are written by the model from the public passages only, under a daily spending cap the owner sets in the console, and the widget falls back to the passages once the cap is reached.",
+   "leaves": ["M10.7.6", "M10.7.7"],
+   "proof": ["M10.7.8"],
+   "decision": null
+  }
+ ]
+}

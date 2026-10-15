@@ -1,0 +1,4 @@
+============================= test session starts ==============================
+collected 25 items
+
+tests/unit/test_acceptance.py ....................

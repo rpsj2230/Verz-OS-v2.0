@@ -1,0 +1,17 @@
+{
+ "leaves": [
+  "A Laravel view's visibility rule names one department for every record the view keeps, a rule naming several departments is refused where it is typed with a sentence saying why, and each record is stored with that one department",
+  "Proved on the install: the Laravel connect form built for one department keeps both views under it, a rule listing two departments is refused naming that rule and saying why, a record is stored with the one department and a record naming another department is not stored"
+ ],
+ "rows": [
+  {
+   "id": "DEC-138A",
+   "source": "needs-rupash 138 (decided 2026-10-13, option A)",
+   "area": "Connectors",
+   "requirement": "Each Laravel client record is visible to one department for now: a view's rule names one department, the index stores that one value on every record, and a rule naming several is refused where it is typed.",
+   "leaves": ["M11.9.16"],
+   "proof": ["M11.9.17"],
+   "decision": null
+  }
+ ]
+}

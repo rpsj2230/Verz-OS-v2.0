@@ -1,0 +1,1952 @@
+{
+ "M17.1.1": {
+  "sentence": "Job table with state machine, attempts, and scheduling",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.jobs); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/jobs.py"
+  ],
+  "tests": [
+   "tests/unit/test_jobs.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "a0f2f38 A job that was cancelled leaves its side effect unknown, not failed"
+  ]
+ },
+ "M17.1.2": {
+  "sentence": "Procrastinate integration on Postgres",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.jobs, ops.queue, ops.worker); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/jobs.py",
+   "src/brain/ops/queue.py",
+   "src/brain/ops/worker.py"
+  ],
+  "tests": [
+   "tests/unit/test_control_task.py",
+   "tests/unit/test_jobs.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "bf2f5b8 Graphs checkpoint to Postgres through a guarded saver that re-resolves reach on resume, an",
+   "d4dc7e2 A checkpoint refuses any value that is not a plain scalar, so a resumed run cannot read ba",
+   "a0f2f38 A job that was cancelled leaves its side effect unknown, not failed"
+  ]
+ },
+ "M17.1.3": {
+  "sentence": "Worker pool with per-class concurrency",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.jobs); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/jobs.py"
+  ],
+  "tests": [
+   "tests/unit/test_jobs.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "a0f2f38 A job that was cancelled leaves its side effect unknown, not failed"
+  ]
+ },
+ "M17.1.4": {
+  "sentence": "Cancellation and timeout",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.jobs); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/jobs.py"
+  ],
+  "tests": [
+   "tests/unit/test_jobs.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "a0f2f38 A job that was cancelled leaves its side effect unknown, not failed"
+  ]
+ },
+ "M17.1.5": {
+  "sentence": "Dead-letter handling with an operator surface",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.jobs); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/jobs.py"
+  ],
+  "tests": [
+   "tests/unit/test_jobs.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "a0f2f38 A job that was cancelled leaves its side effect unknown, not failed"
+  ]
+ },
+ "M17.2.1": {
+  "sentence": "LangGraph checkpointer on Postgres",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.checkpoint_store); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/checkpoint_store.py"
+  ],
+  "tests": [
+   "tests/unit/test_checkpoint_store.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "bf2f5b8 Graphs checkpoint to Postgres through a guarded saver that re-resolves reach on resume, an",
+   "d4dc7e2 A checkpoint refuses any value that is not a plain scalar, so a resumed run cannot read ba",
+   "046612a A property that has to hold at every boundary cannot be tested at a list of boundaries"
+  ]
+ },
+ "M17.2.2": {
+  "sentence": "Our own re-drive driver for crash recovery",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.crash); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/crash.py"
+  ],
+  "tests": [
+   "tests/unit/test_crash.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "046612a A property that has to hold at every boundary cannot be tested at a list of boundaries"
+  ]
+ },
+ "M17.2.3": {
+  "sentence": "Checkpoint at every side-effect boundary",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.crash); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/crash.py"
+  ],
+  "tests": [
+   "tests/unit/test_crash.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "046612a A property that has to hold at every boundary cannot be tested at a list of boundaries"
+  ]
+ },
+ "M17.2.4": {
+  "sentence": "Resume after restart with state intact",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.crash); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/crash.py"
+  ],
+  "tests": [
+   "tests/unit/test_crash.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "046612a A property that has to hold at every boundary cannot be tested at a list of boundaries"
+  ]
+ },
+ "M17.2.5": {
+  "sentence": "Entitlement re-check at every resume point",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.crash); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/crash.py"
+  ],
+  "tests": [
+   "tests/unit/test_crash.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "046612a A property that has to hold at every boundary cannot be tested at a list of boundaries"
+  ]
+ },
+ "M17.3.1": {
+  "sentence": "Idempotency key on every side-effecting operation",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in channels.adapter, channels.email, channels.lark +9 more; NOT wired: ops.effects. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-w1-6",
+  "src": [
+   "src/brain/channels/adapter.py",
+   "src/brain/channels/email.py",
+   "src/brain/channels/lark.py",
+   "src/brain/channels/slack.py",
+   "src/brain/channels/teams.py",
+   "src/brain/channels/telegram.py",
+   "src/brain/channels/whatsapp.py",
+   "src/brain/gate/leash.py",
+   "src/brain/ops/digest_delivery.py",
+   "src/brain/ops/effects.py",
+   "src/brain/ops/idempotency.py",
+   "src/brain/ops/operation_store.py",
+   "src/brain/tables/operation.py"
+  ],
+  "tests": [
+   "tests/invariants/test_every_side_effect_is_keyed.py",
+   "tests/unit/test_channel_correction.py",
+   "tests/unit/test_digest_delivery.py",
+   "tests/unit/test_effects.py",
+   "tests/unit/test_email.py",
+   "tests/unit/test_idempotency.py",
+   "tests/unit/test_issue_once.py",
+   "tests/unit/test_lark_channel.py",
+   "tests/unit/test_leash.py",
+   "tests/unit/test_operation_store.py",
+   "tests/unit/test_slack.py",
+   "tests/unit/test_teams.py",
+   "tests/unit/test_telegram.py",
+   "tests/unit/test_whatsapp.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "7245ee0 An approved DNS change is sent with a DNS Edit token of its own, once, and read back befor",
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "8b70f0d A stated memory is recalled however old it is, and an approved action runs once however ma",
+   "de14f6a Retention runs on a schedule and reports what it did, the audit ledger, sessions and sign-"
+  ]
+ },
+ "M17.3.2": {
+  "sentence": "Operation state machine: pending, sent, unknown, verifying, succeeded, failed",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.idempotency); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/idempotency.py"
+  ],
+  "tests": [
+   "tests/unit/test_idempotency.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "21729e5 UNKNOWN is a state, because the honest answer after a crash is that nobody knows"
+  ]
+ },
+ "M17.3.3": {
+  "sentence": "Verification read-back per connector",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (connectors.write_verification, ops.idempotency); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/connectors/write_verification.py",
+   "src/brain/ops/idempotency.py"
+  ],
+  "tests": [
+   "tests/unit/test_idempotency.py",
+   "tests/unit/test_write_verification.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "610522e A browser run is judged on its actions, then on masked pictures, then on its system of rec",
+   "c768f15 Every connector reads a write back into found, absent or unknown, and a connector with no ",
+   "046612a A property that has to hold at every boundary cannot be tested at a list of boundaries"
+  ]
+ },
+ "M17.3.4": {
+  "sentence": "Connectors without read-back restricted to read-only, declared in the manifest",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.idempotency); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/idempotency.py"
+  ],
+  "tests": [
+   "tests/unit/test_idempotency.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "21729e5 UNKNOWN is a state, because the honest answer after a crash is that nobody knows"
+  ]
+ },
+ "M17.3.5": {
+  "sentence": "Kill-after-side-effect test proving exactly-once",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.idempotency); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/idempotency.py"
+  ],
+  "tests": [
+   "tests/invariants/test_crash_exactly_once.py",
+   "tests/unit/test_idempotency.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "21729e5 UNKNOWN is a state, because the honest answer after a crash is that nobody knows"
+  ]
+ },
+ "M17.4.1": {
+  "sentence": "Trigger types: schedule, connector event, webhook",
+  "status": "OPEN",
+  "note": "PLAN 2026-10-12: also reached from the agent page's New automation (M39.9.2.2); the trigger kinds must be selectable and shown there. PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (orchestration.unattended); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/orchestration/unattended.py"
+  ],
+  "tests": [
+   "tests/unit/test_orchestration_unattended.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/needs-rupash.md",
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "f37b1d1 The agent page's Knowledge and Automation sections are planned: fifteen new tasks, two reo",
+   "ed87a0e The agent page's Knowledge and Automation sections are planned: fifteen new tasks, two reo",
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "4f1f1d6 When agent A calls agent B, B runs at the person's reach and not at A's"
+  ]
+ },
+ "M17.4.2": {
+  "sentence": "Automations start from named outcome templates, while workflows are authored in the console as stored, versioned step data rather than drawn on a blank canvas",
+  "status": "OPEN",
+  "note": "PLAN 2026-10-12: also the data model behind New automation on the agent page (M39.9.2.1); a template with changed settings needs none of it, anything else does. PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (orchestration.unattended); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/orchestration/unattended.py"
+  ],
+  "tests": [
+   "tests/unit/test_orchestration_unattended.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/needs-rupash.md",
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "f37b1d1 The agent page's Knowledge and Automation sections are planned: fifteen new tasks, two reo",
+   "ed87a0e The agent page's Knowledge and Automation sections are planned: fifteen new tasks, two reo",
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "4f1f1d6 When agent A calls agent B, B runs at the person's reach and not at A's"
+  ]
+ },
+ "M17.4.3": {
+  "sentence": "Automation principal resolving the owner's live entitlements at each run",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (orchestration.unattended); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/orchestration/unattended.py"
+  ],
+  "tests": [
+   "tests/unit/test_orchestration_unattended.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "b53eace The entitlement store and the principal records exist over the database, awaited on the ap",
+   "4f1f1d6 When agent A calls agent B, B runs at the person's reach and not at A's"
+  ]
+ },
+ "M17.4.4": {
+  "sentence": "Suspension when the owner loses a required entitlement",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (orchestration.unattended); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/orchestration/unattended.py"
+  ],
+  "tests": [
+   "tests/unit/test_orchestration_unattended.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "4f1f1d6 When agent A calls agent B, B runs at the person's reach and not at A's"
+  ]
+ },
+ "M17.4.5": {
+  "sentence": "Timeout and expiry on every approval step",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (orchestration.unattended); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/orchestration/unattended.py"
+  ],
+  "tests": [
+   "tests/unit/test_orchestration_unattended.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "4f1f1d6 When agent A calls agent B, B runs at the person's reach and not at A's"
+  ]
+ },
+ "M17.4.6": {
+  "sentence": "Run history with cost per run",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (orchestration.unattended); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/orchestration/unattended.py"
+  ],
+  "tests": [
+   "tests/unit/test_orchestration_unattended.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "4f1f1d6 When agent A calls agent B, B runs at the person's reach and not at A's"
+  ]
+ },
+ "M17.5.1": {
+  "sentence": "Postgres outbox with retry and backoff",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.outbox, ops.outbox_store, ops.webhook_delivery +1 more); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/outbox.py",
+   "src/brain/ops/outbox_store.py",
+   "src/brain/ops/webhook_delivery.py",
+   "src/brain/tables/outbox.py"
+  ],
+  "tests": [
+   "tests/unit/test_outbox.py",
+   "tests/unit/test_outbox_store.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "9742280 The outbox, versioned budgets and the plugin registry have tables, and the dispatcher is r",
+   "3be5a2e Nine leaves this repository claimed and had not built",
+   "21729e5 UNKNOWN is a state, because the honest answer after a crash is that nobody knows"
+  ]
+ },
+ "M17.5.2": {
+  "sentence": "Signing and delivery guarantees",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.outbox); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/outbox.py"
+  ],
+  "tests": [
+   "tests/unit/test_outbox.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "21729e5 UNKNOWN is a state, because the honest answer after a crash is that nobody knows"
+  ]
+ },
+ "M17.5.3": {
+  "sentence": "Subscriber management in the console",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.subscribers, ops.outbox, ops.outbox_store +1 more); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/console/subscribers.py",
+   "src/brain/ops/outbox.py",
+   "src/brain/ops/outbox_store.py",
+   "src/brain/tables/outbox.py"
+  ],
+  "tests": [
+   "tests/unit/test_outbox.py",
+   "tests/unit/test_outbox_store.py",
+   "tests/unit/test_subscribers.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "9742280 The outbox, versioned budgets and the plugin registry have tables, and the dispatcher is r",
+   "3be5a2e Nine leaves this repository claimed and had not built",
+   "21729e5 UNKNOWN is a state, because the honest answer after a crash is that nobody knows"
+  ]
+ },
+ "M17.6.1": {
+  "sentence": "An administrator can define a multi-step workflow from the console as stored, versioned data, and an agent assigned that workflow runs it without a person performing each step",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M17.6.2": {
+  "sentence": "A workflow step can call a skill, read a connector or use a tool, and every such step runs through the gate at the run's reach, the leash and the meter, exactly as an agent's own call does",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M17.6.3": {
+  "sentence": "A workflow step's output is named and schema-checked, and a later step can read only outputs that earlier steps declared",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M17.6.4": {
+  "sentence": "A workflow step can run only when a condition over earlier named outputs holds, and a skipped step is recorded as skipped with the condition that decided it",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M17.6.5": {
+  "sentence": "Workflow steps declared parallel start together, and the step that combines them runs only after each has finished or been recorded as a gap",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M17.6.6": {
+  "sentence": "Each workflow step carries its own retry limit and backoff, a side-effecting step is retried only through its idempotency key, and a step that exhausts its retries takes its declared failure path",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M17.6.7": {
+  "sentence": "Every finished workflow or automation run emits a success or failure signal naming the workflow, the agent and the step that failed, and repeated failures of one step open a learning candidate instead of changing the workflow",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": [
+   "1721fbb Memory, context and the evaluation gate are checked on an install, and the memory, learnin",
+   "bef3f9f Migration train: 0190 to 0207 in one chain (channels, approved actions, OAuth, API connect",
+   "c55fbef A correction may say what the right answer is, held apart and decided by the document's st"
+  ]
+ },
+ "M17.6.8": {
+  "sentence": "A workflow that reads two connectors, calls two skills, waits for an approval and delivers a document runs end to end on the install and leaves one trace a person can follow",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M17.7.1": {
+  "sentence": "The monthly search report workflow runs on the install for a named client: it resolves the client, reads the period's analytics and search console figures, finds the previous report, runs the search checks, writes recommendations into the report template, holds it for approval and delivers it, and no step but the approval is performed by a person, with the run recorded",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M17.7.2": {
+  "sentence": "A scheduler inside the application runs every registered scheduled control when it is due, holding a database lock so two application copies never run the same one, and a control with no run inside its window raises an alert",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M17.7.3": {
+  "sentence": "Automations are proved on an install: a scheduled, a connector-event and a webhook automation each run as their owner from a named template, one is suspended when its owner loses a required access and offered for adoption when the owner leaves, run history shows cost and outcome, and where the optional canvas is enabled it reaches the platform only over the internal network, with the checks recorded",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M17.7.4": {
+  "sentence": "Workflow control flow is proved on an install: a workflow with two parallel skill steps, a conditional step that is skipped, a step that fails, retries through its idempotency key and takes its failure path, and a combining step that records the gap shows every outcome in its one trace, with the checks recorded",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M17.7.5": {
+  "sentence": "The automation gallery ships a daily brief, capture of deals from group chats into the customer records held as drafts, and drafted email replies a person sends, each declaring its trigger, connectors and approval step",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M17.7.6": {
+  "sentence": "Every notice the product composes is delivered to the person it names through their bound channel or the configured email relay, and a notice that could not be delivered is shown as undelivered on the notifications screen",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M17.7.7": {
+  "sentence": "An agent runs only the workflows assigned to it, and a request that would start any other workflow through it is refused before the first step runs",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M17.7.8": {
+  "sentence": "Every human approval requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M17.7.9": {
+  "sentence": "On the install the denial digest runs on its window and tells the person's department lead or data steward that someone keeps being refused, naming no resource they could not reach",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M40.1.1.1": {
+  "sentence": "Single sign-on through Keycloak with the same identity the channels use",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member.shell); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member/shell.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_shell.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "58fb80c A Keycloak token can be verified for real: RS256 over the realm's published keys, fetched ",
+   "f46b8db A member application where the menu is not the boundary"
+  ]
+ },
+ "M40.1.1.2": {
+  "sentence": "Channel identity and web identity resolved to one principal, never two",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member.shell); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member/shell.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_shell.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "f46b8db A member application where the menu is not the boundary"
+  ]
+ },
+ "M40.1.1.3": {
+  "sentence": "Session policy, idle timeout and device list",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member.shell); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member/shell.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_shell.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "f46b8db A member application where the menu is not the boundary"
+  ]
+ },
+ "M40.1.1.4": {
+  "sentence": "Password reset and recovery handled by the identity provider, not by us",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member.shell); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member/shell.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_shell.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "f46b8db A member application where the menu is not the boundary"
+  ]
+ },
+ "M40.1.1.5": {
+  "sentence": "Explicit test that a channel-only user can sign in and sees the same entitlement",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member.shell); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member/shell.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_shell.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "f46b8db A member application where the menu is not the boundary"
+  ]
+ },
+ "M40.1.2.1": {
+  "sentence": "Member navigation distinct from the admin console and much shorter",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member.shell); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member/shell.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_shell.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "ee744e0 An answer is one keypress from the question, an approval opened on a phone starts on the f",
+   "4576f37 Five console views scrolled sideways on a phone, and the shell and agent workspace are now",
+   "a2df7b5 Approvals have a queue and a card that read on a phone, and nothing can decide one yet bec"
+  ]
+ },
+ "M40.1.2.2": {
+  "sentence": "No administrative surface reachable by URL guessing, enforced server side",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.reads, member.shell); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/console/reads.py",
+   "src/brain/member/shell.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_shell.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "2f21276 A console plane opens a screen only over the scope it is held in, and binding a sign-in op",
+   "f46b8db A member application where the menu is not the boundary"
+  ]
+ },
+ "M40.1.2.3": {
+  "sentence": "Responsive down to a phone since approvals arrive on phones",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in pages/approvals/ApprovalsPage.tsx; NOT wired: pages/Approvals.tsx",
+  "src": [],
+  "tests": [],
+  "console": [
+   "console/src/pages/Approvals.tsx",
+   "console/src/pages/approvals/ApprovalsPage.tsx"
+  ],
+  "ctests": [
+   "console/tests/approvals-phone.test.tsx"
+  ],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "ee744e0 An answer is one keypress from the question, an approval opened on a phone starts on the f",
+   "4576f37 Five console views scrolled sideways on a phone, and the shell and agent workspace are now",
+   "a2df7b5 Approvals have a queue and a card that read on a phone, and nothing can decide one yet bec"
+  ]
+ },
+ "M40.1.2.4": {
+  "sentence": "Entitlement disclosure line rendered from the real entitlement set, never hand-written",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member.shell); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member/shell.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_shell.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "2f21276 A console plane opens a screen only over the scope it is held in, and binding a sign-in op",
+   "f46b8db A member application where the menu is not the boundary"
+  ]
+ },
+ "M40.2.1.1": {
+  "sentence": "Questions asked this month with corrections separated out",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member_activity); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member_activity.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_activity.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e0c7f99 What a member has done, contributed, and had learned about them"
+  ]
+ },
+ "M40.2.1.2": {
+  "sentence": "Agents this person can call, split between department-provided and self-built",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member_activity); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member_activity.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_activity.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e0c7f99 What a member has done, contributed, and had learned about them"
+  ]
+ },
+ "M40.2.1.4": {
+  "sentence": "Count of things learned about this person, each reversible",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member_activity); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member_activity.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_activity.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e0c7f99 What a member has done, contributed, and had learned about them"
+  ]
+ },
+ "M40.2.2.1": {
+  "sentence": "List with source, where each one runs and how often this person used it",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member_activity); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member_activity.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_activity.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e0c7f99 What a member has done, contributed, and had learned about them"
+  ]
+ },
+ "M40.2.2.2": {
+  "sentence": "Open an agent into the same workspace surface, bounded to what this person may see",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member_activity); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member_activity.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_activity.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e0c7f99 What a member has done, contributed, and had learned about them"
+  ]
+ },
+ "M40.2.2.3": {
+  "sentence": "Build a personal agent from a template within the person's own ceiling",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member_activity); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member_activity.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_activity.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e0c7f99 What a member has done, contributed, and had learned about them"
+  ]
+ },
+ "M40.2.2.4": {
+  "sentence": "Personal agent visible to nobody else unless explicitly shared",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member_activity); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member_activity.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_activity.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e0c7f99 What a member has done, contributed, and had learned about them"
+  ]
+ },
+ "M40.2.2.5": {
+  "sentence": "Request an agent the person cannot yet call, routed to the department admin",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member_activity); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member_activity.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_activity.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e0c7f99 What a member has done, contributed, and had learned about them"
+  ]
+ },
+ "M40.3.1.1": {
+  "sentence": "Items this person uploaded with visibility scope, verification date and review due",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member_library); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member_library.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_library.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e0c7f99 What a member has done, contributed, and had learned about them"
+  ]
+ },
+ "M40.3.1.2": {
+  "sentence": "Upload, replace and retire with the review cycle set at upload time",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member_library); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member_library.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_library.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e0c7f99 What a member has done, contributed, and had learned about them"
+  ]
+ },
+ "M40.3.1.3": {
+  "sentence": "Usage count so an author can see whether anything reads what they wrote",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member_library); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member_library.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_library.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e0c7f99 What a member has done, contributed, and had learned about them"
+  ]
+ },
+ "M40.3.1.4": {
+  "sentence": "Request promotion to company-wide, routed as a tier three decision",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member_library); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member_library.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_library.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e0c7f99 What a member has done, contributed, and had learned about them"
+  ]
+ },
+ "M40.3.1.5": {
+  "sentence": "Never shows an item outside this person's entitlement, including their own department's restricted rows",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member_library); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member_library.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_library.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e0c7f99 What a member has done, contributed, and had learned about them"
+  ]
+ },
+ "M40.3.2.1": {
+  "sentence": "Personal skills with source, version and review state",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member_library); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member_library.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_library.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e0c7f99 What a member has done, contributed, and had learned about them"
+  ]
+ },
+ "M40.3.2.2": {
+  "sentence": "Author in the studio, import from a repository or paste a URL",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member_library); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member_library.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_library.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e0c7f99 What a member has done, contributed, and had learned about them"
+  ]
+ },
+ "M40.3.2.3": {
+  "sentence": "Submit to the department library for review",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member_library); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member_library.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_library.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e0c7f99 What a member has done, contributed, and had learned about them"
+  ]
+ },
+ "M40.3.2.4": {
+  "sentence": "Personal skills usable only by this person's own agents until approved",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member_library); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member_library.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_library.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e0c7f99 What a member has done, contributed, and had learned about them"
+  ]
+ },
+ "M40.3.3.1": {
+  "sentence": "Everything produced for this person by any agent",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member_library); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member_library.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_library.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e0c7f99 What a member has done, contributed, and had learned about them"
+  ]
+ },
+ "M40.3.3.3": {
+  "sentence": "Share with a colleague only where that colleague's entitlement already covers the contents",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member_library); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member_library.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_library.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e0c7f99 What a member has done, contributed, and had learned about them"
+  ]
+ },
+ "M40.4.1.1": {
+  "sentence": "Plain-language list of every preference learned, with the evidence that produced it",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member_activity); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member_activity.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_activity.py",
+   "tests/unit/test_memory_digest.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e0c7f99 What a member has done, contributed, and had learned about them"
+  ]
+ },
+ "M40.4.1.2": {
+  "sentence": "One-click undo per item and an undo-all control",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member_activity); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member_activity.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_activity.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e0c7f99 What a member has done, contributed, and had learned about them"
+  ]
+ },
+ "M40.4.1.4": {
+  "sentence": "Opt out of personal learning entirely, with the cost stated honestly",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member_activity); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member_activity.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_activity.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e0c7f99 What a member has done, contributed, and had learned about them"
+  ]
+ },
+ "M40.4.2.1": {
+  "sentence": "What is stored about this person and where, in plain language",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member_activity); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member_activity.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_activity.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e0c7f99 What a member has done, contributed, and had learned about them"
+  ]
+ },
+ "M40.4.2.3": {
+  "sentence": "Deletion request routed to the retention policy rather than performed silently",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member_activity); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member_activity.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_activity.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e0c7f99 What a member has done, contributed, and had learned about them"
+  ]
+ },
+ "M40.4.2.4": {
+  "sentence": "Which agents have read my HR record, from the audit ledger",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit.ledger, audit.reads, audit.record +1 more); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/audit/ledger.py",
+   "src/brain/audit/reads.py",
+   "src/brain/audit/record.py",
+   "src/brain/member_activity.py"
+  ],
+  "tests": [
+   "tests/unit/test_audit_reads.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "818e10f A read of a personnel record or a salary is written down, and the log answers to a noun of"
+  ]
+ },
+ "M40.5.1.1": {
+  "sentence": "Personal account connections with per-source consent",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member.connections); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member/connections.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_connections.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "f46b8db A member application where the menu is not the boundary"
+  ]
+ },
+ "M40.5.1.2": {
+  "sentence": "Explicit copy stating that connecting an account never widens what the person may see",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member.connections); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member/connections.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_connections.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "f46b8db A member application where the menu is not the boundary"
+  ]
+ },
+ "M40.5.1.3": {
+  "sentence": "Disconnect with immediate token revocation",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member.connections); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member/connections.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_connections.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "f46b8db A member application where the menu is not the boundary"
+  ]
+ },
+ "M40.5.1.4": {
+  "sentence": "Department-provided connections shown as inherited and not disconnectable here",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member.connections); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member/connections.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_connections.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "f46b8db A member application where the menu is not the boundary"
+  ]
+ },
+ "M40.5.2.1": {
+  "sentence": "Which channels this person is reachable on and which is primary",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member.connections); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member/connections.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_connections.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "f46b8db A member application where the menu is not the boundary"
+  ]
+ },
+ "M40.5.2.2": {
+  "sentence": "Per-channel notification preferences",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member.connections); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member/connections.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_connections.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "f46b8db A member application where the menu is not the boundary"
+  ]
+ },
+ "M40.5.2.3": {
+  "sentence": "An approver's routing preference for envelope decisions chooses only between the console and a Lark card, never WhatsApp or email",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member.connections); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member/connections.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_connections.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "f46b8db A member application where the menu is not the boundary"
+  ]
+ },
+ "M40.5.2.4": {
+  "sentence": "Quiet hours honoured by automations and digests",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (member.connections); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/member/connections.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_connections.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "f46b8db A member application where the menu is not the boundary"
+  ]
+ },
+ "M40.6.1.1": {
+  "sentence": "Envelope approvals awaiting this person, with what will happen stated before the fact",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: member.approvals name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/member/approvals.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_approvals.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "f46b8db A member application where the menu is not the boundary"
+  ]
+ },
+ "M40.6.1.2": {
+  "sentence": "Approve, reject and amend, each written to the ledger",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in audit.ledger, audit.record, console.approvals; NOT wired: member.approvals",
+  "src": [
+   "src/brain/audit/ledger.py",
+   "src/brain/audit/record.py",
+   "src/brain/console/approvals.py",
+   "src/brain/member/approvals.py"
+  ],
+  "tests": [
+   "tests/unit/test_approvals.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "af7a7ef An approver reads what will happen, not how, and all four verdicts reach the ledger"
+  ]
+ },
+ "M40.6.1.3": {
+  "sentence": "Expiry on an unanswered approval with a stated default of doing nothing",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: member.approvals name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/member/approvals.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_approvals.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "eccfa55 An asker whose handed-on question nobody picked up is told so once, in the chat they last ",
+   "c4dd9ee An asker whose handed-on question nobody picked up is told so once, in the chat they last ",
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "f46b8db A member application where the menu is not the boundary"
+  ]
+ },
+ "M40.6.1.4": {
+  "sentence": "Same approval reachable from Lark and from the web without double action",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: member.approvals name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/member/approvals.py"
+  ],
+  "tests": [
+   "tests/unit/test_member_approvals.py",
+   "tests/unit/test_member_connections.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "f46b8db A member application where the menu is not the boundary"
+  ]
+ },
+ "M40.7.2": {
+  "sentence": "A person can try an approved skill from its card, which opens a conversation with that skill pinned, run through the one agent runtime at the person's reach and metered like any other run",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M40.7.3": {
+  "sentence": "The web composer accepts an attached file and dictated speech, and dictation is transcribed through the registered speech tool at the person's reach before the text is sent",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M40.7.4": {
+  "sentence": "The member application is proved in the browser for a member who administers nothing: their agents, knowledge, skills, artifacts, memory, data, connected accounts and approvals, each showing only what that person may reach, with the checks recorded",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M40.7.5": {
+  "sentence": "The member application offers two starting points, start a task and talk to an agent, and a task started without an agent is routed by the gate to an agent the person may call, running at the person's reach",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M40.7.6": {
+  "sentence": "The member's recent tasks and threads each show their state, running, waiting for approval, done or failed, read from the job and suspension records, and a failed one says which step failed",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M40.7.7": {
+  "sentence": "A person can create a personal project grouping their threads and uploaded files, and a run inside it reads those files as project context at the person's reach on every turn, never storing them as memory",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M40.7.8": {
+  "sentence": "Opening an agent shows three starter prompts drawn from that agent's skills and the knowledge the person may reach, and never offers one the person's run could not answer",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ }
+}

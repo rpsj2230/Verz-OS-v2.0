@@ -1,0 +1,18 @@
+{
+ "group": "Owner decisions of 2026-10-13 on the agent page",
+ "leaves": [
+  "On an agent's page its steward and a holder of the lifecycle authority over it are also told that other people's conversations with it happened: who, when and whether the agent answered, declined or failed, and never the question or the answer, and a personal agent tells nobody but its owner anything",
+  "Proved on the install: an agent's steward is shown that a colleague's conversation with it happened, with who, when and that it failed, and no word the colleague asked or was answered; the colleague and a person who may not oversee the agent are shown none of it"
+ ],
+ "rows": [
+  {
+   "id": "DEC-121B",
+   "source": "needs-rupash 121 (decided 2026-10-13, option B)",
+   "area": "Agents",
+   "requirement": "On an agent's page the owner and administrators also see that other people's conversations happened: who, when, and whether the agent failed, never the question or the answer.",
+   "leaves": ["M39.11.1", "M39.8.9"],
+   "proof": ["M39.11.2"],
+   "decision": null
+  }
+ ]
+}
