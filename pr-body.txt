@@ -1,0 +1,3 @@
+M14.2.6: the registry checks and spells a UEN once before hashing it (it was never called), with an install check over a source declared for the check. No migration, no route change.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)

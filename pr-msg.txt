@@ -1,0 +1,11 @@
+A registration number is checked and spelled once before the registry hashes it, and an install check shows it
+
+M14.2.6 asks for Singapore UEN format validation. `normalise.check_uen` was written, argued and tested, and nothing called it: `cascade.usable_identifiers`, the one place an identifier value becomes a digest, hashed the raw string. So a UEN mistyped on one record joined the record that carried the same mistake at the stage that merges on a hard identifier alone, and one number written in lower case or with a space never joined itself.
+
+`usable_identifiers` now calls `check_uen` for a UEN: a value that is not one is dropped, with a reason that carries no value, and a valid one is hashed in its canonical spelling. `Dropped` gains a `not_a_uen` flag rather than the refusal becoming a `BlockRule`, because the block list is deliberately a list and not a validator, and `rule is None` meant exactly free mail (the property `is_free_mail` still means that and only that). No installed data changes: no shipped connector projects a UEN, so no digest in any `er.identifier` was made from one.
+
+The install check declares a company source that keeps a registration number, for the check only, as `acceptance_checks_matching` does and for the same reason, and runs the product's own registry and matching: one number in capitals and in lower case with a space is one key and is put to a person at stage one (held while unattended merging is off, item 155), and one mistyped number on two records is given no key and joins nothing. Shown failing with a validator that accepts anything and one that hashes as written.
+
+Not claimed: M14.3.1 (stage one on UEN, tax id, verified domain, verified phone). Nothing verifies a domain or a phone on any install, so its last two clauses cannot fire; that is a question for the owner, not a check.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
