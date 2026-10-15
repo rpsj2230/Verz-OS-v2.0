@@ -1,0 +1,116 @@
+A job set aside for a person can be run again from the console, behind a switch that ships off, and Runs and queue lists the actions waiting for a person
+
+Two things were missing on Operations. The Scheduled jobs screen listed the jobs the recovery sweep
+had set aside for a person and the person had a shell to do anything about one, and the actions a
+stopped worker left unconfirmed were served by `GET /operations/interrupted` and drawn by no screen
+(the console audit named that gap against M27.15.46). This closes the first as a control and the
+second as a list, and leaves one thing unbuilt because the owner has not answered it.
+
+Run again. On Background jobs, under Jobs set aside for a person, an administrator holding the
+schedule's authority presses Run again, confirms a dialog that names the job and says what the
+worker will do, and the worker puts that one failed job back on its queue within a minute with the
+arguments it already had. The row then says when it did, or that the job was no longer waiting.
+
+The shape is `schedule_control`'s, for its reasons. The application has no connection to the queue
+(its tables are refused to it), so the press cannot be a call. It is one row in `ops.setting`,
+`queue.redrive_asked.job_<id>`, an instant; `0059`'s trigger puts it in the audit ledger under the
+person. The worker's minute (`run_queue_redrive_now`, after the sweep has made its own decisions)
+reads every ask later than its answer, retries that job with the driver's own retry, and writes
+`queue.redrive_answered.job_<id>`. Nothing is taken or deleted, so a worker that dies halfway loses
+nothing and two presses before its minute ask once. No migration.
+
+Rejected, and written into `brain.ops.redrive_control`: a queue of asks a worker consumes (a consumer
+that dies between taking an ask and retrying loses it silently); a new job built from the dead
+letter (it would need the arguments, and the dead letter was built to carry none, being a copy of
+somebody's data with a different retention); a requeue edge in `brain.ops.jobs`, whose rejection is
+about a cancelled or aborted job, which no dead letter is. The control is a person's act and does
+not change what the sweep decides for any other job.
+
+A defect the real-database test found before it shipped: the driver's retry accepts a job that is
+running, not only one that failed. The first draft of the worker's half asked it for a live job and
+moved it back to the queue under the worker that was running it, which would have run it twice. The
+worker now reads the driver's status first and answers "no longer waiting for a person" for anything
+but failed (`DriverQueue.put_back`; the database test holds a running job beside the failed one).
+
+Switch: `job_redrive`, in its own module under `brain.ops.features_declared`, ships off. Off, the
+route says so by name to a holder of the authority, the list still shows an ask made while it was on,
+and the page tells a holder of the authority that it is off (a switch gates the door and never traps
+what it opened). A press is refused with the one sentence an unknown job gets for a caller without
+the authority and for a job the caller may not see, so the refusal says nothing about what is set
+aside, and a dead letter whose references are gone is refused in words.
+
+Runs and queue lists the actions waiting for a person by state in words (not known whether it
+happened; sent, the answer never recorded; being checked), with what the sweep found, and says that
+nothing there is sent again. Its own read: a failure of it draws a failure under the other two lists
+and never replaces them.
+
+NOT built, and why. Resolving an unknown side effect by a person's word (the other half of M27.13.3,
+and the confirmation naming the operation that M27.15.46 asks for) waits on needs-rupash item 188,
+point 5, which is open: an action whose result is unknown leaves that state only by being checked
+against the other system, a person's word would replace the check, and item 188 asks the owner
+whether it may. I have not decided it. The console audit's gap for it now says so instead of naming
+the leaf as open for code. M27.13.5 (start a backup drill from the console) is blocked on a new
+question, item 235: nothing the product runs can start the container a drill needs, so the button
+would reach nothing. M27.15.49 is blocked on item 188, point 2; the settings write already needs
+`admin:install_setting` and is refused before the database without it, which an existing test holds.
+
+`brain.ops.write_attribution` names the worker's answer row as not a request with a reach, with its
+reason, because the writer is the worker with nobody signed in. `brain.ops.queue` imports the ask's
+shapes from `brain.ops.redrive_control`, which imports the setting store only inside the two
+functions that need it, because the store reaches the tables and the tables reach the queue's
+importers (a circular import found on the first run).
+
+Reused: `brain.ops.schedule_control` (the instant-row pattern, copied in shape not in code),
+`brain.ops.setting_store.put` and `0059`'s trigger for the ledger entry, `brain.jobs_routes`
+(`_authorised` order, `_attribute`, `may_see`, `may_see_job`, the dead letter list and view),
+`brain.ops.queue.DriverQueue.run_again` (the driver's retry), `brain.ops.recovery_run.run_queue_redrive_now`
+(the worker's minute), `brain.operation_routes.interrupted` (the list's route, now drawn),
+`kit/ConfirmDialog`, `kit/WholeList`, `kit/Note`. Replaced: nothing.
+
+Mutation, Python (brain.ops.mutation, 19 breaks, every one caught, no survivors):
+
+
+an answered ask is live again only when it is later than its answer      | caught | test_an_ask_is_live_only_while_it_is_later_than_its_answer_and_not_in_the_future, test_a_press_after_an_answer_asks_again
+an ask in the future is not live                                         | caught | test_an_ask_is_live_only_while_it_is_later_than_its_answer_and_not_in_the_future
+a naive instant is not an ask                                            | caught | test_a_row_is_an_ask_only_when_it_holds_a_zoned_instant_for_a_job_id, test_a_row_is_an_answer_only_when_it_holds_an_instant_and_a_real_boolean
+an answer must hold a real boolean                                       | caught | test_a_row_is_an_answer_only_when_it_holds_an_instant_and_a_real_boolean
+one minute carries out a bounded number of asks                          | caught | test_the_minute_puts_back_every_live_ask_once_and_answers_each
+the oldest ask is carried out first                                      | caught | test_live_asks_come_oldest_first_and_one_minute_carries_out_a_bounded_number, test_the_minute_puts_back_every_live_ask_once_and_answers_each
+a job id is digits and nothing else                                      | caught | test_a_job_id_is_the_digits_the_queue_numbers_it_by_and_nothing_else
+the worker answers every ask it carries out                              | caught | test_the_minute_puts_back_every_live_ask_once_and_answers_each
+an ask for a job no longer failed is answered as not put back            | caught | test_the_minute_puts_back_every_live_ask_once_and_answers_each, test_the_summary_is_empty_when_nobody_asked_and_names_the_counts_when_somebody_did
+the screen says nothing of a job nobody asked about                      | caught | test_the_screen_says_what_became_of_an_ask_and_nothing_of_a_job_nobody_asked_about
+pressing needs the schedule's authority                                  | caught | test_a_caller_who_may_not_press_gets_the_refusal_an_unknown_job_gets, test_a_password_only_sign_in_cannot_press_run_again
+the job's own read decides, and a hidden job is the one refusal          | caught | test_a_caller_who_may_not_press_gets_the_refusal_an_unknown_job_gets
+the switch gates the press                                               | caught | test_pressing_is_refused_by_name_while_the_switch_is_off
+a dead letter whose references are gone is refused                       | caught | test_a_dead_letter_whose_references_are_gone_is_refused_in_words
+the press is attributed to the person                                    | caught | test_pressing_run_again_writes_the_instant_the_worker_reads_and_says_who_pressed
+the list carries each ask's standing                                     | caught | test_the_list_says_what_became_of_each_ask_and_nothing_of_a_job_nobody_asked_about, test_an_answered_ask_is_still_shown_while_the_switch_is_off
+the driver's retry is asked only for a failed job                        | caught | test_a_persons_ask_puts_one_job_back_through_the_drivers_retry_and_is_answered_once
+the worker writes its answer as the worker                               | caught | test_a_persons_ask_puts_one_job_back_through_the_drivers_retry_and_is_answered_once
+the sweep's minute carries out the asks                                  | caught | test_a_persons_ask_puts_one_job_back_through_the_drivers_retry_and_is_answered_once
+
+Mutation, console (by hand in this tree, md5 of each file checked after restoring; first run found
+two survivors, the column's authority and switch checks being repeated by a second condition, so
+the repeat was removed and the table below is the second run):
+
+the Run again column needs the authority                               | caught | Run again on a job set aside is offered only when it is switched on, the reader holds the authority and the job can still be investigated
+the Run again column needs the switch on                              | caught | (same test)
+a row whose references are gone is not offered Run again              | caught | (same test)
+the request goes to the job's own redrive address                      | caught | Run again names the job, says what the worker will do, sends one request from the dialog and asks the list again; a refused Run again is drawn in the API's words and the dialog closes
+the press opens a confirmation naming the job and sends nothing       | caught | the same two
+the dialog names the job it will run again                            | caught | Run again names the job, says what the worker will do, ...
+the page tells a holder of the authority that the switch is off       | caught | a holder of the authority is told by name that Run again is switched off, and nobody else is
+a refused press is drawn in the API's words                           | caught | a refused Run again is drawn in the API's words and the dialog closes
+the list is asked again after a press                                 | caught | Run again names the job, says what the worker will do, ...
+an unconfirmed action's state is said in words                        | caught | the actions a stopped worker left unconfirmed are listed by state in words, ...
+nothing is sent again from the list, and the page says so             | caught | the same
+a failed read of the third list draws a failure                       | caught | with nothing waiting for a person the list says so, and a failed read draws a failure under the other two lists
+an action's own key is not put in front of a person                   | caught | the actions a stopped worker left unconfirmed are listed by state in words, ...
+
+Gates: console typecheck and boundaries clean; the whole vitest suite passed except nine files that
+timed out under load and passed when rerun together (506 tests); ruff, ruff format, mypy
+--platform linux clean; test_dead_letter, test_recovery_run, test_queue and test_acceptance run
+against a scratch PostgreSQL 18 with pgvector (see the pull request for the counts).
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

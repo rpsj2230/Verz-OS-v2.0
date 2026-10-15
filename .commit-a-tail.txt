@@ -1,0 +1,45 @@
+
+an answered ask is live again only when it is later than its answer      | caught | test_an_ask_is_live_only_while_it_is_later_than_its_answer_and_not_in_the_future, test_a_press_after_an_answer_asks_again
+an ask in the future is not live                                         | caught | test_an_ask_is_live_only_while_it_is_later_than_its_answer_and_not_in_the_future
+a naive instant is not an ask                                            | caught | test_a_row_is_an_ask_only_when_it_holds_a_zoned_instant_for_a_job_id, test_a_row_is_an_answer_only_when_it_holds_an_instant_and_a_real_boolean
+an answer must hold a real boolean                                       | caught | test_a_row_is_an_answer_only_when_it_holds_an_instant_and_a_real_boolean
+one minute carries out a bounded number of asks                          | caught | test_the_minute_puts_back_every_live_ask_once_and_answers_each
+the oldest ask is carried out first                                      | caught | test_live_asks_come_oldest_first_and_one_minute_carries_out_a_bounded_number, test_the_minute_puts_back_every_live_ask_once_and_answers_each
+a job id is digits and nothing else                                      | caught | test_a_job_id_is_the_digits_the_queue_numbers_it_by_and_nothing_else
+the worker answers every ask it carries out                              | caught | test_the_minute_puts_back_every_live_ask_once_and_answers_each
+an ask for a job no longer failed is answered as not put back            | caught | test_the_minute_puts_back_every_live_ask_once_and_answers_each, test_the_summary_is_empty_when_nobody_asked_and_names_the_counts_when_somebody_did
+the screen says nothing of a job nobody asked about                      | caught | test_the_screen_says_what_became_of_an_ask_and_nothing_of_a_job_nobody_asked_about
+pressing needs the schedule's authority                                  | caught | test_a_caller_who_may_not_press_gets_the_refusal_an_unknown_job_gets, test_a_password_only_sign_in_cannot_press_run_again
+the job's own read decides, and a hidden job is the one refusal          | caught | test_a_caller_who_may_not_press_gets_the_refusal_an_unknown_job_gets
+the switch gates the press                                               | caught | test_pressing_is_refused_by_name_while_the_switch_is_off
+a dead letter whose references are gone is refused                       | caught | test_a_dead_letter_whose_references_are_gone_is_refused_in_words
+the press is attributed to the person                                    | caught | test_pressing_run_again_writes_the_instant_the_worker_reads_and_says_who_pressed
+the list carries each ask's standing                                     | caught | test_the_list_says_what_became_of_each_ask_and_nothing_of_a_job_nobody_asked_about, test_an_answered_ask_is_still_shown_while_the_switch_is_off
+the driver's retry is asked only for a failed job                        | caught | test_a_persons_ask_puts_one_job_back_through_the_drivers_retry_and_is_answered_once
+the worker writes its answer as the worker                               | caught | test_a_persons_ask_puts_one_job_back_through_the_drivers_retry_and_is_answered_once
+the sweep's minute carries out the asks                                  | caught | test_a_persons_ask_puts_one_job_back_through_the_drivers_retry_and_is_answered_once
+
+Mutation, console (by hand in this tree, md5 of each file checked after restoring; first run found
+two survivors, the column's authority and switch checks being repeated by a second condition, so
+the repeat was removed and the table below is the second run):
+
+the Run again column needs the authority                               | caught | Run again on a job set aside is offered only when it is switched on, the reader holds the authority and the job can still be investigated
+the Run again column needs the switch on                              | caught | (same test)
+a row whose references are gone is not offered Run again              | caught | (same test)
+the request goes to the job's own redrive address                      | caught | Run again names the job, says what the worker will do, sends one request from the dialog and asks the list again; a refused Run again is drawn in the API's words and the dialog closes
+the press opens a confirmation naming the job and sends nothing       | caught | the same two
+the dialog names the job it will run again                            | caught | Run again names the job, says what the worker will do, ...
+the page tells a holder of the authority that the switch is off       | caught | a holder of the authority is told by name that Run again is switched off, and nobody else is
+a refused press is drawn in the API's words                           | caught | a refused Run again is drawn in the API's words and the dialog closes
+the list is asked again after a press                                 | caught | Run again names the job, says what the worker will do, ...
+an unconfirmed action's state is said in words                        | caught | the actions a stopped worker left unconfirmed are listed by state in words, ...
+nothing is sent again from the list, and the page says so             | caught | the same
+a failed read of the third list draws a failure                       | caught | with nothing waiting for a person the list says so, and a failed read draws a failure under the other two lists
+an action's own key is not put in front of a person                   | caught | the actions a stopped worker left unconfirmed are listed by state in words, ...
+
+Gates: console typecheck and boundaries clean; the whole vitest suite passed except nine files that
+timed out under load and passed when rerun together (506 tests); ruff, ruff format, mypy
+--platform linux clean; test_dead_letter, test_recovery_run, test_queue and test_acceptance run
+against a scratch PostgreSQL 18 with pgvector (see the pull request for the counts).
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

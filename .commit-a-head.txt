@@ -1,0 +1,71 @@
+A job set aside for a person can be run again from the console, behind a switch that ships off, and Runs and queue lists the actions waiting for a person (M27.13.3, M27.15.46)
+
+Two things were missing on Operations. The Scheduled jobs screen listed the jobs the recovery sweep
+had set aside for a person and the person had a shell to do anything about one, and the actions a
+stopped worker left unconfirmed were served by `GET /operations/interrupted` and drawn by no screen
+(the console audit named that gap against M27.15.46). This closes the first as a control and the
+second as a list, and leaves one thing unbuilt because the owner has not answered it.
+
+Run again. On Background jobs, under Jobs set aside for a person, an administrator holding the
+schedule's authority presses Run again, confirms a dialog that names the job and says what the
+worker will do, and the worker puts that one failed job back on its queue within a minute with the
+arguments it already had. The row then says when it did, or that the job was no longer waiting.
+
+The shape is `schedule_control`'s, for its reasons. The application has no connection to the queue
+(its tables are refused to it), so the press cannot be a call. It is one row in `ops.setting`,
+`queue.redrive_asked.job_<id>`, an instant; `0059`'s trigger puts it in the audit ledger under the
+person. The worker's minute (`run_queue_redrive_now`, after the sweep has made its own decisions)
+reads every ask later than its answer, retries that job with the driver's own retry, and writes
+`queue.redrive_answered.job_<id>`. Nothing is taken or deleted, so a worker that dies halfway loses
+nothing and two presses before its minute ask once. No migration.
+
+Rejected, and written into `brain.ops.redrive_control`: a queue of asks a worker consumes (a consumer
+that dies between taking an ask and retrying loses it silently); a new job built from the dead
+letter (it would need the arguments, and the dead letter was built to carry none, being a copy of
+somebody's data with a different retention); a requeue edge in `brain.ops.jobs`, whose rejection is
+about a cancelled or aborted job, which no dead letter is. The control is a person's act and does
+not change what the sweep decides for any other job.
+
+A defect the real-database test found before it shipped: the driver's retry accepts a job that is
+running, not only one that failed. The first draft of the worker's half asked it for a live job and
+moved it back to the queue under the worker that was running it, which would have run it twice. The
+worker now reads the driver's status first and answers "no longer waiting for a person" for anything
+but failed (`DriverQueue.put_back`; the database test holds a running job beside the failed one).
+
+Switch: `job_redrive`, in its own module under `brain.ops.features_declared`, ships off. Off, the
+route says so by name to a holder of the authority, the list still shows an ask made while it was on,
+and the page tells a holder of the authority that it is off (a switch gates the door and never traps
+what it opened). A press is refused with the one sentence an unknown job gets for a caller without
+the authority and for a job the caller may not see, so the refusal says nothing about what is set
+aside, and a dead letter whose references are gone is refused in words.
+
+Runs and queue lists the actions waiting for a person by state in words (not known whether it
+happened; sent, the answer never recorded; being checked), with what the sweep found, and says that
+nothing there is sent again. Its own read: a failure of it draws a failure under the other two lists
+and never replaces them.
+
+NOT built, and why. Resolving an unknown side effect by a person's word (the other half of M27.13.3,
+and the confirmation naming the operation that M27.15.46 asks for) waits on needs-rupash item 188,
+point 5, which is open: an action whose result is unknown leaves that state only by being checked
+against the other system, a person's word would replace the check, and item 188 asks the owner
+whether it may. I have not decided it. The console audit's gap for it now says so instead of naming
+the leaf as open for code. M27.13.5 (start a backup drill from the console) is blocked on a new
+question, item 235: nothing the product runs can start the container a drill needs, so the button
+would reach nothing. M27.15.49 is blocked on item 188, point 2; the settings write already needs
+`admin:install_setting` and is refused before the database without it, which an existing test holds.
+
+`brain.ops.write_attribution` names the worker's answer row as not a request with a reach, with its
+reason, because the writer is the worker with nobody signed in. `brain.ops.queue` imports the ask's
+shapes from `brain.ops.redrive_control`, which imports the setting store only inside the two
+functions that need it, because the store reaches the tables and the tables reach the queue's
+importers (a circular import found on the first run).
+
+Reused: `brain.ops.schedule_control` (the instant-row pattern, copied in shape not in code),
+`brain.ops.setting_store.put` and `0059`'s trigger for the ledger entry, `brain.jobs_routes`
+(`_authorised` order, `_attribute`, `may_see`, `may_see_job`, the dead letter list and view),
+`brain.ops.queue.DriverQueue.run_again` (the driver's retry), `brain.ops.recovery_run.run_queue_redrive_now`
+(the worker's minute), `brain.operation_routes.interrupted` (the list's route, now drawn),
+`kit/ConfirmDialog`, `kit/WholeList`, `kit/Note`. Replaced: nothing.
+
+Mutation, Python (brain.ops.mutation, 19 breaks, every one caught, no survivors):
+
