@@ -745,19 +745,19 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M32.1.1.1": {
-    status: "BLOCKED",
-    why: "waits on memory for Langfuse: 2,048 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-30 (needs-rupash 120, row 3). PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_services, ops.overlays, ops.wiring +1 more); open for proof on the install or a decision, not for code",
-    updated: "2026-09-30",
+    status: "READY FOR TESTING",
+    why: "Built, wired and off until switched on; the memory wait is over (needs-rupash 120, decided A on 2026-10-05: the other project's Dify, old Langfuse and old v1 worker were taken down, so the five services need 2,304 MB of about 7,000 MB available, measured read-only on 2026-10-14). To prove it on the install: open Install, Settings, set Optional services this server runs to langfuse (add presidio after a comma if the detector is wanted too), save, wait for the next update to finish, then look at the install's next acceptance run, which runs after each update, and check the install check for the trace ledger's five services passes (web, worker, column store, cache and file store each running and healthy). To undo it set the setting back to none. It closes when the install's two newest runs both pass it. PRIOR WORK: ops.overlays, ops.acceptance_checks_services, ops.wiring, docker-compose.langfuse.yml",
+    updated: "2026-10-14",
   },
   "M32.1.1.2": {
-    status: "BLOCKED",
-    why: "waits on memory for Langfuse: 2,048 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-30 (needs-rupash 120, row 3). PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_services, ops.overlays, ops.wiring); open for proof on the install or a decision, not for code",
-    updated: "2026-09-30",
+    status: "READY FOR TESTING",
+    why: "Built, wired and off until switched on; the memory wait is over (needs-rupash 120, decided A on 2026-10-05; about 7,000 MB available against the 2,304 MB the ledger's limits add up to, measured read-only on 2026-10-14). Each of the five services carries a hard memory limit equal to its budget, and saving a list of services that would not all fit in the memory the server last measured is refused at Settings. To prove it on the install: switch langfuse on as for M32.1.1.1, then check the install check that each of the five runs under its budgeted limit passes. It closes when the install's two newest runs both pass it. PRIOR WORK: ops.overlays, ops.acceptance_checks_services, ops.wiring, docker-compose.langfuse.yml",
+    updated: "2026-10-14",
   },
   "M32.2.1.1": {
-    status: "BLOCKED",
-    why: "waits on memory for the personal-data detector: 1,536 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-30 (needs-rupash 120, row 1). PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_services, ops.overlays, ops.pii); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-g4",
-    updated: "2026-09-30",
+    status: "READY FOR TESTING",
+    why: "Built, wired and off until switched on; the memory wait is over (needs-rupash 120, decided A on 2026-10-05; the detector's 1,536 MB fits beside the ledger's 2,304 MB in about 7,000 MB available, measured read-only on 2026-10-14). To prove it on the install: open Install, Settings, set Optional services this server runs to presidio, save, wait for the next update to finish, then look at the install's next acceptance run, which runs after each update, and check the install check that the detector finds every entity the scrub relies on passes. To undo it set the setting back to none. It closes when the install's two newest runs both pass it. The model server (M32.2.1.2) still waits on a larger server (item 120, row 2). PRIOR WORK: ops.overlays, ops.acceptance_checks_services, ops.pii, docker-compose.presidio.yml",
+    updated: "2026-10-14",
   },
   "M32.2.1.2": {
     status: "BLOCKED",
@@ -2980,9 +2980,9 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M32.5.2.1": {
-    status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in api_routes, components/DataTable.tsx, components/paging.ts +2 more; NOT wired: pages/Records.tsx. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-w1-1; old backup branch recovery/from-windows-20260928-wt-w1-2; old backup branch recovery/from-windows-20260928-wt-w1-2a",
-    updated: "2026-10-06",
+    status: "READY FOR TESTING",
+    why: "built (M32/tanstack-table-every-grid): every list and every table in the console is now drawn through TanStack Table from one feature set, and the Artifacts list, the one list that narrowed the whole estate in the browser, now pages, searches, filters and orders on the server; to prove on the install: open Knowledge and data then Artifacts, type part of an agent's name in the search box and see the list narrow to that agent's artifacts (it asks the server, so one on a later page is found), choose a kind and an order, press Show more until it goes; then open Models and see the failover matrix, the prices and the routing tables read as before, and on Custom connectors type a whole word into a field name without the cursor leaving the box",
+    updated: "2026-10-14",
   },
   "M32.5.2.3": {
     status: "READY FOR TESTING",

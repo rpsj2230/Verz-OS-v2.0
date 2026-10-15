@@ -267,6 +267,70 @@ batch pull requests that touch shared test infrastructure into a train, and to d
 nightly suite before a release. A red nightly on a file a pull request did not select is the signal
 to widen `brain.ops.test_selection`, not to trust it.
 
+## What the unit shards cost, and how they are balanced
+
+Measured on 2026-10-14 for the owner's priority that CI's wall clock is the roadblock. **A pull
+request's wall clock is its slowest unit shard**, and over the last ten successful pull request
+runs one shard in every run was far slower than the other seven (minutes, from the CI API, one row
+per run; the slow shard was a different one in nearly every run):
+
+| Run | Slowest shard | The other seven: median, range |
+| --- | --- | --- |
+| 38551283009 | 66 | 18, 15 to 23 |
+| 38550419596 | 89 | 21, 13 to 23 |
+| 38544768362 | 123 | 20, 12 to 44 |
+| 38540690481 | 81 | 19, 17 to 25 |
+| 38540026813 | 80 | 19, 13 to 25 |
+| 38530768853 | 68 | 11, 6 to 23 |
+| 38529837653 | 66 | 8, 4 to 17 |
+| 38528623476 | 90 | 24, 14 to 40 |
+| 38524660463 | 87 | 18, 16 to 32 |
+| 38521443931 | 81 | 21, 12 to 26 |
+
+**It started on the morning of 2026-10-14.** The thirteen successful pull request runs from
+2026-10-13 13:49 UTC to 2026-10-14 01:59 UTC had a slowest shard of 11 to 42 minutes; all
+twenty-three from 03:18 UTC on had one of 61 to 136. Between them `main` took #581 (2026-10-13
+16:58 UTC), which added `gc.collect()` after every check in
+`brain.ops.acceptance_run.run_suite`. The shard that took the hour was the one holding
+`tests/unit/test_acceptance.py`, whose three tests that run the whole registry (573 checks, once,
+twice and once) call it about 2,300 times in a process that has imported ninety test files and
+records branch coverage. The log of shard 1 of run 38550419596 shows it: the first 3% of the
+shard's tests done a minute in, the next 4% done 69 minutes later, and the remaining 93% in the 18
+minutes after that.
+
+**What was done, and what was left alone.**
+
+1. **The file's tests no longer collect garbage.** An autouse fixture replaces only
+   `acceptance_run`'s own name for `gc`; `tests/unit/test_acceptance_suite_memory.py` still holds
+   that the product collects after every check, because that call fixed a real incident on an
+   install and is right for the worker.
+2. **The shards are balanced on recorded durations.** `ops/ci/test-timings.json` holds seconds per
+   test file, `brain.ops.test_shards` and `brain.ops.test_plan` deal the files greedily by it, and a
+   file with no record is weighed by its lines at the median rate the recorded files show (so a new
+   file lands somewhere sensible, and no record at all is the old split). It was balanced by lines
+   before, which cannot see a file that costs an hour.
+3. **The three registry tests are units of their own** (`brain.ops.test_timings.CARVED_OUT`), so a
+   shard that gets the rest of the file gets a `--deselect` for each carved test that runs
+   elsewhere. Each makes a scratch database of its own, so they are independent. Slicing the
+   registry across jobs is not possible: the roll-up checks read what earlier checks of the same
+   run came to.
+4. **The record is kept fresh from CI.** Every shard, here and in the nightly suite, uploads its
+   JUnit report as `timing-shard-N`. To refresh after a nightly:
+   `gh run download <nightly run id> -p 'timing-shard-*' -D /tmp/timings` then
+   `uv run python -m brain.ops.test_timings refresh /tmp/timings`, and commit
+   `ops/ci/test-timings.json`. The refresh names any file that alone outweighs a shard's even
+   share (`OVERSIZED`), which no assignment can balance around, and
+   `tests/unit/test_test_timings.py` holds the checked-in record to having none.
+
+**What is measured, and what is not.** The coverage floor reads every shard's data exactly as
+before, so no test was taken out of coverage and no gate was loosened. The check names are
+unchanged: of the required checks only `Unit tests and coverage` is a unit-suite job (branch
+protection on `main`, read on 2026-10-14), the shard jobs are not required by name, and nothing
+here renames either. The selection is unchanged. What a recorded duration costs is that it is a
+number from one run on one runner: a test that gets slower is found by the next refresh and not by
+the next shard, and a refresh that finds a file above a shard's share is the cue to speed it up or
+split it.
+
 ## Rollback
 
 Images are tagged by commit SHA, so rolling back is redeploying an older tag - set

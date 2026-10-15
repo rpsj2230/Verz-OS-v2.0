@@ -32,12 +32,14 @@
  * nor this console knows is drawn as itself and marks nothing: inventing "set here" for an
  * unrecognised word would mark a row as locally edited on no evidence at all.
  *
- * Task ids: M39.1.1.5
+ * Task ids: M39.1.1.5, M32.5.2.1
  */
 
 import { Chip } from "../ui/Chip";
 import type { DiffRow } from "./agentWorkspaceState";
 import { SET_ON_THIS_AGENT, TAUGHT_BY_THE_AGENT } from "./agentWorkspaceState";
+import type { GridColumn } from "./gridFeatures";
+import { GridTable } from "./kit/GridTable";
 import "../styles/agent-workspace.css";
 
 /**
@@ -50,11 +52,12 @@ export const DIFF_CAPTION = "This agent beside the template it came from.";
  * What an empty diff says.
  *
  * A copy of `NOTHING_TO_SHOW` in `src/components/DataTable.tsx`, spelled the same and
- * checked against it by test rather than imported: importing it would pull the table
- * library into this module's graph, and the split `src/App.tsx` measures exists because
- * that library is the largest thing in this console. The sentence is the same one for the
- * same reason the grid gives: empty because there is nothing and empty because nothing this
- * reader holds reaches anything are one event and must look like one.
+ * checked against it by test. It was kept as a copy while importing the grid would have pulled
+ * the table library into this module's graph; the table is now drawn through that library
+ * (`GridTable.tsx`), and the copy stays because the two sentences are checked against each
+ * other, which is cheaper than moving a constant other modules import. The sentence is the
+ * same one for the same reason the grid gives: empty because there is nothing and empty because
+ * nothing this reader holds reaches anything are one event and must look like one.
  */
 export const NOTHING_TO_SHOW = "Nothing to show.";
 
@@ -117,6 +120,32 @@ function DiffValue({ value }: { readonly value: string }) {
   return <span className="composition-diff__value">{value}</span>;
 }
 
+const DIFF_COLUMNS: GridColumn<DiffRow>[] = [
+  {
+    id: "path",
+    header: PATH_COLUMN,
+    cell: ({ row }) => <code>{row.original.path}</code>,
+    meta: { rowHeader: true },
+  },
+  { id: "template", header: TEMPLATE_COLUMN, cell: ({ row }) => <DiffValue value={row.original.template} /> },
+  { id: "instance", header: INSTANCE_COLUMN, cell: ({ row }) => <DiffValue value={row.original.instance} /> },
+  {
+    id: "source",
+    header: SOURCE_COLUMN,
+    cell: ({ row }) => (
+      <>
+        <Chip label={row.original.source} />
+        {row.original.setBy === undefined ? null : (
+          <>
+            {" "}
+            <code>{row.original.setBy}</code>
+          </>
+        )}
+      </>
+    ),
+  },
+];
+
 export function CompositionDiff({ rows }: { readonly rows: readonly DiffRow[] }) {
   const groups = groupByPart(rows);
 
@@ -125,54 +154,24 @@ export function CompositionDiff({ rows }: { readonly rows: readonly DiffRow[] })
   }
 
   return (
-    <table className="composition-diff">
-      <caption className="composition-diff__caption">{DIFF_CAPTION}</caption>
-      <thead>
-        <tr>
-          <th scope="col">{PATH_COLUMN}</th>
-          <th scope="col">{TEMPLATE_COLUMN}</th>
-          <th scope="col">{INSTANCE_COLUMN}</th>
-          <th scope="col">{SOURCE_COLUMN}</th>
+    <GridTable
+      className="composition-diff"
+      caption={DIFF_CAPTION}
+      captionClassName="composition-diff__caption"
+      columns={DIFF_COLUMNS}
+      rows={groups.flatMap((group) => group.rows)}
+      rowId={(row) => row.path}
+      rowClassName={(row) =>
+        isSetOnThisAgent(row) || isTaughtByTheAgent(row) ? "composition-diff__row composition-diff__row--local" : "composition-diff__row"
+      }
+      groupOf={(row) => row.part}
+      groupHeader={(part) => (
+        <tr className="composition-diff__part">
+          <th scope="rowgroup" colSpan={COLUMNS}>
+            {part}
+          </th>
         </tr>
-      </thead>
-      {groups.map((group) => (
-        <tbody key={group.part}>
-          <tr className="composition-diff__part">
-            <th scope="rowgroup" colSpan={COLUMNS}>
-              {group.part}
-            </th>
-          </tr>
-          {group.rows.map((row) => (
-            <tr
-              key={row.path}
-              className={
-                isSetOnThisAgent(row) || isTaughtByTheAgent(row)
-                  ? "composition-diff__row composition-diff__row--local"
-                  : "composition-diff__row"
-              }
-            >
-              <th scope="row">
-                <code>{row.path}</code>
-              </th>
-              <td>
-                <DiffValue value={row.template} />
-              </td>
-              <td>
-                <DiffValue value={row.instance} />
-              </td>
-              <td>
-                <Chip label={row.source} />
-                {row.setBy === undefined ? null : (
-                  <>
-                    {" "}
-                    <code>{row.setBy}</code>
-                  </>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      ))}
-    </table>
+      )}
+    />
   );
 }
