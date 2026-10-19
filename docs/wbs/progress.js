@@ -4954,6 +4954,21 @@ const PROGRESS = {
     why: "TRIAGE 2026-10-13 class 2 (partly built): docs/install/network.md and threat-model.md describe public ports, TLS and the allowlist, and ops/security exists; no probe from outside the allowlist and no alert on the install's own certificate within fourteen days exists (ops/website_probe.py reads other sites' certificates only). NEXT: Build an external probe job and a certificate-expiry alert to a named person, then a check that reads the alert configuration; the outside-address probe itself is a person step.",
     updated: "2026-10-13",
   },
+  "M27.15.75": {
+    status: "READY FOR TESTING",
+    why: "To test it on the install: open the Install page and find the check 'the console names no font host and serves every font it ships' passing; open any console page with the browser's network tab open and see every font file come from the install's own address and none from a font service; open /font-licences.txt on the install to read the fonts' licence notices. In CI the 'Console types, boundaries, tests, build' job audits the built bundle (python -m brain.ops.bundle_audit console/dist) and the nightly Browser workflow records every font request of every page.",
+    updated: "2026-10-14",
+  },
+  "M27.15.79": {
+    status: "READY FOR TESTING",
+    why: "Proved by the CI job 'Dependency audit' (python -m brain.ops.dependency_policy offline): it reads every package in the console's lock, build-time ones included, and refuses one whose licence is not on the allowed list or is not recorded. To see it refuse, open a pull request adding a console dependency under a licence the list does not name and read the job's output. Three build-time packages wait on you in needs-rupash item 238; the job prints them on every run.",
+    updated: "2026-10-14",
+  },
+  "M27.15.83": {
+    status: "BLOCKED",
+    why: "Partly built, and the rest is the owner's to supply. Built: docs/reference-screens/index.json records, for each console page the reference screenshots cover, what was adapted and what was refused, and console/tests/reference-screens.test.ts holds it against the route table and the two kept rejections. Not done: the thirteen images are not in the repository. They are in the owner's workspace outside it, and the session that built this could not read or copy them. Copy them into docs/reference-screens/ and set each entry's file in index.json (needs-rupash item 237); then the leaf is ready for testing.",
+    updated: "2026-10-14",
+  },
   "M27.15.68": {
     status: "READY FOR TESTING",
     why: "Built on branch M27/console-lists-wizards-buttons. Prove it on the install. (1) Sign in as an administrator, open Agent templates and a published template. The Install card is now a short wizard, Step 1 of 3 or 4: its name, who can find it, where it answers (only when the version offers channels), then Check and install. Type a new name, tick For my department, press Next. (2) Go to another page, such as Agents, then come back to the same template: you are on the same step with the same answers, and a line says you are back where you left. (3) On the last step press Install: a confirmation names what will be installed, and nothing is sent until you confirm; the new agent opens disabled. Back on the template the install is blank again. (4) Press Start again part way through and it empties; sign out and sign in as somebody else and nothing the first person typed is there. (5) First run on a fresh install: enter the setup code, finish the company screen, close the tab, reopen the first-run address, enter the same code and you land on the next screen with the company answers still in the boxes. A provider key typed on its screen is not kept.",

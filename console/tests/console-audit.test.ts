@@ -48,38 +48,9 @@ import {
   templateOf,
   type Measured,
 } from "./support/consoleAudit";
-import { consoleSourcePaths, staticImportGraph } from "./support/typescript";
+import { staticImportGraph } from "./support/typescript";
+import { drawnScreens as screens } from "./support/routeTable";
 import { everyWrite } from "./support/writes";
-
-/**
- * Every address the route table registers, read from `App.tsx` and every page's route file, with
- * the page file drawing it.
- */
-function screens(): Map<string, string> {
-  const tables = [
-    readConsoleFile("src/App.tsx"),
-    ...consoleSourcePaths("src/pages")
-      .filter((one) => one.endsWith(".route.tsx"))
-      .map((one) => readConsoleFile(one)),
-  ];
-  const app = tables.join("\n");
-  const fileOf = new Map<string, string>();
-  for (const found of app.matchAll(/import \{ (\w+) \} from "\.\/(?:pages\/)?(\w+)";/g)) {
-    fileOf.set(found[1] as string, `src/pages/${found[2] as string}.tsx`);
-  }
-  for (const found of app.matchAll(/const (\w+) = lazy\([^;]*?import\("\.\/(?:pages\/)?(\w+)"\)/gs)) {
-    fileOf.set(found[1] as string, `src/pages/${found[2] as string}.tsx`);
-  }
-  const constants: Record<string, string> = { CALLBACK_PATH: "/auth/callback", SIGNED_OUT_PATH: "/signed-out", FIRST_RUN_PATH: "/first-run", STAFF_LIST_RETURN_PATH: "/first-run/staff-list" };
-  const drawn = new Map<string, string>();
-  for (const found of app.matchAll(/\{\s*(?:path: ("[^"]*"|\w+)|index: true), element: \(?\s*<(\w+)/g)) {
-    const raw = found[1];
-    const address =
-      raw === undefined ? "/" : raw.startsWith('"') ? `/${raw.slice(1, -1)}` : (constants[raw] ?? raw);
-    drawn.set(address === "//" ? "/" : address, fileOf.get(found[2] as string) ?? `<${found[2] as string}>`);
-  }
-  return drawn;
-}
 
 /**
  * Every file a page's static imports reach, the page among them. A page that imports nothing is

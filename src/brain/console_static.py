@@ -66,7 +66,7 @@ share an origin. See `NO_INSTALLS_VALUES_ARE_BUILT_INTO_THE_BUNDLE`. The install
 arrives the same way, already turned into the colours the console draws with it and measured
 for contrast in both themes, which `served_accent` argues, and so do its names and logo.
 
-Task ids: M32.5.1.1, M32.5.1.2, M42.5.14, M42.6.1, M27.10.4, M41.1.4, M27.15.81
+Task ids: M32.5.1.1, M32.5.1.2, M42.5.14, M42.6.1, M27.10.4, M41.1.4, M27.15.81, M27.15.75
 """
 
 from __future__ import annotations
@@ -422,10 +422,62 @@ def mount_console_fallback(app: FastAPI) -> None:
             await unmatched(scope, receive, send)
             return
         found = file_in_bundle(path)
-        response: Response = FileResponse(found) if found is not None else _entry_response(entry)
+        response: Response = (
+            bundle_file_response(found) if found is not None else _entry_response(entry)
+        )
         await response(scope, receive, send)
 
     app.router.default = console_or_unmatched
+
+
+#: The directory Vite writes content-hashed files to: the only one a browser may keep for ever.
+HASHED_ASSET_DIRECTORY: Final = "assets"
+
+#: How long a hashed file may be kept: a year, and `immutable` so a reload does not even revalidate.
+HASHED_ASSET_CACHE_CONTROL: Final = "public, max-age=31536000, immutable"
+
+#: The content type of each font file a bundle carries, named here rather than read from a table.
+#:
+#: `FileResponse` guesses a type from the machine's mime tables, and a slim container with no
+#: `/etc/mime.types` answers from whatever table the interpreter carries, so what a font is served
+#: as would depend on the image's base rather than on this code. A font served as `text/plain` is
+#: refused by a browser that checks, and then the page falls back to the system font with nothing
+#: on screen saying why. The install's fonts are its own (M27.15.75), so what it serves them as is
+#: its own too.
+FONT_CONTENT_TYPES: Final = {
+    ".woff2": "font/woff2",
+    ".woff": "font/woff",
+    ".ttf": "font/ttf",
+    ".otf": "font/otf",
+}
+
+#: Why a hashed file is cached for ever and the entry document never is.
+A_HASHED_FILE_NEVER_CHANGES_UNDER_ITS_NAME: Final = (
+    "Everything Vite writes under assets/ carries a hash of its contents in its name, so a name is "
+    "never reused for different bytes and a browser may keep the file for ever; the entry document "
+    "is the one file whose name stays and whose contents change, and `_entry_response` refuses to "
+    "cache it. Without this the fonts, which are the largest files a page loads, are revalidated "
+    "with the install on every visit."
+)
+
+
+def bundle_file_response(found: Path, root: Path | None = None) -> FileResponse:
+    """A file the bundle carries, with the type a font has and the cache a hashed file may have.
+
+    Anything outside `assets/` (the manifest, the icons, the font notices) is served with the
+    framework's own validators and no lifetime of its own, because its name does not change when
+    its contents do. See `A_HASHED_FILE_NEVER_CHANGES_UNDER_ITS_NAME`.
+    """
+    base = (CONSOLE_DIST if root is None else root).resolve()
+    inside = found.resolve().relative_to(base).parent.parts
+    headers = (
+        {"cache-control": HASHED_ASSET_CACHE_CONTROL}
+        if inside[:1] == (HASHED_ASSET_DIRECTORY,)
+        else None
+    )
+    return FileResponse(
+        found, media_type=FONT_CONTENT_TYPES.get(found.suffix.lower()), headers=headers
+    )
 
 
 #: The console's content security policy for styles, sent with its entry document.
