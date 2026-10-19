@@ -31,6 +31,7 @@ from brain.ops import (
     acceptance,
     acceptance_audit,
     acceptance_checks_accounts,
+    acceptance_checks_automation_canvas,
     acceptance_checks_channels,
     acceptance_checks_class_pools,
     acceptance_checks_connectors_area,
@@ -961,6 +962,21 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         "a_run_sent_to_the_ledger_is_found_there_with_its_model_call",
     ):
         assert outcomes.pop(ledger_check) == (NOT_RUN, acceptance_checks_services.NO_LEDGER_HERE)
+    # The automation canvas is not named in `INSTALL_SERVICES` here and no deploy reported any
+    # service; `tests/unit/test_acceptance_automation_canvas.py` runs the three on that default
+    # and judges each against a report it writes.
+    for canvas_check in (
+        "the_canvas_runs_as_three_services_each_held_to_its_budget",
+        "the_canvas_has_no_way_out_but_its_proxy_and_no_foreign_secret",
+    ):
+        assert outcomes.pop(canvas_check) == (
+            NOT_RUN,
+            acceptance_checks_automation_canvas.NO_CANVAS_HERE,
+        )
+    assert outcomes.pop("the_canvas_runs_where_the_setting_names_it_and_nowhere_else") == (
+        NOT_RUN,
+        acceptance_checks_automation_canvas.THE_SERVICES_ARE_NOT_REPORTED,
+    )
     # No class pooler runs here; `tests/unit/test_class_pools.py` stands a limited login in for
     # the batch pool, reports it running and passes.
     assert outcomes.pop("a_batch_job_holding_its_share_cannot_take_a_persons_connection") == (

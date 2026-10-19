@@ -28,7 +28,7 @@ Nothing here reads a clock. `now` is a parameter for the reason
 `brain.gate.provenance` gives: a rule about dates that reads the clock itself cannot be
 tested at its own boundary, and the boundary is the part that goes wrong.
 
-Task ids: M7.4.2, M7.4.3, M7.4.4
+Task ids: M7.4.2, M7.4.3, M7.4.4, M20.5.1
 """
 
 from __future__ import annotations
@@ -43,6 +43,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from brain.core.department import department_scope
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.scope import Clause, Op, Scope
+from brain.core.scope_sql import scope_narrows
 
 #: The field a personal scope tests. Named once here so the scope builder, the publishing
 #: check and anything that later writes the column cannot drift into two spellings, which
@@ -101,6 +102,56 @@ def width(level: Visibility) -> int:
 def is_wider(candidate: Visibility, than: Visibility) -> bool:
     """True when moving to `candidate` would show the item to somebody new."""
     return width(candidate) > width(than)
+
+
+#: Why the company is decided by a different authority from a department.
+PUBLISHING_TO_THE_COMPANY_NEEDS_AUTHORITY_OVER_THE_COMPANY: Final = (
+    "A publication to a department is decided by whoever holds the approving authority over that "
+    "department's rows, and a publication to the whole company by whoever holds it over "
+    "everything. The two are different grants and not the same grant read twice: an authority "
+    "held in one department says nothing about telling the others, so a department's administrator "
+    "who could publish to the company alone would be deciding for people they were never given "
+    "authority over. One function asks the question for agents, knowledge and every other thing "
+    "published to a level, so a department-scoped grant cannot be enough for the company at one "
+    "door and refused at another."
+)
+
+
+def holds_for_level(
+    entitlement: EntitlementSet,
+    capability: Capability,
+    to_level: Visibility,
+    now: datetime | None = None,
+    *,
+    department: str = "",
+) -> bool:
+    """Whether this entitlement holds `capability` widely enough to decide a publication to
+    `to_level` (M20.5.1).
+
+    **The company needs the capability held over everything**, which is what a Super Admin holds
+    and a department's administrator does not: their grants are scoped to their department, and
+    a grant in a department is not authority over the rest. **A department needs it held over that
+    department** when `department` is named, and over anything at all when it is not, because a
+    caller that does not know the department (`approve_promotion` is handed a proposal and no row)
+    leaves the row question to the caller that does, `brain.console.global_surfaces.
+    may_approve_publication` and its `_in_reach`. A personal level needs no authority, being the
+    owner's own. See `PUBLISHING_TO_THE_COMPANY_NEEDS_AUTHORITY_OVER_THE_COMPANY`.
+
+    `scope_narrows` is sound and incomplete, so a refusal here can be a scope that is in fact
+    unrestricted in a shape the analysis cannot prove; the cost of that is a person asking for the
+    grant to be written plainly, and the cost of the other error is a department deciding for the
+    company.
+    """
+    held = entitlement.scope_for(capability, now)
+    if held is None:
+        return False
+    match to_level:
+        case Visibility.COMPANY:
+            return scope_narrows(Scope.unrestricted(), held)
+        case Visibility.DEPARTMENT if department:
+            return scope_narrows(department_scope(department), held)
+        case _:
+            return True
 
 
 def scope_for(level: Visibility, *, owner_id: str = "", department: str = "") -> Scope:
@@ -333,10 +384,11 @@ def approve_promotion(
             f"approver {approver_id!r}; an approval must be made out of the approver's own reach"
         )
         raise VisibilityError(msg)
-    if not entitlement.holds(PROMOTION_CAPABILITY, now):
+    if not holds_for_level(entitlement, PROMOTION_CAPABILITY, proposal.to_level, now):
         msg = (
-            f"{approver_id!r} does not hold {PROMOTION_CAPABILITY.value}; "
-            "nobody has granted them the promotion path"
+            f"{approver_id!r} does not hold {PROMOTION_CAPABILITY.value} over what a promotion to "
+            f"{proposal.to_level} reaches; nobody has granted them that promotion path. "
+            f"{PUBLISHING_TO_THE_COMPANY_NEEDS_AUTHORITY_OVER_THE_COMPANY}"
         )
         raise VisibilityError(msg)
     return Approval(

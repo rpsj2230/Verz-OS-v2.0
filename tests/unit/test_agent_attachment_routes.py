@@ -5,13 +5,14 @@ registry, so the ceiling check, `0196`'s policies and both its ledger triggers a
 install has, and the answer route's own roster reader is asked what a run would now be handed: the
 tools it carries, and through `entitlement_ceiling` the sources its connector list opens.
 
-Task ids: M39.8.6, M39.2.1.2, M39.1.1.3
+Task ids: M39.8.6, M39.2.1.2, M39.1.1.3, M39.9.2.3
 """
 
 from __future__ import annotations
 
 import uuid
 from collections.abc import Awaitable, Callable, Iterator, Mapping
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -29,6 +30,7 @@ from brain.agents.binding import providers
 from brain.agents.model import entitlement_ceiling
 from brain.api import API_PREFIX
 from brain.app import Settings, create_app
+from brain.automation_gallery_routes import StoredAgentRecords
 from brain.console.reads import Plane, plane_capability
 from brain.console.workspace import Tab, tab
 from brain.core.entitlement import Capability, Grant
@@ -36,6 +38,7 @@ from brain.core.envelope import Entity, IdentityMode, SideEffect, ToolDefinition
 from brain.core.scope import Scope
 from brain.ops.attachment_store import AgentMovedError, StoredAttachments
 from brain.session import make_session_factory
+from brain.tables.attachment import AttachmentPart
 from brain.tools.registry import ToolRegistry
 from tests.fixtures.console_http import gate_wiring, headers
 from tests.fixtures.retirable import retirable
@@ -326,3 +329,57 @@ def test_an_archived_agents_connectors_are_not_written(database: str) -> None:
 
     assert pressed(database, act) == "refused"
     assert sql(database, "SELECT connectors FROM agent.agent WHERE id = %s", AGENT) == [([],)]
+
+
+def test_an_automation_reads_the_agent_as_a_run_carries_it_with_what_was_attached_or_detached(
+    database: str,
+) -> None:
+    """**M39.9.2.3 on PostgreSQL.** The record the automation routes read is the agent folded over
+    its stored attachments, as the answer route's roster reads it: a tool attached since the
+    manifest is on it, a tool detached since is not, and an agent nobody pressed on is its row.
+    Delete this and a tool somebody detached from the agent can still be named on a new automation,
+    and one they attached is never offered."""
+
+    async def go() -> tuple[frozenset[str], frozenset[str], frozenset[str], object]:
+        built = app_engine(database)
+        try:
+            sessions = make_session_factory(built)
+            records = StoredAgentRecords(sessions)
+            before = await records.agent(AGENT)
+            assert before is not None
+
+            async def press(reference: str, attached: bool) -> None:
+                await StoredAttachments(sessions).press(
+                    agent_id=AGENT,
+                    part=AttachmentPart.TOOL,
+                    reference=reference,
+                    attached=attached,
+                    tools=(reference,),
+                    by="u_admin",
+                    reason_code=FROM_THE_AGENT_PAGE,
+                    ent_hash="0" * 32,
+                    trace_id="t-record",
+                    at=datetime(2031, 1, 1, tzinfo=UTC),
+                )
+
+            await press("crm.read_deal", True)
+            attached = await records.agent(AGENT)
+            await press("crm.read_client", False)
+            detached = await records.agent(AGENT)
+            missing = await records.agent("no_such_agent")
+            assert attached is not None and detached is not None
+            return (
+                before.authority.allowed_tools,
+                attached.authority.allowed_tools,
+                detached.authority.allowed_tools,
+                missing,
+            )
+        finally:
+            await built.dispose()
+
+    manifest, attached, detached, missing = run(go)
+
+    assert manifest == {"crm.read_client"}
+    assert attached == {"crm.read_client", "crm.read_deal"}
+    assert detached == {"crm.read_deal"}
+    assert missing is None
