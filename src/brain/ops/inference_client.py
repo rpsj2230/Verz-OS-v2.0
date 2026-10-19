@@ -324,7 +324,10 @@ def http_transport() -> InferenceTransport:
 
 
 def make_client(
-    *, env: Mapping[str, str] | None = None, timeout_seconds: float = EMBED_TIMEOUT_SECONDS
+    *,
+    env: Mapping[str, str] | None = None,
+    timeout_seconds: float = EMBED_TIMEOUT_SECONDS,
+    observer: Callable[[PeakReport], None] | None = None,
 ) -> InferenceEmbeddingClient:
     """An embedding client pointed at this install's inference server.
 
@@ -349,4 +352,5 @@ def make_client(
         transport=_HttpxTransport(client=httpx.Client()),
         url=embed_url(embedding_endpoint(env)),
         timeout_seconds=timeout_seconds,
+        observer=observer,
     )

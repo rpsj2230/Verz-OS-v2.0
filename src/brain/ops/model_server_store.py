@@ -25,9 +25,11 @@ Task ids: M7.2.1, M7.3.3
 
 from __future__ import annotations
 
+import threading
 from datetime import datetime
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Final, cast
 
+import structlog
 from sqlalchemy import Table, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -40,6 +42,8 @@ from brain.tables.model_server import ModelServerPeakRow
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+log = structlog.get_logger()
 
 # A cast at a library boundary: SQLAlchemy types a mapped class's `__table__` as the broader
 # `FromClause`, and `insert` wants the `Table` it always is. Proving it to mypy buys nothing.
@@ -112,3 +116,54 @@ async def recorded_peaks(session: AsyncSession) -> Sequence[RecordedPeak]:
         )
         for row in rows
     )
+
+
+class PeakKeeper:
+    """Holds the reports a worker's clients were told of, until a job writes them down.
+
+    **A client is called from a thread and a session belongs to the event loop**, so the report
+    cannot be written where it is heard. This is the hand-off: `keep` is what a client calls (it
+    is the `observer` of `ModelServerClient` and of `InferenceEmbeddingClient`), `flush` is what the
+    job calls once it is back on the loop with a session of its own. A list and a lock, and nothing
+    that can fail, because the thread calling it is in the middle of a document.
+
+    **A statistic is never a reason to fail a job.** `flush` writes each report in a savepoint of
+    its own and drops the one that is refused, saying so by type and nothing else, so a table that
+    would not take a row costs that row and not the passages the job has just embedded. It is
+    called in a `finally`, so the figures of a job that failed are kept as well: a batch that ran
+    the server out of memory is the one whose peak is wanted most.
+
+    **Bounded.** A worker whose database is down for an hour must not grow without limit, so the
+    oldest reports are dropped past `LARGEST_KEPT`, which is a ring's worth for every part.
+    """
+
+    #: The most reports held at once: one ring for each part, which is all a ring could keep.
+    LARGEST_KEPT: Final = 50 * len(Part)
+
+    def __init__(self) -> None:
+        self._held: list[PeakReport] = []
+        self._lock = threading.Lock()
+
+    def keep(self, report: PeakReport) -> None:
+        """What a client calls when the server told it its memory for a request."""
+        with self._lock:
+            self._held.append(report)
+            del self._held[: -self.LARGEST_KEPT]
+
+    def drain(self) -> tuple[PeakReport, ...]:
+        """Everything held, and nothing held afterwards."""
+        with self._lock:
+            held, self._held = tuple(self._held), []
+        return held
+
+    async def flush(self, sessions: async_sessionmaker[AsyncSession], *, at: datetime) -> int:
+        """Write what is held, one savepoint each, and say how many were kept."""
+        written = 0
+        for report in self.drain():
+            try:
+                async with sessions() as session, session.begin(), session.begin_nested():
+                    await record_peak(session, report, at=at)
+                written += 1
+            except Exception as error:
+                log.warning("the model server's peak was not kept", error=type(error).__name__)
+        return written

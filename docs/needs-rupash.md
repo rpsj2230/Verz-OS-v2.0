@@ -66,6 +66,19 @@ has built and files nobody has fetched. Three things are yours:
    (`/api/v1/install/model-server`) before adding layout, scanned pages or the entity finder, whose sizes
    are the least certain.
 
+**What the three document parts add to the same two questions (1 and 2).** The layout part (Docling), the
+scanned-page part (Tesseract) and the general reader (Apache Tika, a Java program) are written and tested
+over stand-ins for their libraries, and none has run against the real one: the calls into Docling,
+Tesseract, pdfium and Tika are written from their published interfaces. Their files are fetched by the same
+step as the embedding model, from public addresses (Tesseract's small English data from its own
+repository, Tika's server from Maven Central, Docling's models by Docling's own downloader), and none is
+pinned, so question 2 covers them too: after your first install I pin what it recorded for the two single
+files, and Docling's models carry Docling's own revisions. Two things are likely to be wrong on the first
+run and will show as a part that does not load, not as a wrong answer: the exact command line Tika's
+server is started with, and the name of Docling's downloader. Photographs (PNG and JPEG) are now checked at
+the worker by what their headers claim (a header claiming more pixels than any page has is refused) so that
+the scanned-page part can be sent one; with that part off a photograph is refused at the door as before.
+
 **What I need from you:** reply "240: A A" for both recommendations, or the letters you prefer; the third
 is a suggestion for when you switch it on and needs no reply.
 

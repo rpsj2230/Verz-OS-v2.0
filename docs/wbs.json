@@ -950,7 +950,7 @@
     },
     "M7.2.1": {
      "status": "IN PROGRESS",
-     "why": "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14): the model server is an optional service that holds one part at a time, and the layout part is one of them (1,344 MiB by arithmetic with documents up to 25 MB, not measured). Built: the server frame (supervisor, budget, switch, settings, measured peaks). Not built: the layout part's backend and the route that sends an upload to it. PRIOR WORK: knowledge.parse_layout (the contract), ops.inference",
+     "why": "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14): the model server is an optional service that holds one part at a time, and the layout part is one of them (1,344 MiB by arithmetic with documents up to 25 MB, not measured). Built: the server frame (supervisor, budget, switch, settings, measured peaks); the layout part's backend, written from Docling's published interface and never run against it; and the route that sends a queued upload to it before the reader in this process, with an outage left waiting in the queue and the path the read took returned with it. An install check sends the part a one-page PDF. Not built: Docling run for real (the image is unbuilt and unpublished, needs-rupash 235); the path stored beside each passage and shown in a citation (the columns exist, nothing writes them). PRIOR WORK: knowledge.parse_layout (the contract), ops.inference",
      "updated": "2026-10-14"
     },
     "M7.2.2": {
@@ -960,12 +960,12 @@
     },
     "M7.2.3": {
      "status": "IN PROGRESS",
-     "why": "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14): the general reader is one part of the optional model server (a JVM, 832 MiB by arithmetic, not measured). Built: the server frame (supervisor, budget, switch, settings, measured peaks) and, before it, the fallback route's rule. Not built: the part's own backend and the ingest route that sends an unsupported format to it. PRIOR WORK: knowledge.parse_paths",
+     "why": "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14): the general reader is one part of the optional model server (a JVM, 832 MiB by arithmetic, not measured). Built: the server frame; the fallback route's rule and its use in the ingest job (a presentation goes layout then this reader, and an outage waits in the queue instead of ending the file); the part's backend, which starts Tika's server and asks it for plain text only, never metadata, written from Tika's documentation and never run against it. An install check sends it a one-page PDF. Not built: Tika run for real (the image is unbuilt, needs-rupash 235), and a check that sends it a format the layout part cannot open, which is what the leaf is for. PRIOR WORK: knowledge.parse_paths",
      "updated": "2026-10-14"
     },
     "M7.2.4": {
      "status": "IN PROGRESS",
-     "why": "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14): the scanned-page reader is one part of the optional model server (Tesseract, 576 MiB by arithmetic, not measured). Built: the server frame (supervisor, budget, switch, settings, measured peaks). Not built: the part's own backend and the route that sends a scan to it. PRIOR WORK: knowledge.parse_ocr (the contract, not yet wired)",
+     "why": "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14): the scanned-page reader is one part of the optional model server (Tesseract, 576 MiB by arithmetic, not measured). Built: the server frame; the part's backend (a PDF page rendered and recognised one at a time, with a confidence for every page, written from the libraries' published interfaces and never run against them); the route that sends a scan to it last, after the layout part and the reader in this process; and the door that now accepts a photograph when this part is chosen, after the structural check judges its header (a header claiming more pixels than any page has is refused). An install check renders and recognises a one-page PDF. Not built: the libraries run for real (the image is unbuilt, needs-rupash 235), and a check of a real scan. PRIOR WORK: knowledge.parse_ocr (the contract, now wired)",
      "updated": "2026-10-14"
     },
     "M7.2.5": {
@@ -990,17 +990,17 @@
     },
     "M7.3.3": {
      "status": "IN PROGRESS",
-     "why": "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14): the embedding part is the default and the smallest of the model server's parts (Qwen3-Embedding-0.6B at 8 bits, 1,088 MiB by arithmetic, not measured). Built: the server frame (supervisor, budget, switch, settings, measured peaks, two install checks of the frame). Not built: the embedding part's own backend, and the worker's call with the peak kept. PRIOR WORK: knowledge.embed, embed_policy, embed_queue, ops.inference_client",
+     "why": "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14): the embedding part is the default and the smallest of the model server's parts (Qwen3-Embedding-0.6B at 8 bits, 1,088 MiB by arithmetic, not measured). Built: the server frame (supervisor, budget, switch, settings, measured peaks, two install checks of the frame); the embedding part's backend (written from llama.cpp's published interface and never run against it, stating the weights' own revision); the worker passing what its clients were told of the server's memory to the table, and writing it even when the job failed; the model server screen showing the revision the server holds beside the one the install declares; and an install check that the two are the same. Not built: the part run for real (the image is unbuilt and the weights are not fetched, needs-rupash 235), and so no passage embedded by it on an install. PRIOR WORK: knowledge.embed, embed_policy, embed_queue, ops.inference_client",
      "updated": "2026-10-14"
     },
     "M7.3.4": {
      "status": "IN PROGRESS",
-     "why": "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14). The queue exists and now tolerates a server that is down by design: a part not loaded, a host without room and a busy server all answer as an outage, so the work waits and nothing is lost. Not yet: a batch sent to a real embedding part. PRIOR WORK: knowledge.embed_queue",
+     "why": "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14). The queue exists and tolerates a server that is down by design: a part not loaded, a host without room and a busy server all answer as an outage, so the work waits and nothing is lost, and the product's client and the real gateway and supervisor are exercised against each other over a loopback socket in tests with the library stood in. Not yet: a batch sent to a real embedding part on an install (needs-rupash 235). PRIOR WORK: knowledge.embed_queue",
      "updated": "2026-10-14"
     },
     "M7.3.5": {
      "status": "IN PROGRESS",
-     "why": "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14). The rebuild command and the plan are built (knowledge.reembed); it needs an embedding part that answers, which is not built. PRIOR WORK: knowledge.embedding, knowledge.reembed",
+     "why": "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14). The rebuild command and the plan are built (knowledge.reembed), and the embedding part it sends to now exists; a rebuild run on an install whose server answers is what proves it, and that waits on the image (needs-rupash 235). PRIOR WORK: knowledge.embedding, knowledge.reembed",
      "updated": "2026-10-14"
     },
     "M7.4.1": {
@@ -1090,7 +1090,7 @@
     },
     "M7.7.8": {
      "status": "IN PROGRESS",
-     "why": "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14). Every vector already records its model (know.chunk.embedding_model, migration 0010) and a search never compares two models; the rebuild that keeps the previous vectors serving is what the owner's sentence adds and needs an embedding part that answers. PRIOR WORK: knowledge.embedding, knowledge.reembed",
+     "why": "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14). Not blocked on memory. Every vector already records its model (know.chunk.embedding_model, migration 0010) and a search never compares two models; while a rebuild runs, answers come from word search alone, which is what is built. The owner's sentence says the previous vectors keep serving, which the product decided against and put to him as needs-rupash 186 (still open; Option B builds it with a second column and one migration). PRIOR WORK: knowledge.embedding, knowledge.reembed",
      "updated": "2026-10-14"
     },
     "M7.7.9": {
@@ -1100,12 +1100,12 @@
     },
     "M7.7.10": {
      "status": "IN PROGRESS",
-     "why": "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14). A scanned page is kept out of the index under a confidence floor per page, with a notice naming the page, once the scanned-page part and the parse provenance columns (migration 0250, added with the first piece) are wired; neither is wired yet",
+     "why": "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14). Built: a scanned page under the confidence floor is left out of the index, page by page, with every later offset laid out again for what stayed, and the parser hands the pages it left out to the knowledge layer (`ReadWithGaps`, `ParsedDocument.left_out_pages`) with the uploader's wording for them (`left_out_notice`); a page with no recognised word is not named. Not built: the notice written onto the item and shown (the column `know.item.parse_notice` exists, nothing writes it yet). PRIOR WORK: knowledge.parse_ocr",
      "updated": "2026-10-14"
     },
     "M7.7.11": {
      "status": "IN PROGRESS",
-     "why": "The owner's choice is made (needs-rupash 119, 25 MB for every document type) and is the model server's default upload setting; the server's memory follows it, and a larger document makes a larger server. Built: the setting and its sizing. Not built: the worker's start-up finding that the door admits more than the server is sized for, and the check that the largest upload is parsed within the container's limit. PRIOR WORK: knowledge.app_parse_budget",
+     "why": "The owner's choice is made (needs-rupash 119, 25 MB for every document type) and is the model server's default upload setting; the server's memory follows it, and a larger document makes a larger server. Built: the setting and its sizing; the worker's start-up finding that the door admits more than the server is sized for, against the ceiling the install's own parts and upload size give and said only for an install whose server reads documents; and an install check that holds the memory peaks the server has recorded against its limit. Not built: a check that sends the largest upload the install admits through a part, which would cost minutes on every update; peaks are only recorded for documents once the worker keeps them (the next piece). PRIOR WORK: knowledge.app_parse_budget",
      "updated": "2026-10-14"
     }
    }

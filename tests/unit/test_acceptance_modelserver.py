@@ -281,3 +281,106 @@ def test_the_parts_it_is_held_to_are_the_ones_the_settings_name(server: list[str
     finally:
         hold_saved(before)
     assert server
+
+
+# ------------------------------------------------------------------------ the revision it holds
+REVISION = "the_declared_embedding_revision_is_the_one_the_server_holds"
+HELD = "abc123def456"
+
+
+def revision_judged() -> tuple[str, str]:
+    harness = Harness(run="0a1b2c3d", now=LONG_AGO, settings=settings_from({}), connection=None)  # type: ignore[arg-type]
+    try:
+        asyncio.run(mine()[REVISION].run(harness))
+    except Exception as exc:
+        return reason_for(exc)
+    return PASSED, ""
+
+
+@pytest.fixture
+def declared() -> Iterator[None]:
+    before = hold_saved({"INSTALL_SERVICES": "modelserver", "INSTALL_EMBEDDING_REVISION": HELD})
+    yield
+    hold_saved(before)
+
+
+def test_the_revision_check_claims_the_leaf_the_embedding_part_serves() -> None:
+    """Delete this and the check can be moved onto a leaf it says nothing about."""
+    assert mine()[REVISION].leaves == ("M7.3.3",)
+
+
+def test_an_install_that_cannot_be_compared_is_not_run_with_the_reason_that_is_true(
+    server: list[str],
+) -> None:
+    """No server, no embedding part and no declared revision each leave nothing to compare, and
+    each says which, because a red row an install cannot act on teaches its owner to ignore the
+    page. Delete this and any of them shows a failure.
+
+    Nothing is asked of a server in any of the three."""
+    before = hold_saved({})
+    try:
+        assert revision_judged() == (NOT_RUN, modelserver.NO_MODEL_SERVER_HERE)
+        hold_saved({"INSTALL_SERVICES": "modelserver", "INSTALL_MODEL_PARTS": "ocr"})
+        assert revision_judged() == (NOT_RUN, modelserver.NO_EMBEDDING_PART_HERE)
+        hold_saved({"INSTALL_SERVICES": "modelserver"})
+        assert revision_judged() == (
+            NOT_RUN,
+            modelserver.NO_EMBEDDING_REVISION_IS_DECLARED_HERE,
+        )
+    finally:
+        hold_saved(before)
+    assert server == []
+
+
+@pytest.mark.usefixtures("declared")
+def test_a_declared_revision_the_server_says_it_holds_passes(server: list[str]) -> None:
+    """The positive case, asked of the readiness route and nothing else.
+
+    Delete this and a check that fails everything passes every refusal below."""
+    answer(says({"ready": True, "parts": ["embedding"], "revisions": {"embedding": HELD}}))
+
+    assert revision_judged() == (PASSED, "")
+    assert server == ["http://inference-server:8080/ready"]
+
+
+@pytest.mark.usefixtures("declared")
+@pytest.mark.parametrize(
+    ("body", "sentence"),
+    [
+        (
+            {"revisions": {"embedding": "000000000000"}},
+            modelserver.THE_DECLARED_REVISION_IS_NOT_THE_HELD_ONE,
+        ),
+        ({"revisions": {"embedding": None}}, modelserver.THE_SERVER_STATES_NO_REVISION),
+        ({"revisions": {}}, modelserver.THE_SERVER_STATES_NO_REVISION),
+        ({}, modelserver.THE_SERVER_STATES_NO_REVISION),
+        ({"revisions": {"embedding": ""}}, modelserver.THE_SERVER_STATES_NO_REVISION),
+    ],
+    ids=["other-weights", "none-recorded", "empty", "absent", "blank"],
+)
+def test_a_revision_that_differs_or_is_not_stated_fails_with_its_own_sentence(
+    server: list[str], body: dict[str, object], sentence: str
+) -> None:
+    """Different weights and no statement of weights are two failures with two remedies: set the
+    setting, or fetch the file.
+
+    Delete this and every vector is refused for a revision nobody told the owner to change."""
+    answer(says(body))
+
+    assert revision_judged() == (FAILED, sentence)
+
+
+@pytest.mark.usefixtures("declared")
+def test_a_server_that_does_not_answer_fails_the_revision_check_as_unanswering(
+    server: list[str],
+) -> None:
+    """Silent is the same sentence as the readiness check gives, not a revision that differs.
+
+    Delete this and an unreachable server reads as the owner having declared the wrong thing."""
+
+    def silent(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused", request=request)
+
+    answer(silent)
+
+    assert revision_judged() == (FAILED, modelserver.THE_MODEL_SERVER_DID_NOT_ANSWER)
