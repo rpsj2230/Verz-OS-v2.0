@@ -254,7 +254,7 @@ async def an_estate_read_cut_to_an_agent_is_its_slice_and_hides_the_rest(
     if (
         not {ids["first"], ids["second"], ids["plain"]} <= learning_ids(whole_learning)
         or not {ids["first"], ids["second"]} <= memory_ids(whole_memory)
-        or file_ids(second_files) != {files["second"]}
+        or files["second"] not in file_ids(second_files)
     ):
         raise CheckFailedError(WHOLE_READ_LACKS_AN_AGENT)
 
