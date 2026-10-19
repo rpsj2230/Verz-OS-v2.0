@@ -11,7 +11,7 @@
  * leaves with the dialog. What a flow keeps here is what it would print on a confirmation: which
  * uses were chosen, an identifier, a link. See `A_FLOW_REMEMBERS_ITS_PLACE_AND_NO_SECRET`.
  *
- * Task ids: M11.9.4, M27.11.9
+ * Task ids: M11.9.4, M27.11.9, M27.15.68
  */
 
 export const A_FLOW_REMEMBERS_ITS_PLACE_AND_NO_SECRET =
@@ -36,4 +36,13 @@ export function rememberFlow<T>(key: string, place: T): void {
 /** Forget the flow named `key`, once what it was for is done. */
 export function forgetFlow(key: string): void {
   places.delete(key);
+}
+
+/**
+ * Forget every flow, as somebody signs out. A flow's key names the person it was kept for, so a
+ * different person cannot be handed it; this is the second lock, so that nothing one person typed is
+ * still in memory when the next sits down in the same tab.
+ */
+export function forgetAllFlows(): void {
+  places.clear();
 }

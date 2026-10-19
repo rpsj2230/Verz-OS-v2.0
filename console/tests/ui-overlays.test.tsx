@@ -181,7 +181,7 @@ describe("confirmation", () => {
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Keep as it is</AlertDialogCancel>
-                <AlertDialogAction variant="destructive" onClick={confirmed}>
+                <AlertDialogAction variant="danger" onClick={confirmed}>
                   Archive
                 </AlertDialogAction>
               </AlertDialogFooter>
@@ -268,7 +268,7 @@ describe("popover, menu and tooltip", () => {
     render(
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost">Actions for Ticket triage</Button>
+          <Button variant="quiet">Actions for Ticket triage</Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent>
           <DropdownMenuItem onSelect={renamed}>Rename</DropdownMenuItem>

@@ -156,7 +156,7 @@ function Answer({ added, onWiden, onClose }: { readonly added: KnowledgeAdded; r
           <span className="font-medium">{added.title}</span>
           {`. ${added.said}`}
         </p>
-        <Button variant="ghost" size="icon-sm" className="size-11 sm:size-8" aria-label="Dismiss" onClick={onClose}>
+        <Button variant="quiet" size="icon-sm" className="size-11 sm:size-8" aria-label="Dismiss" onClick={onClose}>
           <X aria-hidden />
         </Button>
       </div>

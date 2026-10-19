@@ -247,7 +247,7 @@ function SidebarTrigger({ className, onClick, ...props }: ComponentProps<typeof 
     <Button
       data-sidebar="trigger"
       data-slot="sidebar-trigger"
-      variant="ghost"
+      variant="quiet"
       size="icon-sm"
       aria-expanded={isMobile ? openMobile : open}
       className={cn(className)}
