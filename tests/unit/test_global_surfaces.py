@@ -676,12 +676,15 @@ def a_request(
     item_id: str = "k_1",
     proposer_id: str = "u_dept_admin",
     department: str = MAINTENANCE,
+    to_company: bool = True,
 ) -> Placed[PromotionProposal]:
-    """One real publication request, paired with the row its item sits in."""
+    """One real publication request, paired with the row its item sits in: to the whole company by
+    default, which is the request only the authority held over everything decides (M20.5.1), or
+    to the department the item sits in."""
     proposal = propose_promotion(
         item_id=item_id,
-        from_level=Visibility.DEPARTMENT,
-        to_level=Visibility.COMPANY,
+        from_level=Visibility.DEPARTMENT if to_company else Visibility.PERSONAL,
+        to_level=Visibility.COMPANY if to_company else Visibility.DEPARTMENT,
         proposer_id=proposer_id,
         owner_id="u_owner",
         review_by=NOW + timedelta(days=180),
@@ -701,8 +704,8 @@ def test_the_publication_queue_shows_only_what_this_reader_could_decide() -> Non
 
     Delete this and the queue shows every department's requests to whoever can open it."""
     requests = [
-        a_request(item_id="k_maintenance", department=MAINTENANCE),
-        a_request(item_id="k_finance", department=FINANCE),
+        a_request(item_id="k_maintenance", department=MAINTENANCE, to_company=False),
+        a_request(item_id="k_finance", department=FINANCE, to_company=False),
     ]
     reader = holding(PROMOTION_CAPABILITY.value, department=MAINTENANCE)
 
@@ -710,6 +713,31 @@ def test_the_publication_queue_shows_only_what_this_reader_could_decide() -> Non
 
     assert [one.record.item_id for one in seen] == ["k_maintenance"]
     assert isinstance(seen, tuple)
+
+
+def test_a_request_for_the_whole_company_is_offered_only_to_the_authority_over_everything() -> None:
+    """**M20.5.1.** A department's administrator holds the promotion authority in their own
+    department, and that is not authority to tell every department, so a request to the company is
+    not offered to them even from their own department's item. The holder over everything is
+    offered both it and the department's own.
+
+    Delete this and a department's administrator is shown, and then refused, the company's
+    decisions, or worse is offered the button for them."""
+    to_company = a_request(item_id="k_company", department=MAINTENANCE)
+    to_department = a_request(item_id="k_department", department=MAINTENANCE, to_company=False)
+    department_admin = holding(PROMOTION_CAPABILITY.value, department=MAINTENANCE)
+    super_admin = holding(PROMOTION_CAPABILITY.value, department=None)
+
+    assert [
+        one.record.item_id
+        for one in publication_queue([to_company, to_department], department_admin, NOW)
+    ] == ["k_department"]
+    assert [
+        one.record.item_id
+        for one in publication_queue([to_company, to_department], super_admin, NOW)
+    ] == ["k_company", "k_department"]
+    with pytest.raises(GlobalSurfaceError, match="may not approve"):
+        approve_publication(to_company, department_admin, now=NOW)
 
 
 def test_a_reader_may_not_approve_the_request_they_made() -> None:
@@ -741,7 +769,7 @@ def test_an_approval_is_the_visibility_modules_own_and_carries_the_proposals_dig
 
     Delete this and a second approval type arrives in the console layer."""
     request = a_request()
-    reader = holding(PROMOTION_CAPABILITY.value)
+    reader = holding(PROMOTION_CAPABILITY.value, department=None)
 
     approval = approve_publication(request, reader, now=NOW)
 
@@ -1171,11 +1199,14 @@ def test_publishing_asks_for_the_visibility_capability_and_not_the_one_that_writ
 
     Delete this and the console asks for the wrong capability, and the audience becomes a
     function of somebody's reach."""
-    holds_visibility = holding(AGENT_PUBLICATION_CAPABILITY.value)
-    holds_grants = holding(GOVERNANCE_CONTROL.value)
+    holds_visibility = holding(AGENT_PUBLICATION_CAPABILITY.value, department=None)
+    holds_grants = holding(GOVERNANCE_CONTROL.value, department=None)
 
     assert may_publish(holds_visibility, NOW)
     assert not may_publish(holds_grants, NOW)
+    # A department's administrator holds the capability in their department, which is not the
+    # whole company (M20.5.1).
+    assert not may_publish(holding(AGENT_PUBLICATION_CAPABILITY.value), NOW)
     assert not may_publish(EntitlementSet(principal_id="u_admin", grants=()), NOW)
 
 
@@ -1196,7 +1227,7 @@ def test_the_control_is_offered_only_for_agents_it_would_actually_move() -> None
     gone = an_agent("a_gone", archived_at=NOW - timedelta(days=1))
     ready = an_agent("a_ready")
 
-    reader = holding(AGENT_PUBLICATION_CAPABILITY.value)
+    reader = holding(AGENT_PUBLICATION_CAPABILITY.value, department=None)
     offered = publishable([mine, already, gone, ready], reader, NOW)
 
     assert [one.agent_id for one in offered] == ["a_ready"]
@@ -1216,7 +1247,9 @@ def test_a_reader_without_the_capability_is_offered_nothing_rather_than_a_list()
     reader = holding(GOVERNANCE_CONTROL.value)
 
     assert publishable([ready], reader, NOW) == ()
-    assert publishable([ready], holding(AGENT_PUBLICATION_CAPABILITY.value), NOW) == (ready,)
+    assert publishable(
+        [ready], holding(AGENT_PUBLICATION_CAPABILITY.value, department=None), NOW
+    ) == (ready,)
 
 
 def test_neither_transition_is_written_here_and_both_are_the_lifecycle_modules() -> None:

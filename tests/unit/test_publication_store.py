@@ -25,6 +25,7 @@ from brain.builder.publish import (
     publication_history,
     record_publish,
 )
+from brain.builder.run_cost import cost_of_document
 from brain.gate.injection import AutonomyTier
 from tests.unit.test_acceptance import at_head
 
@@ -64,6 +65,9 @@ def expected(first: Any, second: Any) -> Any:
             agent_id=AGENT, rung=AutonomyTier.SHADOW, approvers=1, widenings=(), refusals=()
         ),
         approvers=("u_approver",),
+        # What the history reads off the stored document: the price of a run of that version, which
+        # `brain.builder.run_cost` computes and this test does not restate (M20.5.2).
+        cost_minor=cost_of_document(second.manifest.document()),
     )
 
 
