@@ -19,11 +19,11 @@
  * (one line under the table now), the "What this screen cannot show" card, and the source position
  * as a default column (it is a column a reader turns on).
  *
- * Task ids: M27.8.14, M27.8.6, M27.15.48, M27.16.1
+ * Task ids: M27.8.14, M27.8.6, M27.15.48, M27.16.1, M27.16.3
  */
 
 import { Download } from "lucide-react";
-import { useCallback, useId, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
@@ -40,6 +40,8 @@ import {
   saveCsv,
   SectionCard,
 } from "../../components/kit";
+import { SavedFilters } from "../../components/kit/SavedFilters";
+import { addressFor } from "../../components/kit/savedFilterStore";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import {
@@ -59,6 +61,7 @@ import {
   LEVELS,
   logsApiPath,
   logsExportApiPath,
+  LOGS_PATH,
   LOGS_LABEL,
   LOGS_LEDE,
   MAX_SEARCH_CHARS,
@@ -122,10 +125,21 @@ function Choice({
   );
 }
 
+/** The parameters a saved filter's parts travel in on this page's address. */
+const SAVED_NAMES = {
+  search: ADDRESS_PARAMETERS.event,
+  filters: { level: ADDRESS_PARAMETERS.level, period: ADDRESS_PARAMETERS.period },
+  sort: ADDRESS_PARAMETERS.order,
+} as const;
+
 function Filters({ filters, search }: { readonly filters: LogFilters; readonly search: URLSearchParams }) {
   const navigate = useNavigate();
   const searchId = useId();
   const [typed, setTyped] = useState(filters.event);
+  // A saved filter changes the address under the box, so the box follows the address.
+  useEffect(() => {
+    setTyped(filters.event);
+  }, [filters.event]);
   const submit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
@@ -154,6 +168,15 @@ function Filters({ filters, search }: { readonly filters: LogFilters; readonly s
         <Button type="submit" variant="outline" size="sm" className="min-h-11 sm:min-h-8">
           Search
         </Button>
+        <SavedFilters
+          label={SEARCH_LABEL}
+          question={{ search: filters.event, filters: { level: filters.level, period: filters.period }, sort: filters.order }}
+          columns={["level", "period"]}
+          sorts={[...ORDERS]}
+          onApply={(question) => {
+            navigate(addressFor(LOGS_PATH, question, SAVED_NAMES, search));
+          }}
+        />
       </form>
       <form
         aria-label={FILTERS_LABEL}

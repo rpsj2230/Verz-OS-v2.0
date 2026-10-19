@@ -11,7 +11,7 @@
  * **Native selects**, for `kit/ListToolbar`'s reason: keyboard-complete, the phone's own picker, and
  * no portal.
  *
- * Task ids: M27.16.1
+ * Task ids: M27.16.1, M27.16.3
  */
 
 import { Search, X } from "lucide-react";
@@ -19,6 +19,7 @@ import { useId, type ReactNode } from "react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { RESET_LABEL } from "../../components/kit";
+import { SavedFilters } from "../../components/kit/SavedFilters";
 
 const SELECT =
   "h-11 min-w-0 max-w-full rounded-md border border-input bg-panel px-2.5 text-sm text-ink shadow-xs outline-hidden focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring sm:h-8";
@@ -116,10 +117,30 @@ export function Narrowing({
         <Choice key={one.label} narrow={one} />
       ))}
       {narrowed && onReset !== undefined ? (
-        <Button type="button" variant="ghost" size="sm" className="min-h-11 sm:min-h-8" onClick={onReset}>
+        <Button type="button" variant="quiet" size="sm" className="min-h-11 sm:min-h-8" onClick={onReset}>
           {RESET_LABEL} <X aria-hidden />
         </Button>
       ) : null}
+      {onSearch === undefined && narrows.length === 0 ? null : (
+        <SavedFilters
+          label={label}
+          question={{
+            search: search ?? "",
+            filters: Object.fromEntries(narrows.map((one) => [one.label, one.value])),
+            sort: "",
+          }}
+          columns={narrows.map((one) => one.label)}
+          sorts={[]}
+          onApply={(question) => {
+            onSearch?.(question.search);
+            // Every choice is set, the ones the saved question does not name to everything, so
+            // applying a saved filter replaces the question rather than adding to it.
+            for (const one of narrows) {
+              one.onChange(question.filters[one.label] ?? "");
+            }
+          }}
+        />
+      )}
     </form>
   );
 }

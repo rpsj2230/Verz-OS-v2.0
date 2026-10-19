@@ -377,7 +377,7 @@ export function JobDetailPage({ control, tab }: { readonly control: string; read
                 <Button
                   key={action}
                   size="sm"
-                  variant={action === "run" ? "default" : "outline"}
+                  variant={action === "run" ? "primary" : "outline"}
                   className="min-h-11 sm:min-h-8"
                   disabled={acts.busy}
                   onClick={() => {
@@ -414,7 +414,7 @@ export function JobDetailPage({ control, tab }: { readonly control: string; read
       }
       switcher={<ViewSwitch label={VIEWS_LABEL} views={views} current={view} />}
       beside={
-        <Button asChild variant="ghost" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
+        <Button asChild variant="quiet" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
           <Link to={JOBS_PATH}>All jobs</Link>
         </Button>
       }

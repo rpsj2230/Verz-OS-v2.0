@@ -173,7 +173,7 @@ export function AgentTools({ agentId }: { readonly agentId: string }) {
             <li key={one.name} className="flex flex-wrap items-center gap-2 border-b border-line py-1.5 last:border-b-0">
               <span className="min-w-0 text-ink [overflow-wrap:anywhere]">{toolWords(one)}</span>
               {attachments.mayChangeTools ? (
-                <Button className="ml-auto" variant="ghost" size="xs" onClick={() => setAsking({ part: "tool", reference: one.name, attached: false })}>
+                <Button className="ml-auto" variant="quiet" size="xs" onClick={() => setAsking({ part: "tool", reference: one.name, attached: false })}>
                   Detach
                 </Button>
               ) : null}
@@ -197,7 +197,7 @@ export function AgentTools({ agentId }: { readonly agentId: string }) {
             <li key={one} className="flex flex-wrap items-center gap-2 border-b border-line py-1.5 last:border-b-0">
               <span className="min-w-0 text-ink [overflow-wrap:anywhere]">{`Reads ${one}`}</span>
               {attachments.mayChangeConnectors ? (
-                <Button className="ml-auto" variant="ghost" size="xs" onClick={() => setAsking({ part: "connector", reference: one, attached: false })}>
+                <Button className="ml-auto" variant="quiet" size="xs" onClick={() => setAsking({ part: "connector", reference: one, attached: false })}>
                   Detach
                 </Button>
               ) : null}

@@ -22,7 +22,7 @@
  * **What was removed.** The breadcrumb as text, the identifiers as the rows' names, and the paragraph
  * about downloads (one line now).
  *
- * Task ids: M27.7.23, M27.16.1
+ * Task ids: M27.7.23, M27.16.1, M27.16.2
  */
 
 import { FETCHING_MORE, NOTHING_MATCHES, SHOW_MORE } from "../../components/ListControls";
@@ -155,7 +155,7 @@ export function ArtifactsPage() {
   return (
     <div data-slot="ops-page" className="flex min-w-0 flex-col gap-4">
       <PageHeader crumbs={[{ label: KNOWLEDGE }, { label: ARTIFACTS_HEADING }]} title={ARTIFACTS_HEADING} lede={ARTIFACTS_LEDE} />
-      <SectionCard title={ARTIFACTS_HEADING} footer={<Line>{CARRIES_ITS_RUN}</Line>}>
+      <SectionCard title={ARTIFACTS_HEADING} hideTitle footer={<Line>{CARRIES_ITS_RUN}</Line>}>
         {nothingRecords ? (
           <div className="flex flex-col gap-1">
             <p className="m-0 text-sm font-medium text-ink">{NOTHING_RECORDED}</p>

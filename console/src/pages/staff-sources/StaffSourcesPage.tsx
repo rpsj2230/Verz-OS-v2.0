@@ -455,7 +455,7 @@ export function StaffSourcesPage() {
   const primary =
     guides === null ? undefined : (
       <Button
-        variant={guides.may_connect ? "default" : "outline"}
+        variant={guides.may_connect ? "primary" : "outline"}
         className="min-h-11 sm:min-h-8"
         onClick={() => {
           setConnecting(true);

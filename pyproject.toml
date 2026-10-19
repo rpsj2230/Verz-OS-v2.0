@@ -89,6 +89,14 @@ files = ["src", "tests"]
 module = "tests.*"
 disallow_untyped_defs = false
 
+# The model server's own libraries are installed in its image (`modelserver/requirements.txt`) and
+# not in this environment, so mypy cannot resolve them here. They are imported only inside the
+# part that uses them and held behind a stand-in in every test, which is what the part modules say
+# about themselves: written from the libraries' documented interfaces and never run against them.
+[[tool.mypy.overrides]]
+module = ["docling.*", "pypdfium2", "pytesseract", "PIL", "PIL.*", "llama_cpp", "gliner", "huggingface_hub"]
+ignore_missing_imports = true
+
 # ---------------------------------------------------------------- pytest
 [tool.pytest.ini_options]
 testpaths = ["tests"]

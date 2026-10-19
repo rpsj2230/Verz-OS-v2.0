@@ -16,7 +16,7 @@
  * What was removed from the old page: the period as a drop-down of four including a year (now the
  * three every Report page offers), and the lede explaining both figures.
  *
- * Task ids: M27.7.17, M27.8.6, M27.16.1
+ * Task ids: M27.7.17, M27.8.6, M27.16.1, M27.16.3
  */
 
 import { useState } from "react";

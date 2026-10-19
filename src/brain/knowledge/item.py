@@ -120,6 +120,12 @@ ARRIVALS: Final = frozenset({ARRIVED_AS_FILE, ARRIVED_AS_LINK})
 #: The longest address a link may be stored under, which is the longest the link door accepts.
 MAX_SOURCE_URL_CHARS: Final = 2048
 
+#: The longest note about how a document was read, in characters. Spelled as
+#: `brain.tables.knowledge.PARSE_NOTICE_CHARS` (the column's width) and
+#: `brain.knowledge.parse_ocr.NOTICE_CHARS` (what the wording keeps inside it), which a test holds
+#: equal.
+MAX_PARSE_NOTICE_CHARS: Final = 400
+
 
 #: The states an item may be retrieved from. Written out rather than expressed as "not
 #: superseded and not archived", so that adding a fifth state is a decision somebody makes
@@ -166,6 +172,10 @@ class KnowledgeItem(BaseModel):
     arrived_as: str = Field(default="", max_length=8)
     #: The address a link was added from, so a person can ask for it again. Only a link has one.
     source_url: str = Field(default="", max_length=MAX_SOURCE_URL_CHARS)
+    #: Pages of a scan that were not added because they were not clear enough to read reliably,
+    #: in the words the uploader is told them in (M7.7.10). Empty for an item read whole, which is
+    #: nearly every item. Page numbers only: nothing the file says is in it.
+    parse_notice: str = Field(default="", max_length=MAX_PARSE_NOTICE_CHARS)
 
     @field_validator("verified_at", "review_by")
     @classmethod

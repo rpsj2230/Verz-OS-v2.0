@@ -74,7 +74,7 @@ function RowMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${row.name}`}>
+        <Button variant="quiet" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${row.name}`}>
           <MoreHorizontal aria-hidden />
         </Button>
       </DropdownMenuTrigger>

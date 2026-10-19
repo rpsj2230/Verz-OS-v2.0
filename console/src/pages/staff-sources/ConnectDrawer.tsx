@@ -289,7 +289,7 @@ function ConnectForm({ guide, onConnected }: { readonly guide: Guide; readonly o
         ))}
         {connected !== "" ? null : (
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" variant={useHeld ? "default" : "outline"} className="min-h-11 sm:min-h-8" disabled={busy}>
+            <Button type="submit" variant={useHeld ? "primary" : "outline"} className="min-h-11 sm:min-h-8" disabled={busy}>
               {useHeld ? SAVE_AND_CONNECT : TEST_CONNECTION}
             </Button>
             {useHeld ? null : (

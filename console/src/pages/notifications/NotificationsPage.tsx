@@ -22,7 +22,7 @@
  * was kept for the reader; and three served sentences under the notices, which are the card's one
  * line and a footer.
  *
- * Task ids: M27.8.11, M23.2.2, M27.16.1
+ * Task ids: M27.8.11, M23.2.2, M27.16.1, M27.16.3
  */
 
 import { useCallback, useState } from "react";
@@ -145,6 +145,7 @@ function Body({ page, onAct }: { readonly page: NotificationsBody; readonly onAc
     <>
       {"rows" in alerts && alerts.rows.length > 0 ? (
         <WholeList
+          exportName="alerts"
           title={ALERTS_HEADING}
           caption={ALERTS_HEADING}
           columns={alertColumns(page)}

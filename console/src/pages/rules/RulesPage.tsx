@@ -27,7 +27,7 @@
  * **What was put in Advanced rather than on the card**: the rule's id as stored, which carries its
  * department as a prefix, and where its table lives.
  *
- * Task ids: M6.5.1
+ * Task ids: M6.5.1, M27.16.2
  */
 
 import { useId, useState } from "react";
@@ -53,7 +53,7 @@ import {
   ADD,
   ADD_HEADING,
   ADD_LEDE,
-  ADDED_BY,
+  ADDED_ON,
   ANSWER_HINT,
   ANSWER_LABEL,
   ANSWERS_WITH,
@@ -124,7 +124,7 @@ function RuleCard({ rule, busy, onRetire }: { readonly rule: RuleShown; readonly
       lede={`${ASKED_BY} ${placeOf(rule)}.`}
       footer={
         <p data-slot="rule-added" className="m-0 text-[12px] text-dim">
-          {ADDED_BY} {rule.created_by}, {when(rule.created_at)}.
+          {ADDED_ON} {when(rule.created_at)}.
         </p>
       }
     >

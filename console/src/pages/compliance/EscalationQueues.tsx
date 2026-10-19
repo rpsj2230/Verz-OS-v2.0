@@ -16,7 +16,7 @@
  * **Every naming is confirmed**, because it replaces whoever was named: the questions handed to the
  * queue from then on reach the person named here, and the confirmation says so in those words.
  *
- * Task ids: M8.3.2
+ * Task ids: M8.3.2, M27.16.3
  */
 
 import { MoreHorizontal, Plus } from "lucide-react";
@@ -270,6 +270,7 @@ export function EscalationQueuesView({ onDone, version }: { readonly onDone: (to
         />
       ) : (
         <EntityTable
+          exportName="escalation-queues"
           caption="Who each escalation queue is handed to"
           columns={columns}
           rows={found.routes}
@@ -278,7 +279,7 @@ export function EscalationQueuesView({ onDone, version }: { readonly onDone: (to
           rowActions={(one) => (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${one.queue}`}>
+                <Button variant="quiet" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${one.queue}`}>
                   <MoreHorizontal aria-hidden />
                 </Button>
               </DropdownMenuTrigger>

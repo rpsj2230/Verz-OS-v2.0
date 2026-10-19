@@ -321,7 +321,7 @@ export function AccessRequestsPage() {
           handledOf(row) ? null : (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for the request from ${nameOf(people, row.asker_id)}`}>
+                <Button variant="quiet" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for the request from ${nameOf(people, row.asker_id)}`}>
                   <MoreHorizontal aria-hidden />
                 </Button>
               </DropdownMenuTrigger>

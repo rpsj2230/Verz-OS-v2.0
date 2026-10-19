@@ -22,7 +22,7 @@
  * the recovery point" (words now), recovery times in bare seconds (in words), and the two record
  * file suffixes (in Advanced). Starting a rehearsal has no route, so it is a `kit/Explanation`.
  *
- * Task ids: M27.16.1
+ * Task ids: M27.16.1, M27.16.3
  */
 
 import { Play } from "lucide-react";
@@ -181,6 +181,7 @@ export function RecoveryPage() {
                 </SectionCard>
               )}
               <WholeList
+                exportName="copies"
                 title={COPIES_HEADING}
                 caption={COPIES_CAPTION}
                 columns={COPY_COLUMNS}

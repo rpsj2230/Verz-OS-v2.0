@@ -16,7 +16,7 @@
  * does, and is confirmed before it is sent. Rejecting needs a reason, which is kept. Nothing on the
  * page counts what the reader was not shown.
  *
- * Task ids: M16.6.5, M16.6.6, M16.7.6
+ * Task ids: M16.6.5, M16.6.6, M16.7.6, M27.16.2
  */
 
 import { FileText } from "lucide-react";
@@ -273,7 +273,9 @@ export function CorrectionsPage() {
   return (
     <div data-slot="corrections-page" className="flex min-w-0 flex-col gap-4">
       <PageHeader crumbs={[{ label: KNOWLEDGE_HEADING, to: LIBRARY_ADDRESS }, { label: CORRECTIONS_HEADING }]} title={CORRECTIONS_HEADING} lede={CORRECTIONS_LEDE} />
-      <SectionCard title={CORRECTIONS_HEADING}>{body}</SectionCard>
+      <SectionCard title={CORRECTIONS_HEADING} hideTitle>
+        {body}
+      </SectionCard>
     </div>
   );
 }

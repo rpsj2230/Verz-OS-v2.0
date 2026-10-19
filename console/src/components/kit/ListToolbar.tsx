@@ -13,10 +13,13 @@
  * platform's own select is keyboard-complete, opens the phone's own picker, and needs no portal. The
  * Radix select is kept for forms whose options need more than a line of text each.
  *
+ * **Saved filters are the last control** (`SavedFilters.tsx`): the question just asked, kept under a
+ * name in this person's own browser. Drawn only for a known person.
+ *
  * **Drawn whatever state the list is in**, so the box somebody is typing in is never unmounted by
  * the loading state that typing started.
  *
- * Task ids: M27.10.2, M27.10.3
+ * Task ids: M27.10.2, M27.10.3, M27.16.3
  */
 
 import { Search, X } from "lucide-react";
@@ -27,6 +30,7 @@ import { SEARCH_LABEL, SORT_LABEL } from "../ListControls";
 import type { Listing } from "../useListing";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { SavedFilters } from "./SavedFilters";
 
 export const RESET_LABEL = "Clear search and filters";
 
@@ -156,7 +160,7 @@ export function ListToolbar<Row>({
       {narrows(question) ? (
         <Button
           type="button"
-          variant="ghost"
+          variant="quiet"
           size="sm"
           className="min-h-11 sm:min-h-8"
           onClick={() => {
@@ -166,6 +170,13 @@ export function ListToolbar<Row>({
           {RESET_LABEL} <X aria-hidden />
         </Button>
       ) : null}
+      <SavedFilters
+        label={label}
+        question={question}
+        columns={choices.map((choice) => choice.column)}
+        sorts={sorts.map((one) => one.value)}
+        onApply={ask}
+      />
     </form>
   );
 }

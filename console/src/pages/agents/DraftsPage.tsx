@@ -11,7 +11,7 @@
  * **States are words**: a draft, checked, waiting for a second approver, sent back, or published,
  * read off the draft's latest version by the API (`brain.builder.agent_drafts.state_of`).
  *
- * Task ids: M27.11.6, M27.15.31, M27.16.1
+ * Task ids: M27.11.6, M27.15.31, M27.16.1, M27.16.3
  */
 
 import { FilePlus2, FileStack } from "lucide-react";
@@ -110,6 +110,7 @@ export function DraftsPage() {
           {drafts.waitingForYou.length === 0 ? null : (
             <SectionCard title={WAITING_HEADING} lede={WAITING_LEDE}>
               <EntityTable
+                exportName="drafts-waiting"
                 caption={WAITING_HEADING}
                 columns={COLUMNS}
                 rows={drafts.waitingForYou}
@@ -129,6 +130,7 @@ export function DraftsPage() {
               />
             ) : (
               <EntityTable
+                exportName="drafts-yours"
                 caption={YOURS_HEADING}
                 columns={COLUMNS}
                 rows={drafts.items}

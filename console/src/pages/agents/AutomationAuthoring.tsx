@@ -598,7 +598,7 @@ function Form({
           </section>
           {busy ? <Status>{REVIEWING}</Status> : null}
           <div className="flex items-center justify-end gap-3">
-            <Button type="button" variant="ghost" className="min-h-11 sm:min-h-9" onClick={onClose}>
+            <Button type="button" variant="quiet" className="min-h-11 sm:min-h-9" onClick={onClose}>
               {KEEP_LABEL}
             </Button>
             <Submit label={REVIEW} busy={busy} />

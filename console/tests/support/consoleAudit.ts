@@ -235,13 +235,14 @@ export const AREAS: Readonly<Record<string, Area>> = {
     routes: [
       "/api/v1/install",
       "/api/v1/install/settings*",
+      "/api/v1/install/model-server",
       "/api/v1/install/limits",
       "/api/v1/install/tuning*",
       "/api/v1/install/capacity",
       "/api/v1/digest/destination",
       "/setup/*",
     ],
-    tables: ["ops.setting", "ops.budget_version", "ops.budget_stop"],
+    tables: ["ops.setting", "ops.budget_version", "ops.budget_stop", "ops.model_server_peak"],
     installation: [
       "INSTALL_LOCALES",
       "INSTALL_CURRENCY",
@@ -249,6 +250,10 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "INSTALL_DIGEST_DESTINATION",
       "INSTALL_DIGEST_TIME",
       "INSTALL_SERVICES",
+      "INSTALL_MODEL_PARTS",
+      "INSTALL_MODEL_IDLE_SECONDS",
+      "INSTALL_MODEL_MEMORY_MIB",
+      "INSTALL_MODEL_UPLOAD_MB",
     ],
     gaps: [
       {

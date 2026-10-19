@@ -13,12 +13,20 @@
  * and must not try. A new agent starts disabled and at Shadow, which the confirmation says in the
  * API's words, and the page then opens it.
  *
+ * **Installing is a stepped wizard whose draft survives leaving the page** (`kit/WizardSteps.tsx`,
+ * `kit/useFlowDraft.ts`): its name, who can find it, where it answers when the version offers
+ * channels, and a last step that shows what will be installed and ends in the same confirmation as
+ * before. The answers are kept in this tab's memory under the person's own name and removed on install,
+ * on "Start again" and on sign-out. The last step's button opens the confirmation and Next never does,
+ * so walking the steps cannot install anything. Rejected: one form with every field at once, which is
+ * what this was, and keeping the draft in the browser's storage, which would outlive the person.
+ *
  * **Withdraw has no route**, so it is a `kit/Explanation` of the `action` form (`template.withdraw`).
  *
- * Task ids: M27.11.7, M27.16.1
+ * Task ids: M27.11.7, M27.16.1, M27.15.68
  */
 
-import { useId, useState, type FormEvent } from "react";
+import { useId, useMemo, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
@@ -39,7 +47,11 @@ import {
   Note,
   SectionCard,
   StatCard,
+  WizardSteps,
+  useFlowDraft,
+  type WizardStep,
 } from "../../components/kit";
+import { useCallerId } from "../../components/kit/caller";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
@@ -102,13 +114,45 @@ function Chips({ values }: { readonly values: readonly string[] }) {
   );
 }
 
+/** What the install keeps between visits: the step, and the three answers. Never anything secret. */
+interface InstallDraft {
+  readonly at: number;
+  readonly name: string;
+  readonly forDepartment: boolean;
+  readonly channels: readonly string[];
+}
+
+export const DRAFT_IS_KEPT =
+  "What you have filled in is kept while this console stays open, so you can leave this page and come back to it. " +
+  "Installing, starting again or signing out removes it.";
+export const PICKED_UP_WHERE_YOU_WERE = "You are back where you left this install.";
+export const START_AGAIN = "Start again";
+export const NAME_STEP = "Its name";
+export const FIND_STEP = "Who can find it";
+export const CHANNELS_STEP = "Where it answers";
+export const CHECK_STEP = "Check and install";
+export const NAME_STEP_HINT = "What the new agent is called in the list.";
+export const FIND_STEP_HINT = "Who can find it until somebody publishes it.";
+export const CHECK_STEP_HINT = "This is what will be installed. Nothing happens until you confirm.";
+
+/** The draft key: one per person, template and version, so nobody is handed another person's. */
+export function installDraftKey(callerId: string | null, templateId: string, version: number): string | null {
+  return callerId === null ? null : `template-install:${callerId}:${templateId}:${String(version)}`;
+}
+
 function InstallCard({ template }: { readonly template: TemplateDetail }) {
   const navigate = useNavigate();
   const { entry } = template;
+  const callerId = useCallerId();
   const version = useResource<TemplateVersion>(versionApiPath(entry.template_id, entry.version));
-  const [name, setName] = useState(entry.display_name);
-  const [forDepartment, setForDepartment] = useState(false);
-  const [channels, setChannels] = useState<ReadonlySet<string>>(new Set());
+  const initial = useMemo<InstallDraft>(
+    () => ({ at: 0, name: entry.display_name, forDepartment: false, channels: [] }),
+    [entry.display_name],
+  );
+  const { draft, change, forget, resumed } = useFlowDraft<InstallDraft>(
+    installDraftKey(callerId, entry.template_id, entry.version),
+    initial,
+  );
   const [pending, setPending] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
@@ -139,15 +183,18 @@ function InstallCard({ template }: { readonly template: TemplateDetail }) {
   }
 
   const choices = readChannelChoices(found.channels);
+  const chosen = new Set(draft.channels);
+  const named = draft.name.trim() === "" ? entry.display_name : draft.name.trim();
+  const answeringOn = choices.filter((one) => chosen.has(one.name)).map((one) => one.label);
 
   function send(digest: string): void {
     setBusy(true);
     void (async () => {
-      const trimmed = name.trim();
+      const trimmed = draft.name.trim();
       const body = {
         expected_digest: digest,
-        for_department: forDepartment,
-        channels: ticked(choices, channels),
+        for_department: draft.forDepartment,
+        channels: ticked(choices, chosen),
         ...(trimmed === "" || trimmed === entry.display_name ? {} : { display_name: trimmed }),
       };
       const result = await request<unknown>(installApiPath(entry.template_id, entry.version), { method: "POST", body });
@@ -158,50 +205,54 @@ function InstallCard({ template }: { readonly template: TemplateDetail }) {
       }
       const agentId = (result.data as { agent?: { agent_id?: unknown } } | null)?.agent?.agent_id;
       setPending(false);
+      // Installed, so the draft has done its work and the next visit starts clean.
+      forget();
       if (typeof agentId === "string") {
         navigate(agentAddress(agentId));
       }
     })();
   }
 
-  return (
-    <SectionCard title={INSTALL_HEADING} lede={found.starts}>
-      <form
-        className="flex min-w-0 flex-col gap-4"
-        noValidate
-        onSubmit={(event: FormEvent<HTMLFormElement>) => {
-          event.preventDefault();
-          setFailure(null);
-          setPending(true);
-        }}
-      >
+  const steps: WizardStep[] = [
+    {
+      key: "name",
+      title: NAME_STEP,
+      hint: NAME_STEP_HINT,
+      body: (
         <div className="flex flex-col gap-2">
           <Label htmlFor={nameId}>Name of the new agent</Label>
           <Input
             id={nameId}
             name="display_name"
-            value={name}
+            value={draft.name}
             maxLength={120}
             aria-describedby={`${nameId}-hint`}
             className="sm:max-w-md"
             onChange={(event) => {
-              setName(event.target.value);
+              change((before) => ({ ...before, name: event.target.value }));
             }}
           />
           <p id={`${nameId}-hint`} className="m-0 text-[12.5px] leading-snug text-dim">
             {NAME_HINT}
           </p>
         </div>
+      ),
+    },
+    {
+      key: "find",
+      title: FIND_STEP,
+      hint: FIND_STEP_HINT,
+      body: (
         <div className="flex items-start gap-2">
           <input
             id={departmentId}
             type="checkbox"
             name="for_department"
             className="mt-1 size-4"
-            checked={forDepartment}
+            checked={draft.forDepartment}
             aria-describedby={`${departmentId}-hint`}
             onChange={(event) => {
-              setForDepartment(event.target.checked);
+              change((before) => ({ ...before, forDepartment: event.target.checked }));
             }}
           />
           <div className="flex flex-col gap-1">
@@ -211,17 +262,83 @@ function InstallCard({ template }: { readonly template: TemplateDetail }) {
             </p>
           </div>
         </div>
-        <ChannelChoices choices={choices} note={found.channels_note} chosen={channels} onChange={setChannels} />
-        {failure === null ? null : <FailureState failure={failure} title={NOT_INSTALLED} />}
-        <div>
-          <Button type="submit" disabled={busy} className="min-h-11 sm:min-h-9">
-            {ACT_LABELS.install}
-          </Button>
-        </div>
-      </form>
+      ),
+    },
+    ...(choices.length === 0
+      ? []
+      : [
+          {
+            key: "channels",
+            title: CHANNELS_STEP,
+            body: (
+              <ChannelChoices
+                choices={choices}
+                note={found.channels_note}
+                chosen={chosen}
+                onChange={(next) => {
+                  change((before) => ({ ...before, channels: ticked(choices, next) }));
+                }}
+              />
+            ),
+          },
+        ]),
+    {
+      key: "check",
+      title: CHECK_STEP,
+      hint: CHECK_STEP_HINT,
+      body: (
+        <form
+          className="flex min-w-0 flex-col gap-4"
+          noValidate
+          onSubmit={(event: FormEvent<HTMLFormElement>) => {
+            event.preventDefault();
+            setFailure(null);
+            setPending(true);
+          }}
+        >
+          <FactList>
+            <Fact label="Name">{named}</Fact>
+            <Fact label="Who can find it">{draft.forDepartment ? "People in your department" : "Only you"}</Fact>
+            {choices.length === 0 ? null : (
+              <Fact label="Where it answers">{answeringOn.length === 0 ? "Nowhere yet" : answeringOn.join(", ")}</Fact>
+            )}
+          </FactList>
+          {failure === null ? null : <FailureState failure={failure} title={NOT_INSTALLED} />}
+          <div>
+            <Button type="submit" disabled={busy} className="min-h-11 sm:min-h-9">
+              {ACT_LABELS.install}
+            </Button>
+          </div>
+        </form>
+      ),
+    },
+  ];
+
+  return (
+    <SectionCard title={INSTALL_HEADING} lede={found.starts}>
+      <div className="flex min-w-0 flex-col gap-3">
+        <WizardSteps
+          steps={steps}
+          at={draft.at}
+          onAt={(next) => {
+            change((before) => ({ ...before, at: next }));
+          }}
+        />
+        {callerId === null ? null : (
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+            <p role="status" className="m-0 text-[12.5px] text-dim">
+              {resumed && draft.at > 0 ? `${PICKED_UP_WHERE_YOU_WERE} ` : ""}
+              {DRAFT_IS_KEPT}
+            </p>
+            <Button type="button" variant="quiet" size="sm" className="min-h-11 sm:min-h-8" onClick={forget}>
+              {START_AGAIN}
+            </Button>
+          </div>
+        )}
+      </div>
       <ConfirmDialog
         open={pending}
-        question={`Install ${name.trim() === "" ? entry.display_name : name.trim()} from ${entry.display_name}, version ${String(entry.version)}?`}
+        question={`Install ${named} from ${entry.display_name}, version ${String(entry.version)}?`}
         consequence={found.starts}
         details={failure === null ? undefined : <FailureState failure={failure} title={NOT_INSTALLED} />}
         confirmLabel={ACT_LABELS.install}

@@ -70,7 +70,7 @@ export function useOverflow<T>(items: readonly T[], limit: number = CONNECTORS_O
   const shown = open ? items : items.slice(0, limit);
   const toggle =
     more > 0 ? (
-      <Button variant="ghost" size="xs" aria-expanded={open} onClick={() => setOpen((was) => !was)}>
+      <Button variant="quiet" size="xs" aria-expanded={open} onClick={() => setOpen((was) => !was)}>
         {open ? "Show fewer" : `${String(more)} more`}
       </Button>
     ) : null;
@@ -120,7 +120,7 @@ export function ConnectorsDetail({ connectors }: { readonly connectors: readonly
           <ConnectorChip key={one.source} one={one} />
         ))}
         {more > 0 ? (
-          <Button variant="ghost" size="xs" aria-expanded={open} onClick={() => setOpen((was) => !was)}>
+          <Button variant="quiet" size="xs" aria-expanded={open} onClick={() => setOpen((was) => !was)}>
             {open ? "Show fewer" : `${String(more)} more`}
           </Button>
         ) : null}
@@ -199,7 +199,7 @@ export function SkillsDetail({
             {one.source === undefined ? null : <span className="text-[11px] text-dim">{SOURCE_WORDS[one.source] ?? one.source}</span>}
             {one.detachable ? (
               <Button
-                variant="ghost"
+                variant="quiet"
                 size="icon-xs"
                 aria-label={`Take ${one.name} off this agent`}
                 onClick={() => setAsking({ kind: "detach", name: one.name, version: one.version, digest: one.digest })}
@@ -306,7 +306,7 @@ export function KnowledgeCard({ knowledge, onWiden }: { readonly knowledge: Know
             {ADD_DOCUMENT}
           </Link>
           {onWiden === undefined ? null : (
-            <Button variant="ghost" size="xs" onClick={onWiden}>
+            <Button variant="quiet" size="xs" onClick={onWiden}>
               Widen what it draws on, through a draft
             </Button>
           )}

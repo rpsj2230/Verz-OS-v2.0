@@ -82,7 +82,7 @@ function RowMenu({ row, onAct }: { readonly row: SubscriberRow; readonly onAct: 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${row.subscriber_id}`}>
+        <Button variant="quiet" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${row.subscriber_id}`}>
           <MoreHorizontal aria-hidden />
         </Button>
       </DropdownMenuTrigger>

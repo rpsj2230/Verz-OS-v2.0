@@ -108,7 +108,7 @@ function Filters({
         <input id={`${id}-to`} type="date" className={CONTROL} value={filter.to} onChange={(event) => onFilter({ ...filter, to: event.target.value })} />
       </div>
       {filter === NO_FILTER ? null : (
-        <Button variant="ghost" size="sm" className="min-h-11 sm:min-h-8" onClick={() => onFilter(NO_FILTER)}>
+        <Button variant="quiet" size="sm" className="min-h-11 sm:min-h-8" onClick={() => onFilter(NO_FILTER)}>
           Clear filters
         </Button>
       )}
@@ -155,18 +155,18 @@ function ArtifactRow({
         <span className="text-[11.5px] text-dim">{STATE_WORDS[item.state] ?? item.state}</span>
         <span className="ml-auto flex flex-wrap gap-1">
           {item.downloadable ? (
-            <Button variant="ghost" size="xs" onClick={() => onFetch(item)}>
+            <Button variant="quiet" size="xs" onClick={() => onFetch(item)}>
               <Download aria-hidden />
               Download
             </Button>
           ) : null}
           {item.changeable && canSupersede && item.state === "current" ? (
-            <Button variant="ghost" size="xs" onClick={() => onAsk({ kind: "supersede", item })}>
+            <Button variant="quiet" size="xs" onClick={() => onAsk({ kind: "supersede", item })}>
               Replace with a newer one
             </Button>
           ) : null}
           {item.changeable && item.state !== "archived" ? (
-            <Button variant="ghost" size="xs" onClick={() => onAsk({ kind: "archive", item })}>
+            <Button variant="quiet" size="xs" onClick={() => onAsk({ kind: "archive", item })}>
               Archive
             </Button>
           ) : null}

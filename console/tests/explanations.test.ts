@@ -393,6 +393,8 @@ export const DISABLED_FOR: Readonly<Record<string, string>> = Object.freeze({
   "src/components/kit/formTemplates.tsx::disabled": DISABLED_BECAUSE.PASSED_ON,
   "src/components/kit/formTemplates.tsx::disabled || readonly": DISABLED_BECAUSE.PASSED_ON,
   "src/components/kit/formTemplates.tsx::enumDisabled?.includes(one.value) === true": DISABLED_BECAUSE.PASSED_ON,
+  "src/components/kit/SavedFilters.tsx::fullForThisName": DISABLED_BECAUSE.EXPLAINED,
+  "src/components/kit/WizardSteps.tsx::index === 0": DISABLED_BECAUSE.EDGE,
   "src/pages/AskDictation.tsx::disabled": DISABLED_BECAUSE.PASSED_ON,
   "src/pages/FirstRun.tsx::at === 0": DISABLED_BECAUSE.EDGE,
   "src/pages/agents/AgentLeash.tsx::to === chosen.rung": DISABLED_BECAUSE.INCOMPLETE,

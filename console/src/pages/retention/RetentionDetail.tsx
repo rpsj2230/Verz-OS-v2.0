@@ -115,7 +115,7 @@ export function HoldPage({ holdId }: { readonly holdId: string }) {
               <>
                 <HistoryLink kind="legal_hold" id={hold.hold_id} />
                 {retention.controls.may_hold ? (
-                  <Button size="sm" variant="destructive" className="min-h-11 sm:min-h-8" disabled={lifting.busy} onClick={() => lifting.lift(hold.hold_id)}>
+                  <Button size="sm" variant="danger" className="min-h-11 sm:min-h-8" disabled={lifting.busy} onClick={() => lifting.lift(hold.hold_id)}>
                     {LIFT_LABEL}
                   </Button>
                 ) : null}

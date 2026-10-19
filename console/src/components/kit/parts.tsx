@@ -18,7 +18,7 @@
  * Every root element carries `data-slot`, which is what `theme/preflight.css` scopes the reset to,
  * so these parts render the same on a page that still has old stylesheets around it.
  *
- * Task ids: M27.10.2
+ * Task ids: M27.10.2, M27.16.2
  */
 
 import { CircleCheck, Info } from "lucide-react";
@@ -33,7 +33,16 @@ export const ADVANCED_LEDE = "Identifiers the system uses, for quoting in a supp
 
 type HeadingLevel = "h2" | "h3";
 
-/** A headed card: a title, a sentence under it, an action at its right, and a footer for notes. */
+/**
+ * A headed card: a title, a sentence under it, an action at its right, and a footer for notes.
+ *
+ * **`hideTitle` is for a card whose title is the page's own.** A list drawn directly under a heading
+ * of the same name needs the name for a screen reader, which finds the card by its label, and does not
+ * need to read it twice with the eye: two headings saying the same thing look like two panels.
+ * `tests/console-cleanup.test.tsx` refuses a page that draws one heading twice. The heading stays in
+ * the document, visually hidden, so the card is still a labelled region; and the header row is not
+ * drawn at all when there is no sentence or action to put in it.
+ */
 export function SectionCard({
   title,
   lede,
@@ -42,6 +51,7 @@ export function SectionCard({
   footer,
   className,
   headingLevel = "h2",
+  hideTitle = false,
   id,
 }: {
   readonly title: string;
@@ -51,10 +61,13 @@ export function SectionCard({
   readonly footer?: ReactNode | undefined;
   readonly className?: string | undefined;
   readonly headingLevel?: HeadingLevel | undefined;
+  /** The title is the page's own: keep it for a screen reader and do not draw it. */
+  readonly hideTitle?: boolean | undefined;
   readonly id?: string | undefined;
 }) {
   const headingId = useId();
   const Heading = headingLevel;
+  const bareHeader = hideTitle && lede === undefined && action === undefined;
   return (
     <section
       data-slot="section-card"
@@ -62,9 +75,9 @@ export function SectionCard({
       id={id}
       className={cn("flex min-w-0 flex-col rounded-md border border-line bg-panel", className)}
     >
-      <div className="flex items-start justify-between gap-3 border-b border-line px-4 py-3">
+      <div className={cn("flex items-start justify-between gap-3 border-b border-line px-4 py-3", bareHeader && "sr-only")}>
         <div className="min-w-0">
-          <Heading id={headingId} className="m-0 text-sm font-semibold text-ink">
+          <Heading id={headingId} className={cn("m-0 text-sm font-semibold text-ink", hideTitle && "sr-only")}>
             {title}
           </Heading>
           {lede === undefined ? null : <p className="m-0 mt-0.5 text-[12.5px] leading-snug text-dim">{lede}</p>}

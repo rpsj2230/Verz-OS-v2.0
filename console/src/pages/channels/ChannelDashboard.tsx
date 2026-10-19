@@ -14,7 +14,7 @@
  * does, and is recorded in the audit ledger (CH2's control). How a person binds is one line: from
  * My workspace, with a one-time code they send from the chat.
  *
- * Task ids: M27.13.1, M10.3.4, M10.1.4, M27.16.1
+ * Task ids: M27.13.1, M10.3.4, M10.1.4, M27.16.1, M27.16.3
  */
 
 import { useMemo, useState } from "react";
@@ -198,6 +198,7 @@ function Bound({ row, version, onChanged }: { readonly row: ChannelRow; readonly
   } else {
     body = (
       <EntityTable
+        exportName="people-bound"
         caption={`People bound on ${row.label}`}
         columns={columns}
         rows={listing.rows}

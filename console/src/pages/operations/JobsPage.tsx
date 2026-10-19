@@ -13,7 +13,7 @@
  * each now), the "Paused by u_admin" principal ids (a name, or "somebody"), and the per-row
  * explanation of what each job keeps true (on the job's About view).
  *
- * Task ids: M27.8.13, M27.15.47, M27.16.1, M17.1.5, M27.13.3
+ * Task ids: M27.8.13, M27.15.47, M27.16.1, M17.1.5, M27.16.2, M27.13.3
  */
 
 import { MoreHorizontal } from "lucide-react";
@@ -95,7 +95,7 @@ function RowMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${name}`}>
+        <Button variant="quiet" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${name}`}>
           <MoreHorizontal aria-hidden />
         </Button>
       </DropdownMenuTrigger>
@@ -336,6 +336,7 @@ export function JobsPage() {
             {page.may_control && !page.controls_switched_on ? <Explanation form="note" act="job.controls_switched_off" /> : null}
             <WholeList
               title={JOBS_LABEL}
+              hideTitle
               caption={JOBS_CAPTION}
               columns={columns}
               rows={page.jobs}

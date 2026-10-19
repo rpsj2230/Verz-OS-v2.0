@@ -25,7 +25,7 @@
  * **No figure anywhere.** The passages are sections, not a numbered list, because a marker is a
  * number and a number here is a count of passages the reader was or was not shown.
  *
- * Task ids: M8.1.2, M15.3.4
+ * Task ids: M8.1.2, M15.3.4, M27.16.2
  */
 
 import { useEffect, useRef } from "react";
@@ -113,9 +113,12 @@ export function CitedDocument() {
     <article className="page">
       <h1>{document.title || UNTITLED}</h1>
       <p className="lede">{CITED_DOCUMENT_LEDE}</p>
-      <p className="note">
-        <code>{document.documentId}</code>
-      </p>
+      {document.title === "" ? (
+        // The reference is shown only when there is no title to say which document this is.
+        <p className="note">
+          <code>{document.documentId}</code>
+        </p>
+      ) : null}
       {cited !== "" && !found ? (
         <p className="note">{document.truncated ? CITED_PASSAGE_NOT_SHOWN : CITED_PASSAGE_GONE}</p>
       ) : null}
