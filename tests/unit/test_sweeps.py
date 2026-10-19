@@ -1076,20 +1076,36 @@ def test_every_task_ids_line_in_this_repository_names_a_leaf_that_exists() -> No
     assert sweeps._claims_that_name_no_leaf() == ()
 
 
-def test_the_counter_reports_nothing_rather_than_failing_without_a_repository() -> None:
+def test_the_counter_reports_nothing_rather_than_failing_without_a_repository(
+    tmp_path: Path,
+) -> None:
     """An advisory line on a sweep must not fail the sweep for want of git. `sweep_dependencies`
     and `_commit_claims_without_tests` both make this choice and this follows them.
 
+    The checkout here has the work breakdown's sources and a history that cannot be read, because
+    the plan is generated from them (`brain.ops.wbs_generate`) and a directory without them is a
+    different failure, refused loudly in `test_wbs_generate.py`.
+
     Delete this and a checkout with no history turns an informational note into a red
     build, which is how a useful advisory gets deleted rather than fixed."""
+    import shutil
+
+    from brain import status as status_module
     from brain.ops import sweeps
 
+    def no_history(*args: object, **kwargs: object) -> object:
+        raise RuntimeError("git is not available")
+
+    shutil.copytree(sweeps.REPO / "docs" / "wbs", tmp_path / "docs" / "wbs")
     original = sweeps.REPO
+    original_reader = status_module.closed_task_ids
     try:
-        sweeps.REPO = Path("/nonexistent-for-this-test")
+        sweeps.REPO = tmp_path
+        status_module.closed_task_ids = no_history  # type: ignore[assignment]
         assert sweeps._source_claims_never_closed_by_a_commit() == 0
     finally:
         sweeps.REPO = original
+        status_module.closed_task_ids = original_reader
 
 
 def test_the_house_style_sweep_raises_on_an_em_dash_rather_than_only_printing() -> None:

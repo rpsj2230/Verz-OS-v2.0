@@ -560,6 +560,34 @@ Not solved, and worth knowing before you meet it: a new item in `docs/needs-rupa
 inserted under `# Open` like every other, and `docs/wbs/progress.js` entries are edited in place,
 so two pull requests that touch the same item or the same leaf still conflict.
 
+**Three files are generated and never committed: `docs/wbs.json`, `docs/tracker.html` and
+`docs/wave-windows.json`.** They are made from `docs/wbs/*.js` by `node docs/wbs/export.js` and
+`node docs/wbs/render.js`, and every pull request that regenerated them conflicted with every other
+one (76 of the last 612 commits to main touched them), so a pull request now changes the sources
+only. Do not `git add` them; they are in `.gitignore`. Nothing for you to run in the ordinary case:
+pytest makes them before collecting (`tests/conftest.py`) and `brain.ops.sweeps traceability` makes
+them before it reads the plan. For anything else, such as `uv run python -m brain.requirements`, a
+console test or a local `docker build`, the one command is:
+
+```
+uv run python -m brain.ops.wbs_generate
+```
+
+It needs `node` (CI's runners have it; on the Mac it is in `/opt/homebrew/bin`). A reader that finds
+the file missing says so in one sentence naming that command, and a source the scripts refuse
+(an id in `progress.js` that names no leaf) stops it with the reason, which is what the CI job
+`Tracker matches the WBS` now checks. Deploy still generates them before the image build, so the
+`/build` pages are unchanged. `brain.ops.wbs_generate` has the argument and the rejected designs.
+Left committed on purpose: `docs/console-audit/` (rendered by the console's own toolchain from the
+live API schema, one file per area), `docs/delivery-checklist.md` (changes only with `acts.js`), and
+the installer's scripts and `docker-compose.full.yml` (a client install needs them in the repository).
+
+**A pull request branched before this change** and still carrying those files goes dirty on merge
+(main deleted what it modified). Fix it once: `git merge origin/main`, then
+`git rm --cached -f docs/wbs.json docs/tracker.html docs/wave-windows.json` (or `git rm -f` and
+resolve the modify/delete as a deletion), commit, push. CI warns, and does not fail, on a pull
+request that still tracks them.
+
 **WBS task ids are positional, so a group is appended and never inserted.** `M27.5.5` means
 "the fifth leaf of the fifth task group of M27", and nothing anchors it to a name. Adding
 `Install screens` as M27's fifth group on 2026-09-07 silently repointed every `M27.5.x` claim
@@ -567,7 +595,7 @@ in `brain/console/reads.py` at four leaves about backups. The traceability sweep
 the one id that fell off the end (`M27.5.5`, reported as naming a group); the other four
 matched real leaves and would have shipped as a correct-looking, wrong claim. The same edit to
 M1 moved `Entitlement system` from `M1.4` to `M1.5`. Append a new group to the end of `tasks`,
-append a new leaf to the end of `s`, and run `node docs/wbs/export.js`, `node docs/wbs/render.js`
+append a new leaf to the end of `s`, and run `uv run python -m brain.ops.wbs_generate`
 and the traceability sweep afterwards, reading the "names a group" note rather than only the
 `ok:` line.
 
@@ -626,7 +654,7 @@ each of those has exactly one test file, so there was nothing else to miss.
 | `src/brain/migration/` | Moving a company off the system it already runs. Seven modules, and every one is a refusal: only knowledge carries across, a vector never does, an entity seed has nowhere to hold the old system's access, and a rebuilt agent starts at Shadow. |
 | `src/brain/browsing/` | An agent with hands. Four refusals: the planner cannot read the page, the policy cannot change mid-run, the credential never reaches the model, the rubric predates the run. |
 | `migrations/versions/` | Alembic. Every new table enables row-level security. |
-| `docs/wbs/*.js` | The work breakdown. `docs/wbs.json` is compiled from it. |
+| `docs/wbs/*.js` | The work breakdown. `docs/wbs.json`, `docs/tracker.html` and `docs/wave-windows.json` are generated from it and not committed. |
 | `docs/needs-rupash.md` | Decisions only the owner can make. Served at `/build/needs-rupash`. |
 | `docs/requirements/register.json` | The owner's requirements, each traced to the leaves that build and prove it. |
 | `ops/` | Keycloak realm, OpenBao policies and runbooks, git hooks. |
