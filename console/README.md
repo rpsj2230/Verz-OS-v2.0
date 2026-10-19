@@ -735,9 +735,12 @@ because they are not only depended on but copied or shipped:
   with software and asks that the copyright notice and the licence travel with the fonts. The texts
   are `node_modules/@fontsource/<font>/LICENSE`.
 
-**What is not done about either**: the built image carries `dist/` and not `node_modules/`, so neither
-notice is inside the image today. A notices file served beside the bundle is the fix, and it belongs
-with whoever next touches the Dockerfile's console stage.
+**The fonts' notice is in the image** (M27.15.75): `scripts/font-licences.mjs` writes
+`font-licences.txt` into `dist/` at build time from each `@fontsource` dependency's own `LICENSE`, the
+install serves it at `/font-licences.txt`, and `python -m brain.ops.bundle_audit console/dist` (run in
+CI after the build, and by the install check over the image's own bundle) fails a font family with no
+section in it. **What is not done:** shadcn/ui's MIT notice above is still not carried in the image;
+a notices file for the copied components belongs with whoever next touches them.
 
 ### The cascade, and how the old pages stay as they were
 

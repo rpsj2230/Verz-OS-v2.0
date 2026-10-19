@@ -2587,6 +2587,11 @@
      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agents.binding, ops.acceptance_checks_binding); open for proof on the install or a decision, not for code",
      "updated": "2026-10-06"
     },
+    "M13.7.9": {
+     "status": "READY FOR TESTING",
+     "why": "Built: the Maintenance Agent template declares the ticket desk and the maintenance records source, three maintenance skills, the HTTP website check and the read-only browser, and installs read-only; its one workflow and its approval are put on the installed agent from the Automations page. To prove it on the install: after the release, run the checks on Install, Acceptance and read the row 'the role templates declare their sources and would answer', which should pass in the two newest runs. Then on Agents, New agent, choose the Maintenance Agent template.",
+     "updated": "2026-10-14"
+    },
     "M13.8.1": {
      "status": "OPEN",
      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agents.binding, agents.model, gate.runtime +2 more); open for proof on the install or a decision, not for code",
@@ -2596,6 +2601,16 @@
      "status": "OPEN",
      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (gate.runtime); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/w3-runtime-side-effects, no PR",
      "updated": "2026-10-06"
+    },
+    "M13.8.7": {
+     "status": "READY FOR TESTING",
+     "why": "Built: the SEO agent template (version 2) declares the analytics and search console connectors, reads the figures each reports, checks a site over HTTP and carries the SEO audit, keyword research and monthly report skills; the monthly report workflow and the channels are set where the builder links to. To prove it on the install: after the release, run the checks on Install, Acceptance and read the row 'the role templates declare their sources and would answer', which should pass in the two newest runs.",
+     "updated": "2026-10-14"
+    },
+    "M13.8.8": {
+     "status": "READY FOR TESTING",
+     "why": "Built: the sales, finance, support and project management templates read the sources they name, bind every tool to one an install registers, and carry the starter skills of their role (finance carries none: none of the eight is about a ledger). To prove it on the install: after the release, open Install, Acceptance, run the checks, and read the row 'the role templates declare their sources and would answer', which should pass in the two newest runs. Then on Agents, New agent, choose the Support Ticket Agent template, finish the steps, and connect Freshdesk if the page says it is waiting for it.",
+     "updated": "2026-10-14"
     },
     "M13.8.15": {
      "status": "READY FOR TESTING",
@@ -5988,10 +6003,25 @@
      "why": "built: console/tests/styled-classes.test.ts compiles the component layer's stylesheet and refuses any class in the markup with no selector and no emitted utility (it found bg-surface, text-ink-3 and text-danger, which nothing defined, and two dozen unstyled hooks), and console/tests/one-failure-component.test.ts refuses a failure drawn by hand, a failure heading typed anywhere but ui/FailureNotice, and a private failure component (it found twelve writes drawing failure.message with no reference). Proved in CI: the console job (Console types, boundaries, tests, build) in .github/workflows/ci.yml runs both through npm run test. On the install: make a write fail, for example set an agent's monthly budget while holding no budget role, and read the heading, the sentence and the reference under the form.",
      "updated": "2026-10-15"
     },
+    "M27.15.75": {
+     "status": "READY FOR TESTING",
+     "why": "To test it on the install: open the Install page and find the check 'the console names no font host and serves every font it ships' passing; open any console page with the browser's network tab open and see every font file come from the install's own address and none from a font service; open /font-licences.txt on the install to read the fonts' licence notices. In CI the 'Console types, boundaries, tests, build' job audits the built bundle (python -m brain.ops.bundle_audit console/dist) and the nightly Browser workflow records every font request of every page.",
+     "updated": "2026-10-14"
+    },
+    "M27.15.79": {
+     "status": "READY FOR TESTING",
+     "why": "Proved by the CI job 'Dependency audit' (python -m brain.ops.dependency_policy offline): it reads every package in the console's lock, build-time ones included, and refuses one whose licence is not on the allowed list or is not recorded. To see it refuse, open a pull request adding a console dependency under a licence the list does not name and read the job's output. Three build-time packages wait on you in needs-rupash item 238; the job prints them on every run.",
+     "updated": "2026-10-14"
+    },
     "M27.15.81": {
      "status": "OPEN",
      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): nothing found on main or on any branch for this task",
      "updated": "2026-10-06"
+    },
+    "M27.15.83": {
+     "status": "BLOCKED",
+     "why": "Partly built, and the rest is the owner's to supply. Built: docs/reference-screens/index.json records, for each console page the reference screenshots cover, what was adapted and what was refused, and console/tests/reference-screens.test.ts holds it against the route table and the two kept rejections. Not done: the thirteen images are not in the repository. They are in the owner's workspace outside it, and the session that built this could not read or copy them. Copy them into docs/reference-screens/ and set each entry's file in index.json (needs-rupash item 237); then the leaf is ready for testing.",
+     "updated": "2026-10-14"
     },
     "M27.16.1": {
      "status": "OPEN",

@@ -27,11 +27,14 @@
  * stylesheets the console had before the component layer into the `legacy` cascade layer as
  * they are read, and `tailwindcss` compiles `src/theme/tailwind.css`. Both run in Vite's `pre`
  * phase, in the order listed. `scripts/legacy-layer.mjs` and `src/theme/tailwind.css` argue each.
+ * `fontLicences` runs last and writes the bundled fonts' licence notices into the bundle
+ * (`scripts/font-licences.mjs`); it reads the bundle's output and changes none of it.
  */
 
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
+import { fontLicences } from "./scripts/font-licences.mjs";
 import { legacyLayer } from "./scripts/legacy-layer.mjs";
 
 /**
@@ -55,7 +58,7 @@ export default defineConfig(({ mode }) => {
   const apiTarget = env.DEV_API_PROXY_TARGET || DEFAULT_DEV_API_TARGET;
 
   return {
-    plugins: [legacyLayer(), tailwindcss(), react()],
+    plugins: [legacyLayer(), tailwindcss(), react(), fontLicences()],
     server: {
       port: DEV_PORT,
       strictPort: true,
