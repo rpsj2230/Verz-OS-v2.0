@@ -20,11 +20,11 @@
 # background automation runs, and it is what is running in production today.
 #
 # **`docker-compose.full.yml` is the `full` profile as one file, since 2026-09-21.** It is not
-# a hand copy like this one: it is the generated merge of the ten files the full profile
+# a hand copy like this one: it is the generated merge of the nine files the full profile
 # composes (`brain.ops.compose.FULL_PROFILE_FILES`), written by `uv run python -m
 # brain.ops.compose`, and `tests/unit/test_compose.py` fails while it and that merge differ.
-# `full` means fourteen components in `brain.ops.wiring`, twenty-three containers, and a host
-# with 16000 MiB to spare, which `brain.ops.compose.host_mib_for` computes; more than the
+# `full` means thirteen components in `brain.ops.wiring`, twenty-two containers, and a host
+# with 12928 MiB to spare, which `brain.ops.compose.host_mib_for` computes; more than the
 # one machine this repository was measured on, and that is a sizing requirement rather than
 # a reason not to describe the profile.
 #
@@ -152,6 +152,10 @@ services:
       INSTALL_DIGEST_TIME: ${INSTALL_DIGEST_TIME:-}
       INSTALL_ALERT_EMAIL: ${INSTALL_ALERT_EMAIL:-}
       INSTALL_SERVICES: ${INSTALL_SERVICES:-}
+      INSTALL_MODEL_PARTS: ${INSTALL_MODEL_PARTS:-}
+      INSTALL_MODEL_IDLE_SECONDS: ${INSTALL_MODEL_IDLE_SECONDS:-}
+      INSTALL_MODEL_MEMORY_MIB: ${INSTALL_MODEL_MEMORY_MIB:-}
+      INSTALL_MODEL_UPLOAD_MB: ${INSTALL_MODEL_UPLOAD_MB:-}
       INSTALL_UPDATE_MODE: ${INSTALL_UPDATE_MODE:-}
     deploy:
       resources:

@@ -81,7 +81,7 @@ function RowMenu({ row }: { readonly row: CredentialRow }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${row.holder}`}>
+        <Button variant="quiet" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${row.holder}`}>
           <MoreHorizontal aria-hidden />
         </Button>
       </DropdownMenuTrigger>

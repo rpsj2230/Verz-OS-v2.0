@@ -24,7 +24,7 @@
  * Removed from the old screen: principal ids typed into and printed on the forms and lists, the role
  * key as a heading, and three forms drawn open under the lists (now one press away).
  *
- * Task ids: M27.11.3, M1.3.2, M1.3.3, M1.3.4, M1.1.5, M1.8.4, M27.16.1, M33.1.2.3
+ * Task ids: M27.11.3, M1.3.2, M1.3.3, M1.3.4, M1.1.5, M1.8.4, M27.16.1, M33.1.2.3, M27.16.3
  */
 
 import { Plus, UserCog } from "lucide-react";
@@ -144,7 +144,7 @@ function Catalogue() {
   return roles.length === 0 ? (
     <p className="m-0 text-[13px] text-dim">There are no roles to show.</p>
   ) : (
-    <EntityTable caption="The platform roles" columns={columns} rows={roles} rowId={(row) => row.role} rowLabel={(row) => roleWords(row.role)} />
+    <EntityTable exportName="platform-roles" caption="The platform roles" columns={columns} rows={roles} rowId={(row) => row.role} rowLabel={(row) => roleWords(row.role)} />
   );
 }
 
@@ -286,6 +286,7 @@ function GroupRules({ version, onWritten }: { readonly version: number; readonly
   } else {
     body = (
       <EntityTable
+        exportName="group-mappings"
         caption="Directory group mappings"
         columns={columns}
         rows={page.rules}
@@ -422,6 +423,7 @@ function Nominations({ version, onWritten }: { readonly version: number; readonl
           <p className="m-0 text-[13px] text-dim">{NOTHING_TO_DECIDE}</p>
         ) : (
           <EntityTable
+            exportName="nominations-waiting"
             caption="Nominations waiting for your decision"
             columns={columns}
             rows={page.deciding}
@@ -444,7 +446,7 @@ function Nominations({ version, onWritten }: { readonly version: number; readonl
         {page.mine.length === 0 ? (
           <p className="m-0 text-[13px] text-dim">{NOMINATED_NOBODY}</p>
         ) : (
-          <EntityTable caption="Your nominations" columns={columns} rows={page.mine} rowId={(row) => row.id} rowLabel={labelOf} />
+          <EntityTable exportName="your-nominations" caption="Your nominations" columns={columns} rows={page.mine} rowId={(row) => row.id} rowLabel={labelOf} />
         )}
       </div>
     );

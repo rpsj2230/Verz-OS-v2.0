@@ -6,6 +6,54 @@ Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
 # Open
 
+## 237. Please copy the reference screenshots into the repository, and say what the thirteenth is for
+
+**What I need from you:** copy the thirteen image files from the `_research/anygen-screenshots` folder in your
+workspace into `docs/reference-screens/` in this repository, and then tell me "237: copied". I will set each
+file's name in `docs/reference-screens/index.json`, and the check that the images are really there starts
+holding.
+
+**In plain words.** Task M27.15.83 says the reference screenshots are held in the docs and each console page
+they cover records what was adapted and what was refused. The record is built: `docs/reference-screens/index.json`
+says, for every console page the screenshots cover, what was adapted and what was refused, and a test holds it
+against the pages and against the two rejections the design keeps (no single on and off learning switch, no
+browser operator on a person's own session). The images themselves are not in the repository and never have been.
+The session that built the record is not allowed to read your workspace folder, so I could not copy them.
+
+**One more thing I cannot tell from the files.** The folder holds thirteen images and the register names twelve
+of them as the source of a requirement. The thirteenth, `image-1788498461996`, has no requirement behind it (the
+register skips ANY-046). If it shows something you wanted built, tell me what and it gets a requirement and a
+record; if it was pasted by mistake, say so and I will take it off the list.
+
+## 238. May three packages that only the console's build and tests use stay under licences the allowed list does not name?
+
+**In plain terms:** task M27.15.79 says every console dependency's licence is on the allowed list, checked in
+CI. Until now the check read only what ships and skipped the 240 packages that are used to build and test the
+console, so it was not true of every dependency. It reads all 387 now. Three of the build-time ones are under a
+licence the list does not name, and none of them is part of what an install runs:
+
+- **argparse** (Python-2.0), a helper of the YAML reader the toolchain uses. The licence is the Python
+  Software Foundation's, a close relative of PSF-2.0, which the list already allows.
+- **caniuse-lite** (CC-BY-4.0), the table of which browsers support what, read while the bundle is compiled. It
+  is a data licence: it asks that the author is credited if the table is redistributed, and the table is not.
+- **lru-cache** 11.x (BlueOak-1.0.0), a small cache inside the test runner. A permissive licence of the same
+  family as MIT.
+
+Today each is printed on every CI run as waiting on you, and nothing is refused. A fourth package outside the
+list, or one of these three under a different licence, is refused.
+
+**Option A: allow all three.** They are added to the owner-decided list by name and licence, as the three
+fonts were in item 70, so another package under the same licence is still refused until you decide on it.
+
+**Option B: allow none, and replace what brings them in.** Not worth doing: each is several steps down a
+tool the console cannot be built without, and none of them reaches an install.
+
+**Option C: leave them waiting.** The CI run keeps printing them and the check stays green.
+
+**My recommendation:** A. None is copyleft, none is part of what an install runs, and the only one with a
+condition (credit for caniuse-lite) applies to redistributing the table, which nothing does.
+
+**What I need from you:** reply "238: A", "238: B" or "238: C".
 ## 235. What may start a backup drill from the console, now that nothing the product runs can?
 
 **In plain terms:** task M27.13.5 asks for a "start a drill" button on the Backup and recovery screen
@@ -37,6 +85,50 @@ live data is, and the product still starts nothing itself. I will build it behin
 off and prove it on your install by pressing the button and reading the record.
 
 **What I need from you:** reply "235: A", "235: B" or "235: C".
+
+## 240. The model server is built to fit your server; three things only you can do or decide
+
+**In plain terms:** you asked that the model server not need more memory than your server has, with the
+kernel's cache counted. It is built that way (see the note at the end of item 120): one optional service,
+off until you name it, that holds one part in memory at a time, starts a part when work arrives and ends
+it after a time you set, measures its own memory for every batch, and says in words when your server
+cannot hold what you chose. None of it has run on a real server, because it needs an image that nobody
+has built and files nobody has fetched. Three things are yours:
+
+1. **Where the image is built and published.** The server's own program is in the repository
+   (`modelserver/Dockerfile`), and the release looks for it next to the application's image, with
+   `-modelserver` on the end of its name and the same tag.
+   - **Option A: a manual build job in the repository's own workflows**, run by you or by me when a
+     release changes it, pushing to the same registry. What I recommend: nothing about the deploy of the
+     application itself changes, and the image is built from the commit it is run with.
+   - **Option B: you build it once on your server** and tell the overlays which image to use. Nothing in
+     the repository changes; each release then needs the same by hand.
+2. **Pinning the model files.** The first install fetches Qwen3's 8-bit file from its public address and
+   records the checksum it received; nobody on this project has downloaded it to read one, so the product
+   cannot yet hold a second install to it.
+   - **Option A: after your first install, I pin the recorded checksum in the product.** What I
+     recommend.
+   - **Option B: leave it unpinned**, so each install trusts what it first receives.
+3. **What to switch on first.** The embedding part is the smallest and does the most: it is what search by
+   meaning waits on. I recommend `modelserver` alone with the default parts, then reading what it measured
+   (`/api/v1/install/model-server`) before adding layout, scanned pages or the entity finder, whose sizes
+   are the least certain.
+
+**What the three document parts add to the same two questions (1 and 2).** The layout part (Docling), the
+scanned-page part (Tesseract) and the general reader (Apache Tika, a Java program) are written and tested
+over stand-ins for their libraries, and none has run against the real one: the calls into Docling,
+Tesseract, pdfium and Tika are written from their published interfaces. Their files are fetched by the same
+step as the embedding model, from public addresses (Tesseract's small English data from its own
+repository, Tika's server from Maven Central, Docling's models by Docling's own downloader), and none is
+pinned, so question 2 covers them too: after your first install I pin what it recorded for the two single
+files, and Docling's models carry Docling's own revisions. Two things are likely to be wrong on the first
+run and will show as a part that does not load, not as a wrong answer: the exact command line Tika's
+server is started with, and the name of Docling's downloader. Photographs (PNG and JPEG) are now checked at
+the worker by what their headers claim (a header claiming more pixels than any page has is refused) so that
+the scanned-page part can be sent one; with that part off a photograph is refused at the door as before.
+
+**What I need from you:** reply "240: A A" for both recommendations, or the letters you prefer; the third
+is a suggestion for when you switch it on and needs no reply.
 
 ## 226. Should a question be estimated before it is answered, and refused when the estimate is more than is left?
 
@@ -2955,6 +3047,19 @@ For B:
 4. Confirm. The server restarts, and the Brain is offline for those few minutes.
 5. Tell me "120: B done". I measure the server again, as for A.
 
+**Redrawn 2026-10-14, after you said the system should not need more memory than your server has, and
+that the kernel's cache has to be counted.** Row 2 no longer asks for 3,840 MB as one block. The model
+server is now an optional service (named `modelserver` in the optional services setting) that holds one
+part in memory at a time: embedding, layout, scanned pages, the general reader and the entity finder are
+chosen one by one, and its memory is the largest part chosen and not their sum. The default choice, the
+embedding part alone, asks for **1,088 MiB**; all five parts together ask for **1,408 MiB**. It starts a
+part when work arrives and ends it after a time you set, and it measures its own memory for every batch
+so the limit can be tuned from figures that ran. **Every one of these sizes is arithmetic or a judgement
+and none has been measured**: there is no server running yet, and each part says where its figure came
+from. The cache is counted twice on purpose: the container's limit covers the model files it maps, and the
+check on your server counts only what the kernel cannot give back. Item 240 is what is left for you to
+decide.
+
 ## 119. How large a file may people upload - DECIDED 2026-10-05: C now, then A once row 2 of item 120 runs
 
 **Your answer, 2026-10-05:** "My recommendation: C now, then A once row 2 of item 120 runs."
@@ -3031,6 +3136,14 @@ ordinary files.
 
 **What I need from you:** reply "119: C, 25", or your choice for each question (A, B or C, and a size
 in MB). Nothing on your server changes for either answer.
+
+**Built 2026-10-14: the second question's 25 MB is the model server's default, as a setting.** Your
+answer was "my recommendation", which for question 2 is 25 MB for every document type, so the model
+server is sized for documents up to 25 MB and the setting `INSTALL_MODEL_UPLOAD_MB` carries it. It is
+a setting and not a constant because another company's documents are a different size, and a larger
+figure makes the server larger (the page says by how much). The upload door itself still admits what
+it admitted (PDFs to 50 MB); until the door is lowered to match, the worker says at start (the parsing
+piece of this work) that the door admits a file the model server would refuse. Tell me if you meant the door to come down to 25 MB too.
 
 ## 168. What a brand-new install ships with - DECIDED 2026-10-06: A, accept both
 

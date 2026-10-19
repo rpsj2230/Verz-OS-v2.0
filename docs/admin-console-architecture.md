@@ -157,7 +157,8 @@ The concepts taken from AnyGen are therefore the ones the design of record alrea
 `docs/screens.html` SCREEN 13 ("What I took from AnyGen, and what I did not"): the agent as a
 container you open, capabilities as one block of connectors, skills and channels, cost on the
 agent's front page, memory as a visible file with history, artifacts as first-class. Part 5.8 lists
-what to check against the screenshots once they are copied under `brain/docs/reference/`.
+what to check against the screenshots once they are copied under `docs/reference-screens/`, where
+`index.json` already records which console page each covers and what was adapted and refused.
 
 ---
 
@@ -1752,7 +1753,9 @@ stays a lazy route. The agent profile page in 4.1a was rebuilt on this base as i
 
 ### 5.8 What to check against the AnyGen screenshots
 
-Once the 14 images are copied under `brain/docs/reference/anygen/`, compare and adapt (never copy):
+Once the images are copied under `docs/reference-screens/` (the owner's folder holds 13; none is in the
+repository yet), compare and adapt (never copy). `docs/reference-screens/index.json` records each covered
+page and `console/tests/reference-screens.test.ts` holds it:
 the template gallery card (what facts sit on a card before opening it); the agent creation stepper
 (section order and where "test" sits); the agent page's capability block (how connectors, skills and
 channels are added and removed in place); connector cards (connected versus available, how status is

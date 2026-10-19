@@ -105,7 +105,7 @@ export function RequestPage({ requestId }: { readonly requestId: string }) {
                       <Button
                         key={decision}
                         size="sm"
-                        variant={decision === "denied" ? "destructive" : "default"}
+                        variant={decision === "denied" ? "danger" : "primary"}
                         className="min-h-11 sm:min-h-8"
                         disabled={decisions.busy}
                         onClick={() => {

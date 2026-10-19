@@ -12,26 +12,29 @@
  * under it has its own states. A shell that drew a second failure notice above every page whenever
  * `/me` could not be had would be saying the same thing twice on the one screen that is about it.
  *
- * **Its own request rather than the Overview's.** `api/useResource.ts` does not cache, on purpose,
+ * **The shell's request rather than the Overview's.** `api/useResource.ts` does not cache, on purpose,
  * so the Overview and the shell each ask; one extra read of the caller's own facts per page load is
- * cheaper than a shared cache holding facts about whoever was signed in when it filled.
+ * cheaper than a shared cache holding facts about whoever was signed in when it filled. The shell
+ * makes its read once and hands the answer here and to the caller context beside it.
  *
- * Task ids: M27.9.2
+ * Task ids: M27.9.2, M27.16.3
  */
 
-import { useResource } from "../api/useResource";
+import type { Resource } from "../api/useResource";
 import { Notice } from "../ui/Notice";
 import { SignInAgain } from "../ui/SignInAgain";
 import {
   ADMINISTRATION_NEEDS_A_SECOND_FACTOR,
-  ME_API_PATH,
   THIS_SIGN_IN_HAS_NO_SECOND_FACTOR,
   readSignInStrength,
   withheldSentence,
 } from "./signInStrengthQuery";
 
-export function SignInStrength() {
-  const answer = useResource<unknown>(ME_API_PATH);
+/**
+ * Drawn from the answer the shell read, so the shell makes one request for the caller's own facts
+ * and the same answer says who is asking (`components/kit/caller.tsx`).
+ */
+export function SignInStrength({ answer }: { readonly answer: Resource<unknown> }) {
   if (answer.data === null) {
     return null;
   }

@@ -1,6 +1,16 @@
 /**
- * A button, in the variants every page is built from: primary, outline, secondary, quiet, destructive
- * and link.
+ * A button, in the variants every page is built from: primary, outline, secondary, quiet, danger and
+ * link.
+ *
+ * **Three names carry the meaning and the rest are neighbours.** Primary is the one act a page or a
+ * dialog is for, quiet is an action that must not compete with it (Cancel, a row's small act, a
+ * toolbar control), and danger is an act that removes or stops something. They are the names the
+ * owner's design of record uses (`docs/screens.html`), and they replace shadcn/ui's `default`, `ghost`
+ * and `destructive`: a name that says what the button is for survives a restyle, where a name that
+ * says how it looks is wrong the day the look changes. `outline` is the bordered neighbour of primary
+ * and `secondary` the filled one, `link` an inline act. **No other name is accepted**, and
+ * `tests/button-variants.test.tsx` reads every call site in the console to hold it: the type refuses
+ * the old names here, and the test refuses a computed one, which a type cannot see through data.
  *
  * Copied from shadcn/ui's Radix "vega" style at CLI 4.21.0, through the design spike the owner
  * approved, and changed here in four respects:
@@ -20,7 +30,7 @@
  * - **The small sizes use the radius scale** rather than `min(var(--radius-md), 8px)`, which comes
  *   to the same value at this console's radius and names a variable Tailwind does not emit.
  *
- * Task ids: M27.10.2
+ * Task ids: M27.10.2, M27.15.71
  */
 
 import { cva, type VariantProps } from "class-variance-authority";
@@ -33,12 +43,12 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/85",
+        primary: "bg-primary text-primary-foreground hover:bg-primary/85",
         outline:
           "border-border bg-background shadow-xs hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground",
         secondary: "bg-secondary text-secondary-foreground hover:bg-line aria-expanded:bg-line",
-        ghost: "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground",
-        destructive: "bg-crit-wash text-destructive hover:bg-crit-wash/70",
+        quiet: "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground",
+        danger: "bg-crit-wash text-destructive hover:bg-crit-wash/70",
         link: "text-acc-text underline-offset-4 hover:underline",
       },
       size: {
@@ -53,11 +63,19 @@ const buttonVariants = cva(
       },
     },
     defaultVariants: {
-      variant: "default",
+      variant: "primary",
       size: "default",
     },
   },
 );
+
+/**
+ * The names a button may be given, in the order a page reaches for them. `tests/button-variants.test.tsx`
+ * holds every call site in the console to this list, and `ButtonVariant` is the type a wrapper that
+ * passes one through (the dialogs' action and cancel buttons) is written against.
+ */
+export const BUTTON_VARIANTS = ["primary", "outline", "secondary", "quiet", "danger", "link"] as const;
+export type ButtonVariant = (typeof BUTTON_VARIANTS)[number];
 
 type ButtonProps = ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
@@ -65,7 +83,7 @@ type ButtonProps = ComponentProps<"button"> &
     asChild?: boolean;
   };
 
-function Button({ className, variant = "default", size = "default", asChild = false, ...props }: ButtonProps) {
+function Button({ className, variant = "primary", size = "default", asChild = false, ...props }: ButtonProps) {
   const Comp = asChild ? Slot.Root : "button";
   return (
     <Comp

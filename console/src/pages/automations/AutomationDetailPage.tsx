@@ -95,7 +95,7 @@ function Acts({
           <Button
             key={one}
             size="sm"
-            variant={one === "pause" ? "outline" : "default"}
+            variant={one === "pause" ? "outline" : "primary"}
             className="min-h-11 sm:min-h-8"
             onClick={() => {
               onAct(one);

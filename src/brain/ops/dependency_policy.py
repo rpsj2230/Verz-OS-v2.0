@@ -29,7 +29,20 @@ package and a real package whose repository is archived, and requires both refus
 functions the audit calls, then requires the real locks and images to pass. Its evidence file is
 what M0.7.1 asks to be recorded; see `THE_PROOF_ADDS_REAL_PACKAGES_NOT_INVENTED_ONES`.
 
-Task ids: M0.5.7, M0.7.1
+**The console's lock is read whole, which it was not until M27.15.79.** `npm_locked` used to drop
+every package npm marks `dev`, on the argument that a development package never reaches the bundle.
+That is true of what ships and wrong about what the leaf says, "every console dependency": 240 of
+the console lock's 387 packages were never judged, and three of them (argparse, caniuse-lite and a
+nested lru-cache) are outside the allowed list. So a build-time package is now read, flagged
+`build_only`, and judged by the same list. Three things differ for it, each argued where it is
+written: it is never refused for being archived or old (`liveness_findings`), because nothing it
+contains ships; a licence outside the list waits on the owner by name and by licence in
+`BUILD_ONLY_AWAITING_THE_OWNER` and is printed on every run, because the owner has not decided it;
+and one that is neither on the list nor in that table is refused, which is the day a copyleft test
+runner is added. Rejected: leaving them out, which is the silent hole; and refusing them outright,
+which turns the audit red for a data licence on a browser-support table nobody ships.
+
+Task ids: M0.5.7, M0.7.1, M27.15.79
 """
 
 from __future__ import annotations
@@ -193,6 +206,45 @@ OWNER_ALLOWED: Final[Mapping[tuple[str, str], OwnerDecision]] = {
 #: the list cannot be forgotten. Empty since item 70; keyed by component like the table above.
 AWAITING_THE_OWNER: Final[Mapping[tuple[str, str], str]] = {}
 
+_ITEM_BUILD_ONLY: Final = "needs-rupash item 238"
+
+#: Build-time packages outside the allowed list that wait on the owner, pinned to the licence read.
+#:
+#: None of the three ships: `argparse` is `js-yaml`'s, `caniuse-lite` is the browser-support table
+#: `browserslist` reads while the bundle is compiled, and this `lru-cache` is `jsdom`'s, which runs
+#: only under the test runner. They are listed rather than allowed because the owner has not been
+#: asked: allowing a licence is his decision (item 70, item 64), and a table of names waiting on
+#: him is printed on every run so it cannot be forgotten. Keyed by component and pinned to the
+#: licence, like `OWNER_ALLOWED`, so a relicensed release is refused rather than carried over.
+BUILD_ONLY_AWAITING_THE_OWNER: Final[Mapping[tuple[str, str], OwnerDecision]] = {
+    ("npm", "argparse"): OwnerDecision(
+        "Python-2.0",
+        f"a build-time dependency of a YAML reader the toolchain uses; waits on {_ITEM_BUILD_ONLY}",
+    ),
+    ("npm", "caniuse-lite"): OwnerDecision(
+        "CC-BY-4.0",
+        "the browser-support data table read while the bundle is compiled, a data licence "
+        f"rather than a code one; waits on {_ITEM_BUILD_ONLY}",
+    ),
+    ("npm", "lru-cache"): OwnerDecision(
+        "BlueOak-1.0.0",
+        f"the test runner's own cache, never bundled; waits on {_ITEM_BUILD_ONLY}",
+    ),
+}
+
+#: Why a package with no licence in the console's lock is refused and not noted.
+A_CONSOLE_PACKAGE_WITH_NO_LICENCE_IS_REFUSED: Final = (
+    "The leaf is that every console dependency's licence is on the allowed list. A package whose "
+    "lock row names no licence has not shown one, so a note, which nobody reads, would let it "
+    "through unjudged. The console's lock records a licence for every one of its 387 packages, so "
+    "this refuses nothing today and the first one that arrives without is a person's question. "
+    "The automation piece's lock keeps the note: two of its packages carry none, and refusing "
+    "them is a decision about that lock this rule does not take."
+)
+
+#: The locks where `A_CONSOLE_PACKAGE_WITH_NO_LICENCE_IS_REFUSED` applies.
+LOCKS_WHERE_NO_LICENCE_REFUSES: Final = ("console/package-lock.json",)
+
 
 @dataclass(frozen=True)
 class Component:
@@ -206,6 +258,9 @@ class Component:
     licence: str | None = None
     #: Named in a manifest here, rather than pulled in by something that was.
     direct: bool = False
+    #: Reached only from a development dependency: compiled with, never shipped. See the
+    #: module docstring for what that changes and what it does not.
+    build_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -260,18 +315,35 @@ def python_locked(text: str, where: str) -> tuple[Component, ...]:
 
 
 def npm_locked(text: str, where: str) -> tuple[Component, ...]:
-    """Every package a production install of this lock carries, with the licence npm recorded."""
+    """Every package this lock records, with the licence npm recorded, build-time ones flagged.
+
+    **Development packages are read, not dropped** (M27.15.79). Until then a package npm marks
+    `dev` was skipped on the argument that it never reaches the bundle, which left 240 of the
+    console lock's 387 packages unjudged under a leaf that says every dependency. They are
+    flagged `build_only` so the rules that are about shipping (archived, age) can leave them
+    alone while the licence rule still reads them.
+    """
     lock = json.loads(text)
     packages = lock.get("packages", {})
     direct = set(packages.get("", {}).get("dependencies", {}))
     found: list[Component] = []
     for path, package in sorted(packages.items()):
-        if not path or package.get("dev") or "version" not in package:
+        if not path or "version" not in package:
             continue
         name = path.rsplit("node_modules/", 1)[-1]
         licence = str(package.get("license") or "") or None
         chosen = path == f"node_modules/{name}" and name in direct
-        found.append(Component("npm", name, str(package["version"]), where, licence, chosen))
+        found.append(
+            Component(
+                "npm",
+                name,
+                str(package["version"]),
+                where,
+                licence,
+                chosen,
+                build_only=bool(package.get("dev")),
+            )
+        )
     return tuple(found)
 
 
@@ -331,8 +403,12 @@ def _label(component: Component) -> str:
 
 def _judge_licence(component: Component, licence: str | None, into: Findings) -> None:
     key = (component.ecosystem, component.name)
+    waiting = BUILD_ONLY_AWAITING_THE_OWNER.get(key) if component.build_only else None
     if not licence:
-        into.notes.append(f"{_label(component)} declares no licence this can read")
+        if component.ecosystem == "npm" and component.where in LOCKS_WHERE_NO_LICENCE_REFUSES:
+            into.refused.append(f"{_label(component)} records no licence, so nobody has read one")
+        else:
+            into.notes.append(f"{_label(component)} declares no licence this can read")
     elif licence_is_allowed(licence) or (
         key in OWNER_ALLOWED and OWNER_ALLOWED[key].licence == licence
     ):
@@ -342,6 +418,8 @@ def _judge_licence(component: Component, licence: str | None, into: Findings) ->
         into.refused.append(
             f"{_label(component)} is under {licence!r}; the owner allowed it under {decided!r} only"
         )
+    elif waiting is not None and waiting.licence == licence:
+        into.awaiting.append(f"{_label(component)} is under {licence!r}: {waiting.reason}")
     elif key in AWAITING_THE_OWNER:
         into.awaiting.append(f"{_label(component)} is under {licence!r}: {AWAITING_THE_OWNER[key]}")
     else:
@@ -373,7 +451,9 @@ def liveness_findings(
     """Archived, stale, and for a uv lock the licence the index gives the pinned version."""
     out = Findings()
     for component in components:
-        if component.ecosystem == "image":
+        # A build-time package ships nowhere, so its repository being archived or its last release
+        # being old is not a fault in anything a client runs. Its licence is judged offline.
+        if component.ecosystem == "image" or component.build_only:
             continue
         fact = facts.get((component.ecosystem, component.name))
         if fact is None:
@@ -494,7 +574,11 @@ def gather(
     archived: Archived = archived_on_github,
 ) -> dict[tuple[str, str], Liveness]:
     """Every project's facts, asked once per project and eight at a time."""
-    unique = {(c.ecosystem, c.name): c for c in components if c.ecosystem in {"pypi", "npm"}}
+    unique = {
+        (c.ecosystem, c.name): c
+        for c in components
+        if c.ecosystem in {"pypi", "npm"} and not c.build_only
+    }
 
     def ask(component: Component) -> tuple[tuple[str, str], Liveness | None]:
         key = (component.ecosystem, component.name)

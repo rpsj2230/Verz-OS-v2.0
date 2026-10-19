@@ -141,6 +141,11 @@ def test_each_overlay_s_files_describe_exactly_the_containers_it_is_costed_for(
     assert running == sorted(overlay.components)
     for svc, body in described.items():
         limit = str(body["deploy"]["resources"]["limits"]["memory"])  # type: ignore[index]
+        # A limit the install chooses is written `${NAME:-default}M`, and the figure the budget
+        # holds is the default's: the plan costs the install's own and hands it over as NAME.
+        chosen = re.fullmatch(r"\$\{[A-Z_]+:-(\d+)\}M", limit)
+        if chosen is not None:
+            limit = f"{chosen.group(1)}M"
         if svc in overlay.components:
             assert limit == f"{component(svc).memory_mib}M", svc
         else:
@@ -306,15 +311,16 @@ def test_room_is_given_in_declaration_order_and_spent_as_it_is_given() -> None:
 
 
 def test_the_plan_tells_the_script_the_files_the_joins_and_what_to_say() -> None:
-    """The script reads six kinds of line and nothing else. Delete this and a renamed prefix
-    starts nothing on the server with every Python test green."""
+    """The script reads eleven kinds of line and nothing else: the nine an overlay is started with,
+    and the two (`HOST` and `ROOM`) that describe the machine and what each overlay had room for.
+    Delete this and a renamed prefix starts nothing on the server with every Python test green."""
     host = _host(PRESIDIO.cost_mib)
     lines = render(plan((PRESIDIO,), host), host).splitlines()
 
     assert "FILE docker-compose.presidio.yml" in lines
     assert "JOIN pii app brain-worker" in lines
     assert all(
-        re.match(r"^(START|SAY|PREPARE|FILE|JOIN|JOIN_AS_SERVICE|WAIT|AFTER) ", one)
+        re.match(r"^(START|SAY|PREPARE|FILE|ENV|JOIN|JOIN_AS_SERVICE|WAIT|AFTER|HOST|ROOM) ", one)
         for one in lines
     )
     assert "START presidio" in lines
@@ -322,7 +328,7 @@ def test_the_plan_tells_the_script_the_files_the_joins_and_what_to_say() -> None
     assert lines[0].startswith("SAY this server has ")
 
     nothing = render(plan((), host), host).splitlines()
-    assert not [one for one in nothing if not one.startswith("SAY ")]
+    assert not [one for one in nothing if not one.startswith(("SAY ", "HOST ", "ROOM "))]
     assert nothing[-1] == "SAY no optional service is started on this server"
 
 
@@ -1447,7 +1453,7 @@ def test_the_object_store_and_the_canvas_are_services_an_install_can_name() -> N
     assert "objectstore" in services_problem("nonsense")
     assert "automation" in services_problem("nonsense")
     names = [one.name for one in OVERLAYS]
-    assert names[:4] == ["class-pools", "presidio", "langfuse", "sandbox"]
+    assert names[:5] == ["class-pools", "presidio", "modelserver", "langfuse", "sandbox"]
     assert OBJECTSTORE.prepare and OBJECTSTORE.after and AUTOMATION.prepare
 
 
