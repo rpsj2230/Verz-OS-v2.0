@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-19T13:32:17.808876+00:00",
-  "commit": "53532d8f",
-  "commit_subject": "An agent's slice of the Learning, Memory and Artifacts reads, and withdrawing, undoing, exporting and importing a template version (switch off) (#621)",
+  "generated_at": "2026-10-19T14:22:22.570303+00:00",
+  "commit": "b142ed67",
+  "commit_subject": "A person's own Google account on their personal agent, oversight of personal agents, and no team agent carrying either (#623)",
   "total": 1626,
   "done": 1141,
   "percent": 70.2,
-  "built": 1305,
-  "built_percent": 80.3,
-  "built_unproven": 164,
+  "built": 1307,
+  "built_percent": 80.4,
+  "built_unproven": 166,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -134,6 +134,8 @@
     "M38.3.3.2",
     "M38.3.3.3",
     "M38.3.3.4",
+    "M39.10.3",
+    "M39.10.4",
     "M39.5.1.1",
     "M39.5.1.2",
     "M39.5.1.4",
@@ -230,13 +232,13 @@
       "done": 460,
       "percent": 76.8,
       "in_progress": 4,
-      "ready_for_testing": 59,
+      "ready_for_testing": 61,
       "blocked": 3,
-      "open": 73,
+      "open": 71,
       "acts": 1,
       "decided": 56,
-      "built": 518,
-      "built_percent": 86.5
+      "built": 520,
+      "built_percent": 86.8
     },
     {
       "wave": 4,
@@ -683,7 +685,7 @@
       "done": 79,
       "acts": 0,
       "decided": 2,
-      "built": 93
+      "built": 95
     },
     {
       "module": "M40",
@@ -3739,19 +3741,19 @@
       "updated": "2026-10-12"
     },
     "M39.10.3": {
-      "status": "OPEN",
-      "why": "P1. DEPENDS on M39.10.1. Audience scope for PERSONAL is the owner (agents/model.py scope_for); check that every list, the gallery and the oversight view follow it, with no count of hidden agents.",
-      "updated": "2026-10-12"
+      "status": "READY FOR TESTING",
+      "why": "built (M39/personal-agent-oversight-and-workspace): a personal agent is listed, opened and used by its owner alone, and a reader who holds the audit capability for agents (read:audit.agent, in the scope their grant carries) is told on the Agents screen, under Personal agents under oversight, that another person's personal agent exists, whose it is and whether it runs, and is offered nothing: it is not on their roster and its page is refused as for an agent never made. No count anywhere, and the same empty answer for every other reader. Behind the switch Show personal agents to people who hold the audit capability (off). Every place that lists agents is held to the audience by a test that walks the source; a leaver's personal agent is no longer offered to whoever may adopt agents. To prove it on the install: switch the feature on, make a personal agent as one person, open Agents as a person who holds the audit capability for agents, and see it named there and not in the roster; the install check an_auditor_is_told_of_a_personal_agent_and_may_not_use_it does this with reserved people. Not seen by this task: the Usage and Spend breakdowns by agent, which name every agent to a reader of those screens, personal ones included (a question for the owner).",
+      "updated": "2026-10-14"
     },
     "M39.10.4": {
-      "status": "OPEN",
-      "why": "P1. DEPENDS on M11.7.6 and needs item 173's steps done by the owner. Google Workspace is read per person with that person's own token (brain.connectors, My workspace); what is missing is attaching that connection to a personal agent and refusing anyone else.",
-      "updated": "2026-10-12"
+      "status": "READY FOR TESTING",
+      "why": "built (M39/personal-agent-oversight-and-workspace): the owner of a personal agent attaches their own Google account to it from the agent's Profile (Your own Google account, confirmed), and takes it off the same way; the agent then reads that person's own mail, calendar and documents with their own consent and token, for them alone. A colleague, an administrator and any other agent cannot attach or ask for it (answered as for an agent never made), and a team agent never carries one however it is written: the read is now an entity the Google connector provides, so an agent that does not name the connector is not left holding it. Behind the switch Let a person attach their own Google account to their personal agent (off). The real Google sign-in is the owner's step on needs item 173: until then the install check a_persons_own_google_account_is_on_their_agent_for_them_alone passes against recorded Google answers for made-up people and the task is held. To prove it on the install after item 173: connect Google Workspace, connect your own account on My workspace, switch the feature on, attach it on your personal agent, ask it about your mail, and see a colleague get nothing of yours from any agent.",
+      "updated": "2026-10-14"
     },
     "M39.10.5": {
       "status": "OPEN",
-      "why": "P2. DEPENDS on the owner's answer to needs item 189 (recommended C, built as A first). A team agent has no personal Google connection; a shared mailbox is a connection an administrator makes; a person's own mail in a private conversation only, never a room, memory or knowledge item.",
-      "updated": "2026-10-12"
+      "why": "P2. DEPENDS on the owner's answer to needs item 189 (recommended C, built as A first). PARTLY BUILT (M39/personal-agent-oversight-and-workspace), the part that holds under every answer: a team agent can never carry a person's own Google account, however it is written or attached (agents.model.bound_connectors and the read's entity), and the install check asserts a department's agent naming Workspace is handed nothing. NOT BUILT, waiting on item 189: a shared mailbox an administrator connects for a team (options A and C), and a person's own mail reaching a team agent inside that person's private conversation only, never a room, memory or knowledge item (options B and C).",
+      "updated": "2026-10-14"
     },
     "M39.10.7": {
       "status": "OPEN",
