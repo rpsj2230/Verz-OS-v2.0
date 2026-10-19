@@ -4,7 +4,7 @@
 calls into it (`DocumentConverter`, `PdfPipelineOptions`, `iterate_items`) are written from its
 documented interface and have not been executed, and the tests drive the rest of the part through
 a stand-in for the one object that touches it. The first install that switches this part on is
-the first run; `docs/needs-rupash.md` item 235 says so, and the weights it needs are fetched by a
+the first run; `docs/needs-rupash.md` item 240 says so, and the weights it needs are fetched by a
 step that is also unrun.
 
 **OCR is switched off inside it, on purpose.** Docling can run an OCR engine over a page with no
