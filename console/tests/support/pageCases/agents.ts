@@ -387,6 +387,8 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         total: null,
         truncated: false,
       },
+      // Whether describing an agent is offered (M20.5.3): on here, so the card is drawn and judged.
+      "/api/v1/agent-drafts": { items: [], waiting_for_you: [], can_describe: true },
     },
   },
   // The reader's drafts and the publishes waiting for them.

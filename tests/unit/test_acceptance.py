@@ -920,6 +920,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     # The co-author asks a model too, with no tools;
     # `tests/unit/test_acceptance_coauthor.py` runs it.
     assert outcomes.pop("the_coauthor_proposes_and_nothing_changes_until_taken")[0] == NOT_RUN
+    # So does starting a draft from a description, which asks the same co-author;
+    # `tests/unit/test_acceptance_describe.py` runs it.
+    assert outcomes.pop("describing_an_agent_starts_a_draft_and_applies_nothing")[0] == NOT_RUN
     # No antivirus and no object store here; `tests/unit/test_acceptance_ingest.py` runs both.
     assert outcomes.pop("the_antivirus_test_file_is_refused_as_malware")[0] == NOT_RUN
     # No vault answers here, so the Credentials screen offers no write;

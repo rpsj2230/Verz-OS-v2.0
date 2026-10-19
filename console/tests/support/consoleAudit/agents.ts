@@ -29,7 +29,7 @@ import { agentMemoryKindsApiPath } from "../../../src/pages/agents/AgentMemoryKi
 import { agentOwnWorkspaceApiPath } from "../../../src/pages/agents/AgentOwnWorkspace";
 import { agentUpgradeAcceptApiPath, agentUpgradeDeclineApiPath } from "../../../src/pages/agents/agentUpgradeQuery";
 import { agentGroupRemovalApiPath, agentGroupsApiPath } from "../../../src/pages/agents/agentGroupsQuery";
-import { suggestApiPath, takeApiPath } from "../../../src/pages/agents/agentCoauthorQuery";
+import { DESCRIBE_API_PATH, suggestApiPath, takeApiPath } from "../../../src/pages/agents/agentCoauthorQuery";
 import { DRAFTS_API_PATH, draftActApiPath, editAsDraftApiPath } from "../../../src/pages/agents/agentDraftsQuery";
 import { at, type Proofs, type ReadAfterAnAction, t, type WriteRoute } from "../auditClaims";
 
@@ -112,6 +112,12 @@ const UPGRADE_PRESSED = t(
 const DRAFT_APPROVED_PRESSED = t(
   "test_agent_draft_store",
   "test_a_new_agent_is_drafted_approved_by_a_second_person_and_every_step_is_on_the_ledger",
+  true,
+);
+/** A description starting a draft, over the install's own executor and PostgreSQL, applying nothing. */
+const DESCRIBED_PRESSED = t(
+  "test_acceptance_describe",
+  "test_on_a_real_database_a_description_starts_a_draft_and_nothing_is_kept",
   true,
 );
 /** An agent edited as a draft and published as the next version of its own template, against PostgreSQL. */
@@ -220,6 +226,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
       "automationStopApiPath",
       automationStopApiPath("quote-helper", "auto_one"),
     ),
+  ],
+  "src/pages/agents/DescribeAgent.tsx DESCRIBE_API_PATH": [
+    at("POST /api/v1/agent-drafts/describe", "DESCRIBE_API_PATH", DESCRIBE_API_PATH),
   ],
   "src/pages/agents/CoauthorPanel.tsx suggestApiPath(draftId)": [
     at("POST /api/v1/agent-drafts/{draft_id}/suggestions", "suggestApiPath", suggestApiPath("d-1")),
@@ -441,6 +450,13 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: DRAFT_DECLINED_PRESSED,
     audit: DRAFT_DECLINED_PRESSED,
     behaviour: t("test_agent_builder_routes", "test_a_publish_sent_back_publishes_nothing_and_returns_to_its_author"),
+  },
+  "POST /api/v1/agent-drafts/describe": {
+    row: DESCRIBED_PRESSED,
+    // It starts its draft through `start_agent_draft`, the one function the start above is, so the
+    // ledger's account of a draft's steps is that test's.
+    audit: DRAFT_APPROVED_PRESSED,
+    behaviour: t("test_agent_describe_routes", "test_a_description_starts_a_draft_and_proposes_what_the_model_said_without_applying_it"),
   },
   "POST /api/v1/agent-drafts/{draft_id}/suggestions": {
     row: { notApplicable: "Asking the co-author writes no row: the proposal travels in the response and nothing is kept between asking and taking." },

@@ -259,6 +259,11 @@ const PROGRESS = {
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
     updated: "2026-10-13",
   },
+  "M13.9.2": {
+    status: "IN PROGRESS",
+    why: "Built: the form a department's administrator writes an agent in, the same one a Super Admin uses, lists only the tools and connectors that administrator's own reach holds, and says why the list is short. Not built: the same cut for skills and for the knowledge an agent draws on (knowledge is set on the agent's own page, behind that page's reach), and a name typed past the form is still not refused, it waits for a second person who holds it as before (needs-you question). To prove what is built: after the release, open Install, Acceptance, run the checks and read the row 'a department builder is offered only what their department holds'.",
+    updated: "2026-10-15",
+  },
   "M13.8.8": {
     status: "READY FOR TESTING",
     why: "Built: the sales, finance, support and project management templates read the sources they name, bind every tool to one an install registers, and carry the starter skills of their role (finance carries none: none of the eight is about a ledger). To prove it on the install: after the release, open Install, Acceptance, run the checks, and read the row 'the role templates declare their sources and would answer', which should pass in the two newest runs. Then on Agents, New agent, choose the Support Ticket Agent template, finish the steps, and connect Freshdesk if the page says it is waiting for it.",
@@ -1997,6 +2002,11 @@ const PROGRESS = {
   "M20.5.2": {
     status: "IN PROGRESS",
     why: "Built: behind the switch 'Hold an agent that costs more than its department allows' (ships off), publishing an agent to a department whose per-run ceiling is below what one run costs waits for that department's administrator, tells the author both figures in the install's currency, and the publish record carries the cost of each version. Not what the leaf says in two ways: the figure is the run's price from the product's own estimator (the same one the pre-flight uses) and not the median of rehearsed runs, because rehearsals record no cost yet (needs-you question); and no screen writes a department's per-run ceiling yet (M21.1.2), so on an install the hold fires only for a ceiling written some other way. The check 'a costly publish waits for a colleague in the department' proves the hold over a ceiling it writes itself.",
+    updated: "2026-10-15",
+  },
+  "M20.5.3": {
+    status: "IN PROGRESS",
+    why: "Built: behind the switch 'Start an agent's draft from a description' (it ships off), New agent offers 'Describe it': the person writes what the agent is for, a draft of their own is started, and the model's suggestions for its name, summary, instructions, skills and connectors are shown beside what the draft holds, none chosen, to take as any suggestion is taken. Not what the leaf says in two ways: tools, permissions, knowledge and channels are not drafted (the product writes an agent's words and never what it may reach, and the answer says so), and a procedure is not drawn. Whether describing may put the suggestions in without a separate take is a needs-you question. To prove it: after the release, open Install, Acceptance, run the checks and read the row 'describing an agent starts a draft and applies nothing'.",
     updated: "2026-10-15",
   },
   "M21.1.1": {

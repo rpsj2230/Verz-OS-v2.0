@@ -29,7 +29,7 @@
 
 import { CheckCircle2, ClipboardCheck, Hammer, PenLine, Send, Workflow } from "lucide-react";
 import { useCallback, useId, useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
@@ -61,6 +61,7 @@ import { Notice } from "../../ui/Notice";
 import { moneyWords } from "../spendQuery";
 import { ROSTER_HEADING, agentAddress } from "./AgentsPage";
 import { ChannelChoices, ticked } from "./ChannelChoices";
+import { describedFrom } from "./agentCoauthorQuery";
 import { CoauthorPanel } from "./CoauthorPanel";
 import {
   ACT_WORDS,
@@ -397,6 +398,8 @@ function Summary({ draft }: { readonly draft: Draft }) {
 
 function DraftAnswer({ draftId, step }: { readonly draftId: string; readonly step: DraftStep }) {
   const [version, setVersion] = useState(0);
+  const location = useLocation();
+  const described = useMemo(() => describedFrom(location.state, draftId), [location.state, draftId]);
   const answer = useResource<unknown>(draftApiPath(draftId), version);
   const draft = useMemo(() => readDraft(answer.data), [answer.data]);
   const writing = step === "write" && draft?.yours === true;
@@ -496,6 +499,7 @@ function DraftAnswer({ draftId, step }: { readonly draftId: string; readonly ste
         <CoauthorPanel
           draftId={draftId}
           revision={draft.revision}
+          described={described}
           onTaken={() => {
             setVersion((count) => count + 1);
           }}
