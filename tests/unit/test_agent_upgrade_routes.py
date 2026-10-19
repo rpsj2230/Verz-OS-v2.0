@@ -643,3 +643,47 @@ def test_an_acceptance_that_leaves_the_agent_incomplete_switches_it_off(console:
     assert response.status_code == 200, response.text
     assert response.json()["switched_off"] is True
     assert record_of_agent(console).state is AgentState.DISABLED
+
+
+def _declaring_an_unregistered_tool_and_a_new_question() -> SignedManifest:
+    """The next version, declaring a tool nothing on the install provides and a question the
+    version before it did not ask."""
+    from brain.agents.template import Placeholder
+
+    base = newer()
+    document = base.manifest.model_copy(
+        update={
+            "authority": base.manifest.authority.model_copy(
+                update={"allowed_tools": ("invoice.read", "no.such_tool")}
+            ),
+            "placeholders": (Placeholder(key="renewal_price_list", prompt="Which price list?"),),
+        }
+    )
+    return publish(document, key=KEY, signed_by="u_publisher", at=base.signed_at)
+
+
+def test_a_review_names_what_the_version_would_leave_missing_before_it_is_accepted(
+    console: Console,
+) -> None:
+    """The review carries the install's own list: the tool nothing here provides and the question
+    nobody has answered, each with the sentence a person reads, and the acceptance that follows
+    carries the same list on its answer. A version that needs nothing carries none.
+
+    Delete this and a person learns what a version needs from the agent going quiet, or from a
+    page that lists needs for every version."""
+    assert reviewed(console)["needs"] == []
+
+    console.memory.versions.clear()
+    on_offer(console.memory, _declaring_an_unregistered_tool_and_a_new_question())
+    review = reviewed(console)
+    named = {(one["kind"], one["name"]) for one in review["needs"]}
+    assert named == {("placeholder", "renewal_price_list"), ("tool", "no.such_tool")}
+    assert all(one["sentence"] for one in review["needs"])
+
+    response = console.post("u_admin", at(ACCEPT_PATH, agent_id=COMPANY), accepting(review))
+
+    assert response.status_code == 200, response.text
+    done = response.json()
+    assert done["switched_off"] is True
+    assert {(one["kind"], one["name"]) for one in done["needs"]} == named
+    assert record_of_agent(console).state is AgentState.DISABLED

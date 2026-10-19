@@ -12,7 +12,10 @@
  * own grant. A reader who cannot open the gallery is shown the API's refusal in that card and can
  * still start from scratch.
  *
- * Task ids: M27.11.6, M27.16.1
+ * **A third way in, when the install has switched it on:** describe the agent in your own words
+ * (`DescribeAgent.tsx`, M20.5.3). It is drawn only when the API says it would be answered.
+ *
+ * Task ids: M27.11.6, M27.16.1, M20.5.3
  */
 
 import { FilePlus2, LayoutTemplate } from "lucide-react";
@@ -25,10 +28,13 @@ import { WORKS_AT } from "./agentActions";
 import { ROSTER_HEADING } from "./AgentsPage";
 import {
   DRAFTS_ADDRESS,
+  DRAFTS_API_PATH,
   NOTHING_IS_LIVE,
   TEMPLATES_API_PATH,
+  readDrafts,
   readTemplates,
 } from "./agentDraftsQuery";
+import { DescribeAgent } from "./DescribeAgent";
 import { useDraftStart } from "./DraftStart";
 
 export const NEW_AGENT_HEADING = "New agent";
@@ -49,6 +55,8 @@ export function NewAgentPage() {
   const start = useDraftStart();
   const gallery = useResource<unknown>(TEMPLATES_API_PATH);
   const templates = useMemo(() => readTemplates(gallery.data), [gallery.data]);
+  const drafts = useResource<unknown>(DRAFTS_API_PATH);
+  const canDescribe = useMemo(() => readDrafts(drafts.data).canDescribe, [drafts.data]);
 
   return (
     <div data-slot="new-agent-page" className="flex min-w-0 flex-col gap-4">
@@ -65,6 +73,7 @@ export function NewAgentPage() {
       {start.notice}
       {start.dialog}
       <Note>{NOTHING_IS_LIVE}</Note>
+      {canDescribe ? <DescribeAgent /> : null}
       <div className="[display:grid] min-w-0 gap-4 lg:grid-cols-2">
         <SectionCard
           title={SCRATCH_HEADING}

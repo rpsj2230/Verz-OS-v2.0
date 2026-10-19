@@ -138,11 +138,17 @@ function summaries(value: unknown): readonly DraftSummary[] {
 export interface DraftsPage {
   readonly items: readonly DraftSummary[];
   readonly waitingForYou: readonly DraftSummary[];
+  /** Whether New agent offers to start a draft from a description (M20.5.3). */
+  readonly canDescribe: boolean;
 }
 
 export function readDrafts(payload: unknown): DraftsPage {
   const fields = fieldsOf(payload);
-  return { items: summaries(fields?.["items"]), waitingForYou: summaries(fields?.["waiting_for_you"]) };
+  return {
+    items: summaries(fields?.["items"]),
+    waitingForYou: summaries(fields?.["waiting_for_you"]),
+    canDescribe: fields?.["can_describe"] === true,
+  };
 }
 
 /** One act on one revision: `DraftActView`. */

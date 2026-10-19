@@ -17,7 +17,7 @@
  * or how closely it is watched, so there is nothing here to hide and no flag to read; a change the
  * co-author named for such a path arrives as a sentence under "not proposed".
  *
- * Task ids: M20.1.3
+ * Task ids: M20.1.3, M20.5.3
  */
 
 import { useId, useState } from "react";
@@ -53,6 +53,8 @@ import {
   takeApiPath,
   takeBody,
   TAKEN,
+  NOT_DRAFTED_HEADING,
+  type Described,
   type Suggestion,
 } from "./agentCoauthorQuery";
 
@@ -68,17 +70,20 @@ export function CoauthorPanel({
   draftId,
   revision,
   onTaken,
+  described,
 }: {
   readonly draftId: string;
   /** The draft's latest revision as the page drew it, which both writes name. */
   readonly revision: number;
   /** Called after changes were taken, so the page asks for the draft again. */
   readonly onTaken: () => void;
+  /** What describing the agent on New agent started this draft with, when it did (M20.5.3). */
+  readonly described?: Described | undefined;
 }) {
   const askId = useId();
-  const [words, setWords] = useState("");
+  const [words, setWords] = useState(described?.description ?? "");
   const [missing, setMissing] = useState(false);
-  const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
+  const [suggestion, setSuggestion] = useState<Suggestion | null>(described?.suggestion ?? null);
   const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
   const [step, setStep] = useState<Step | null>(null);
   const [sending, setSending] = useState(false);
@@ -197,6 +202,19 @@ export function CoauthorPanel({
               {ASK_BUTTON}
             </Button>
           </div>
+          {described === undefined ? null : (
+            <div data-slot="described" className="flex min-w-0 flex-col gap-1">
+              {described.told === null ? null : <Note>{described.told}</Note>}
+              <p className="m-0 text-[13px] font-semibold text-ink">{NOT_DRAFTED_HEADING}</p>
+              <ul className="m-0 flex list-none flex-col gap-1 p-0">
+                {described.notDrafted.map((one) => (
+                  <li key={one}>
+                    <Note>{one}</Note>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {suggestion === null ? null : (
             <div data-slot="coauthor-suggestion" className="flex min-w-0 flex-col gap-3">
               <Note>{suggestion.note}</Note>
