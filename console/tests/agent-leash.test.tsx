@@ -235,7 +235,8 @@ describe("the leash block", () => {
       [`POST /api/v1${supervisionApiPath(AGENT, "review")}`]: { body: { outcome: "extended", review_due_at: "2019-04-05T09:00:00Z" } },
     });
     const block = container.querySelector('[data-slot="leash-supervision"]') as Element;
-    expect(block.textContent).toContain("only practises until a review finds it ready");
+    // The sentence is an explanation the server serves, drawn when its answer arrives.
+    await waitFor(() => expect(block.textContent).toContain("only practises until a review finds it ready"));
     await act(async () => {
       fireEvent.click([...block.querySelectorAll("button")].find((one) => one.textContent === "Review it now") as Element);
     });
