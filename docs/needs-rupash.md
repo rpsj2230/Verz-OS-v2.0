@@ -6,7 +6,39 @@ Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
 # Open
 
-## 235. The model server is built to fit your server; three things only you can do or decide
+## 235. What may start a backup drill from the console, now that nothing the product runs can?
+
+**In plain terms:** task M27.13.5 asks for a "start a drill" button on the Backup and recovery screen
+and for the result to be recorded. The screen today shows the newest copy, whether a drill is due and
+what the last one found, and it says there is no button, because a drill loads your newest copy into a
+scratch database beside your containers, and nothing the product runs holds the access to start a
+container. A button that is pressed and reaches nothing is worse than none, and you decided in item 44
+that this screen must never read as reassurance before a drill has verified a copy. So I have not
+built the button. Three ways to make it real, and each changes what the install is trusted to do:
+
+**Option A: keep the drill by hand, on the server.** The screen goes on saying how to do it and what
+it will then read. Nothing new is trusted. The leaf is closed as "by hand, documented", and the weekly
+rehearsal (M30.3.6) stays the thing that is not automatic.
+
+**Option B: a small service on the server, set up by the installer, does the drill.** The button asks
+for one (a row the console writes); a timer on the server reads the ask through the product's own
+signed-in route, runs the drill script that already exists against the newest copy in a scratch
+container on an internal network, and writes the drill record beside the copy, which the screen then
+reads. The product itself still starts nothing: the service is the installer's, with the server's own
+access, and it is one more thing on the server to keep running.
+
+**Option C: the worker does the drill inside the database server, with no container.** It loads the
+newest copy into a second database on the same database server, checks it, and drops it. It needs no new
+service, but a full second copy of the company's records sits on the same server for the length of the
+drill, with the same access as the first, which is a weaker rehearsal than a separate container.
+
+**My recommendation:** B. It is the only one that rehearses a restore somewhere other than where the
+live data is, and the product still starts nothing itself. I will build it behind a switch that ships
+off and prove it on your install by pressing the button and reading the record.
+
+**What I need from you:** reply "235: A", "235: B" or "235: C".
+
+## 240. The model server is built to fit your server; three things only you can do or decide
 
 **In plain terms:** you asked that the model server not need more memory than your server has, with the
 kernel's cache counted. It is built that way (see the note at the end of item 120): one optional service,
@@ -47,7 +79,7 @@ server is started with, and the name of Docling's downloader. Photographs (PNG a
 the worker by what their headers claim (a header claiming more pixels than any page has is refused) so that
 the scanned-page part can be sent one; with that part off a photograph is refused at the door as before.
 
-**What I need from you:** reply "235: A A" for both recommendations, or the letters you prefer; the third
+**What I need from you:** reply "240: A A" for both recommendations, or the letters you prefer; the third
 is a suggestion for when you switch it on and needs no reply.
 
 ## 226. Should a question be estimated before it is answered, and refused when the estimate is more than is left?
@@ -2977,7 +3009,7 @@ part when work arrives and ends it after a time you set, and it measures its own
 so the limit can be tuned from figures that ran. **Every one of these sizes is arithmetic or a judgement
 and none has been measured**: there is no server running yet, and each part says where its figure came
 from. The cache is counted twice on purpose: the container's limit covers the model files it maps, and the
-check on your server counts only what the kernel cannot give back. Item 235 is what is left for you to
+check on your server counts only what the kernel cannot give back. Item 240 is what is left for you to
 decide.
 
 ## 119. How large a file may people upload - DECIDED 2026-10-05: C now, then A once row 2 of item 120 runs

@@ -15,7 +15,7 @@
  * **Nothing here decides who may see or control a job.** `may_control` and `controls_switched_on`
  * only decide whether a control is drawn; each control asks again.
  *
- * Task ids: M27.8.13, M27.15.47
+ * Task ids: M27.8.13, M27.15.47, M27.13.3
  */
 
 import type { components } from "../api/schema";
@@ -59,6 +59,40 @@ export const DEAD_LETTER_REASON_WORDS: Readonly<Record<string, string>> = {
 
 export function deadLetterReasonWords(reason: string): string {
   return DEAD_LETTER_REASON_WORDS[reason] ?? "It was set aside for a person.";
+}
+
+export const RUN_AGAIN = "Run again";
+export const DEAD_RUN_AGAIN_COLUMN = "Run again";
+export const RUN_AGAIN_SWITCHED_OFF =
+  "Running a job that was set aside again is switched off on this install; it is switched on under Features.";
+export const RUN_AGAIN_ASKED =
+  "Asked. The worker puts the job back on its queue within a minute, and this list then says whether it did.";
+
+/** Where one set-aside job is asked to be run again. */
+export function redrivePath(jobId: string): string {
+  return `${DEAD_LETTERS_API_PATH}/${encodeURIComponent(jobId)}/redrive`;
+}
+
+export function runAgainQuestion(task: string): string {
+  return `Run ${task} again?`;
+}
+
+/**
+ * What the worker will do and what to check first. The sweep set the job aside because running it
+ * twice may do the same thing twice, so the sentence says to look at what it had done.
+ */
+export function runAgainConsequence(task: string): string {
+  return `The worker puts ${task} back on its queue within a minute, with the arguments it already had, and nothing else is run. It was set aside because running it twice may do the same thing twice, so look at what it had already done first.`;
+}
+
+/** Whether the list draws a Run again column at all. Presentation only: the route asks again. */
+export function runAgainIsOffered(body: DeadLettersBody): boolean {
+  return body.run_again_switched_on && body.may_run_again;
+}
+
+/** Whether one row can still be run again: what it refers to is kept. Presentation only. */
+export function rowCanRunAgain(row: DeadLetterRow): boolean {
+  return row.actionable;
 }
 
 export function readDeadLetters(payload: unknown): DeadLettersBody | null {
