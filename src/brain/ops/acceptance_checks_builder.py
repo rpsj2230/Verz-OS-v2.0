@@ -125,6 +125,31 @@ async def _builder(h: Harness, role: str, *extra: tuple[str, Scope]) -> str:
     return made
 
 
+async def _wide_builder(h: Harness) -> str:
+    """A reserved builder whose install authority is held over everything, with the gallery's reads.
+
+    Not `_builder` plus a second grant: a person holds one grant of a capability, and the
+    department one `_builder` always gives would be a duplicate of it.
+    """
+    from brain.agent_routes import TEMPLATE_SCREEN
+    from brain.agents.creation import AGENT_INSTALL_CAPABILITY
+    from brain.console.reads import plane_capability_for
+    from brain.console.screens import screen
+
+    read = screen(TEMPLATE_SCREEN).read
+    wide = h.principal(A, "everywhere")
+    await h.person(
+        wide,
+        department=A,
+        grants=(
+            (read.requires.value, Scope.unrestricted()),
+            (plane_capability_for(read, read.plane).value, Scope.unrestricted()),
+            (AGENT_INSTALL_CAPABILITY.value, Scope.unrestricted()),
+        ),
+    )
+    return wide
+
+
 def _body(answered: Any) -> dict[str, Any]:
     """A route's JSON body, whichever way it answered."""
     if hasattr(answered, "body"):
@@ -463,8 +488,13 @@ async def the_form_is_the_manifest_and_a_template_installs_in_one_press(h: Harne
     builder = await _builder(h, "gallery")
     form_app = _gallery(h, secrets.token_hex(32))
     # The served form against the generator run over the manifest's schema as it is now: a form
-    # kept by hand, or cut from an older schema, differs from it.
-    form = _body(await builder_form(_request(form_app), await _asking(h, builder)))
+    # kept by hand, or cut from an older schema, differs from it. Read as a builder whose install
+    # authority is held over everything, because a department's builder is served the same form
+    # with its tool and connector lists cut to what they hold (M13.9.2), and that cut is the next
+    # check's to prove.
+    wide = await _wide_builder(h)
+    form = _body(await builder_form(_request(form_app), await _asking(h, wide)))
+    form.pop("offer_note", None)
     # Beside the form the answer names the parts the builder links to and does not hold
     # (needs-rupash 170 A); they are not the manifest's, so the comparison is over the form.
     form.pop("set_elsewhere", None)

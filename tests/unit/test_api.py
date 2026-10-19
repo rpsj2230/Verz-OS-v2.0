@@ -305,6 +305,7 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
         SAVE_PATH,
     )
     from brain.agent_coauthor_routes import SUGGEST_PATH, TAKE_PATH
+    from brain.agent_describe_routes import DESCRIBE_PATH
     from brain.agent_group_routes import GROUPS_PATH
     from brain.agent_lifecycle_routes import (
         ARCHIVE_PATH,
@@ -389,6 +390,7 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
         (f"{API_PREFIX}{GROUPS_PATH}", "409"): "#/components/schemas/NotChangedView",
         (f"{API_PREFIX}{SUGGEST_PATH}", "409"): "#/components/schemas/NotChangedView",
         (f"{API_PREFIX}{TAKE_PATH}", "409"): "#/components/schemas/NotChangedView",
+        (f"{API_PREFIX}{DESCRIBE_PATH}", "409"): "#/components/schemas/NotChangedView",
         (f"{API_PREFIX}{UPGRADE_ACCEPT_PATH}", "409"): "#/components/schemas/NotChangedView",
         (f"{API_PREFIX}{UPGRADE_DECLINE_PATH}", "409"): "#/components/schemas/NotChangedView",
     }

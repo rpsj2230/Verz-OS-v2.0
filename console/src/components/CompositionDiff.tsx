@@ -37,7 +37,7 @@
 
 import { Chip } from "../ui/Chip";
 import type { DiffRow } from "./agentWorkspaceState";
-import { SET_ON_THIS_AGENT } from "./agentWorkspaceState";
+import { SET_ON_THIS_AGENT, TAUGHT_BY_THE_AGENT } from "./agentWorkspaceState";
 import type { GridColumn } from "./gridFeatures";
 import { GridTable } from "./kit/GridTable";
 import "../styles/agent-workspace.css";
@@ -108,6 +108,14 @@ export function isSetOnThisAgent(row: DiffRow): boolean {
   return row.source === SET_ON_THIS_AGENT;
 }
 
+/**
+ * Whether this row is a value the agent's own learning wrote, which a person approved: the other
+ * way a row differs from its template, and the one a person can list and give back by itself.
+ */
+export function isTaughtByTheAgent(row: DiffRow): boolean {
+  return row.source === TAUGHT_BY_THE_AGENT;
+}
+
 function DiffValue({ value }: { readonly value: string }) {
   return <span className="composition-diff__value">{value}</span>;
 }
@@ -154,7 +162,7 @@ export function CompositionDiff({ rows }: { readonly rows: readonly DiffRow[] })
       rows={groups.flatMap((group) => group.rows)}
       rowId={(row) => row.path}
       rowClassName={(row) =>
-        isSetOnThisAgent(row) ? "composition-diff__row composition-diff__row--local" : "composition-diff__row"
+        isSetOnThisAgent(row) || isTaughtByTheAgent(row) ? "composition-diff__row composition-diff__row--local" : "composition-diff__row"
       }
       groupOf={(row) => row.part}
       groupHeader={(part) => (

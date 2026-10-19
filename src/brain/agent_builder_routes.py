@@ -55,7 +55,8 @@ draft can be written, saved, checked and rehearsed meanwhile.
 **A new module rather than `brain.agent_lifecycle_routes`**, because that router moves an agent that
 exists and this one makes and changes one; they share its three questions and its 409 body.
 
-Task ids: M27.11.6, M27.15.31, M20.1.4, M20.4.6, M13.7.4, M20.4.1, M20.4.4, M20.5.2
+Task ids: M27.11.6, M27.15.31, M20.1.4, M20.4.6, M13.7.4, M20.4.1, M20.4.4
+Task ids: M13.9.2, M20.5.2, M20.5.3
 """
 
 from __future__ import annotations
@@ -150,7 +151,15 @@ from brain.builder.agent_drafts import (
     system_check,
     widenings,
 )
+from brain.builder.choices import (
+    THE_OFFER_IS_WHAT_YOUR_DEPARTMENT_HOLDS,
+    Choices,
+    held_choices,
+    limited_to_a_department,
+    offered,
+)
 from brain.builder.compose import BuilderError
+from brain.builder.describe_switch import describe_is_on
 from brain.builder.draft_store import AgentDraftStore, Attribution, StoredAgentDrafts
 from brain.builder.draft_words import DraftAct, DraftKind, DraftState
 from brain.builder.drafts import (
@@ -336,6 +345,9 @@ class BuilderFormView(BaseModel):
     #: The parts of an agent the builder links to and does not hold. See
     #: `brain.builder.form.WORKFLOWS_KNOWLEDGE_AND_CHANNELS_ARE_LINKED_NOT_SECTIONS`.
     set_elsewhere: list[SetElsewhereView] = Field(default_factory=list)
+    #: Said when the tools and connectors above are cut to what this reader's department holds
+    #: (M13.9.2), and null for a reader who is offered everything. See `brain.builder.choices`.
+    offer_note: str | None = None
 
 
 class DraftActView(BaseModel):
@@ -369,6 +381,8 @@ class AgentDraftsPage(BaseModel):
 
     items: list[AgentDraftSummary]
     waiting_for_you: list[AgentDraftSummary]
+    #: Whether New agent offers to start a draft from a description (M20.5.3).
+    can_describe: bool = False
 
 
 class AgentDraftView(BaseModel):
@@ -705,6 +719,16 @@ async def _may_build(request: Request, asked: Asking) -> None:
         AGENT_INSTALL_CAPABILITY, asked.now
     ) is None and not await _personal_on(request):
         raise _no_draft_here(asked, "capability")
+
+
+async def describing_is_on(request: Request) -> bool:
+    """Whether a draft may be started from a description: `app.state.describe_is_on` when a test put
+    one there, and the switch otherwise. A process with no database has no switch, which is off."""
+    found = getattr(request.app.state, "describe_is_on", None)
+    if isinstance(found, bool):
+        return found
+    sessions = sessions_of(request)
+    return sessions is not None and await describe_is_on(sessions)
 
 
 async def _kinds_for(request: Request, asked: Asking) -> list[str]:
@@ -1113,10 +1137,24 @@ _TOLD: Final[dict[int | str, dict[str, object]]] = {
 async def builder_form(request: Request, asked: Asked) -> JSONResponse:
     """The form a draft is written in, one JSON Schema per section, cut from the manifest's own."""
     await _may_build(request, asked)
+    document = form_document()
+    note: str | None = None
+    if limited_to_a_department(asked.reach, asked.now):
+        # A department's builder is offered the tools and connectors their own reach admits, from
+        # the catalogue's own answer, and the same form otherwise (M13.9.2).
+        tools = _tool_registry(request)
+        document = offered(
+            document,
+            held_choices(tools, asked.reach, asked.now)
+            if tools is not None
+            else Choices(tools=(), connectors=()),
+        )
+        note = THE_OFFER_IS_WHAT_YOUR_DEPARTMENT_HOLDS
     return JSONResponse(
         status_code=200,
         content={
-            **form_document(),
+            **document,
+            "offer_note": note,
             "set_elsewhere": [
                 SetElsewhereView(
                     part=one.part, title=one.title, sentence=one.sentence, address=one.address
@@ -1141,6 +1179,7 @@ async def agent_drafts(request: Request, asked: Asked) -> AgentDraftsPage:
     return AgentDraftsPage(
         items=[_summary(one) for one in mine],
         waiting_for_you=[_summary(one) for one in waiting],
+        can_describe=await describing_is_on(request),
     )
 
 

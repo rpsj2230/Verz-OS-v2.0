@@ -51,11 +51,12 @@ that signed it. A process without one says so, and a decline needs none.
 **A new module rather than `brain.agent_lifecycle_routes`**, because those moves change an agent's
 state and this one changes what the agent is; they share its three questions and its 409 body.
 
-Task ids: M13.4.2, M13.4.3, M13.4.4, M13.4.5
+Task ids: M13.4.2, M13.4.3, M13.4.4, M13.4.5, M13.8.11
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Final, Literal, Protocol, runtime_checkable
@@ -76,7 +77,8 @@ from brain.agent_lifecycle_routes import (
     template_key_of,
     visible,
 )
-from brain.agent_routes import record_of
+from brain.agent_routes import _tool_registry, record_of
+from brain.agents.install import Completeness, MissingKind
 from brain.agents.lifecycle import AGENT_LIFECYCLE_CAPABILITY, ARCHIVE_IS_TERMINAL
 from brain.agents.model import AgentRecord, AgentState
 from brain.agents.template import TemplateError
@@ -91,6 +93,7 @@ from brain.agents.upgrade import (
     VersionShelf,
     accept,
     decline,
+    needs_after,
     review,
     rungs_an_upgrade_would_raise,
 )
@@ -159,6 +162,16 @@ WRITTEN_AND_SWITCHED_OFF: Final = (
     "not available on this install yet."
 )
 WRITTEN: Final = "The agent is on the new version. Whether it is switched on has not changed."
+
+#: What each kind of missing thing reads as, once, for the review and for the acceptance.
+NEEDS_WORDS: Final[Mapping[MissingKind, str]] = {
+    MissingKind.FIELD: "{name} is empty in the new version.",
+    MissingKind.PLACEHOLDER: (
+        "The new version asks a question, {name}, that nobody has answered here yet."
+    ),
+    MissingKind.CONNECTOR: "The {name} connector is not connected on this install yet.",
+    MissingKind.TOOL: "Nothing on this install provides the tool {name} yet.",
+}
 DECLINED: Final = "You said no to this version. It will not be offered again; a newer one will be."
 THIS_RAISES_A_RUNG: Final = (
     "This version holds an action at a higher rung than this agent is on. A rung is raised from "
@@ -205,6 +218,18 @@ class UpgradeChangeView(BaseModel):
     sealed: bool
 
 
+class UpgradeNeedView(BaseModel):
+    """One thing the version on offer leaves missing on this install: what kind, which, and the
+    sentence a person reads. A kind and a name the person's own template declares, never a count."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    #: `field`, `placeholder`, `connector` or `tool`: `brain.agents.install.MissingKind`.
+    kind: str
+    name: str
+    sentence: str
+
+
 class UpgradeView(BaseModel):
     """What is waiting for one agent, and what accepting it would do."""
 
@@ -225,6 +250,10 @@ class UpgradeView(BaseModel):
     accept_unavailable: str | None = None
     #: Why there is nothing to review at all, for an agent with no install.
     nothing: str | None = None
+    #: What the version would leave missing here if every value kept here is kept, the checks an
+    #: install meets, named before anybody accepts. Empty means nothing; it is never a count of
+    #: anything hidden, because each item is something this version's own template declares.
+    needs: list[UpgradeNeedView] = Field(default_factory=list)
 
 
 class UpgradeAccepted(BaseModel):
@@ -260,6 +289,8 @@ class UpgradeDone(BaseModel):
     to_version: int
     #: Whether the agent was switched off because the new version leaves it incomplete here.
     switched_off: bool = False
+    #: What it still needs, when it was switched off or was already off: the install's own list.
+    needs: list[UpgradeNeedView] = Field(default_factory=list)
 
 
 # ------------------------------------------------------------------------------ the store
@@ -510,8 +541,6 @@ def _trace_id() -> str:
 
 
 def _tools(request: Request) -> ToolRegistry:
-    from brain.agent_routes import _tool_registry
-
     tools = _tool_registry(request)
     if tools is None:
         raise Failed("no tool registry on this process")
@@ -559,7 +588,19 @@ def accept_unavailable(reviewed: UpgradeReview, record: AgentRecord, key: str | 
     return None
 
 
-def _view(reading: Reading, key: str | None) -> UpgradeView:
+def need_views(found: Completeness | None) -> list[UpgradeNeedView]:
+    """What a settle left missing, as the sentences a person reads, in the install's order."""
+    if found is None:
+        return []
+    return [
+        UpgradeNeedView(
+            kind=one.kind.value, name=one.name, sentence=NEEDS_WORDS[one.kind].format(name=one.name)
+        )
+        for one in found.missing
+    ]
+
+
+def _view(reading: Reading, key: str | None, needs: Completeness | None = None) -> UpgradeView:
     record = reading.found.record
     reviewed = _reviewed(reading)
     if reviewed is None:
@@ -599,6 +640,7 @@ def _view(reading: Reading, key: str | None) -> UpgradeView:
             for one in reviewed.updates
         ],
         accept_unavailable=accept_unavailable(reviewed, record, key),
+        needs=need_views(needs),
     )
 
 
@@ -606,7 +648,18 @@ def _view(reading: Reading, key: str | None) -> UpgradeView:
 async def agent_upgrade(request: Request, agent_id: str, asked: Asked) -> UpgradeView:
     """What is waiting for one agent: the badge, what the version changes and what it asks."""
     _, reading = await _actionable(request, agent_id, asked)
-    return _view(reading, template_key_of(request))
+    reviewed = _reviewed(reading)
+    needs: Completeness | None = None
+    tools = _tool_registry(request)
+    if reviewed is not None and reviewed.candidate is not None and tools is not None:
+        needs = needs_after(
+            reviewed,
+            audience=reading.found.record.audience,
+            registry=await connectors_of(request),
+            tools=tools,
+            at=asked.now,
+        )
+    return _view(reading, template_key_of(request), needs)
 
 
 def _stale(reading: Reading, reviewed: UpgradeReview, to_version: int, expected: str) -> bool:
@@ -695,6 +748,7 @@ async def accept_agent_upgrade(
         from_version=reviewed.from_version,
         to_version=body.to_version,
         switched_off=switched_off,
+        needs=need_views(upgraded.completeness),
     )
     return JSONResponse(status_code=200, content=done.model_dump(mode="json"))
 
