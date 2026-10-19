@@ -27,6 +27,7 @@ import { readRoster } from "../src/pages/agentsQuery";
 import { UNAVAILABLE } from "../src/pages/agents/agentActions";
 import { ACT_DONE, MAY_NOT_CHANGE, TYPED_MISSING } from "../src/pages/agentLifecycleQuery";
 import { DRAFTS_LINK, NOT_AVAILABLE, readAgentRows } from "../src/pages/agents/AgentsPage";
+import { OVERSIGHT_API_PATH } from "../src/pages/agents/AgentOversight";
 import { DRAFTS_ADDRESS, NEW_AGENT_ADDRESS } from "../src/pages/agents/agentDraftsQuery";
 import { NEW_AGENT_HEADING } from "../src/pages/agents/NewAgentPage";
 import { agentStatsApiPath } from "../src/pages/agents/agentStats";
@@ -253,7 +254,11 @@ describe("the list", () => {
     });
     const asked = idp.urls.map((url) => new URL(url, CONSOLE_ORIGIN)).filter((url) => url.pathname.startsWith("/api/v1/"));
     const paths = asked.map((url) => url.pathname).filter((path) => path !== NAVIGATION_ADDRESS && path !== "/api/v1/me");
-    expect(paths.sort()).toEqual([ROSTER_API, `/api/v1${agentStatsApiPath("quote_helper")}`].sort());
+    // The oversight section is the one other read (M39.10.3): one request, and absent from the page
+    // for a reader the API tells of no personal agent.
+    expect(paths.sort()).toEqual(
+      [ROSTER_API, `/api/v1${agentStatsApiPath("quote_helper")}`, `/api/v1${OVERSIGHT_API_PATH}`].sort(),
+    );
   });
 
   test("New agent opens the guided start, and Drafts the drafts list", async () => {

@@ -397,6 +397,7 @@ def may_audit(
     subject_id: str,
     actions: Iterable[AuditAction],
     now: datetime,
+    actor_id: str | None = None,
 ) -> bool:
     """Whether this reader's audit reach covers entries about this subject, in its own name.
 
@@ -406,6 +407,12 @@ def may_audit(
     (`brain.identity.staff_sync`'s `actor_id IN ...`) therefore covers each of those people, and a
     company-wide audit grant covers everybody. Used where a route must decide whether to read
     anything about a subject before it has an entry to ask about.
+
+    **`actor_id` is who made the entry when that is not the subject**, which is the case for every
+    subject that is not a person: an agent's entries are made by the people who change it, so the
+    question for an agent is asked in its owner's name, and a grant scoped to a department's people
+    covers the agents those people own. Left out, the actor is the subject itself, as it always
+    was, so no existing caller changes (M39.10.3).
     """
     if subject_kind == "principal" and subject_id == reader.principal_id:
         return True
@@ -422,7 +429,7 @@ def may_audit(
                 "action": one.value,
                 "subject_kind": subject_kind,
                 "subject": subject,
-                "actor_id": subject_id,
+                "actor_id": subject_id if actor_id is None else actor_id,
             }
         )
         for one in actions
