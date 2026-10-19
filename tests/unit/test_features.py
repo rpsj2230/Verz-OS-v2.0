@@ -267,6 +267,7 @@ def test_switching_a_feature_on_writes_its_row_and_the_next_read_sees_it(
         "browser_runs": False,
         "control_not_run_alerts": False,
         "agent_learned_changes": False,
+        "job_redrive": False,
         "agent_audience_extras": False,
     }
 
