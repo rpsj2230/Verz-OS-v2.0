@@ -9,7 +9,7 @@
 
 import { EXPORTS_API_PATH } from "../../../src/pages/dataTransferQuery";
 import { ACKNOWLEDGE_API_PATH } from "../../../src/pages/incidentsQuery";
-import { actionPath } from "../../../src/pages/jobsQuery";
+import { actionPath, redrivePath } from "../../../src/pages/jobsQuery";
 import { LEARNING_SETTINGS_API_PATH } from "../../../src/pages/learningQuery";
 import { HALTS_API_PATH, RESUME_API_PATH } from "../../../src/pages/stopQuery";
 import { TUNING_API_PATH, knobPath } from "../../../src/pages/tuningQuery";
@@ -35,6 +35,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/jobs/{name}/pause", "actionPath", actionPath("pause", "spend_report_refresh")),
     at("POST /api/v1/jobs/{name}/resume", "actionPath", actionPath("resume", "spend_report_refresh")),
     at("POST /api/v1/jobs/{name}/run", "actionPath", actionPath("run", "spend_report_refresh")),
+  ],
+  "src/pages/operations/JobsPage.tsx redrivePath(row.job_id)": [
+    at("POST /api/v1/jobs/dead/{job_id}/redrive", "redrivePath", redrivePath("41")),
   ],
   "src/pages/operations/IncidentsPage.tsx ACKNOWLEDGE_API_PATH": [
     at("POST /api/v1/console/incidents/acknowledgement", "ACKNOWLEDGE_API_PATH", ACKNOWLEDGE_API_PATH),
@@ -93,6 +96,11 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: SETTINGS_PRESSED,
     audit: SETTINGS_PRESSED,
     behaviour: t("test_console_controls_reach_behaviour", "test_a_job_paused_from_the_screen_is_left_unstarted_by_the_next_tick_and_resumed_is_started"),
+  },
+  "POST /api/v1/jobs/dead/{job_id}/redrive": {
+    row: t("test_redrive_routes", "test_pressing_run_again_writes_the_instant_the_worker_reads_and_says_who_pressed"),
+    audit: t("test_console_control_audit", "test_pressing_run_again_on_a_set_aside_job_reaches_the_row_and_the_ledger", true),
+    behaviour: t("test_dead_letter", "test_a_persons_ask_puts_one_job_back_through_the_drivers_retry_and_is_answered_once", true),
   },
   "POST /api/v1/jobs/{name}/run": {
     row: SETTINGS_PRESSED,

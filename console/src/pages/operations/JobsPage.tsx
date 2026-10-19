@@ -13,14 +13,16 @@
  * each now), the "Paused by u_admin" principal ids (a name, or "somebody"), and the per-row
  * explanation of what each job keeps true (on the job's About view).
  *
- * Task ids: M27.8.13, M27.15.47, M27.16.1, M17.1.5
+ * Task ids: M27.8.13, M27.15.47, M27.16.1, M17.1.5, M27.13.3
  */
 
 import { MoreHorizontal } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
-import { BY_THE_INSTALL, type EntityColumn, Explanation } from "../../components/kit";
+import { request } from "../../api/client";
+import type { ApiFailure } from "../../api/errors";
+import { BY_THE_INSTALL, ConfirmDialog, type EntityColumn, Explanation, FailureState, Note } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import {
   DropdownMenu,
@@ -35,10 +37,18 @@ import {
   DEAD_LETTERS_API_PATH,
   DEAD_LETTERS_CAPTION,
   DEAD_LETTERS_LABEL,
+  DEAD_RUN_AGAIN_COLUMN,
   deadLetterReasonWords,
   NO_DEAD_LETTERS,
   NO_DEAD_LETTERS_MORE,
+  rowCanRunAgain,
+  runAgainIsOffered,
   readDeadLetters,
+  redrivePath,
+  RUN_AGAIN,
+  RUN_AGAIN_ASKED,
+  runAgainConsequence,
+  runAgainQuestion,
   REFERENCES_OUTLIVED,
   type DeadLetterRow,
   everyWords,
@@ -47,6 +57,7 @@ import {
   JOBS_CAPTION,
   JOBS_LABEL,
   JOBS_LEDE,
+  KEEP_IT,
   lastRunWords,
   MESSAGE_KEPT_ON_THE_SERVER,
   NEVER_SUCCEEDED,
@@ -120,11 +131,32 @@ export const DEAD_WHEN_COLUMN = "Set aside";
  * what a reader with nothing to see and an install with nothing set aside are both told.
  */
 function DeadLetters() {
-  const answer = useResource<unknown>(DEAD_LETTERS_API_PATH, 0);
+  const [version, setVersion] = useState(0);
+  const [pending, setPending] = useState<DeadLetterRow | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const [asked, setAsked] = useState(false);
+  const answer = useResource<unknown>(DEAD_LETTERS_API_PATH, version);
   const body = answer.data === null ? null : readDeadLetters(answer.data);
   if (body === null) {
     return null;
   }
+  const confirm = (row: DeadLetterRow) => {
+    setBusy(true);
+    void (async () => {
+      const result = await request<unknown>(redrivePath(row.job_id), { method: "POST", body: {} });
+      setBusy(false);
+      setPending(null);
+      if (!result.ok) {
+        setAsked(false);
+        setFailure(result.failure);
+        return;
+      }
+      setFailure(null);
+      setAsked(true);
+      setVersion((count) => count + 1);
+    })();
+  };
   const columns: readonly EntityColumn<DeadLetterRow>[] = [
     {
       id: "task",
@@ -151,22 +183,76 @@ function DeadLetters() {
       cell: (row) => at(row.set_aside_at),
       text: (row) => at(row.set_aside_at),
     },
+    {
+      id: "again",
+      header: DEAD_RUN_AGAIN_COLUMN,
+      cell: (row) => row.run_again_standing ?? "",
+      text: (row) => row.run_again_standing ?? "",
+    },
   ];
+  const mayAsk = body.may_run_again && body.items.length > 0;
   return (
-    <WholeList
-      title={DEAD_LETTERS_LABEL}
-      caption={DEAD_LETTERS_CAPTION}
-      columns={columns}
-      rows={body.items}
-      rowId={(row) => row.job_id}
-      rowLabel={(row) => row.task}
-      exportName="jobs-set-aside"
-      empty={NO_DEAD_LETTERS}
-      emptyDescription={NO_DEAD_LETTERS_MORE}
-      emptyAdds="A job is set aside when it fails every attempt, and none is added by hand."
-      emptyBy={BY_THE_INSTALL}
-      footer={body.items.some((row) => !row.actionable) ? <Line>{REFERENCES_OUTLIVED}</Line> : null}
-    />
+    <>
+      {mayAsk && !body.run_again_switched_on ? <Explanation form="note" act="job.run_again_switched_off" /> : null}
+      {failure === null ? null : <FailureState failure={failure} />}
+      {asked ? (
+        <div role="status" aria-live="polite">
+          <Note>{RUN_AGAIN_ASKED}</Note>
+        </div>
+      ) : null}
+      {pending === null ? null : (
+        <ConfirmDialog
+          open
+          question={runAgainQuestion(pending.task)}
+          consequence={runAgainConsequence(pending.task)}
+          confirmLabel={RUN_AGAIN}
+          cancelLabel={KEEP_IT}
+          danger={false}
+          busy={busy}
+          onConfirm={() => {
+            confirm(pending);
+          }}
+          onCancel={() => {
+            setPending(null);
+          }}
+        />
+      )}
+      <WholeList
+        title={DEAD_LETTERS_LABEL}
+        caption={DEAD_LETTERS_CAPTION}
+        columns={columns}
+        rows={body.items}
+        rowId={(row) => row.job_id}
+        rowLabel={(row) => row.task}
+        rowActions={
+          runAgainIsOffered(body)
+            ? (row) =>
+                rowCanRunAgain(row) ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="min-h-11 sm:min-h-8"
+                    aria-label={`${RUN_AGAIN}: ${row.task}`}
+                    disabled={busy}
+                    onClick={() => {
+                      setAsked(false);
+                      setFailure(null);
+                      setPending(row);
+                    }}
+                  >
+                    {RUN_AGAIN}
+                  </Button>
+                ) : null
+            : undefined
+        }
+        exportName="jobs-set-aside"
+        empty={NO_DEAD_LETTERS}
+        emptyDescription={NO_DEAD_LETTERS_MORE}
+        emptyAdds="A job is set aside when it fails every attempt, and none is added by hand."
+        emptyBy={BY_THE_INSTALL}
+        footer={body.items.some((row) => !row.actionable) ? <Line>{REFERENCES_OUTLIVED}</Line> : null}
+      />
+    </>
   );
 }
 

@@ -134,6 +134,16 @@ const PROGRESS = {
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
     updated: "2026-10-13",
   },
+  "M27.15.46": {
+    status: "IN PROGRESS",
+    why: "BUILT AND TESTED: Runs and queue lists what is running and what is owed, and now a third list, Actions waiting for a person, by state in words with what was found and the line that nothing there is sent again. NOT BUILT: resolving an unknown side effect with a confirmation naming the operation, because whether a person may resolve one at all is needs-rupash item 188 (point 5). Install proof: open Runs and queue and read the list; with nothing interrupted it says so.",
+    updated: "2026-10-14",
+  },
+  "M27.15.49": {
+    status: "BLOCKED",
+    why: "Part built: saving a setting needs the settings authority over everything and is refused before the database without it (tested). The rest, an identity provider change that re-derives its redirect addresses and an embedding size that refuses a change once anything is embedded, waits on needs-rupash item 188 (point 2): both values are read-only on Settings because changing either from a browser can lock every person out, and the owner has not said whether to build the change or move it to the installer.",
+    updated: "2026-10-14",
+  },
   "M27.15.42": {
     status: "READY FOR TESTING",
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
@@ -178,6 +188,16 @@ const PROGRESS = {
     status: "READY FOR TESTING",
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
     updated: "2026-10-13",
+  },
+  "M27.13.3": {
+    status: "IN PROGRESS",
+    why: "BUILT AND TESTED, behind the job_redrive switch that ships off: on Background jobs, under Jobs set aside for a person, an administrator holding the schedule's authority presses Run again, confirms a dialog that names the job, and the worker puts that one failed job back on its queue with the arguments it already had within a minute; the row then says when it did, or that the job was no longer waiting. Runs and queue also lists the actions a stopped worker left unconfirmed, by state. NOT BUILT: a person marking an unknown side effect resolved by their word, which waits on needs-rupash item 188 (point 5), because it would replace the check against the other system. Install proof once the switch is on under Features: set a test job aside, press Run again, wait a minute, read the row's answer and the audit log entry naming you.",
+    updated: "2026-10-14",
+  },
+  "M27.13.5": {
+    status: "BLOCKED",
+    why: "Waits on needs-rupash item 235: nothing the product runs can start the container a backup drill needs, so a Start button would reach nothing, which item 44 and docs/admin-console.md refuse. The item names three ways to make it real and recommends one.",
+    updated: "2026-10-14",
   },
   "M27.12.8": {
     status: "READY FOR TESTING",

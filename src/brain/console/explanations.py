@@ -334,6 +334,13 @@ EXPLANATIONS: Final[tuple[Explanation, ...]] = (
         Lead.NOT_YET,
     ),
     Explanation(
+        "job.run_again_switched_off",
+        Form.NOTE,
+        "running a job that was set aside again is switched off on this install; it is switched "
+        "on under Features.",
+        Lead.NOT_YET,
+    ),
+    Explanation(
         "log.export_cut_off",
         Form.NOTE,
         "The period held more rows than one export carries; choose a shorter period for the rest.",

@@ -31,7 +31,14 @@
  * **No count is rendered.** The lists are narrowed per reader, so a number beside one is the
  * subtraction `CLAUDE.md` forbids, and these lists are short enough to read.
  *
- * Task ids: M27.2.2, M27.2.6
+ * **A third list, of the actions a stopped worker left unconfirmed (M27.15.46).** An action that
+ * may have changed something outside, with nobody sure whether it did, rests in one of three
+ * states until the connected system says. They are listed by state in words, and a person is told
+ * the one thing that matters about them: nothing here sends one again, and one leaves the list
+ * only when the system it went to says whether it happened. Resolving one by a person's word is
+ * not offered, because the owner has not answered whether it may be (needs-rupash 188).
+ *
+ * Task ids: M27.2.2, M27.2.6, M27.15.46
  */
 
 import type { components } from "../api/schema";
@@ -42,6 +49,42 @@ export type LiveRunsBody = components["schemas"]["LiveRunsView"];
 export type RunningControl = components["schemas"]["RunningControlView"];
 /** One control owed a run. */
 export type OwedControl = components["schemas"]["OwedControlView"];
+
+/** One side effect a stopped worker left unconfirmed, as `brain.operation_routes` sends it. */
+export type InterruptedAction = components["schemas"]["InterruptedView"];
+export type InterruptedBody = components["schemas"]["InterruptedPage"];
+
+/** Where the API keeps the actions waiting for a person. It declares no query parameter. */
+export const INTERRUPTED_API_PATH = "/operations/interrupted";
+export const INTERRUPTED_HEADING = "Actions waiting for a person";
+export const INTERRUPTED_CAPTION = "Actions that may have changed something outside and are not confirmed";
+export const NOTHING_INTERRUPTED = "No action is waiting for a person";
+export const NOTHING_INTERRUPTED_MORE =
+  "An action appears here when the worker stopped while it was being sent and nobody has confirmed whether it happened.";
+export const NOTHING_IS_SENT_AGAIN_FROM_HERE =
+  "Nothing here is sent again. An action leaves this list when the system it went to says whether it happened.";
+
+/** The three states an unconfirmed action rests in, in words. From `brain.ops.idempotency.OperationState`. */
+export const INTERRUPTED_STATE_WORDS: Readonly<Record<string, string>> = {
+  unknown: "Not known whether it happened",
+  sent: "Sent; the answer was never recorded",
+  verifying: "Being checked against the other system",
+};
+
+export function interruptedStateWords(state: string): string {
+  return INTERRUPTED_STATE_WORDS[state] ?? "Not confirmed";
+}
+
+export function readInterrupted(payload: unknown): InterruptedBody | null {
+  if (typeof payload !== "object" || payload === null) {
+    return null;
+  }
+  const body = payload as { as_of?: unknown; operations?: unknown };
+  if (typeof body.as_of !== "string" || !Array.isArray(body.operations)) {
+    return null;
+  }
+  return payload as InterruptedBody;
+}
 
 /** Written down because an empty table on a screen headed live is read as an idle install. */
 export const A_LIST_OF_RUNS_IS_READ_AS_EVERYTHING_THAT_IS_RUNNING =
