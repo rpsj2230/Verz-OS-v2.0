@@ -234,6 +234,21 @@ const PROGRESS = {
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
     updated: "2026-10-13",
   },
+  "M13.8.8": {
+    status: "READY FOR TESTING",
+    why: "Built: the sales, finance, support and project management templates read the sources they name, bind every tool to one an install registers, and carry the starter skills of their role (finance carries none: none of the eight is about a ledger). To prove it on the install: after the release, open Install, Acceptance, run the checks, and read the row 'the role templates declare their sources and would answer', which should pass in the two newest runs. Then on Agents, New agent, choose the Support Ticket Agent template, finish the steps, and connect Freshdesk if the page says it is waiting for it.",
+    updated: "2026-10-14",
+  },
+  "M13.8.7": {
+    status: "READY FOR TESTING",
+    why: "Built: the SEO agent template (version 2) declares the analytics and search console connectors, reads the figures each reports, checks a site over HTTP and carries the SEO audit, keyword research and monthly report skills; the monthly report workflow and the channels are set where the builder links to. To prove it on the install: after the release, run the checks on Install, Acceptance and read the row 'the role templates declare their sources and would answer', which should pass in the two newest runs.",
+    updated: "2026-10-14",
+  },
+  "M13.7.9": {
+    status: "READY FOR TESTING",
+    why: "Built: the Maintenance Agent template declares the ticket desk and the maintenance records source, three maintenance skills, the HTTP website check and the read-only browser, and installs read-only; its one workflow and its approval are put on the installed agent from the Automations page. To prove it on the install: after the release, run the checks on Install, Acceptance and read the row 'the role templates declare their sources and would answer', which should pass in the two newest runs. Then on Agents, New agent, choose the Maintenance Agent template.",
+    updated: "2026-10-14",
+  },
   "M13.8.19": {
     status: "READY FOR TESTING",
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
