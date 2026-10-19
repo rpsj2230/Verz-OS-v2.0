@@ -224,6 +224,21 @@ const PROGRESS = {
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
     updated: "2026-10-13",
   },
+  "M13.8.8": {
+    status: "READY FOR TESTING",
+    why: "Built: the sales, finance, support and project management templates read the sources they name, bind every tool to one an install registers, and carry the starter skills of their role (finance carries none: none of the eight is about a ledger). To prove it on the install: after the release, open Install, Acceptance, run the checks, and read the row 'the role templates declare their sources and would answer', which should pass in the two newest runs. Then on Agents, New agent, choose the Support Ticket Agent template, finish the steps, and connect Freshdesk if the page says it is waiting for it.",
+    updated: "2026-10-14",
+  },
+  "M13.8.7": {
+    status: "READY FOR TESTING",
+    why: "Built: the SEO agent template (version 2) declares the analytics and search console connectors, reads the figures each reports, checks a site over HTTP and carries the SEO audit, keyword research and monthly report skills; the monthly report workflow and the channels are set where the builder links to. To prove it on the install: after the release, run the checks on Install, Acceptance and read the row 'the role templates declare their sources and would answer', which should pass in the two newest runs.",
+    updated: "2026-10-14",
+  },
+  "M13.7.9": {
+    status: "READY FOR TESTING",
+    why: "Built: the Maintenance Agent template declares the ticket desk and the maintenance records source, three maintenance skills, the HTTP website check and the read-only browser, and installs read-only; its one workflow and its approval are put on the installed agent from the Automations page. To prove it on the install: after the release, run the checks on Install, Acceptance and read the row 'the role templates declare their sources and would answer', which should pass in the two newest runs. Then on Agents, New agent, choose the Maintenance Agent template.",
+    updated: "2026-10-14",
+  },
   "M13.8.19": {
     status: "READY FOR TESTING",
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
@@ -4948,6 +4963,21 @@ const PROGRESS = {
     status: "READY FOR TESTING",
     why: "built (M27/agent-reads-and-template-withdrawal, migration 0261): an administrator withdraws a published template version with a reason and puts it back, each an inserted row and a ledger entry; a withdrawn version leaves the gallery, its install page and agents' upgrade offers while agents installed from it stay as they were; a version is saved as a signed document and a document from another install is read, then added once, signed again by this install; all behind the template_withdrawal switch, which ships off (needs-rupash 236 asks whether installs should prove origin to each other). Proved on the install with the check 'A withdrawn version is not offered and agents stay pinned'; by hand: turn the switch on in Features, open a template, withdraw its newest version with a reason, see the version before it offered and an agent made from it unchanged, then put it back from Agent templates",
     updated: "2026-10-15",
+  },
+  "M27.15.75": {
+    status: "READY FOR TESTING",
+    why: "To test it on the install: open the Install page and find the check 'the console names no font host and serves every font it ships' passing; open any console page with the browser's network tab open and see every font file come from the install's own address and none from a font service; open /font-licences.txt on the install to read the fonts' licence notices. In CI the 'Console types, boundaries, tests, build' job audits the built bundle (python -m brain.ops.bundle_audit console/dist) and the nightly Browser workflow records every font request of every page.",
+    updated: "2026-10-14",
+  },
+  "M27.15.79": {
+    status: "READY FOR TESTING",
+    why: "Proved by the CI job 'Dependency audit' (python -m brain.ops.dependency_policy offline): it reads every package in the console's lock, build-time ones included, and refuses one whose licence is not on the allowed list or is not recorded. To see it refuse, open a pull request adding a console dependency under a licence the list does not name and read the job's output. Three build-time packages wait on you in needs-rupash item 238; the job prints them on every run.",
+    updated: "2026-10-14",
+  },
+  "M27.15.83": {
+    status: "BLOCKED",
+    why: "Partly built, and the rest is the owner's to supply. Built: docs/reference-screens/index.json records, for each console page the reference screenshots cover, what was adapted and what was refused, and console/tests/reference-screens.test.ts holds it against the route table and the two kept rejections. Not done: the thirteen images are not in the repository. They are in the owner's workspace outside it, and the session that built this could not read or copy them. Copy them into docs/reference-screens/ and set each entry's file in index.json (needs-rupash item 237); then the leaf is ready for testing.",
+    updated: "2026-10-14",
   },
   "M27.15.68": {
     status: "READY FOR TESTING",

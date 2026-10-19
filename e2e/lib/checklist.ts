@@ -15,15 +15,18 @@
  *    control's reason is a sentence naming no task, route or constant (M27.15.53).
  * 6. **Nothing is asked of anybody but the install.** Every request goes to the install or its
  *    identity provider; the console sends no telemetry and loads nothing from elsewhere (M27.15.82).
+ *    Fonts are held to it too, and across the whole session rather than page by page, because a
+ *    font is fetched on the first page that draws with it and a page judged after `reset` would
+ *    never see that request (M27.15.75, `consoleFontRequests`).
  * 7. **Nothing is refused by the page's content security policy** (M27.15.81).
  *
  * The checks are made on the page as the browser drew it, after the network went quiet, because
  * a list that loads after the heading is where a failure notice appears.
  *
- * Task ids: M27.10.6, M27.15.53, M27.15.81, M27.15.82
+ * Task ids: M27.10.6, M27.15.53, M27.15.75, M27.15.81, M27.15.82
  */
 
-import { expect, type Page, type TestInfo } from "@playwright/test";
+import { expect, type Page, type Request, type TestInfo } from "@playwright/test";
 
 /** A WBS task id as this repository writes one: M27.10.6, M32.2.2.1. */
 export const TASK_ID = /\bM\d{1,2}(?:\.\d{1,3}){2,}\b/;
@@ -75,6 +78,12 @@ export function installOrigins(): ReadonlySet<string> {
 /** The failure headings `console/src/ui/FailureNotice.tsx` draws for a request that failed. */
 export const SERVER_FAILURE_HEADINGS: readonly string[] = ["The Brain could not be reached"];
 
+/** One font request: the file asked for and the address of the page that asked. */
+export interface FontRequest {
+  readonly url: string;
+  readonly from: string;
+}
+
 export interface Watch {
   readonly faults: string[];
   readonly refusals: string[];
@@ -83,6 +92,12 @@ export interface Watch {
   readonly elsewhere: string[];
   /** What the browser reported refusing under the page's content security policy. */
   readonly refusedByPolicy: string[];
+  /**
+   * Every font requested since `watch`, and **never cleared by `reset`**. A font is fetched once, by
+   * the first page that draws with it, which is the sign-in or the first screen after it, and
+   * `reset` runs before each page is judged, so the per-page lists above cannot see it.
+   */
+  readonly fonts: FontRequest[];
   /** API requests sent and not yet answered. */
   inFlight: number;
 }
@@ -111,9 +126,47 @@ export async function settle(page: Page, seen: Watch, limitMs = 20_000): Promise
   }
 }
 
+/** The address of the page a request came from, or empty where the browser names none. */
+function askedFrom(request: Request): string {
+  try {
+    return request.frame().url();
+  } catch {
+    // A request made by a worker belongs to no frame, and Playwright throws rather than answering.
+    return "";
+  }
+}
+
+/**
+ * The font requests made by the console's own pages, in the order they were made.
+ *
+ * A page on the identity provider's origin draws with the provider's own fonts, which are its
+ * business and not the console's, so only a request made from a page on the install is the
+ * console's. The rule that follows is `fontsStayOnTheInstall`.
+ */
+export function consoleFontRequests(seen: Watch): FontRequest[] {
+  const installOrigin = new URL(process.env["E2E_BASE_URL"] ?? "http://localhost:8000").origin;
+  return seen.fonts.filter((one) => one.from !== "" && new URL(one.from).origin === installOrigin);
+}
+
+/** The console's font requests that went anywhere but the install. Empty is the pass. */
+export function fontsStayOnTheInstall(seen: Watch): string[] {
+  const installOrigin = new URL(process.env["E2E_BASE_URL"] ?? "http://localhost:8000").origin;
+  return consoleFontRequests(seen)
+    .map((one) => one.url)
+    .filter((url) => new URL(url).origin !== installOrigin);
+}
+
 /** Record every API answer and every uncaught exception on `page` from now on. */
 export function watch(page: Page): Watch {
-  const seen: Watch = { faults: [], refusals: [], thrown: [], elsewhere: [], refusedByPolicy: [], inFlight: 0 };
+  const seen: Watch = {
+    faults: [],
+    refusals: [],
+    thrown: [],
+    elsewhere: [],
+    refusedByPolicy: [],
+    fonts: [],
+    inFlight: 0,
+  };
   const allowed = installOrigins();
   const isApi = (url: string): boolean => {
     const path = new URL(url).pathname;
@@ -126,6 +179,9 @@ export function watch(page: Page): Watch {
     }
     if (isApi(request.url())) {
       seen.inFlight += 1;
+    }
+    if (request.resourceType() === "font") {
+      seen.fonts.push({ url: request.url(), from: askedFrom(request) });
     }
   });
   const answered = (url: string): void => {

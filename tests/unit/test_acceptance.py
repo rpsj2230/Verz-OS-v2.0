@@ -43,6 +43,7 @@ from brain.ops import (
     acceptance_checks_proof_gaps,
     acceptance_checks_recovery,
     acceptance_checks_requirement_areas,
+    acceptance_checks_role_templates,
     acceptance_checks_services,
     acceptance_checks_starter,
     acceptance_checks_storage,
@@ -797,6 +798,12 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     # No vault here, so the start signed no built-in template;
     # `tests/unit/test_acceptance_templates.py` signs the catalogue on and runs it.
     assert outcomes.pop("every_built_in_template_is_on_file_and_installs_at_shadow")[0] == NOT_RUN
+    # The role templates are on file the same way, so with no vault the check says it was not run;
+    # `tests/unit/test_acceptance_role_templates.py` signs the catalogue on and runs it.
+    assert outcomes.pop("the_role_templates_declare_their_sources_and_would_answer") == (
+        NOT_RUN,
+        acceptance_checks_role_templates.NOTHING_ON_FILE_AND_NO_VAULT,
+    )
     assert outcomes.pop("the_rate_limits_screen_lists_the_windows_refusing_now")[0] == NOT_RUN
     assert outcomes.pop("rate_limits_and_capacity_answer_their_readers")[0] == NOT_RUN
     assert outcomes.pop("three_classes_share_one_budget_and_give_way_in_order")[0] == NOT_RUN
@@ -1040,6 +1047,12 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     # A test image may carry no built console, in which case the shell check says so; the install's
     # own image does, and `tests/unit/test_acceptance_checks_localisation.py` serves a bundle.
     assert outcomes.pop("the_console_is_served_as_an_installable_shell")[0] in (PASSED, NOT_RUN)
+    # The same image carries the fonts that check reads;
+    # `tests/unit/test_acceptance_checks_console_bundle.py` serves a bundle with and without them.
+    assert outcomes.pop("the_console_names_no_font_host_and_serves_every_font_it_ships")[0] in (
+        PASSED,
+        NOT_RUN,
+    )
     # Nothing started the application against this database, so nothing furnished it;
     # `tests/unit/test_acceptance_operations_console.py` furnishes one and the check passes.
     assert outcomes.pop("the_install_was_furnished_once_by_the_product") == (
