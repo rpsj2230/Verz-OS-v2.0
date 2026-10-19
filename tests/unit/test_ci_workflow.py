@@ -788,11 +788,17 @@ HANDOVER_JOB = "handover"
 
 #: The pull-request-only jobs that also read a filter of `brain.ops.ci_paths`, by its output.
 PATH_SCOPED = {
-    "console": "console",
     "presidio": "presidio",
     "supply_chain": "dependencies",
     "vulnerabilities": "image",
 }
+
+
+#: The console job's gate: not a task-list-only change, and the console's filter says the diff can
+#: affect it. No event name, so a push to main runs it as a pull request does.
+CONSOLE_GATE = (
+    "${{ needs.changes.outputs.tasks_only != 'true' && needs.changes.outputs.console == 'true' }}"
+)
 
 
 def path_scoped(output: str) -> str:
@@ -956,6 +962,8 @@ def test_main_runs_the_deploy_gates_and_leaves_the_suite_to_the_pull_request() -
     for name, output in PATH_SCOPED.items():
         assert jobs[name].get("if") == path_scoped(output), name
     assert jobs["coverage"]["if"] == "${{ !cancelled() && github.event_name == 'pull_request' }}"
+    # The console is the one path-scoped suite that main also runs, when the push touches it.
+    assert jobs["console"]["if"] == CONSOLE_GATE
     for name in (
         "static",
         "sweeps",
@@ -1007,3 +1015,24 @@ def test_a_regression_in_the_golden_corpus_fails_the_check_main_requires() -> No
         if isinstance(node, ast.FunctionDef)
     }
     assert set(GOLDEN_BLOCKS_ON) <= defined
+
+
+def test_a_red_console_job_on_main_holds_the_deploy() -> None:
+    """The console job runs on a push to main, and the deploy starts only from a CI run that
+    concluded success, so a red console job stops the deploy with no `needs` between workflows.
+
+    Delete this and the console job can be made pull-request-only again, or the deploy can start
+    from a run that failed, and two merged pull requests that break each other's tests reach the
+    install: on 2026-10-19 a guard from one and a label from another left main red for hours
+    because only pull requests ran the console's tests."""
+    jobs = _workflow()["jobs"]
+    assert "github.event_name" not in str(jobs["console"]["if"])
+    assert jobs["console"]["if"] == CONSOLE_GATE
+    deploy = yaml.safe_load(
+        (REPO / ".github" / "workflows" / "deploy.yml").read_text(encoding="utf-8")
+    )
+    triggers = deploy[True]["workflow_run"]
+    assert triggers["workflows"] == [_workflow()["name"]]
+    assert triggers["branches"] == ["main"]
+    condition = str(deploy["jobs"]["build"]["if"])
+    assert "github.event.workflow_run.conclusion == 'success'" in condition

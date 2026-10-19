@@ -74,14 +74,25 @@ def test_each_filtered_job_reads_its_own_filter_and_every_filter_has_a_job() -> 
     assert '"$GITHUB_OUTPUT"' in str(step["run"])
 
 
+#: The console is a check and not an input to a deploy: it is skipped on a push that touches none
+#: of what it is built from, and when it runs and fails, the deploy (which starts only from a CI
+#: run that concluded success) is held. Every other filtered job stays pull-request-only.
+THE_ONE_FILTERED_JOB_MAIN_RUNS = "console"
+
+
 def test_no_deploy_gate_reads_a_filter() -> None:
     """Main keeps every job a deploy depends on. Delete this and a path filter can creep onto a
     job main runs, and a merge deploys with that job skipped."""
     jobs = workflow("ci.yml")["jobs"]
     for name, job in jobs.items():
         gate = str(job.get("if", ""))
+        if name == THE_ONE_FILTERED_JOB_MAIN_RUNS:
+            continue
         if any(f"outputs.{output}" in gate for output in FILTERS):
             assert "github.event_name == 'pull_request'" in gate, name
+    # The exception is held on its own: only the console's filter, and no pull-request clause.
+    gate = str(jobs[THE_ONE_FILTERED_JOB_MAIN_RUNS]["if"])
+    assert "outputs.console == 'true'" in gate and "github.event_name" not in gate
 
 
 def test_a_diff_touching_a_filters_file_runs_its_job_and_one_touching_none_does_not() -> None:

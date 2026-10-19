@@ -17,7 +17,7 @@ env:
   UV_VERSION: "0.12.9"
 
 jobs:
-  # Main runs only what guards the deploy. Every pull request has already passed its tests before
+  # Main runs only what guards the deploy (and the console, when the push touches it). Every pull request has already passed its tests before
   # it merges (the files its diff reaches, or the whole suite for a merge train, see the unit
   # shards below), and the next pull request's run is on top of the newest main, so running
   # the unit shards, console, coverage, handover, analyser and the two supply-chain scans again
@@ -42,8 +42,8 @@ jobs:
     outputs:
       tasks_only: ${{ steps.kind.outputs.tasks_only }}
       # One per filter in `brain.ops.ci_paths`: whether this diff can affect that job. A diff it
-      # cannot compute makes every one true. Read only by pull-request-only jobs; main's deploy
-      # gates never read them.
+      # cannot compute makes every one true. Read by the pull-request-only jobs and by the console job,
+      # which also runs on main.
       dependencies: ${{ steps.paths.outputs.dependencies }}
       image: ${{ steps.paths.outputs.image }}
       presidio: ${{ steps.paths.outputs.presidio }}
@@ -585,11 +585,17 @@ jobs:
   # `src/api/generated/` is gitignored precisely so the console cannot compile against an API
   # that no longer exists, and a job that skipped regeneration would restore that hazard with
   # extra steps.
+  # Runs on a push to main as well as on a pull request, when the push touches what the console is
+  # built from (the filter in `brain.ops.ci_paths`). Each pull request passes it alone, but two
+  # merged pull requests can break a test neither broke by itself: on 2026-10-19 a guard from one and a
+  # label from another left main red in this job for hours, because main never ran it. The deploy
+  # workflow starts only from a CI run that concluded success, so a red console job on main holds the
+  # deploy without any `needs` between the two workflows.
   console:
     name: Console types, boundaries, tests, build
     runs-on: ubuntu-latest
     needs: changes
-    if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.tasks_only != 'true' && needs.changes.outputs.console == 'true' }}
+    if: ${{ needs.changes.outputs.tasks_only != 'true' && needs.changes.outputs.console == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
