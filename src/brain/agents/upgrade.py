@@ -114,14 +114,26 @@ no registry holds; a caller persisting it would have stored the defect
 `brain.agents.install.AN_AGENT_IS_FINISHED_FROM_A_MANIFEST_IN_ONE_PLACE`. `accept` still writes
 nothing: `Upgraded.record` and `Upgraded.leash` are what a caller persists.
 
-**One thing an acceptance does not re-check, said plainly rather than implied.** A new version
-can declare a required placeholder nobody has answered, and `accept` reports nothing missing
-for it. It cannot honestly do otherwise: the answers live only on the draft and on the
-`Installation`, because `brain.agents.install` argued against a `placeholder_answers` column on
-the grounds that nothing writes the table. Reconstructing them from an instance would mean
-inventing them, and an agent reported complete on invented answers is worse than one that says
-nothing, so `accept` passes `settle` no unanswered keys and says so here. This is a gap, not a
-decision to leave it open for ever.
+**A placeholder the new version asks and the old one did not is unanswered, and that is read
+from the two manifests rather than from answers nobody stored (M13.8.11).** The answers live only
+on the draft and on the `Installation`, because `brain.agents.install` argued against a
+`placeholder_answers` column on the grounds that nothing writes the table, so an acceptance cannot
+know what was typed for a question the install already asked. It can know, exactly, which required
+questions are new: a key the pinned version did not require, which nobody can have answered, since
+nobody was asked. `newly_required_placeholders` names them, `accept` hands them to `settle` as the
+unanswered keys, and the agent comes back incomplete and disabled, which is the install's own
+wizard reopened: the page lists what the version still needs and the agent does not answer until a
+person has seen it and switched it on. A question both versions ask is not re-asked, because
+inventing an answer to say it was answered would report complete an agent that may not be, and
+asking it again would turn every upgrade into an install. See
+`A_NEW_QUESTION_IS_UNANSWERED_AND_AN_OLD_ONE_IS_NOT_ASKED_AGAIN`.
+
+**What accepting would need is answered before anybody presses.** `needs_after` is `accept`'s own
+settle run over the instance with every local value kept, and it reports the tools, connectors and
+questions the version leaves missing here, so the review carries the same list the acceptance will
+produce rather than a surprise after it. It writes nothing and is not the acceptance: a resolution
+that takes the version's value for a path the install had overlaid can change the answer, and the
+acceptance recomputes it exactly.
 
 **What consults this.** `brain.agent_upgrade_routes` (2026-10-06): the review, accepting and
 declining over HTTP, with the console's control on the agent's page. It reads the shelf from
@@ -139,7 +151,7 @@ the agent's autonomy by being accepted. `accept` refuses it with the rule's word
 review can show why before anybody presses. Declining is still possible, and so is reading. A rung
 is raised from evidence of the agent's own runs, which no version carries.
 
-Task ids: M13.4.1, M13.4.2, M13.4.3, M13.4.4, M13.4.5
+Task ids: M13.4.1, M13.4.2, M13.4.3, M13.4.4, M13.4.5, M13.8.11
 """
 
 from __future__ import annotations
@@ -258,6 +270,27 @@ A_DECLINE_IS_PINNED_TO_A_VERSION_AND_A_BODY: Final = (
     "the reason the pin carries one: a version republished with a different body is a body "
     "nobody reviewed, and a decline that went on hiding it would turn a refusal to read "
     "into a refusal to be shown."
+)
+
+#: Why an acceptance names the questions that are new and does not re-ask the old ones.
+A_NEW_QUESTION_IS_UNANSWERED_AND_AN_OLD_ONE_IS_NOT_ASKED_AGAIN: Final = (
+    "A required placeholder the new version asks and the version the agent runs did not is a "
+    "question nobody was asked, so it is unanswered by construction and the agent is held "
+    "incomplete and disabled until a person has seen it. A question both versions ask was put to "
+    "whoever installed the agent, and the answer was never stored, so an acceptance cannot say "
+    "it was answered and must not say it was not: it leaves the badge as the install left it. "
+    "Treating every required question as unanswered would disable every upgrade of every "
+    "agent, and treating none as unanswered, which is what this module did until 2026-10-14, "
+    "let a version that asks a new question run on a blank."
+)
+
+#: Why the offered version is checked the way an install is, before anybody presses accept.
+AN_UPGRADE_IS_FINISHED_BY_THE_CHECKS_AN_INSTALL_IS: Final = (
+    "Accepting a version is the moment its tools, connectors and questions stop being a document "
+    "and become what an agent runs on, so it meets the same binding and completeness checks an "
+    "install meets (`brain.agents.install.settle`), and a version that leaves something missing "
+    "here comes back incomplete and disabled, naming each thing, instead of running on what is "
+    "declared and not bound."
 )
 
 #: Why the offer is always the newest version and never an intermediate one.
@@ -726,6 +759,86 @@ def rungs_an_upgrade_would_raise(reviewed: UpgradeReview) -> tuple[str, ...]:
     )
 
 
+def newly_required_placeholders(reviewed: UpgradeReview) -> tuple[str, ...]:
+    """The required questions the offered version asks and the pinned one did not, in its order.
+
+    These are unanswered by construction: nobody was asked them. A question the pinned version
+    already required is not here, whether or not anybody answered it, for the reason in
+    `A_NEW_QUESTION_IS_UNANSWERED_AND_AN_OLD_ONE_IS_NOT_ASKED_AGAIN`. Empty when nothing is on
+    offer. A question the pinned version asked but did not require, and the new one requires, is
+    new in the sense that matters: nobody was obliged to answer it, so nobody can be assumed to.
+    """
+    candidate = reviewed.candidate
+    if candidate is None:
+        return ()
+    required = {one.key for one in reviewed.pinned.manifest.placeholders if one.required}
+    return tuple(
+        one.key
+        for one in candidate.manifest.placeholders
+        if one.required and one.key not in required
+    )
+
+
+def _moved_to(
+    candidate: SignedManifest,
+    instance: TemplateInstance,
+    overlay: Mapping[str, JsonValue],
+    owners: Mapping[str, FieldOwner],
+) -> TemplateInstance:
+    """The instance pinned to the offered version, carrying this overlay and these owners.
+
+    One construction for an acceptance and for the dry run beside it, so what the review says an
+    acceptance will need and what the acceptance settles are built the same way.
+    """
+    identity = candidate.manifest.identity
+    return TemplateInstance(
+        instance_id=instance.instance_id,
+        template_id=identity.template_id,
+        template_version=identity.version,
+        content_digest=candidate.content_digest,
+        overlay=overlay,
+        overlay_owners=owners,
+        created_by=instance.created_by,
+    )
+
+
+def needs_after(
+    reviewed: UpgradeReview,
+    *,
+    audience: AgentAudience,
+    registry: ConnectorRegistry,
+    tools: ToolRegistry,
+    at: datetime,
+) -> Completeness | None:
+    """What the offered version would leave missing on this install, before anybody accepts it.
+
+    `accept`'s own settle run over the instance with every local value kept, so the tools that
+    bind to nothing here, the connectors that do not serve and the new questions are the ones the
+    acceptance will report. Writes nothing and moves no pin. None when nothing is on offer or when
+    the version cannot be applied to this agent as configured, which the acceptance refuses in its
+    own words. A resolution taking the version's value for a path this install had overlaid can
+    change the answer, and the acceptance recomputes it. See
+    `AN_UPGRADE_IS_FINISHED_BY_THE_CHECKS_AN_INSTALL_IS`.
+    """
+    candidate = reviewed.candidate
+    if candidate is None:
+        return None
+    instance = reviewed.instance
+    try:
+        settled = settle(
+            candidate,
+            _moved_to(candidate, instance, instance.overlay, instance.overlay_owners),
+            audience=audience,
+            unanswered=newly_required_placeholders(reviewed),
+            registry=registry,
+            tools=tools,
+            at=at,
+        )
+    except (TemplateError, ValueError):
+        return None
+    return settled.completeness
+
+
 def accept(
     reviewed: UpgradeReview,
     *,
@@ -767,8 +880,9 @@ def accept(
 
     **The upgraded agent is settled through `brain.agents.install.settle`**, against `registry`
     and `tools`, so what comes back is bound, pinned and badged exactly as `complete` would
-    leave an install of the same manifest. No unanswered placeholder is passed, for the reason
-    the module docstring gives.
+    leave an install of the same manifest. **The unanswered placeholders are the questions the
+    version asks and the pinned one did not** (`newly_required_placeholders`), so a version that
+    asks something new comes back incomplete and disabled, naming it, as an install would.
     """
     candidate = reviewed.candidate
     if candidate is None:
@@ -814,21 +928,12 @@ def accept(
         overlay[path] = value
         owners[path] = instance.overlay_owners[path]
 
-    identity = candidate.manifest.identity
-    upgraded = TemplateInstance(
-        instance_id=instance.instance_id,
-        template_id=identity.template_id,
-        template_version=identity.version,
-        content_digest=candidate.content_digest,
-        overlay=overlay,
-        overlay_owners=owners,
-        created_by=instance.created_by,
-    )
+    upgraded = _moved_to(candidate, instance, overlay, owners)
     settled = settle(
         candidate,
         upgraded,
         audience=audience,
-        unanswered=(),
+        unanswered=newly_required_placeholders(reviewed),
         registry=registry,
         tools=tools,
         at=at,
