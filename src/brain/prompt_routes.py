@@ -52,7 +52,7 @@ which `brain.audit.ledger.AuditAction` argues. A give-back removes the overlay's
 no longer says who gave the instructions back: the route sets who, at what reach and for which
 request in the transaction before it writes, and the trigger reads them.
 
-Task ids: M27.8.9
+Task ids: M27.8.9, M16.7.1
 """
 
 from __future__ import annotations
@@ -71,6 +71,7 @@ from brain.agent_routes import manifest_of, record_of, viewer_of
 from brain.agents.model import PERSONA_CHARS, AgentRecord, visible_agent_ids
 from brain.agents.template import (
     FieldOwner,
+    FieldSource,
     SignedManifest,
     TemplateError,
     TemplateInstance,
@@ -143,8 +144,15 @@ class AgentInstructionsView(BaseModel):
     #: True when this install replaced the template's instructions.
     overridden: bool
     #: Who set the instructions in force and when: this install's editor, or the template's signer.
+    #: For instructions the agent's own learning wrote, the person who approved them.
     set_by: str | None
     set_at: datetime | None
+    #: Where the instructions in force came from: `template`, `instance` or `learned`, the
+    #: members of `brain.agents.template.FieldSource`. Null for an agent with no install.
+    source: str | None = None
+    #: True when the agent's own learning wrote the instructions in force (M16.7.1), so a person
+    #: can tell what the agent taught itself from what somebody here set, and give it back.
+    machine_authored: bool = False
     #: The hash an edit must name. `brain.agents.template.config_hash`, which the cache keys on.
     effective_hash: str | None
     #: False for an agent whose install record is missing or does not construct.
@@ -353,6 +361,8 @@ def instructions_view(
                 overridden=PERSONA_PATH in instance.overlay,
                 set_by=owner.set_by,
                 set_at=owner.set_at,
+                source=owner.source.value,
+                machine_authored=owner.source is FieldSource.LEARNED,
                 effective_hash=effective_hash,
                 installed=True,
                 editable=editable,

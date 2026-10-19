@@ -359,17 +359,24 @@ class SealedPathError(TemplateError):
 
 
 class FieldSource(enum.StrEnum):
-    """Where a path's current value came from. Two members, and there is no third.
+    """Where a path's current value came from. Three members, and there is no fourth.
 
-    A value is either the template's, meaning nobody here has touched it and an upgrade may
-    move it, or this instance's, meaning somebody set it and an upgrade must ask. A third
-    member for "the template's, but confirmed here" was rejected: it changes nothing about
-    what the agent does and it is the kind of state that ends up meaning "somebody clicked
-    a button once".
+    A value is the template's, meaning nobody here has touched it and an upgrade may move it,
+    or this instance's, meaning somebody set it and an upgrade must ask, or **learned**,
+    meaning the agent's own learning wrote it after a person approved the change (M16.7.1).
+    The third is a different answer from the second and not a flavour of it: an instance's
+    value is an administrator's decision, and a learned one is the product's suggestion that an
+    administrator agreed to, so a person who wants to list and give back exactly what the agent
+    taught itself, apart from what somebody here set, has to be able to tell them apart in the
+    record of who set what. A member for "the template's, but confirmed here" was rejected: it
+    changes nothing about what the agent does and it is the kind of state that ends up meaning
+    "somebody clicked a button once". `brain.agents.learned` is the one door a learned value
+    goes through, and `set_by` on a learned owner is the person who approved it.
     """
 
     TEMPLATE = "template"
     INSTANCE = "instance"
+    LEARNED = "learned"
 
 
 class FieldOwner(BaseModel):
@@ -949,15 +956,23 @@ def install(
 
 
 def set_field(
-    instance: TemplateInstance, path: str, value: JsonValue, *, by: str, at: datetime
+    instance: TemplateInstance,
+    path: str,
+    value: JsonValue,
+    *,
+    by: str,
+    at: datetime,
+    source: FieldSource = FieldSource.INSTANCE,
 ) -> TemplateInstance:
     """Overlay one path and record who did it (M13.2.4).
 
     Returns a new instance rather than mutating one, so the value before the edit is still
-    holdable when the console renders what changed.
+    holdable when the console renders what changed. `source` is `INSTANCE` for a person's own
+    edit and `LEARNED` only from `brain.agents.learned.learn_field`, which is the one caller
+    that names it, so a learned mark is never one a person's edit can carry.
     """
     check_overlay({path: value})
-    owner = FieldOwner(source=FieldSource.INSTANCE, set_by=by, set_at=at)
+    owner = FieldOwner(source=source, set_by=by, set_at=at)
     return instance.model_copy(
         update={
             "overlay": {**instance.overlay, path: value},

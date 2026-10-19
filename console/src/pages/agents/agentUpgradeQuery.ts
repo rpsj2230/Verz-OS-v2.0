@@ -70,6 +70,15 @@ export interface UpgradeChange {
   readonly sealed: boolean;
 }
 
+/** One thing the version on offer leaves missing on this install: `UpgradeNeedView`. */
+export interface UpgradeNeed {
+  /** `field`, `placeholder`, `connector` or `tool`. */
+  readonly kind: string;
+  readonly name: string;
+  /** The API's own sentence, which is what is drawn. */
+  readonly sentence: string;
+}
+
 /** What is waiting for one agent: `UpgradeView`. */
 export interface AgentUpgrade {
   readonly agentId: string;
@@ -83,6 +92,8 @@ export interface AgentUpgrade {
   readonly updates: readonly UpgradeChange[];
   readonly acceptUnavailable?: string;
   readonly nothing?: string;
+  /** What accepting would leave missing here, named before anybody presses. */
+  readonly needs: readonly UpgradeNeed[];
 }
 
 function fieldsOf(payload: unknown): Readonly<Record<string, unknown>> | null {
@@ -154,6 +165,25 @@ function readChanges(payload: unknown): readonly UpgradeChange[] {
   return found;
 }
 
+/** The needs a review or an acceptance named, out of a response body. A row without its sentence is not one. */
+export function readNeeds(payload: unknown): readonly UpgradeNeed[] {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+  const found: UpgradeNeed[] = [];
+  for (const row of payload as readonly unknown[]) {
+    const fields = fieldsOf(row);
+    const kind = said(fields?.["kind"]);
+    const name = said(fields?.["name"]);
+    const sentence = said(fields?.["sentence"]);
+    if (kind === undefined || name === undefined || sentence === undefined) {
+      continue;
+    }
+    found.push({ kind, name, sentence });
+  }
+  return found;
+}
+
 /** The review out of a response body, or null when the body is not one. */
 export function readUpgrade(payload: unknown): AgentUpgrade | null {
   const fields = fieldsOf(payload);
@@ -185,6 +215,7 @@ export function readUpgrade(payload: unknown): AgentUpgrade | null {
     updates: readChanges(fields["updates"]),
     ...(acceptUnavailable === undefined ? {} : { acceptUnavailable }),
     ...(nothing === undefined ? {} : { nothing }),
+    needs: readNeeds(fields["needs"]),
   };
 }
 
@@ -255,7 +286,12 @@ export const ACCEPT_CONSEQUENCE =
 export const DECLINE_CONSEQUENCE =
   "This version will not be offered again for this agent. A newer one will be. You can still " +
   "upgrade to it from here later.";
+export const NEEDS_HEADING = "What this version needs on this install";
+export const NEEDS_CONSEQUENCE =
+  "If you upgrade, the agent is switched off until these are in place, and nothing it answers " +
+  "comes from a source it does not have.";
 export const DONE_UPGRADED = "Upgraded";
+export const DONE_SWITCHED_OFF = "Upgraded, and switched off until it has what it needs";
 export const DONE_DECLINED = "Declined";
 export const NOT_CHANGED = "Nothing was changed";
 export { SOMETHING_DID_NOT_WORK } from "../../ui/FailureNotice";

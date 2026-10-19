@@ -23,7 +23,8 @@
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
-import { CompositionDiff } from "../src/components/CompositionDiff";
+import { CompositionDiff, isSetOnThisAgent, isTaughtByTheAgent } from "../src/components/CompositionDiff";
+import { TAUGHT_BY_THE_AGENT } from "../src/components/agentWorkspaceState";
 import { NOT_RECORDED, UNAVAILABLE_MARK } from "../src/components/kit";
 import { FIGURES_FAILED } from "../src/components/kit/KpiStrip";
 import { readAgentWorkspace, type AgentWorkspaceAnswer } from "../src/pages/agentQuery";
@@ -835,6 +836,27 @@ describe("what an answer becomes", () => {
       expect(markup).not.toContain("quote-draft");
     }
     expect(diffMarkup(complete)).toContain("quote-draft");
+  });
+
+  test("a value the agent's own learning wrote is marked as a local difference and says so in its own word", () => {
+    // What breaks if this is deleted: what an agent taught itself drawn like the template's own
+    // value, so nobody can tell it from what an administrator set, or drawn as "set here", which
+    // says somebody typed it.
+    const learned = backendFieldSource("LEARNED");
+    expect(learned).toBe(TAUGHT_BY_THE_AGENT);
+    const rows = read({
+      agent: agentWire(),
+      composition: [
+        { ...(compositionWire()[0] as Record<string, unknown>), source: learned, set_by: "reviewer-one" },
+        compositionWire()[2],
+      ],
+    }).composition;
+
+    expect(rows.map(isTaughtByTheAgent)).toEqual([true, false]);
+    expect(rows.map(isSetOnThisAgent)).toEqual([false, false]);
+    const markup = diffMarkup([{ ...(compositionWire()[0] as Record<string, unknown>), source: learned }]);
+    expect(markup).toContain("composition-diff__row--local");
+    expect(markup).toContain("learned");
   });
 
   test("the answer the page holds has no field for what was left out", () => {

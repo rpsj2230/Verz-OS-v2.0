@@ -144,7 +144,7 @@ describe("the own account card", () => {
 
     fireEvent.click(screen.getByRole("button", { name: DETACH_LABEL }));
     expect(posts).toEqual([]);
-    fireEvent.click(screen.getByRole("button", { name: "Detach" }));
+    fireEvent.click(screen.getByRole("button", { name: "Detach my Google account" }));
 
     await waitFor(() => {
       expect(container.textContent).toContain("Nothing was changed");

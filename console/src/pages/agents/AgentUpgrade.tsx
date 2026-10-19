@@ -49,10 +49,14 @@ import {
   DECLINE_LABEL,
   declineBody,
   DONE_DECLINED,
+  DONE_SWITCHED_OFF,
   DONE_UPGRADED,
   hasAnOffer,
   KEEP_LABEL,
+  NEEDS_CONSEQUENCE,
+  NEEDS_HEADING,
   NOT_CHANGED,
+  readNeeds,
   readNotChanged,
   readUpgrade,
   RESOLUTION_LABELS,
@@ -61,6 +65,7 @@ import {
   valueWords,
   type AgentUpgrade as Review,
   type Resolution,
+  type UpgradeNeed,
 } from "./agentUpgradeQuery";
 
 type Step = "accept" | "decline";
@@ -151,17 +156,50 @@ function Updates({ review }: { readonly review: Review }) {
   );
 }
 
+/** What the version would leave missing here, named before it is accepted. Nothing is drawn when nothing is. */
+function Needs({ needs }: { readonly needs: readonly UpgradeNeed[] }) {
+  if (needs.length === 0) {
+    return null;
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="m-0 text-[13px] font-semibold text-ink">{NEEDS_HEADING}</h3>
+      <ul className="m-0 flex list-none flex-col gap-1 p-0">
+        {needs.map((one) => (
+          <li key={`${one.kind}-${one.name}`} className="text-[13px] text-ink">
+            {one.sentence}
+          </li>
+        ))}
+      </ul>
+      <Note kind="info">{NEEDS_CONSEQUENCE}</Note>
+    </div>
+  );
+}
+
 /** What the page holds of an agent's upgrade: the review once it has answered, and a way to ask again. */
 export interface UpgradeReview {
   readonly review: Review | null;
   /** True while the first answer, or a fresh one after a write, is on its way. */
   readonly busy: boolean;
   readonly refresh: () => void;
+  /**
+   * What the last write did, kept here and not in the card, because the page is redrawn from its
+   * loading state after an upgrade and a card's own state does not survive that.
+   */
+  readonly outcome: Outcome | null;
+  readonly settle: (outcome: Outcome | null) => void;
+}
+
+/** What an upgrade or a decline did, and what the agent still needs if it was switched off. */
+export interface Outcome {
+  readonly title: string;
+  readonly needs: readonly UpgradeNeed[];
 }
 
 /** Asks for the review, and asks again whenever `refresh` is called. A 404 is `review: null`. */
 export function useUpgradeReview(agentId: string): UpgradeReview {
   const [version, setVersion] = useState(0);
+  const [outcome, settle] = useState<Outcome | null>(null);
   const answer = useResource<unknown>(agentUpgradeApiPath(agentId), version);
   const review = useMemo(
     () => (answer.failure !== null || answer.data === null ? null : readUpgrade(answer.data)),
@@ -170,7 +208,7 @@ export function useUpgradeReview(agentId: string): UpgradeReview {
   const refresh = useCallback(() => {
     setVersion((count) => count + 1);
   }, []);
-  return { review, busy: answer.busy, refresh };
+  return { review, busy: answer.busy, refresh, outcome, settle };
 }
 
 export function AgentUpgrade({
@@ -182,11 +220,10 @@ export function AgentUpgrade({
   readonly upgrade: UpgradeReview;
   readonly onChanged: () => void;
 }) {
-  const { review, busy, refresh } = upgrade;
+  const { review, busy, refresh, outcome, settle } = upgrade;
   const [chosen, setChosen] = useState<Readonly<Record<string, Resolution>>>({});
   const [step, setStep] = useState<Step | null>(null);
   const [sending, setSending] = useState(false);
-  const [told, setTold] = useState<string | null>(null);
   const [refused, setRefused] = useState<Refused | null>(null);
 
   const choose = useCallback((path: string, resolution: Resolution) => {
@@ -199,13 +236,18 @@ export function AgentUpgrade({
     setStep(null);
     if (result.ok) {
       setRefused(null);
-      setTold(what === "accept" ? DONE_UPGRADED : DONE_DECLINED);
+      // A cast at the boundary: only the one field is read, and readNeeds checks what is in it.
+      const needs = what === "accept" ? readNeeds((result.data as { readonly needs?: unknown } | null)?.needs) : [];
+      settle({
+        title: what === "accept" ? (needs.length > 0 ? DONE_SWITCHED_OFF : DONE_UPGRADED) : DONE_DECLINED,
+        needs,
+      });
       setChosen({});
       refresh();
       onChanged();
       return;
     }
-    setTold(null);
+    settle(null);
     const notChanged = result.failure.status === 409 ? readNotChanged(result.body) : null;
     setRefused(
       notChanged === null
@@ -245,9 +287,12 @@ export function AgentUpgrade({
         title={refused.title}
         {...(refused.sentence === undefined ? {} : { sentence: refused.sentence })}
       />
-    ) : told !== null ? (
-      <Notice title={told}>
+    ) : outcome !== null ? (
+      <Notice title={outcome.title}>
         <p>{review?.displayName ?? ""}</p>
+        {outcome.needs.map((one) => (
+          <p key={`${one.kind}-${one.name}`}>{one.sentence}</p>
+        ))}
       </Notice>
     ) : null;
 
@@ -301,6 +346,7 @@ export function AgentUpgrade({
         <div className="flex min-w-0 flex-col gap-4 p-4">
           <Conflicts review={review} chosen={chosen} onChoose={choose} />
           <Updates review={review} />
+          <Needs needs={review.needs} />
           {review.conflicts.length === 0 && review.updates.length === 0 ? (
             <Note kind="info">This version changes nothing a person can read here.</Note>
           ) : null}
