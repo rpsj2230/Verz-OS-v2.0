@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-19T12:35:58.198013+00:00",
-  "commit": "c13814f8",
-  "commit_subject": "Pull requests stop committing the generated work-breakdown files, so merging one no longer makes the others conflict (#632)",
+  "generated_at": "2026-10-19T13:32:17.808876+00:00",
+  "commit": "53532d8f",
+  "commit_subject": "An agent's slice of the Learning, Memory and Artifacts reads, and withdrawing, undoing, exporting and importing a template version (switch off) (#621)",
   "total": 1626,
   "done": 1141,
   "percent": 70.2,
-  "built": 1303,
-  "built_percent": 80.1,
-  "built_unproven": 162,
+  "built": 1305,
+  "built_percent": 80.3,
+  "built_unproven": 164,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -89,6 +89,8 @@
     "M27.11.14",
     "M27.15.19",
     "M27.15.32",
+    "M27.15.34",
+    "M27.15.35",
     "M27.15.50",
     "M27.15.57",
     "M27.15.68",
@@ -228,13 +230,13 @@
       "done": 460,
       "percent": 76.8,
       "in_progress": 4,
-      "ready_for_testing": 57,
+      "ready_for_testing": 59,
       "blocked": 3,
-      "open": 75,
+      "open": 73,
       "acts": 1,
       "decided": 56,
-      "built": 516,
-      "built_percent": 86.1
+      "built": 518,
+      "built_percent": 86.5
     },
     {
       "wave": 4,
@@ -561,7 +563,7 @@
       "done": 156,
       "acts": 0,
       "decided": 22,
-      "built": 172
+      "built": 174
     },
     {
       "module": "M28",
@@ -2979,6 +2981,16 @@
     "M27.15.32": {
       "status": "READY FOR TESTING",
       "why": "built (M27/agent-profile-and-personal-agents): the Profile's computer use card is the sentence the API sends (GET /agents/{id}/capabilities, computer_use, from brain.console.agent_behaviour), which says computer use is not offered because the product has no isolated desktop runner, and nothing is drawn to switch. Whether a runner exists is asked of the import machinery for the module brain.browsing.desktop and not of a constant, so the day it is added the sentence changes and the install check says not run until a person looks again; even then offered stays false until a per-agent switch is built. A reader sent no detail is drawn no card. Install check computer_use_is_not_offered_until_a_desktop_runner_exists. To prove on the install: open any agent's Profile; the card Computer use reads Not offered, with the reason, and holds no button or switch",
+      "updated": "2026-10-15"
+    },
+    "M27.15.34": {
+      "status": "READY FOR TESTING",
+      "why": "built (M27/agent-reads-and-template-withdrawal): the Learning, Memory and Artifacts reads take an optional agent, cut after the reader's audience, so an agent the reader may not see answers as one that does not exist; an agent's own Memory tab no longer lists the learnings formed in plain conversations. Proved on the install with the check 'An estate read cut to an agent is its slice and hides the rest', which passes when the install's two newest runs both pass it; by hand: on Learning, Artifacts and a person's Memory page ask for one agent and see only what it formed or produced, then ask for a personal agent of somebody else and see the same answer as for one that was never made",
+      "updated": "2026-10-15"
+    },
+    "M27.15.35": {
+      "status": "READY FOR TESTING",
+      "why": "built (M27/agent-reads-and-template-withdrawal, migration 0261): an administrator withdraws a published template version with a reason and puts it back, each an inserted row and a ledger entry; a withdrawn version leaves the gallery, its install page and agents' upgrade offers while agents installed from it stay as they were; a version is saved as a signed document and a document from another install is read, then added once, signed again by this install; all behind the template_withdrawal switch, which ships off (needs-rupash 236 asks whether installs should prove origin to each other). Proved on the install with the check 'A withdrawn version is not offered and agents stay pinned'; by hand: turn the switch on in Features, open a template, withdraw its newest version with a reason, see the version before it offered and an agent made from it unchanged, then put it back from Agent templates",
       "updated": "2026-10-15"
     },
     "M27.15.41": {
