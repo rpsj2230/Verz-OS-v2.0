@@ -153,8 +153,11 @@ def test_text_that_is_not_utf8_past_its_head_is_unscannable() -> None:
 
 
 def test_a_container_this_path_does_not_read_is_unscannable() -> None:
-    """Delete this and an image handed to this check is cleared by a check that never looked."""
+    """Delete this and a binary file of no known kind handed to this check is cleared by a check
+    that never looked. An image is judged by its header (`test_model_server_parsers.py`), so the
+    example is a file with no signature at all, and a PNG whose header is not one is refused too."""
     png = bytes((0x89,)) + b"PNG" + bytes((0x0D, 0x0A, 0x1A, 0x0A)) + bytes(16)
+    assert verdict(bytes((0x00, 0x01, 0x02, 0x03)) * 8) is ScanVerdict.UNSCANNABLE
     assert verdict(png) is ScanVerdict.UNSCANNABLE
 
 

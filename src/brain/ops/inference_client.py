@@ -314,6 +314,15 @@ class _HttpxTransport:
         return cast(InferenceResponse, response)
 
 
+def http_transport() -> InferenceTransport:
+    """The `httpx` transport, for the other client of the same server (`model_server_client`).
+
+    One transport behind one protocol, so a second client does not grow a second translation of
+    `httpx`'s exceptions or a second reason to keep a document's address out of a log line.
+    """
+    return _HttpxTransport(client=httpx.Client())
+
+
 def make_client(
     *, env: Mapping[str, str] | None = None, timeout_seconds: float = EMBED_TIMEOUT_SECONDS
 ) -> InferenceEmbeddingClient:

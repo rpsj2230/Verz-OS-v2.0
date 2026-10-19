@@ -322,6 +322,10 @@ ALLOWED_HOSTS: Final[frozenset[str]] = frozenset(
         # the same checkpoint for everyone, so it is a package source like the two indexes above
         # and never one company's host.
         "huggingface.co",
+        # The public Maven repository the model server fetches the text extractor's release from
+        # (`inference_server.fetch`). Not yet pinned to a digest (needs-rupash 240). A package
+        # source like the indexes above; the same artefact for every install.
+        "repo1.maven.org",
         # This product's own provenance, and the two entries are one fact in two halves.
         # `ops/deploy.sh` and `ops/watch-and-deploy.sh` verify the image's signature before
         # running it, and a Sigstore verification is an assertion about two fixed strings:

@@ -77,7 +77,29 @@ SOURCES: Final[tuple[Source, ...]] = (
         name="Qwen3-Embedding-0.6B-Q8_0.gguf",
         url="https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf",
     ),
+    # Tesseract's English data, the small "fast" model the budget's basis is written for. It sits in
+    # a directory of its own because the engine is pointed at a directory, not a file.
+    Source(
+        part="ocr",
+        name="tessdata/eng.traineddata",
+        url="https://github.com/tesseract-ocr/tessdata_fast/raw/main/eng.traineddata",
+    ),
+    # Apache Tika's server, the jar the general reader starts a JVM from. Version 3.0.0 is the one
+    # whose command line `inference_server.parts.tika` is written from; nobody has run it.
+    Source(
+        part="tika",
+        name="tika/tika-server.jar",
+        url=(
+            "https://repo1.maven.org/maven2/org/apache/tika/tika-server-standard/3.0.0/"
+            "tika-server-standard-3.0.0.jar"
+        ),
+    ),
 )
+
+#: Parts whose weights are a directory of many files that one library knows how to fetch, by the
+#: directory's name under the model directory. Not in `SOURCES` because there is no one URL, and not
+#: pinned because there is no one digest: the library records its own revisions.
+DIRECTORIES: Final[dict[str, str]] = {"layout": "docling"}
 
 
 class FetchError(Exception):
@@ -112,6 +134,7 @@ def fetch_one(source: Source, directory: Path, *, opener: object = None) -> str:
     `opener` is how a test stands in for the network; in the image it is `urllib.request.urlopen`.
     """
     target = directory / source.name
+    target.parent.mkdir(parents=True, exist_ok=True)
     held = _record(directory).get(source.name)
     if target.exists() and held is not None and held.get("bytes") == target.stat().st_size:
         recorded = str(held.get("sha256", ""))
@@ -157,6 +180,46 @@ def fetch_one(source: Source, directory: Path, *, opener: object = None) -> str:
     )
 
 
+def fetch_layout_weights(target: Path) -> None:
+    """Docling's layout and table models, fetched by its own downloader into `target`.
+
+    **Never run.** The call is written from Docling's documented model downloader and nothing here
+    has installed Docling; the first install that chooses the layout part is its first run, and an
+    exception is reported by type and nothing else, so the fault is the part's to fix and not a
+    sentence from a library. The weights are Docling's own and carry its own revisions: this module
+    pins nothing about them, and `needs-rupash 240` says so.
+    """
+    from docling.utils.model_downloader import download_models
+
+    download_models(
+        output_dir=target,
+        with_layout=True,
+        with_tableformer=True,
+        with_code_formula=False,
+        with_picture_classifier=False,
+        with_easyocr=False,
+    )
+
+
+def fetch_directory(name: str, directory: Path, *, download: object = None) -> str:
+    """Make a directory of weights present, unless it already holds something, and say which.
+
+    A directory that is already there and not empty is left alone for the reason a file is: a
+    restart of the release must not become a download, and an install with no route out at that
+    moment must keep working.
+    """
+    target = directory / name
+    if target.is_dir() and any(target.iterdir()):
+        return f"{name} is already here"
+    target.mkdir(parents=True, exist_ok=True)
+    try:
+        (download or fetch_layout_weights)(target)  # type: ignore[operator]
+    except Exception as error:
+        msg = f"{name} could not be fetched: {error.__class__.__name__}"
+        raise FetchError(msg) from error
+    return f"{name} fetched; its revisions are the library's own and are not pinned here"
+
+
 def main(argv: list[str]) -> int:
     """Fetch every file the named parts need into the model directory. Exit 0 if all are there."""
     directory = Path(os.environ.get("INFERENCE_MODEL_DIR", "/models"))
@@ -169,6 +232,14 @@ def main(argv: list[str]) -> int:
     for source in sources_for(parts):
         try:
             print(fetch_one(source, directory))
+        except FetchError as error:
+            print(str(error), file=sys.stderr)
+            failed = True
+    for part, name in DIRECTORIES.items():
+        if part not in parts:
+            continue
+        try:
+            print(fetch_directory(name, directory))
         except FetchError as error:
             print(str(error), file=sys.stderr)
             failed = True
