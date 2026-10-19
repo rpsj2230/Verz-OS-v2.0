@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-19T11:36:11.248468+00:00",
-  "commit": "26adb61f",
-  "commit_subject": "The maintenance agent joins the catalogue, and the role templates read the sources they name (M13.7.9, M13.8.7, M13.8.8) (#618)",
+  "generated_at": "2026-10-19T12:00:59.399980+00:00",
+  "commit": "16098818",
+  "commit_subject": "The console's fonts and licences are checked on what is built, and each reference screen records what was adapted and refused (#630)",
   "total": 1626,
   "done": 1141,
   "percent": 70.2,
-  "built": 1301,
-  "built_percent": 80.0,
-  "built_unproven": 160,
+  "built": 1303,
+  "built_percent": 80.1,
+  "built_unproven": 162,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -93,6 +93,8 @@
     "M27.15.57",
     "M27.15.68",
     "M27.15.71",
+    "M27.15.75",
+    "M27.15.79",
     "M27.16.2",
     "M27.16.3",
     "M27.7.23",
@@ -226,13 +228,13 @@
       "done": 460,
       "percent": 76.8,
       "in_progress": 4,
-      "ready_for_testing": 55,
-      "blocked": 2,
-      "open": 78,
+      "ready_for_testing": 57,
+      "blocked": 3,
+      "open": 75,
       "acts": 1,
       "decided": 56,
-      "built": 514,
-      "built_percent": 85.8
+      "built": 516,
+      "built_percent": 86.1
     },
     {
       "wave": 4,
@@ -559,7 +561,7 @@
       "done": 156,
       "acts": 0,
       "decided": 22,
-      "built": 170
+      "built": 172
     },
     {
       "module": "M28",
@@ -3017,6 +3019,21 @@
     "M27.15.71": {
       "status": "READY FOR TESTING",
       "why": "Built on branch M27/console-lists-wizards-buttons. Prove it on the install. (1) On any page with both a Cancel and an act that removes or stops something (Stop, a retention hold, a review decision), the main act is the filled accent button, Cancel is the quiet button with no border, and the removing act is the red-washed danger button, each visibly different. (2) Open the console home: the figures are tiles, Needs you and Recent activity are each a card with its own heading, as on the first screen of the key screens design. The Overview already drew these; this task names the three button variants, moves every page onto them and holds that with a check.",
+      "updated": "2026-10-14"
+    },
+    "M27.15.75": {
+      "status": "READY FOR TESTING",
+      "why": "To test it on the install: open the Install page and find the check 'the console names no font host and serves every font it ships' passing; open any console page with the browser's network tab open and see every font file come from the install's own address and none from a font service; open /font-licences.txt on the install to read the fonts' licence notices. In CI the 'Console types, boundaries, tests, build' job audits the built bundle (python -m brain.ops.bundle_audit console/dist) and the nightly Browser workflow records every font request of every page.",
+      "updated": "2026-10-14"
+    },
+    "M27.15.79": {
+      "status": "READY FOR TESTING",
+      "why": "Proved by the CI job 'Dependency audit' (python -m brain.ops.dependency_policy offline): it reads every package in the console's lock, build-time ones included, and refuses one whose licence is not on the allowed list or is not recorded. To see it refuse, open a pull request adding a console dependency under a licence the list does not name and read the job's output. Three build-time packages wait on you in needs-rupash item 238; the job prints them on every run.",
+      "updated": "2026-10-14"
+    },
+    "M27.15.83": {
+      "status": "BLOCKED",
+      "why": "Partly built, and the rest is the owner's to supply. Built: docs/reference-screens/index.json records, for each console page the reference screenshots cover, what was adapted and what was refused, and console/tests/reference-screens.test.ts holds it against the route table and the two kept rejections. Not done: the thirteen images are not in the repository. They are in the owner's workspace outside it, and the session that built this could not read or copy them. Copy them into docs/reference-screens/ and set each entry's file in index.json (needs-rupash item 237); then the leaf is ready for testing.",
       "updated": "2026-10-14"
     },
     "M27.16.1": {
