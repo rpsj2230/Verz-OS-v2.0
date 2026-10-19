@@ -45,7 +45,10 @@ the route it calls is `brain.automation_routes`, which the install's acceptance 
 `brain.ops.acceptance_checks_automation` posts steps to. The container (M32.6.1.1) is
 `docker-compose.automation.yml`, which a release starts only where `INSTALL_SERVICES` names
 `automation` (`brain.ops.overlays`), and which costs 896 MiB with its proxy and its database. What
-is here is the boundary the piece obeys and the checks that say whether it does.
+is here is the boundary the piece obeys and the checks that say whether it does. What the running
+canvas is, as the server's docker sees it (its networks, the names of its variables, its routes and
+the allowlist its proxy runs), is `brain.ops.automation_report`, and the install's checks that read
+it are `brain.ops.acceptance_checks_automation_canvas`.
 
 Task ids: M32.6.1.2, M32.6.1.4, M32.6.2.1, M32.6.2.2
 """
@@ -185,6 +188,16 @@ def credential_leaks(env: Mapping[str, str]) -> tuple[str, ...]:
         if lowered.startswith(_CONNECTION_SCHEMES):
             findings.append(f"{name}: holds a connection string")
     return tuple(findings)
+
+
+def is_credential_name(name: str) -> bool:
+    """Whether an environment variable's name is one that carries a credential.
+
+    The name half of `credential_leaks`, for a caller that has been told names and never values:
+    `brain.ops.automation_report` is handed what the server's docker said of the running canvas,
+    and the step that gathers it removes every value before anything leaves the host.
+    """
+    return _CREDENTIAL_NAME_RE.search(name) is not None
 
 
 # ----------------------------------------------------------------- enablement

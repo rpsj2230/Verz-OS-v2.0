@@ -285,6 +285,33 @@ describe("one automation's page", () => {
     expect(container.textContent).not.toContain("automation.unanswered_questions");
   });
 
+  test("the profile of an automation a person wrote says what it was told, what it may use and that a write waits", async () => {
+    // What breaks if this is deleted: the page of something a person wrote shows a name and a
+    // schedule and nothing of what it will do or what it may use, and a template's page grows
+    // rows with nothing in them.
+    const written = aDetail({
+      instruction: "Look at the tickets and tell me which are overdue.",
+      tools: ["desk.search_tickets"],
+      skills: ["overdue_chase"],
+      may_use: "The tools and skills an automation may use are the agent's own.",
+      skills_rule: "They are the agent's to change.",
+      writes_wait: "Anything it would write waits for a person to decide.",
+      cannot_run: "This outcome cannot run on this install yet.",
+    });
+    const { container } = await consoleAt(`${AUTOMATIONS_ADDRESS}/auto_one/profile`, answers(written));
+    const text = container.textContent ?? "";
+    expect(text).toContain("Look at the tickets and tell me which are overdue.");
+    expect(text).toContain("desk.search_tickets");
+    expect(text).toContain("overdue_chase");
+    expect(text).toContain("They are the agent's to change.");
+    expect(text).toContain("Anything it would write waits for a person to decide.");
+    expect(text).toContain("This outcome cannot run on this install yet.");
+
+    const plain = await consoleAt(`${AUTOMATIONS_ADDRESS}/auto_one/profile`);
+    expect(plain.container.textContent).not.toContain("Told to");
+    expect(plain.container.textContent).not.toContain("Anything it would write");
+  });
+
   test("only the changes the API offers are drawn, and a pause is sent only once it is confirmed", async () => {
     // What breaks if this is deleted: a resume offered that the API refuses, or a pause sent by one
     // press with nobody having read what it does.

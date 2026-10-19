@@ -61,6 +61,12 @@ const AUTOMATION_DETAIL = {
   task: UNBROKEN,
   template_id: UNBROKEN,
   owner_id: UNBROKEN,
+  instruction: UNBROKEN,
+  tools: [UNBROKEN],
+  skills: [UNBROKEN],
+  may_use: UNBROKEN,
+  skills_rule: UNBROKEN,
+  writes_wait: UNBROKEN,
 };
 
 /** One automation's figures as `brain.automations_routes.AutomationStatsView` sends them. */

@@ -40,6 +40,7 @@ ops
 !ops/deploy/overlays/objectstore.prepare.sh
 !ops/deploy/overlays/objectstore.hand.sh
 !ops/deploy/overlays/automation.prepare.sh
+!ops/deploy/overlays/automation.observe.sh
 !ops/deploy/overlays/class-pools.yml
 !ops/deploy/overlays/class-pools.prepare.sh
 !ops/deploy/overlays/modelserver.prepare.sh
