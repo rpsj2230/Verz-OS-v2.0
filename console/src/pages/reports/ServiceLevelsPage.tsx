@@ -134,7 +134,7 @@ function Reading({ lanes }: { readonly lanes: readonly LaneReadingRow[] }) {
         </SectionCard>
       )}
       <SectionCard title={LANES_HEADING}>
-        <EntityTable exportName="service-levels" caption={LANES_HEADING} columns={COLUMNS} rows={lanes} rowId={(row) => row.lane} rowLabel={(row) => row.lane} />
+        <EntityTable caption={LANES_HEADING} columns={COLUMNS} rows={lanes} rowId={(row) => row.lane} rowLabel={(row) => row.lane} />
       </SectionCard>
     </>
   );

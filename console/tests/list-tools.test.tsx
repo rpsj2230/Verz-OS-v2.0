@@ -67,6 +67,15 @@ const EXPORTS_ITSELF: Readonly<Record<string, string>> = {
     "of one list that disagree.",
 };
 
+/** A report page saves the tables it shows through its own Export, named for the report and the period. */
+const A_REPORT_SAVES_ITS_OWN_TABLES =
+  "The report's own Export saves the tables the page shows, named for the report and the period; a " +
+  "second button over one table would be two exports of one list, and the browser case that reads the " +
+  "report's file would find two buttons of one name.";
+for (const pattern of ["/service-levels", "/quality", "/questions", "/adoption"]) {
+  (EXPORTS_ITSELF as Record<string, string>)[pattern] = A_REPORT_SAVES_ITS_OWN_TABLES;
+}
+
 /** The pages that have a bulk act that changes something, which a route takes as a set. */
 const OFFERS_A_BULK_ACT: ReadonlySet<string> = new Set(["/access_review", "/library", "/people", "/sessions"]);
 

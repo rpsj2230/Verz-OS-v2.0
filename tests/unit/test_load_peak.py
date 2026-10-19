@@ -11,6 +11,7 @@ Task ids: M22.3.3
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from pathlib import Path
 
 import httpx
@@ -21,8 +22,10 @@ from brain.ops import load_peak
 from brain.ops.admission import LOAD_TEST_TARGET
 from brain.ops.load_peak import (
     ARRIVALS_PER_SECOND,
+    LOAD_TEST_DEPARTMENT,
     MINIMUM_REQUESTS_FOR_A_P95,
     PEAK_SECONDS,
+    CallerFacts,
     LoadError,
     Profile,
     Sample,
@@ -37,6 +40,7 @@ from brain.ops.load_peak import (
     status_of_reply,
     tokens_from,
 )
+from brain.ops.load_run_store import Keeper, RunRecord
 from brain.ops.reliability import ANSWER_P95_MS, FAST_P95_MS
 from brain.ops.telemetry import RequestStatus
 
@@ -51,6 +55,27 @@ def profile(**changes: object) -> Profile:
 
 async def no_waiting(_seconds: float) -> None:
     return None
+
+
+def a_keeper(*, on: bool = True, kept: list[RunRecord] | None = None) -> Keeper:
+    """A keeper over nothing: the switch as given, and every record handed to `kept`."""
+
+    async def switch_is_on() -> bool:
+        return on
+
+    async def keep(record: RunRecord) -> None:
+        if kept is not None:
+            kept.append(record)
+
+    async def close() -> None:
+        return None
+
+    return Keeper(switch_is_on=switch_is_on, keep=keep, commit="a-release", close=close)
+
+
+async def asking_test_people(base_url: str, tokens: Sequence[str]) -> tuple[CallerFacts, ...]:
+    """Every token belongs to a person in the load-test department."""
+    return tuple(CallerFacts(f"person-{n}", LOAD_TEST_DEPARTMENT) for n, _ in enumerate(tokens))
 
 
 async def sent_once(send: load_peak.Sender, shape: Shape) -> Sample:
@@ -311,6 +336,8 @@ def _files(tmp_path: Path) -> list[str]:
         "100",
         "--max-requests",
         "200",
+        "--confirm-requests",
+        "200",
     ]
 
 
@@ -331,9 +358,15 @@ def test_the_command_exits_zero_when_held_one_when_not_and_two_when_it_cannot_ru
 
     monkeypatch.setattr(load_peak, "http_sender", sender)
     arguments = _files(tmp_path)
-    assert main(arguments, sleep=no_waiting) == 0
+    assert main(arguments, sleep=no_waiting, keeper=a_keeper(), ask_who=asking_test_people) == 0
     seconds["value"] = 60.0
-    assert main(arguments, sleep=no_waiting) == load_peak.EXIT_UNMET
+    assert (
+        main(arguments, sleep=no_waiting, keeper=a_keeper(), ask_who=asking_test_people)
+        == load_peak.EXIT_UNMET
+    )
     assert "unmet" in capsys.readouterr().out
     arguments[1] = "http://install.example"
-    assert main(arguments, sleep=no_waiting) == load_peak.EXIT_REFUSED
+    assert (
+        main(arguments, sleep=no_waiting, keeper=a_keeper(), ask_who=asking_test_people)
+        == load_peak.EXIT_REFUSED
+    )

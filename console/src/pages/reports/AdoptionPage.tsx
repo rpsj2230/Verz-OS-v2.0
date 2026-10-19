@@ -211,7 +211,6 @@ export function AdoptionPage() {
   } else {
     list = (
       <EntityTable
-        exportName="adoption"
         caption={LIST_HEADING}
         columns={COLUMNS}
         rows={page.lines}

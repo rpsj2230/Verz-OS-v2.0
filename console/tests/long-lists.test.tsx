@@ -283,9 +283,8 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   },
   "/jobs/:name": {},
   "/approvals": { bulk: AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD },
-  // The table now selects, to export, so a box on each row is offered and no excuse stands for it.
-  // What the selection does not do, and why, is held in `list-tools.test.tsx`.
-  "/adoption": {},
+  // The report's own Export saves the table, so the table carries no selection (`list-tools.test.tsx`).
+  "/adoption": { bulk: READ_ONLY },
   "/people": {},
   // A person's page borrows the roster for the agents they steward, and links to the Agents list.
   "/people/:personId": {

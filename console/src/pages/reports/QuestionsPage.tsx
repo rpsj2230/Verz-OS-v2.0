@@ -126,7 +126,6 @@ function Gaps({ body }: { readonly body: QuestionsBody }) {
       {body.gaps.length === 0 ? null : (
         <SectionCard title={GAPS_HEADING}>
           <EntityTable
-            exportName="question-gaps"
             caption={GAPS_HEADING}
             columns={COLUMNS}
             rows={[...body.gaps].sort((a, b) => b.asked - a.asked)}

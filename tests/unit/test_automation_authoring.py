@@ -18,11 +18,14 @@ from brain.agents.model import AgentAudience, AgentAuthority, AgentRecord
 from brain.connectors.manifest import FieldShape
 from brain.console import automation_authoring as module
 from brain.console.automation_authoring import (
+    A_TOOL_IS_NOT_THIS_AUTOMATIONS,
     AUTHORED_TASK,
     AUTHORED_TEMPLATE,
     NOTHING_FIRES_THIS_YET,
     NOTHING_WAS_WRITTEN_OR_SENT,
     REHEARSED_TRIGGERS,
+    SKILLS_ARE_THE_AGENTS_TO_CHANGE,
+    WRITES_WAIT_FOR_A_PERSON,
     Authored,
     AuthoringRefusedError,
     Condition,
@@ -37,6 +40,9 @@ from brain.console.automation_authoring import (
     ops_for,
     preview,
     rehearse,
+    run_reach,
+    tool_gaps,
+    usable_tools,
 )
 from brain.console.automation_gallery import (
     AUTOMATION_AUTHORITY,
@@ -46,10 +52,13 @@ from brain.console.automation_gallery import (
     GalleryError,
     NotConfirmedError,
 )
+from brain.console.questions_view import QUESTION_AUTHORITY
 from brain.console.workspace import intersections_in
 from brain.core.entitlement import Capability, EntitlementSet, Grant
+from brain.core.envelope import IdentityMode, SideEffect, ToolDefinition
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Clause, Op, Scope
+from brain.gate.runtime import RUNTIME_WRITES_ALWAYS_WAIT_FOR_A_PERSON
 from brain.knowledge.visibility import Visibility
 from brain.ops.automation_run import INSTRUCTION_TASK, TASKS, slots_before, task_gaps
 from brain.orchestration.unattended import TriggerKind
@@ -410,6 +419,212 @@ def test_no_intersection_is_computed_in_the_module() -> None:
     """The one place a reach is computed is `flow_reach`. Delete this and a second copy of the
     central rule can arrive here."""
     assert intersections_in(inspect.getsource(module)) == ()
+
+
+# ------------------------------------------------------------------ what it may use (M39.9.2.3)
+
+
+def a_tool(name: str, capability: str, effect: SideEffect = SideEffect.NONE) -> ToolDefinition:
+    return ToolDefinition(
+        name=name,
+        description=f"The {name} tool",
+        entity="invoice",
+        required_capability=capability,
+        side_effect=effect,
+        identity_mode=IdentityMode.DELEGATED,
+        source="ledger",
+    )
+
+
+#: A read inside the agent's capability, a read of one it does not hold, and a write.
+READS = a_tool("ledger.search_invoices", "read:client.name")
+OTHER_READ = a_tool("ledger.read_payroll", "read:payroll.total")
+WRITES = a_tool("ledger.close_invoice", "write:invoice", SideEffect.WRITE)
+REGISTRY = (READS, OTHER_READ, WRITES)
+
+
+def test_the_tools_a_run_could_be_handed_are_the_catalogue_projected_at_the_reach_it_runs_at() -> (
+    None
+):
+    """A read inside the agent's ceiling is usable. A read of a capability the ceiling does not
+    hold is not, a write is not (the ceiling allows no effect and an automation is admitted at
+    read), and a name the registry does not hold is not. Delete this and the form offers a tool
+    that a run is never handed, because its name is on the agent's list."""
+    agent = an_agent(READS.name, OTHER_READ.name, WRITES.name, "ledger.ghost_tool")
+
+    usable = usable_tools(agent, REGISTRY, run_reach(a_reach(), agent), now=NOW)
+
+    assert usable == {READS.name}
+
+
+def test_a_write_the_agents_ceiling_allows_is_still_not_usable_because_an_automation_reads() -> (
+    None
+):
+    """The agent's ceiling holds the write capability and allows a write, and the author holds the
+    grant: the only thing keeping the tool off the list is that an automation is admitted at read,
+    which is `AN_AUTOMATION_READS_UNTIL_ITS_WRITES_CAN_BE_SUSPENDED`. The read beside it is on the
+    list. Delete this and the list is computed at the author's own reach, which would offer a
+    write an automation could never be handed, and would go on doing so the day the admission
+    changes without anybody being told this list depended on it."""
+    from brain.core.envelope import SideEffect as Effect
+
+    agent = AgentRecord(
+        agent_id="quote_helper",
+        display_name="Quote helper",
+        persona="Answers pricing questions.",
+        audience=AgentAudience(level=Visibility.COMPANY, owner_id="u_steward"),
+        authority=AgentAuthority(
+            capabilities=(Capability(value="read:client.name"), Capability(value="write:invoice")),
+            allowed_tools=frozenset({READS.name, WRITES.name}),
+            max_side_effect=Effect.WRITE,
+        ),
+        created_by="u_builder",
+    )
+    author = EntitlementSet(
+        principal_id="u_author",
+        grants=(
+            Grant(capability=AUTOMATION_AUTHORITY, scope=Scope.unrestricted()),
+            Grant(capability=Capability(value="read:client.name"), scope=Scope.unrestricted()),
+            Grant(capability=Capability(value="write:invoice"), scope=Scope.unrestricted()),
+        ),
+    )
+
+    assert usable_tools(agent, REGISTRY, run_reach(author, agent), now=NOW) == {READS.name}
+
+
+def test_an_agent_whose_required_tool_cannot_be_handed_has_nothing_usable_not_an_error() -> None:
+    """A required tool outside the reach means no run of this agent could be made for this person,
+    which `project` refuses with an error; here it is no tools. Delete this and the options route
+    answers 500 for an agent a person happens not to reach one tool of."""
+    agent = an_agent(READS.name, OTHER_READ.name).model_copy(
+        update={
+            "authority": AgentAuthority(
+                capabilities=(Capability(value="read:client.name"),),
+                allowed_tools=frozenset({READS.name, OTHER_READ.name}),
+                required_tools=frozenset({OTHER_READ.name}),
+            )
+        }
+    )
+
+    assert usable_tools(agent, REGISTRY, run_reach(a_reach(), agent), now=NOW) == frozenset()
+
+
+def test_a_tool_outside_what_a_run_could_be_handed_is_one_sentence_whatever_the_reason() -> None:
+    """The agent lists the write and the registry offers it, the agent lists another that nothing
+    registers, and the agent never listed a third: one sentence each, with the tool the person
+    wrote and nothing else. The sibling, a tool a run could be handed, has no gap. Delete this and
+    a refusal says which of the reasons it was, which is a fact about the install the person did
+    not have."""
+    agent = an_agent(READS.name, WRITES.name, "ledger.ghost_tool")
+    usable = usable_tools(agent, REGISTRY, run_reach(a_reach(), agent), now=NOW)
+
+    assert tool_gaps((READS.name,), agent, usable) == ()
+    said = [
+        tool_gaps((name,), agent, usable)
+        for name in (WRITES.name, "ledger.ghost_tool", "ledger.never_listed")
+    ]
+    assert all(len(one) == 1 for one in said)
+    assert {
+        one[0].replace(name, "<tool>")
+        for one, name in zip(
+            said, (WRITES.name, "ledger.ghost_tool", "ledger.never_listed"), strict=True
+        )
+    } == {A_TOOL_IS_NOT_THIS_AUTOMATIONS.format(tool="<tool>")}
+
+
+def test_without_a_registry_to_ask_a_tool_is_held_to_the_agents_own_list_and_no_further() -> None:
+    """`usable` of None is a caller with no registry: the name check alone. Delete this and the
+    install check, which has none, either refuses every tool or stops checking names."""
+    agent = an_agent(READS.name, WRITES.name)
+
+    assert tool_gaps((WRITES.name,), agent, None) == ()
+    assert tool_gaps(("ledger.never_listed",), agent, None)
+
+
+def test_compose_refuses_a_tool_a_run_could_not_be_handed_and_says_so_with_the_rest() -> None:
+    """Gathered with every other finding, in one refusal, and the same words with `usable` left
+    out are accepted. Delete this and a tool beyond the ceiling is saved on an automation's card."""
+    agent = an_agent(READS.name, WRITES.name)
+    usable = usable_tools(agent, REGISTRY, run_reach(a_reach(), agent), now=NOW)
+    asked = {
+        "agent": agent,
+        "name": "I check each morning whether any invoice is overdue",
+        "instruction": "Look at the invoices and tell me which are overdue.",
+        "guards": "Without it an overdue invoice is found when the client chases.",
+        "trigger": TriggerChoice(kind=TriggerKind.SCHEDULE, cadence=DAILY),
+        "tools": (READS.name, WRITES.name),
+        "condition": None,
+        "fields": FIELDS,
+    }
+
+    with pytest.raises(AuthoringRefusedError) as raised:
+        compose(**asked, usable=usable)  # type: ignore[arg-type]
+
+    assert raised.value.findings == (A_TOOL_IS_NOT_THIS_AUTOMATIONS.format(tool=WRITES.name),)
+    assert compose(**asked).tools == (READS.name, WRITES.name)  # type: ignore[arg-type]
+
+
+def test_the_skills_a_card_names_are_in_the_digest_whatever_order_they_came_in() -> None:
+    """A skill attached or taken away since the preview is a confirmation that does not match,
+    and the same skills in another order are the same card. Delete this and the card a person
+    confirmed is not the card that is saved, or a reordered list refuses somebody for nothing."""
+    agent = an_agent("search_invoices")
+
+    def digest(*skills: str) -> str:
+        return preview(
+            written(), agent, author=a_person(), author_reach=a_reach(), skills=skills
+        ).confirmation
+
+    assert digest("b_skill", "a_skill") == digest("a_skill", "b_skill")
+    assert digest("a_skill") != digest("a_skill", "b_skill")
+    assert digest() != digest("a_skill")
+
+
+def test_a_preview_says_an_instruction_cannot_be_started_and_a_runnable_outcome_does_not() -> None:
+    """The instruction task still declares what it needs, so the preview carries the sentence and
+    a person does not confirm a card that reads as live; an outcome the install can run, from an
+    agent whose ceiling admits what it reads, carries none. Delete this and either an instruction
+    run reads as live, or every card says it cannot be started."""
+    agent = an_agent().model_copy(
+        update={
+            "authority": AgentAuthority(
+                capabilities=(Capability(value="read:client.name"), QUESTION_AUTHORITY),
+            )
+        }
+    )
+    template = next(one for one in BUILT_IN if one.template_id == "unanswered_questions")
+    from_words = preview(written(), agent, author=a_person(), author_reach=a_reach(), now=NOW)
+    from_template = preview(
+        written(task=template.task, template_id=template.template_id),
+        agent,
+        author=a_person(),
+        author_reach=a_reach(),
+        now=NOW,
+    )
+
+    assert from_words.cannot_run is not None
+    assert "cannot be started yet" in from_words.cannot_run
+    assert from_template.cannot_run is None
+
+
+def test_a_rehearsal_names_the_skills_it_could_have_drawn_on_and_none_when_there_are_none() -> None:
+    """Delete this and the rehearsal shows tools and no skills, so what a person confirms differs
+    from what they were shown on the card."""
+    with_skills = rehearse(
+        written(), reach_words=("read:client.name",), now=NOW, skills=("b_skill", "a_skill")
+    )
+    without = rehearse(written(), reach_words=("read:client.name",), now=NOW)
+
+    assert all("skills a_skill, b_skill" in one.says for one in with_skills)
+    assert all("skills" not in one.says for one in without)
+
+
+def test_the_card_says_a_write_waits_for_a_person_in_the_runtimes_own_words() -> None:
+    """The sentence is the runtime's rule, not a paraphrase of it, and the skills sentence says
+    whose they are. Delete this and the card promises something other than what a run does."""
+    assert WRITES_WAIT_FOR_A_PERSON == RUNTIME_WRITES_ALWAYS_WAIT_FOR_A_PERSON
+    assert "wait" in WRITES_WAIT_FOR_A_PERSON.lower()
+    assert "agent has attached and approved" in SKILLS_ARE_THE_AGENTS_TO_CHANGE
 
 
 # ------------------------------------------------------------------ the rehearsal

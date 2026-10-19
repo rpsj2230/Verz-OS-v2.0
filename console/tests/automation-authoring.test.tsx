@@ -76,9 +76,12 @@ function optionsWire(enabled = true): Record<string, unknown> {
         ]
       : [],
     tools: enabled ? ["search_tickets"] : [],
+    skills: enabled ? [{ name: "overdue_chase", version: "1.2.0", description: "Chase a ticket that is overdue" }] : [],
     connectors: enabled ? ["freshdesk"] : [],
     starts_paused: "It starts paused, and somebody other than you has to start it.",
     writes_wait: "Anything it would write waits for a person to decide.",
+    may_use: "The tools and skills an automation may use are the agent's own, read at your reach.",
+    skills_rule: "It may use the skills this agent has attached and approved on the day each run starts.",
   };
 }
 
@@ -95,11 +98,14 @@ function previewWire(): Record<string, unknown> {
     nothing_fires: null,
     condition: "only when the ticket due by (freshdesk) is more than 7 days ago",
     tools: ["search_tickets"],
+    skills: ["overdue_chase"],
     runs_as: "u_admin",
     runs_as_name: "Admin Person",
     reach: ["read:client.name"],
     starts_paused: "It starts paused, and somebody other than you has to start it.",
     writes_wait: "Anything it would write waits for a person to decide.",
+    skills_rule: "It may use the skills this agent has attached and approved on the day each run starts.",
+    cannot_run: "This outcome cannot run on this install yet: an instruction cannot be started yet.",
     rehearsal: [
       { at: "2031-03-13T09:00:00Z", condition: "cannot_tell", says: "Whether the condition held cannot be told. Nothing was read, written or sent." },
     ],
@@ -205,6 +211,8 @@ describe("New automation", () => {
     expect(text).toContain("When something changes in a connected source");
     expect(text).toContain("ticket due by (freshdesk)");
     expect(text).toContain("search_tickets");
+    expect(stand.container.querySelector('[data-slot="authoring-skills"]')?.textContent).toContain("overdue_chase");
+    expect(text).toContain("on the day each run starts");
     expect(stand.container.querySelector('[name="start"]')?.textContent).toContain("I list the questions I could not answer");
     expect(stand.sent.filter((one) => one.method === "POST")).toEqual([]);
   });
@@ -255,6 +263,10 @@ describe("New automation", () => {
     expect(stand.sent.filter((one) => one.path === CREATE)).toEqual([]);
     expect(stand.container.textContent).toContain("Whether the condition held cannot be told");
     expect(stand.container.textContent).toContain("Admin Person");
+    const review = stand.container.querySelector('[data-slot="authoring-review"]')?.textContent ?? "";
+    expect(review).toContain("overdue_chase");
+    expect(review).toContain("an instruction cannot be started yet");
+    expect(review).toContain("Anything it would write waits for a person to decide.");
 
     fireEvent.click(button(stand.container, SAVE));
     await waitFor(() => {
@@ -293,7 +305,7 @@ describe("the readers", () => {
     // What breaks if this is deleted: a confirmation panel with a fact left out, over a digest
     // computed on the whole of it.
     expect(readAuthoringPreview(previewWire())).not.toBeNull();
-    for (const key of ["name", "instruction", "trigger", "runs_as", "reach", "rehearsal", "confirmation"]) {
+    for (const key of ["name", "instruction", "trigger", "runs_as", "reach", "rehearsal", "confirmation", "skills", "skills_rule"]) {
       const wire = previewWire();
       delete wire[key];
       expect(readAuthoringPreview(wire)).toBeNull();
@@ -305,6 +317,13 @@ describe("the readers", () => {
     // What breaks if this is deleted: a renamed field draws a form with nothing in it.
     expect(readAuthoringOptions(optionsWire(false))).toMatchObject({ enabled: false, templates: [], fields: [] });
     expect(readAuthoringOptions(optionsWire())?.fields[0]?.ops[0]?.inDays).toBe(true);
+    expect(readAuthoringOptions(optionsWire())?.skills).toEqual([
+      { name: "overdue_chase", version: "1.2.0", description: "Chase a ticket that is overdue" },
+    ]);
+    expect(readAuthoringPreview(previewWire())?.cannotRun).toContain("cannot be started yet");
+    const settled = previewWire();
+    settled["cannot_run"] = null;
+    expect(readAuthoringPreview(settled)?.cannotRun).toBeUndefined();
     expect(readAuthoringOptions({ enabled: "yes" })).toBeNull();
     expect(readRefusal({ outcome: "refused", sentences: ["one"] })).toEqual(["one"]);
     expect(readRefusal({ outcome: "refused", sentences: [] })).toBeNull();
@@ -332,8 +351,10 @@ describe("the readers", () => {
         condition: "only when the ticket due by (freshdesk) is more than 7 days ago",
         instruction: "Tell me which tickets are overdue.",
         tools: ["search_tickets"],
+        skills: ["overdue_chase"],
         from_template: null,
         writes_wait: "Anything it would write waits for a person.",
+        skills_rule: "They are the agent's to change.",
       },
     };
     const read = readAgentAutomations({ items: [item, { ...item, automation_id: "auto_x", authored: { trigger: "x" } }], result_rule: "r" });
@@ -344,6 +365,8 @@ describe("the readers", () => {
       condition: "only when the ticket due by (freshdesk) is more than 7 days ago",
       instruction: "Tell me which tickets are overdue.",
       tools: ["search_tickets"],
+      skills: ["overdue_chase"],
+      skillsRule: "They are the agent's to change.",
       writesWait: "Anything it would write waits for a person.",
     });
     expect(read?.items[1]?.authored).toBeUndefined();
