@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-15T05:41:46.297333+00:00",
-  "commit": "73f7ba2b",
-  "commit_subject": "A task is proved on the install by the newest complete acceptance run: documents from approved templates",
+  "generated_at": "2026-10-19T06:31:11.099904+00:00",
+  "commit": "25b39494",
+  "commit_subject": "An outside AI service that is not a chat model can be declared, registered as a tool with its own permission and counted as sending something out, and an agent that does not name it is offered nothing (#610)",
   "total": 1626,
   "done": 1136,
   "percent": 69.9,
@@ -197,10 +197,10 @@
       "total": 274,
       "done": 199,
       "percent": 72.6,
-      "in_progress": 0,
+      "in_progress": 1,
       "ready_for_testing": 56,
       "blocked": 12,
-      "open": 7,
+      "open": 6,
       "acts": 0,
       "decided": 20,
       "built": 256,
@@ -2191,6 +2191,11 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in app, ops.sandbox, ops.sandbox_runner +2 more; NOT wired: ops.sandbox_client. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; closed PR #252's branch M6/w3-fastlane-role (may be replayed already); closed PR #255's branch M16/w3-confirmed (may be replayed already); +1 more",
       "updated": "2026-10-06"
     },
+    "M12.3.7": {
+      "status": "IN PROGRESS",
+      "why": "PARTLY BUILT, 2026-10-14; NO PRIOR WORK existed (no note, no branch, no code). BUILT: an outside AI service (image generation, speech to text) an install declares is registered as a tool behind a switch that ships off (brain.tools.external_ai, brain.ops.external_ai_store); its permission is its own (invoke:external_ai.<service>), it counts as sending something out and is capped at Assisted, and an agent whose ceiling does not name it is offered nothing; an install check proves that. NOT BUILT, WAITING ON THE OWNER (needs-rupash 184, open): the call itself, which needs the first service, its provider account and its key in the vault, and whether speech to text counts as a read and image generation as a draft (a loosening, not built). NEXT: when 184 is answered, build the held call and the worker's run of the approved one for that service, then flip this to READY FOR TESTING.",
+      "updated": "2026-10-14"
+    },
     "M12.4.5": {
       "status": "READY FOR TESTING",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_services, ops.sandbox, ops.sandbox_runner); open for proof on the install or a decision, not for code",
@@ -3949,7 +3954,7 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 2,
+  "closed_today": 0,
   "next_up": [
     "M38.5.4"
   ],
