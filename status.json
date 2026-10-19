@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-19T14:22:22.570303+00:00",
-  "commit": "b142ed67",
-  "commit_subject": "A person's own Google account on their personal agent, oversight of personal agents, and no team agent carrying either (#623)",
+  "generated_at": "2026-10-19T14:33:24.516203+00:00",
+  "commit": "2441b28b",
+  "commit_subject": "Five console rules become guards: every class has a rule, one failure component, every delete names its act, who-can-reach is declared, every empty list says who adds a row, one explanation component (console tasks 15.52, 15.62, 15.69, 15.70, 15.72) (#629)",
   "total": 1626,
   "done": 1141,
   "percent": 70.2,
-  "built": 1307,
-  "built_percent": 80.4,
-  "built_unproven": 166,
+  "built": 1311,
+  "built_percent": 80.6,
+  "built_unproven": 170,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -92,9 +92,13 @@
     "M27.15.34",
     "M27.15.35",
     "M27.15.50",
+    "M27.15.52",
     "M27.15.57",
     "M27.15.68",
+    "M27.15.69",
+    "M27.15.70",
     "M27.15.71",
+    "M27.15.72",
     "M27.15.75",
     "M27.15.79",
     "M27.16.2",
@@ -232,13 +236,13 @@
       "done": 460,
       "percent": 76.8,
       "in_progress": 4,
-      "ready_for_testing": 61,
-      "blocked": 3,
-      "open": 71,
+      "ready_for_testing": 65,
+      "blocked": 4,
+      "open": 66,
       "acts": 1,
       "decided": 56,
-      "built": 520,
-      "built_percent": 86.8
+      "built": 524,
+      "built_percent": 87.5
     },
     {
       "wave": 4,
@@ -565,7 +569,7 @@
       "done": 156,
       "acts": 0,
       "decided": 22,
-      "built": 174
+      "built": 178
     },
     {
       "module": "M28",
@@ -3020,20 +3024,45 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (credential_routes, ops.acceptance_operations_console_6, ops.credential_catalogue +8 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +6 more",
       "updated": "2026-10-06"
     },
+    "M27.15.52": {
+      "status": "READY FOR TESTING",
+      "why": "built: console/tests/destructive-labels.test.ts refuses any label that starts Delete, Remove, Take it out and the like (thirty-four became Withdraw, Retire, Detach, Disconnect, End membership and Supersede) and holds that the console sends no DELETE, and tests/unit/test_hard_deletes.py derives from the migrations the tables the application may delete from and holds them to the six that brain.ops.hard_deletes argues (it found obs.trace_step, granted by 0226 through a constant the old text scan could not see). Proved in CI: the console job (Console types, boundaries, tests, build) and the Unit tests shards run them. On the install: open a person's Grants view and read the button beside a grant, which says Withdraw, and an agent's Memory, which says Retire.",
+      "updated": "2026-10-15"
+    },
     "M27.15.57": {
       "status": "READY FOR TESTING",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_skills); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
+    },
+    "M27.15.62": {
+      "status": "BLOCKED",
+      "why": "part of the task text conflicts with the owner's 2026-09-18 record access view and waits on needs-rupash item 188. Built under either answer: console/tests/reach-questions.test.ts and tests/unit/test_reach_questions.py hold that every who-can-reach question the console and API offer is declared with what it is asked of, that only the record access view takes anything naming a record, that it is read for the reader before any candidate and refuses every reader the way an unknown entity is refused. Nothing asserts that no route answers who can see a named record.",
+      "updated": "2026-10-15"
     },
     "M27.15.68": {
       "status": "READY FOR TESTING",
       "why": "Built on branch M27/console-lists-wizards-buttons. Prove it on the install. (1) Sign in as an administrator, open Agent templates and a published template. The Install card is now a short wizard, Step 1 of 3 or 4: its name, who can find it, where it answers (only when the version offers channels), then Check and install. Type a new name, tick For my department, press Next. (2) Go to another page, such as Agents, then come back to the same template: you are on the same step with the same answers, and a line says you are back where you left. (3) On the last step press Install: a confirmation names what will be installed, and nothing is sent until you confirm; the new agent opens disabled. Back on the template the install is blank again. (4) Press Start again part way through and it empties; sign out and sign in as somebody else and nothing the first person typed is there. (5) First run on a fresh install: enter the setup code, finish the company screen, close the tab, reopen the first-run address, enter the same code and you land on the next screen with the company answers still in the boxes. A provider key typed on its screen is not kept.",
       "updated": "2026-10-14"
     },
+    "M27.15.69": {
+      "status": "READY FOR TESTING",
+      "why": "built: kit EmptyList takes the act that adds a row and who does it as required props (ListPage, WholeList and DataTable take emptyAdds and emptyBy), roles come from the platform's six (kit/roles.ts, held to brain.identity.roles.Role), and console/tests/empty-lists.test.tsx mounts every page with its lists emptied, holds each empty list to an act, a who from that vocabulary and no cause, and holds every remaining bare paragraph to console/tests/support/bareEmpties.ts, where the backlog (BARE_LISTS) is now empty and what is left is states (a fact about the install, a page that is not there, a value of None). Every list the first view of a page draws is converted (about eighty). NOT reached by the render sweep: the tabs a page does not open first, which only the static checks over every EmptyList, ListPage and WholeList use cover. Which role adds a row in each list is my reading of the page, not a decision of the owner's: see the question in the report. Proved in CI: the console job runs the test through npm run test. On the install: open Connectors, Agent templates, Webhooks, Automations and People on a fresh install and read each empty message; it says what would add a row and which role may, and never why the list is empty.",
+      "updated": "2026-10-15"
+    },
+    "M27.15.70": {
+      "status": "READY FOR TESTING",
+      "why": "built: one component, console/src/components/kit/explanation.tsx, draws every explanation in three forms (an inert control, a sentence in place of a control, a note with its lead), and the three old drawings (UnavailableAction, NotOffered, and the soon and not-yet kinds of Note) are gone. The sentences are the server's: brain.console.explanations holds 43 of them with the route whose arrival expires each, GET /api/v1/console/explanations/{act} serves one to any signed-in reader, the same bytes for every reader, and the console types none of them (a sentence the API already sends with a row is handed in as told). console/tests/explanations.test.ts refuses a private copy of the markup, a stand-in component, a Note that leads with coming soon, a use that names an unregistered act or types its sentence, and any disabled control not on a named list of reasons (it found a disabled option on the automation form whose reason nobody could read, now drawn as a line). tests/unit/test_console_explanations.py holds every expiry against the routes the application mounts. NOT done: a few lines the console composes from data (a level that cannot answer, a run that removed nothing, a key the account does not hold) are Note kind attention, not served; and 'the reader cannot perform here' is held to the sentences the API already sends with a row, because a sentence that differed by reader would be a denial that could be told from an absence. Proved in CI: the console job and the unit job. On the install: open an agent's Profile, press the dashed Change beside Level and see nothing happen, focus it and read why; open Learning, Shadow, and read the sentence beside Promote; then ask for GET /api/v1/console/explanations/agent.level with a token and read the same sentence.",
+      "updated": "2026-10-15"
+    },
     "M27.15.71": {
       "status": "READY FOR TESTING",
       "why": "Built on branch M27/console-lists-wizards-buttons. Prove it on the install. (1) On any page with both a Cancel and an act that removes or stops something (Stop, a retention hold, a review decision), the main act is the filled accent button, Cancel is the quiet button with no border, and the removing act is the red-washed danger button, each visibly different. (2) Open the console home: the figures are tiles, Needs you and Recent activity are each a card with its own heading, as on the first screen of the key screens design. The Overview already drew these; this task names the three button variants, moves every page onto them and holds that with a check.",
       "updated": "2026-10-14"
+    },
+    "M27.15.72": {
+      "status": "READY FOR TESTING",
+      "why": "built: console/tests/styled-classes.test.ts compiles the component layer's stylesheet and refuses any class in the markup with no selector and no emitted utility (it found bg-surface, text-ink-3 and text-danger, which nothing defined, and two dozen unstyled hooks), and console/tests/one-failure-component.test.ts refuses a failure drawn by hand, a failure heading typed anywhere but ui/FailureNotice, and a private failure component (it found twelve writes drawing failure.message with no reference). Proved in CI: the console job (Console types, boundaries, tests, build) in .github/workflows/ci.yml runs both through npm run test. On the install: make a write fail, for example set an agent's monthly budget while holding no budget role, and read the heading, the sentence and the reference under the form.",
+      "updated": "2026-10-15"
     },
     "M27.15.75": {
       "status": "READY FOR TESTING",
