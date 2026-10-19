@@ -23,3 +23,9 @@ docs/status.json
 
 # agent scratch: mutation harnesses and one-off scripts, never committed
 .scratch/
+
+# generated from docs/wbs/*.js by `uv run python -m brain.ops.wbs_generate`; never committed, so a
+# pull request changes the sources only and two of them cannot conflict in the output
+docs/wbs.json
+docs/tracker.html
+docs/wave-windows.json
