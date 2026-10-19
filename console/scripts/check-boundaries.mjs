@@ -60,12 +60,15 @@ const RULES = [
   {
     name: "tokens are never stored",
     pattern: /\blocalStorage\b/,
-    allow: ["src/theme/theme.ts"],
+    allow: ["src/theme/theme.ts", "src/components/kit/savedFilterStore.ts"],
     why:
       "Access and refresh tokens live in memory and die with the page. The realm gives an " +
       "SSO session ten hours, so a refresh token in the local store would be a ten-hour " +
       "credential readable by any script on this origin. The theme preference is allowed " +
-      "there because it is a property of the screen, not of the person.",
+      "there because it is a property of the screen, not of the person. A person's saved " +
+      "list filters are allowed in the one module that keeps them: they hold the words " +
+      "somebody typed and the values they chose, under their own identity, never a token, " +
+      "never a row and never a count (kit/savedFilterStore.ts says why it is not the API).",
   },
   {
     name: "session storage is for the sign-in handshake only",
@@ -132,7 +135,7 @@ const RULES = [
     allow: [],
     why:
       "A cookie is sent to the API with every request and outlives the tab, and this console keeps " +
-      "nothing in the browser but the theme. shadcn/ui's sidebar writes one on every toggle, and it " +
+      "nothing in the browser but the theme and a person's own saved list filters. shadcn/ui's sidebar writes one on every toggle, and it " +
       "is the kind of line that arrives inside a copied component rather than a reviewed change. " +
       "Keep the state in memory, or ask whether it belongs on the server.",
   },

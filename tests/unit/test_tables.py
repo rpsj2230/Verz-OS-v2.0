@@ -181,6 +181,7 @@ MIGRATION_ACCEPTANCE_RUN = VERSIONS / "0231_acceptance_run_record.py"
 MIGRATION_SKILL_PERSONAL = VERSIONS / "0232_skill_personal.py"
 MIGRATION_PERSONAL_PROJECT = VERSIONS / "0233_personal_project.py"
 MIGRATION_FANOUT_GATE = VERSIONS / "0240_fanout_gate.py"
+MIGRATION_MODEL_SERVER = VERSIONS / "0250_model_server.py"
 MIGRATION_MIGRATION_RECORD = VERSIONS / "0241_migration_record.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
@@ -536,6 +537,10 @@ FANOUT_GATE_TABLES: tuple[str, ...] = ("ops.fanout_gate",)
 #: And the one 0241 adds: the documents a migration from another system is run on.
 MIGRATION_RECORD_TABLES: tuple[str, ...] = ("ops.migration_record",)
 
+#: And the one 0250 adds: the model server's measured peaks. Its two column additions on `know` are
+#: not tables and are held by the model-versus-migration comparison below.
+MODEL_SERVER_TABLES: tuple[str, ...] = ("ops.model_server_peak",)
+
 ALL_TABLES = (
     CORE_TABLES
     + RESOLVER_TABLES
@@ -639,6 +644,7 @@ ALL_TABLES = (
     + SKILL_PERSONAL_TABLES
     + PERSONAL_PROJECT_TABLES
     + FANOUT_GATE_TABLES
+    + MODEL_SERVER_TABLES
     + MIGRATION_RECORD_TABLES
 )
 
@@ -1532,6 +1538,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert personal_project.TABLES == PERSONAL_PROJECT_TABLES
     fanout_gate = migration_module(MIGRATION_FANOUT_GATE)
     assert fanout_gate.TABLES == FANOUT_GATE_TABLES
+    model_server = migration_module(MIGRATION_MODEL_SERVER)
+    assert model_server.TABLES == MODEL_SERVER_TABLES
     migration_record = migration_module(MIGRATION_MIGRATION_RECORD)
     assert migration_record.TABLES == MIGRATION_RECORD_TABLES
     assert core.TABLES == CORE_TABLES
@@ -1660,6 +1668,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(skill_personal.TABLES)
         + tuple(personal_project.TABLES)
         + tuple(fanout_gate.TABLES)
+        + tuple(model_server.TABLES)
         + tuple(migration_record.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
@@ -1768,6 +1777,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(skill_personal.TABLES),
         set(personal_project.TABLES),
         set(fanout_gate.TABLES),
+        set(model_server.TABLES),
         set(migration_record.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)

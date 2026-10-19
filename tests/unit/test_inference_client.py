@@ -174,7 +174,10 @@ def test_the_client_takes_its_address_from_the_install_and_has_no_parameter_for_
     monkeypatch.setenv(ENDPOINT_SETTING, "http://192.0.2.7:9100")
     parameters = inspect.signature(make_client).parameters
 
-    assert set(parameters) == {"env", "timeout_seconds"}
+    # `observer` is where a measured peak is reported to (the job's keeper of them); it carries no
+    # address, so the property this test holds, that nothing but the install says where text goes,
+    # is untouched by it.
+    assert set(parameters) == {"env", "timeout_seconds", "observer"}
     assert make_client().url == f"http://192.0.2.7:9100{EMBED_PATH}"
 
 

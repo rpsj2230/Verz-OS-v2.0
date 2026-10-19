@@ -204,6 +204,23 @@ def test_the_import_graph_is_read_once_and_handed_out_unchangeable() -> None:
         _graph(Path("src"))["brain.status"] = frozenset()  # type: ignore[index]
 
 
+def test_another_program_under_src_is_not_part_of_the_graph(tmp_path: Path) -> None:
+    """A second program built from this repository (the model server's own `inference_server`)
+    sits beside `brain` under `src`; it is left out of the graph, so a module of the application is
+    still found and the survey does not refuse for a package that is not one of its modules.
+
+    Delete this and adding a sibling package under `src` makes `module_name` refuse the whole
+    survey, which is what the model server's first commit did to every audit of every module."""
+    from brain.ops.guards import _graph
+
+    (tmp_path / "src" / "brain").mkdir(parents=True)
+    (tmp_path / "src" / "inference_server").mkdir(parents=True)
+    (tmp_path / "src" / "brain" / "a.py").write_text("import brain.b\n", encoding="utf-8")
+    (tmp_path / "src" / "inference_server" / "x.py").write_text("import os\n", encoding="utf-8")
+
+    assert set(_graph(tmp_path / "src")) == {"brain.a"}
+
+
 def test_a_path_outside_the_package_has_no_module_name() -> None:
     """A path this cannot name is a path whose imports it cannot match, so the test set would
     come back empty and the audit would report every guard as a survivor.

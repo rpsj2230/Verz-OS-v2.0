@@ -137,7 +137,7 @@ export function AgentAudience({ agentId }: { readonly agentId: string }) {
                     <Chip mono={one.kind === "person"}>{one.kind === "department" ? `${one.value} department` : one.value}</Chip>
                     {shown.mayChange ? (
                       <Button
-                        variant="ghost"
+                        variant="quiet"
                         size="icon-xs"
                         className="size-11 sm:size-6"
                         aria-label={`Withdraw this agent from ${whatIs(one.kind, one.value)}`}

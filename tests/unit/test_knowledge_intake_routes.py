@@ -460,3 +460,46 @@ def test_a_link_is_fetched_over_the_skill_importers_pinned_transport_as_a_knowle
         "company-brain-knowledge-link/1",
         "company-brain-skill-import/1",
     }
+
+
+# ------------------------------------------------------------------ the model server's readers
+def _a_photograph() -> bytes:
+    header = (2480).to_bytes(4, "big") + (3508).to_bytes(4, "big") + bytes((8, 2, 0, 0, 0))
+    return b"\x89PNG\r\n\x1a\n" + (13).to_bytes(4, "big") + b"IHDR" + header + bytes(4)
+
+
+def test_a_photograph_is_refused_at_the_queue_when_no_reader_for_it_is_chosen(
+    served: Served,
+) -> None:
+    """On an install with no scanned-page reader the door says what it has always said about an
+    image, before a byte is kept.
+
+    Delete this and every install accepts files nothing behind the door can read."""
+    code, said = problem(
+        queue(served, "u_admin", _a_photograph(), name="scan.png", media_type="image/png")
+    )
+
+    assert code == "not_added"
+    assert "not read from the console on this install" in said
+    assert served.store.names() == []
+
+
+def test_a_photograph_is_queued_when_the_scanned_page_reader_is_chosen(
+    served: Served, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the reader chosen the same file is kept, ticketed and queued for the worker, which is
+    the only place it is read.
+
+    Delete this and the door's allowance for the model server's types is never reached."""
+    from brain.ops.model_server import Part
+
+    async def chosen(sessions: object) -> frozenset[Part]:
+        return frozenset({Part.OCR})
+
+    monkeypatch.setattr(knowledge_intake_routes, "document_parts", chosen)
+
+    response = queue(served, "u_admin", _a_photograph(), name="scan.png", media_type="image/png")
+
+    assert response.status_code == 202, response.text
+    (job,) = served.queue.jobs
+    assert job.task == INGEST_TASK

@@ -107,6 +107,15 @@ from brain.knowledge.ingest import (
 )
 from brain.knowledge.item import ARRIVED_AS_FILE, ARRIVED_AS_LINK, KnowledgeItem, KnowledgeState
 from brain.knowledge.kinds import KnowledgeKind, assert_kind_holds, assert_uploadable
+from brain.knowledge.model_server_parsers import (
+    DocumentServices,
+    fill_in_scanned_pages,
+    readable_types,
+    route_for,
+    stamped,
+)
+from brain.knowledge.parse_ocr import left_out_notice
+from brain.knowledge.parse_paths import ParsePath, ParseProvenance, RoutedParser, parse_by_route
 from brain.knowledge.scanners import configured_scanner
 from brain.knowledge.scanning import (
     Parser,
@@ -896,15 +905,18 @@ def offer_a_table_file(filename: str, declared_type: str = "") -> None:
 TABLE_TYPES: Final = frozenset({MediaType.CSV.value, MediaType.XLSX.value})
 
 
-def text_path_type(declared_type: str) -> MediaType:
-    """The declared type, refused before a byte is read when this path cannot read it.
+def text_path_type(declared_type: str, services: DocumentServices | None = None) -> MediaType:
+    """The declared type, refused before a byte is read when nothing this install has can read it.
 
     The door's own allowlist first, so a type nothing accepts is refused in the door's words.
-    Then this path's four, because an image or a spreadsheet needs the layout service or OCR,
-    and reading a fifty megabyte file only to say so wastes the transfer.
+    Then this path's four, plus whatever a chosen part of the model server opens (a presentation,
+    a photograph of a page), because an image or a presentation needs one of those readers and
+    reading a fifty megabyte file only to say so wastes the transfer. With no `services` it is
+    the four, exactly as before.
     """
     media_type = accepted_type(declared_type)
-    if media_type not in TEXT_PATH_TYPES:
+    opened = readable_types(services) if services is not None else frozenset[MediaType]()
+    if media_type not in TEXT_PATH_TYPES and media_type not in opened:
         msg = (
             f"{media_type.value} is not read from the console on this install; plain text, "
             "Markdown, PDF and Word documents are"
@@ -973,6 +985,11 @@ class ReadUpload:
 
     item: KnowledgeItem
     blocks: tuple[Block, ...]
+    #: Which path and engine read it. None when no route was used, which is every install that
+    #: runs no document part of the model server and every item read before there was one.
+    provenance: ParseProvenance | None = None
+    #: Pages of a scan the reader would not stand behind, which the uploader is told of.
+    left_out_pages: tuple[int, ...] = ()
 
 
 def read_for_text_path(
@@ -984,6 +1001,7 @@ def read_for_text_path(
     scanner: Scanner | None = None,
     parser: Parser | None = None,
     budget_bytes: int | None = None,
+    services: DocumentServices | None = None,
 ) -> ReadUpload | ParseFailure:
     """Scan, parse and name one received upload, or say why it could not be read (M7.6.3).
 
@@ -994,7 +1012,13 @@ def read_for_text_path(
 
     The scanner, when none is passed, is the one the install names
     (`brain.knowledge.scanners.configured_scanner`): the structural check unless ClamAV is chosen.
+
+    **With `services` naming a reader the file goes through the route for its type** instead of
+    the one parser, so a document is read by the first path that can and the path is recorded
+    (`brain.knowledge.model_server_parsers.route_for`). Without it, or with a type no chosen
+    reader opens, this is what it always was.
     """
+    route = route_for(received.upload.media_type, services) if services is not None else ()
     return _read(
         received,
         kind=kind,
@@ -1005,6 +1029,8 @@ def read_for_text_path(
         budget_bytes=budget_bytes,
         tables_visible=TABLES_ARE_VISIBLE,
         arrived_as=ARRIVED_AS_FILE,
+        route=route,
+        services=services,
     )
 
 
@@ -1053,11 +1079,18 @@ def _read(
     title_of: Callable[[ScannedContent], str] | None = None,
     arrived_as: str = "",
     source_url: str = "",
+    route: Sequence[RoutedParser] = (),
+    services: DocumentServices | None = None,
 ) -> ReadUpload | ParseFailure:
-    """The one read both paths take. A type the reader has no table answer for is unsupported."""
+    """The one read both paths take. A type the reader has no table answer for is unsupported.
+
+    With a `route` the document is read by the first path in it that can, and the path is
+    returned on the result. A type the route opens is not refused for being absent from
+    `tables_visible`, because that table answers for the in-process reader only.
+    """
     assert_uploadable(kind)
     media_type = received.upload.media_type
-    if media_type not in tables_visible:
+    if not route and media_type not in tables_visible:
         return ParseFailure(
             cause=ParseCause.UNSUPPORTED,
             media_type=media_type,
@@ -1067,18 +1100,43 @@ def _read(
     scanned = scan_for_parsing(
         received.upload, received.body, scanner=scanner or configured_scanner()
     )
-    parsed = parse_scanned(scanned, parser=parser, budget_bytes=budget_bytes)
-    if isinstance(parsed, ParseFailure):
-        return parsed
+    provenance: ParseProvenance | None = None
+    left_out: tuple[int, ...] = ()
+    if route:
+        attributed = parse_by_route(scanned, route=route, budget_bytes=budget_bytes)
+        if isinstance(attributed, ParseFailure):
+            return attributed
+        parsed = attributed.document
+        provenance = attributed.provenance
+        left_out = parsed.left_out_pages
+        blocks = stamped(parsed.blocks, provenance)
+        if services is not None and provenance.path is ParsePath.LAYOUT:
+            # A layout read of a PDF leaves a photographed page blank: read those by the
+            # scanned-page reader, each block saying how it was read.
+            filled = fill_in_scanned_pages(scanned, blocks, services)
+            if isinstance(filled, ParseFailure):
+                return filled
+            blocks = filled.blocks
+            left_out = tuple(sorted({*left_out, *filled.left_out_pages}))
+        # A layout read sees a table as a table whatever the file is; every other path sees one as
+        # the in-process reader does, which for a type it does not read is not at all.
+        sees_tables = provenance.path is ParsePath.LAYOUT or tables_visible.get(media_type, False)
+    else:
+        parsed_or_failed = parse_scanned(scanned, parser=parser, budget_bytes=budget_bytes)
+        if isinstance(parsed_or_failed, ParseFailure):
+            return parsed_or_failed
+        parsed = parsed_or_failed
+        blocks = parsed.blocks
+        sees_tables = tables_visible[media_type]
     assert_kind_holds(
         kind,
-        holds_a_table=any(block.kind is BlockKind.TABLE for block in parsed.blocks),
-        tables_are_visible=tables_visible[media_type],
+        holds_a_table=any(block.kind is BlockKind.TABLE for block in blocks),
+        tables_are_visible=sees_tables,
     )
     titled = title_of(scanned) if title_of is not None else ""
     item = KnowledgeItem(
         item_id=upload_item_id(received.upload, placement, owner_id),
-        content=joined(parsed.blocks),
+        content=joined(blocks),
         title=titled or upload_title(received.upload.filename),
         visibility=placement,
         owner_id=owner_id,
@@ -1086,5 +1144,11 @@ def _read(
         kind=kind,
         arrived_as=arrived_as,
         source_url=source_url,
+        parse_notice=left_out_notice(left_out),
     )
-    return ReadUpload(item=item, blocks=parsed.blocks)
+    return ReadUpload(
+        item=item,
+        blocks=tuple(blocks),
+        provenance=provenance,
+        left_out_pages=left_out,
+    )

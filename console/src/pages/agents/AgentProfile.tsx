@@ -176,7 +176,7 @@ function Capabilities({
           label="Connectors"
           add={
             onEditDraft === undefined ? null : (
-              <Button variant="ghost" size="icon-sm" className="size-11 sm:size-8" aria-label={ADD_A_SOURCE} title={ADD_A_SOURCE} onClick={onEditDraft}>
+              <Button variant="quiet" size="icon-sm" className="size-11 sm:size-8" aria-label={ADD_A_SOURCE} title={ADD_A_SOURCE} onClick={onEditDraft}>
                 <span aria-hidden>+</span>
               </Button>
             )
@@ -191,7 +191,7 @@ function Capabilities({
           add={
             onEditDraft === undefined ? null : (
               <Button
-                variant="ghost"
+                variant="quiet"
                 size="icon-sm"
                 className="size-11 sm:size-8"
                 aria-label={ADD_A_SOURCE}

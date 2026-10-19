@@ -19,7 +19,7 @@
  *
  * **People are named, never shown by id**; the ids are under Advanced.
  *
- * Task ids: M27.8.12, M27.15.44, M27.16.1
+ * Task ids: M27.8.12, M27.15.44, M27.16.1, M27.16.3
  */
 
 import { IdCard, Info, LayoutDashboard } from "lucide-react";
@@ -255,6 +255,7 @@ function About({ row, page }: { readonly row: SubscriberRow; readonly page: Webh
           <Line>{NO_CHANGES}</Line>
         ) : (
           <EntityTable
+            exportName="webhook-changes"
             caption={`Changes to ${row.subscriber_id}`}
             columns={changeColumns(page)}
             rows={row.changes}

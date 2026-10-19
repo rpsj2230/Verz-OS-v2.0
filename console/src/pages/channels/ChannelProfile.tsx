@@ -18,7 +18,7 @@
  * product sentence to one destination, sent once per record and destination, which ends and
  * replaces nothing (`tests/destructive-confirmed.test.ts` records why).
  *
- * Task ids: M27.13.1, M10.3.3, M10.2.1, M27.16.1
+ * Task ids: M27.13.1, M10.3.3, M10.2.1, M27.16.1, M27.16.2
  */
 
 import { useMemo, useState, type FormEvent } from "react";
@@ -53,9 +53,21 @@ export const SECRET_FORMAT = "Kept in the vault and never shown again. Leave it 
 export const PARTS_FORMAT =
   "Kept in the vault together and never shown again. Paste every part to replace them, or leave them all empty to keep the ones held.";
 
+/** The words a person reads for a vendor's field name: `reply_url` is not a label, "Reply address" is. */
+const FIELD_WORDS: Readonly<Record<string, string>> = Object.freeze({ url: "address", id: "ID", uri: "address" });
+
+export function fieldWords(name: string): string {
+  const text = name
+    .split("_")
+    .filter((one) => one !== "")
+    .map((one) => FIELD_WORDS[one] ?? one)
+    .join(" ");
+  return text === "" ? name : `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+}
+
 /** The label of one part of a channel's secret. */
 export function partLabel(part: string): string {
-  return `${part} (write only)`;
+  return `${fieldWords(part)} (write only)`;
 }
 export const ENABLED_LABEL = "Switched on";
 export const EVENTS_LABEL = "Vendor posts to";
@@ -155,7 +167,7 @@ export function SetUp({
         {fields.length === 0 ? <p className="m-0 text-[12.5px] text-dim">{NO_IDENTIFIERS}</p> : null}
         {fields.map((field) => (
           <div key={field} className="flex min-w-0 flex-col gap-2">
-            <Label htmlFor={`${SETUP_FORM}-${field}`}>{field}</Label>
+            <Label htmlFor={`${SETUP_FORM}-${field}`}>{fieldWords(field)}</Label>
             <Input
               id={`${SETUP_FORM}-${field}`}
               name={field}

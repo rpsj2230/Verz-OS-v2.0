@@ -46,7 +46,7 @@
  * `App.tsx` and nothing here is in the entry chunk. The measurement, before and after, is
  * in the README.
  *
- * Task ids: M32.5.1.2, M32.5.2.1, M32.5.2.2, M1.9.1
+ * Task ids: M32.5.1.2, M32.5.2.1, M32.5.2.2, M1.9.1, M27.16.2
  */
 
 import { useMemo, useState } from "react";
@@ -197,7 +197,7 @@ export function Records() {
   return (
     <article className="page">
       <h1>Records</h1>
-      <p className="lede">Rows of one entity, exactly as the API answered them.</p>
+      <p className="lede">Rows of one kind of record, as this install holds them for you.</p>
 
       <section className="card">
         <SchemaForm

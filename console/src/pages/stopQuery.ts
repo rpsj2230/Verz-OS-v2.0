@@ -11,7 +11,7 @@
  * with who pressed it and when (`brain.ops.halt_store.A_STOP_NEEDS_NO_WORDS_AND_A_RESUME_DOES`).
  * Resuming needs a written reason, said before anything is sent.
  *
- * Task ids: M27.12.4, M27.15.14, M27.2.8
+ * Task ids: M27.12.4, M27.15.14, M27.2.8, M27.16.2
  */
 
 import type { components } from "../api/schema";
@@ -100,8 +100,8 @@ export function resumeQuestion(row: Pick<HaltRow, "scope" | "target">): string {
 }
 
 /** What a resume does, said in the confirmation. */
-export function resumeConsequence(row: Pick<HaltRow, "declared_by">): string {
-  return `New work starts again at once. This lifts a stop ${row.declared_by} made, and your reason is recorded beside it.`;
+export function resumeConsequence(): string {
+  return "New work starts again at once. This lifts the stop, and your reason is recorded beside it.";
 }
 
 /** Why a resume cannot be sent yet, or null. */

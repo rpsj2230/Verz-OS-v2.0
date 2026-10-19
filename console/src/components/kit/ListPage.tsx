@@ -13,7 +13,7 @@
  *
  * **No total anywhere.** The page draws rows and whether there are more; see `EntityTable.tsx`.
  *
- * Task ids: M27.10.2, M27.10.3
+ * Task ids: M27.10.2, M27.10.3, M27.16.3
  */
 
 import type { ReactNode } from "react";
@@ -74,6 +74,10 @@ export interface ListPageProps<Row extends object> {
   readonly rowActions?: ((row: Row) => ReactNode) | undefined;
   readonly bulkActions?: ((selected: readonly Row[], clear: () => void) => ReactNode) | undefined;
   readonly exportName?: string | undefined;
+  /** What a row's detail drawer holds when the page has more to say than its cells. */
+  readonly detail?: ((row: Row) => ReactNode) | undefined;
+  /** Why this list has no detail drawer. */
+  readonly withoutDetail?: string | undefined;
   /** Said while the first page is on its way. */
   readonly loading: string;
   /** The empty state of an unnarrowed list: what it is, and what would put a row here. */
@@ -105,6 +109,8 @@ export function ListPage<Row extends object>({
   rowActions,
   bulkActions,
   exportName,
+  detail,
+  withoutDetail,
   loading,
   emptyTitle,
   emptyDescription,
@@ -147,6 +153,8 @@ export function ListPage<Row extends object>({
         rowActions={rowActions}
         bulkActions={bulkActions}
         exportName={exportName}
+        detail={detail}
+        withoutDetail={withoutDetail}
       />
     );
   }

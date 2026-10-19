@@ -470,7 +470,10 @@ describe("Adoption", () => {
     });
 
     const rows = [...page.root.querySelectorAll("[data-slot='entity-table'] tbody tr")].map((row) =>
-      [...row.querySelectorAll("td")].map((cell) => cell.textContent),
+      // The table draws a box to select a row first and a control that opens its detail last.
+      [...row.querySelectorAll("td")]
+        .filter((cell) => cell.querySelector("[role='checkbox'], [data-slot='row-details']") === null)
+        .map((cell) => cell.textContent),
     );
     expect(rows).toEqual([
       ["finance", "0", "0", "0"],
@@ -524,7 +527,9 @@ describe("Service levels", () => {
       },
     });
 
-    const cells = [...page.root.querySelectorAll("[data-slot='entity-table'] tbody td")].map((one) => one.textContent);
+    const cells = [...page.root.querySelectorAll("[data-slot='entity-table'] tbody td")]
+      .filter((one) => one.querySelector("[role='checkbox'], [data-slot='row-details']") === null)
+      .map((one) => one.textContent);
     expect(cells[2]).toBe(NOT_MEASURED);
     expect(cells[4]).toBe(NOT_MEASURED);
     expect(page.below()).not.toMatch(/(^|[^0-9])0 ms/);
