@@ -9,7 +9,7 @@
  */
 
 import { expect, test, type Page } from "@playwright/test";
-import { checkPage, reset, watch, type Watch } from "../lib/checklist";
+import { checkPage, consoleFontRequests, fontsStayOnTheInstall, reset, watch, type Watch } from "../lib/checklist";
 import { addressesOf, servedNavigation, type Navigation } from "../lib/navigation";
 import { signInAsAdmin } from "../lib/signin";
 import { openFromMenu } from "../pages/module";
@@ -52,3 +52,12 @@ for (const [group, module] of MODULE_PAGES) {
     await module.cases(page);
   });
 }
+
+test("every font the console drew was fetched from the install, and the console did draw some", () => {
+  // Deleting this leaves "no request leaves the install" judged page by page after `reset`, which
+  // never sees the font request: it is made once, by the first page that draws with the font, and
+  // that page's list is cleared before it is judged. The count is asserted too, so a console that
+  // loaded no font at all (and so asked no host for one) is not read as a pass.
+  expect(consoleFontRequests(seen).length, "the console's pages loaded at least one font").toBeGreaterThan(0);
+  expect(fontsStayOnTheInstall(seen), "no console font was fetched from another host").toEqual([]);
+});
