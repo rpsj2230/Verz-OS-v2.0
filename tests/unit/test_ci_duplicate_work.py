@@ -33,12 +33,14 @@ import yaml
 
 REPO = Path(__file__).resolve().parents[2]
 
-#: The jobs a push to main runs. Eight, measured at about 12 job-minutes and 7 to 15 minutes of
-#: wall clock on 2026-10-14. A new job on main is a deliberate decision, because every one of
-#: them is on the path to a deploy and the free plan runs 20 jobs at a time.
+#: The jobs a push to main runs. Nine, the console only when the push touches it. Eight were
+#: measured at about 12 job-minutes and 7 to 15 minutes of wall clock on 2026-10-14.
+#: A new job on main is a deliberate decision, because every one of them is on the path to a
+#: deploy and the free plan runs 20 jobs at a time.
 THE_JOBS_MAIN_RUNS = frozenset(
     {
         "changes",
+        "console",
         "static",
         "sweeps",
         "docs",
@@ -97,12 +99,12 @@ def _expressions(group: object) -> list[str]:
     return re.findall(r"\$\{\{\s*([^}]+?)\s*\}\}", str(group))
 
 
-def test_a_push_to_main_runs_only_the_eight_jobs_a_deploy_depends_on() -> None:
+def test_a_push_to_main_runs_only_the_nine_jobs_a_deploy_depends_on() -> None:
     """The cost of main is its job list. A heavy job added to main without a pull-request-only
     condition doubles CI again, and on the free plan's 20 concurrent jobs that queues every
     deploy behind pull requests, which is what main's trim on 2026-09-28 removed.
 
-    Delete this and the unit shards, the console or the handover can drift back onto main with
+    Delete this and the unit shards or the handover can drift back onto main with
     every other test green, because the existing test in `test_ci_workflow.py` that guards main's
     trim names the jobs it expects to be absent and not the whole set that is present."""
     jobs = _workflow("ci.yml")["jobs"]
