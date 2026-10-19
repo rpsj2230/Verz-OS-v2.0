@@ -54,6 +54,37 @@ tool the console cannot be built without, and none of them reaches an install.
 condition (credit for caniuse-lite) applies to redistributing the table, which nothing does.
 
 **What I need from you:** reply "236: A", "236: B" or "236: C".
+## 235. What may start a backup drill from the console, now that nothing the product runs can?
+
+**In plain terms:** task M27.13.5 asks for a "start a drill" button on the Backup and recovery screen
+and for the result to be recorded. The screen today shows the newest copy, whether a drill is due and
+what the last one found, and it says there is no button, because a drill loads your newest copy into a
+scratch database beside your containers, and nothing the product runs holds the access to start a
+container. A button that is pressed and reaches nothing is worse than none, and you decided in item 44
+that this screen must never read as reassurance before a drill has verified a copy. So I have not
+built the button. Three ways to make it real, and each changes what the install is trusted to do:
+
+**Option A: keep the drill by hand, on the server.** The screen goes on saying how to do it and what
+it will then read. Nothing new is trusted. The leaf is closed as "by hand, documented", and the weekly
+rehearsal (M30.3.6) stays the thing that is not automatic.
+
+**Option B: a small service on the server, set up by the installer, does the drill.** The button asks
+for one (a row the console writes); a timer on the server reads the ask through the product's own
+signed-in route, runs the drill script that already exists against the newest copy in a scratch
+container on an internal network, and writes the drill record beside the copy, which the screen then
+reads. The product itself still starts nothing: the service is the installer's, with the server's own
+access, and it is one more thing on the server to keep running.
+
+**Option C: the worker does the drill inside the database server, with no container.** It loads the
+newest copy into a second database on the same database server, checks it, and drops it. It needs no new
+service, but a full second copy of the company's records sits on the same server for the length of the
+drill, with the same access as the first, which is a weaker rehearsal than a separate container.
+
+**My recommendation:** B. It is the only one that rehearses a restore somewhere other than where the
+live data is, and the product still starts nothing itself. I will build it behind a switch that ships
+off and prove it on your install by pressing the button and reading the record.
+
+**What I need from you:** reply "235: A", "235: B" or "235: C".
 
 ## 226. Should a question be estimated before it is answered, and refused when the estimate is more than is left?
 
