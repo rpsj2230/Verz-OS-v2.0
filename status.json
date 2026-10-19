@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-19T16:17:57.076972+00:00",
-  "commit": "35cda0cb",
-  "commit_subject": "A department's builder is offered only what its department holds, and an agent's draft can be started by describing it (M13.9.2, M20.5.3) (#627)",
+  "generated_at": "2026-10-19T16:41:36.399197+00:00",
+  "commit": "7a3502ee",
+  "commit_subject": "The console job also runs on a push to main that touches the console, and a red one holds the deploy (#635)",
   "total": 1626,
-  "done": 1141,
-  "percent": 70.2,
+  "done": 1152,
+  "percent": 70.8,
   "built": 1315,
   "built_percent": 80.9,
-  "built_unproven": 174,
+  "built_unproven": 163,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -60,10 +60,7 @@
     "M12.4.5",
     "M12.4.7",
     "M12.4.9",
-    "M13.7.9",
     "M13.8.11",
-    "M13.8.7",
-    "M13.8.8",
     "M13.9.2",
     "M15.3.3",
     "M16.7.1",
@@ -75,7 +72,6 @@
     "M17.5.2",
     "M17.7.2",
     "M2.3.2",
-    "M20.5.1",
     "M20.5.2",
     "M20.5.3",
     "M24.3.6",
@@ -88,13 +84,7 @@
     "M26.2.6",
     "M26.3.2",
     "M27.11.10",
-    "M27.11.12",
-    "M27.11.13",
-    "M27.11.14",
     "M27.15.19",
-    "M27.15.32",
-    "M27.15.34",
-    "M27.15.35",
     "M27.15.50",
     "M27.15.52",
     "M27.15.57",
@@ -103,7 +93,6 @@
     "M27.15.70",
     "M27.15.71",
     "M27.15.72",
-    "M27.15.75",
     "M27.15.79",
     "M27.16.2",
     "M27.16.3",
@@ -237,10 +226,10 @@
       "wave": 3,
       "name": "Agents, knowledge, console",
       "total": 599,
-      "done": 460,
-      "percent": 76.8,
+      "done": 471,
+      "percent": 78.6,
       "in_progress": 7,
-      "ready_for_testing": 66,
+      "ready_for_testing": 55,
       "blocked": 4,
       "open": 62,
       "acts": 1,
@@ -430,7 +419,7 @@
       "name": "Agents and templates",
       "wave": 3,
       "total": 69,
-      "done": 57,
+      "done": 60,
       "acts": 0,
       "decided": 16,
       "built": 62
@@ -500,7 +489,7 @@
       "name": "Verz Studio, the builder",
       "wave": 3,
       "total": 16,
-      "done": 12,
+      "done": 13,
       "acts": 0,
       "decided": 6,
       "built": 15
@@ -570,7 +559,7 @@
       "name": "Console, reports, observability",
       "wave": 3,
       "total": 216,
-      "done": 156,
+      "done": 163,
       "acts": 0,
       "decided": 22,
       "built": 178
@@ -972,6 +961,7 @@
     "M13.7.6",
     "M13.7.7",
     "M13.7.8",
+    "M13.7.9",
     "M13.8.1",
     "M13.8.10",
     "M13.8.13",
@@ -981,6 +971,8 @@
     "M13.8.19",
     "M13.8.2",
     "M13.8.4",
+    "M13.8.7",
+    "M13.8.8",
     "M13.9.1",
     "M13.9.4",
     "M14.1.1",
@@ -1131,6 +1123,7 @@
     "M20.4.2",
     "M20.4.4",
     "M20.4.6",
+    "M20.5.1",
     "M21.1.4",
     "M21.1.5",
     "M21.2.3",
@@ -1198,6 +1191,9 @@
     "M27.10.6",
     "M27.11.1",
     "M27.11.11",
+    "M27.11.12",
+    "M27.11.13",
+    "M27.11.14",
     "M27.11.15",
     "M27.11.16",
     "M27.11.3",
@@ -1235,7 +1231,10 @@
     "M27.15.3",
     "M27.15.30",
     "M27.15.31",
+    "M27.15.32",
     "M27.15.33",
+    "M27.15.34",
+    "M27.15.35",
     "M27.15.36",
     "M27.15.37",
     "M27.15.38",
@@ -1265,6 +1264,7 @@
     "M27.15.7",
     "M27.15.73",
     "M27.15.74",
+    "M27.15.75",
     "M27.15.76",
     "M27.15.77",
     "M27.15.78",
@@ -2253,21 +2253,6 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (requirement_check_routes); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
-    "M13.7.9": {
-      "status": "READY FOR TESTING",
-      "why": "Built: the Maintenance Agent template declares the ticket desk and the maintenance records source, three maintenance skills, the HTTP website check and the read-only browser, and installs read-only; its one workflow and its approval are put on the installed agent from the Automations page. To prove it on the install: after the release, run the checks on Install, Acceptance and read the row 'the role templates declare their sources and would answer', which should pass in the two newest runs. Then on Agents, New agent, choose the Maintenance Agent template.",
-      "updated": "2026-10-14"
-    },
-    "M13.8.7": {
-      "status": "READY FOR TESTING",
-      "why": "Built: the SEO agent template (version 2) declares the analytics and search console connectors, reads the figures each reports, checks a site over HTTP and carries the SEO audit, keyword research and monthly report skills; the monthly report workflow and the channels are set where the builder links to. To prove it on the install: after the release, run the checks on Install, Acceptance and read the row 'the role templates declare their sources and would answer', which should pass in the two newest runs.",
-      "updated": "2026-10-14"
-    },
-    "M13.8.8": {
-      "status": "READY FOR TESTING",
-      "why": "Built: the sales, finance, support and project management templates read the sources they name, bind every tool to one an install registers, and carry the starter skills of their role (finance carries none: none of the eight is about a ledger). To prove it on the install: after the release, open Install, Acceptance, run the checks, and read the row 'the role templates declare their sources and would answer', which should pass in the two newest runs. Then on Agents, New agent, choose the Support Ticket Agent template, finish the steps, and connect Freshdesk if the page says it is waiting for it.",
-      "updated": "2026-10-14"
-    },
     "M13.8.11": {
       "status": "READY FOR TESTING",
       "why": "Built: before anybody upgrades an agent, the review lists what the new version would leave missing on this install (a tool nothing provides, a connector that is not connected, a question nobody has answered), and accepting it switches the agent off with the same list, as an install does. To prove it on the install: after the release, open Install, Acceptance, run the checks and read the row 'accepting a version runs the checks an install runs', which should pass in the two newest runs. Then on an agent's Profile, with a newer version of its template on offer, read 'What this version needs on this install'.",
@@ -2703,11 +2688,6 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_builder_routes, builder.agent_drafts, builder.publish); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
-    "M20.5.1": {
-      "status": "READY FOR TESTING",
-      "why": "Built: a department's administrator can no longer publish an agent to the whole company or approve a knowledge item to it alone; that needs the authority held over everything, and for a department it needs the authority held in that department. The skill library is one company-wide object, so only the authority over everything decides about a skill. The publications queue offers each administrator only the requests they could decide. To prove it on the install: after the release, open Install, Acceptance, run the checks and read the row 'a department admin decides only for their department', which should pass in the two newest runs.",
-      "updated": "2026-10-15"
-    },
     "M20.5.2": {
       "status": "IN PROGRESS",
       "why": "Built: behind the switch 'Hold an agent that costs more than its department allows' (ships off), publishing an agent to a department whose per-run ceiling is below what one run costs waits for that department's administrator, tells the author both figures in the install's currency, and the publish record carries the cost of each version. Not what the leaf says in two ways: the figure is the run's price from the product's own estimator (the same one the pre-flight uses) and not the median of rehearsed runs, because rehearsals record no cost yet (needs-you question); and no screen writes a department's per-run ceiling yet (M21.1.2), so on an install the hold fires only for a ceiling written some other way. The check 'a costly publish waits for a colleague in the department' proves the hold over a ceiling it writes itself.",
@@ -2968,21 +2948,6 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in credential_routes, ops.acceptance_operations_console_6, ops.credential_catalogue +9 more; NOT wired: pages/Credentials.route.tsx. MORE ELSEWHERE, read before building: closed PR #171's branch M27/console-credentials (may be replayed already)",
       "updated": "2026-10-06"
     },
-    "M27.11.12": {
-      "status": "READY FOR TESTING",
-      "why": "built (M27/agent-profile-and-personal-agents): an agent's Profile lists its sources, its skills and its channels each with its state. A channel is drawn as on or as off in words and a dashed edge (AgentChannels, from the lifecycle read), a source is attached or requested with the Connectors page's health, and a skill is drawn with its review and its runs. A skill no run of the agent could use says so in a sentence from the API (brain.console.agent_behaviour.skill_standing: not in the library, waiting for review, rejected, changed since it was approved, or naming a tool the agent may not call), checked against the run path's own skills_offered; the old sentence that an assignment changes no answer was false since M27.12.1 and is gone. Skills and channels hold the same overflow list as sources, the first five and the rest behind N more. Add and remove: a skill is attached and taken off through a confirmation, a source through a draft of the agent, a channel through the Change where it answers confirmation. Install check a_pinned_skill_no_run_could_use_is_said_so_on_the_profile. To prove on the install: sign in as an administrator, open an agent's Profile; the Capabilities card lists its skills, and under them a line for any skill no run uses, for example a skill still waiting for review; the card Where it answers shows each channel as on or as off",
-      "updated": "2026-10-15"
-    },
-    "M27.11.13": {
-      "status": "READY FOR TESTING",
-      "why": "built (M27/agent-profile-and-personal-agents), behind the agent_audience_extras switch which ships off: the Availability card shows who can find the agent (level, department, steward, whether you are included) and, to its steward and to the holder of the lifecycle authority over it, the further departments and named people it is offered to, each with a Withdraw control and, for the holder, an Offer control (a department chosen from the install's own list, a person typed by user id), each confirmed first. GET /agents/{id}/audience, POST /audience/additions and /audience/removals (brain.agent_audience_routes). A reader who answers for the agent in no way is sent no name and no sentence saying names exist, so an agent offered to nobody and to many read the same; a personal agent takes no offer; the row stays on withdrawal with who and when. Install check an_agent_is_offered_to_more_than_its_level_from_its_profile. Needs-rupash 201 question 1 (one choice or several) is still unanswered, which is why the controls are behind a switch. NOT BUILT: a ledger entry per offer (the table has no ledger trigger; its own rows say who and when). To prove on the install: Features, switch on Offer an agent to more departments and to named people; sign in as the department administrator of an agent, open its Profile, Availability: choose a department and press Offer then confirm, the agent appears for that department's members; Withdraw it and it stops appearing",
-      "updated": "2026-10-15"
-    },
-    "M27.11.14": {
-      "status": "READY FOR TESTING",
-      "why": "built (M27/agent-profile-and-personal-agents) to the owner's recommendation on needs-rupash 201 question 2, which is not yet answered: the Learning card on the Profile carries a switch Let this agent learn from its conversations, which pauses and resumes what the agent's runs teach it (GET and POST /agents/{id}/learning, the lifecycle authority, a reason required and written to the row), each direction confirmed. Resuming lets each tier go on doing what it already checks, so it cannot let anything be learnt unchecked. The browsing switch is on the Profile as a switch that is off and cannot be pressed, with its reason, and computer use as a sentence: nothing is offered for browsing until the sealed browser has run on an install (question 2 option A). Install check an_agents_learning_is_paused_and_resumed_from_its_profile; what a pause does to what forms is acceptance_checks_signals. To prove on the install: sign in as the administrator of an agent, open its Profile, Learning from conversations: press the switch, give a reason, confirm; the card reads Paused; press it again, give a reason, confirm; it reads On",
-      "updated": "2026-10-15"
-    },
     "M27.12.5": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (app, console.agent_profile, models.calls +11 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #154's branch M21/record-usage-for-stats (may be replayed already); closed PR #167's branch M38/migration-train-0118-0138-0139 (may be replayed already); closed PR #459's branch M21/budget-stops (may be replayed already)",
@@ -3007,21 +2972,6 @@
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (service_account_routes, pages/ServiceAccounts.tsx, pages/service-accounts/AccountActs.tsx +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #124's branch M27/service-accounts-page (may be replayed already); closed PR #180's branch M27/console-platform (may be replayed already)",
       "updated": "2026-10-06"
-    },
-    "M27.15.32": {
-      "status": "READY FOR TESTING",
-      "why": "built (M27/agent-profile-and-personal-agents): the Profile's computer use card is the sentence the API sends (GET /agents/{id}/capabilities, computer_use, from brain.console.agent_behaviour), which says computer use is not offered because the product has no isolated desktop runner, and nothing is drawn to switch. Whether a runner exists is asked of the import machinery for the module brain.browsing.desktop and not of a constant, so the day it is added the sentence changes and the install check says not run until a person looks again; even then offered stays false until a per-agent switch is built. A reader sent no detail is drawn no card. Install check computer_use_is_not_offered_until_a_desktop_runner_exists. To prove on the install: open any agent's Profile; the card Computer use reads Not offered, with the reason, and holds no button or switch",
-      "updated": "2026-10-15"
-    },
-    "M27.15.34": {
-      "status": "READY FOR TESTING",
-      "why": "built (M27/agent-reads-and-template-withdrawal): the Learning, Memory and Artifacts reads take an optional agent, cut after the reader's audience, so an agent the reader may not see answers as one that does not exist; an agent's own Memory tab no longer lists the learnings formed in plain conversations. Proved on the install with the check 'An estate read cut to an agent is its slice and hides the rest', which passes when the install's two newest runs both pass it; by hand: on Learning, Artifacts and a person's Memory page ask for one agent and see only what it formed or produced, then ask for a personal agent of somebody else and see the same answer as for one that was never made",
-      "updated": "2026-10-15"
-    },
-    "M27.15.35": {
-      "status": "READY FOR TESTING",
-      "why": "built (M27/agent-reads-and-template-withdrawal, migration 0261): an administrator withdraws a published template version with a reason and puts it back, each an inserted row and a ledger entry; a withdrawn version leaves the gallery, its install page and agents' upgrade offers while agents installed from it stay as they were; a version is saved as a signed document and a document from another install is read, then added once, signed again by this install; all behind the template_withdrawal switch, which ships off (needs-rupash 236 asks whether installs should prove origin to each other). Proved on the install with the check 'A withdrawn version is not offered and agents stay pinned'; by hand: turn the switch on in Features, open a template, withdraw its newest version with a reason, see the version before it offered and an agent made from it unchanged, then put it back from Agent templates",
-      "updated": "2026-10-15"
     },
     "M27.15.41": {
       "status": "OPEN",
@@ -3087,11 +3037,6 @@
       "status": "READY FOR TESTING",
       "why": "built: console/tests/styled-classes.test.ts compiles the component layer's stylesheet and refuses any class in the markup with no selector and no emitted utility (it found bg-surface, text-ink-3 and text-danger, which nothing defined, and two dozen unstyled hooks), and console/tests/one-failure-component.test.ts refuses a failure drawn by hand, a failure heading typed anywhere but ui/FailureNotice, and a private failure component (it found twelve writes drawing failure.message with no reference). Proved in CI: the console job (Console types, boundaries, tests, build) in .github/workflows/ci.yml runs both through npm run test. On the install: make a write fail, for example set an agent's monthly budget while holding no budget role, and read the heading, the sentence and the reference under the form.",
       "updated": "2026-10-15"
-    },
-    "M27.15.75": {
-      "status": "READY FOR TESTING",
-      "why": "To test it on the install: open the Install page and find the check 'the console names no font host and serves every font it ships' passing; open any console page with the browser's network tab open and see every font file come from the install's own address and none from a font service; open /font-licences.txt on the install to read the fonts' licence notices. In CI the 'Console types, boundaries, tests, build' job audits the built bundle (python -m brain.ops.bundle_audit console/dist) and the nightly Browser workflow records every font request of every page.",
-      "updated": "2026-10-14"
     },
     "M27.15.79": {
       "status": "READY FOR TESTING",
@@ -4116,11 +4061,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 5,
+  "closed_today": 16,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "0fadf6e",
+      "at": "2026-10-19T16:27:06+00:00",
+      "subject": "11 more tasks are proved on the install by the newest complete acceptance run",
+      "closed": "M13.7.9,M13.8.7,M13.8.8,M20.5.1,M27.11.12,M27.11.13,M27.11.14,M27.15.32,M27.15.34,M27.15.35,M27.15.75"
+    },
     {
       "sha": "28a5095",
       "at": "2026-10-19T06:24:02+00:00",
@@ -4234,12 +4185,6 @@
       "at": "2026-10-05T15:33:34+00:00",
       "subject": "Capacity, the trace role and Singapore's identifiers each get an install check that fails on its break, and three leaves held by CI close (#341)",
       "closed": "M32.2.2.2,M32.5.1.4,M32.5.2.2"
-    },
-    {
-      "sha": "3c66a9d",
-      "at": "2026-10-05T14:29:53+00:00",
-      "subject": "Seventy-six tasks close on the install's own acceptance runs after today's deploys (#336)",
-      "closed": "M1.6.14,M1.6.15,M10.1.2,M10.1.3,M10.1.4,M10.2.3,M10.2.4,M10.2.7,M10.3.1,M10.3.2,M10.3.4,M10.3.5,M10.5.7,M10.6.2,M10.7.1,M10.7.4,M11.4.9,M11.7.7,M12.1.3,M12.2.10,M15.4.1,M16.1.2,M16.1.3,M16.1.4,M16.1.5,M16.4.1,M16.4.4,M16.6.3,M16.7.10,M16.7.12,M2.3.1,M22.1.3,M22.1.4,M22.1.5,M22.2.1,M22.2.3,M27.7.4,M32.6.1.3,M32.6.2.2,M33.6.1.3,M39.1.1.2,M39.1.1.4,M39.1.1.5,M39.1.3.1,M39.1.3.2,M39.1.3.3,M39.1.3.4,M39.2.1.4,M39.2.2.1,M39.2.2.2,M39.2.2.3,M39.2.2.4,M39.2.2.5,M39.2.3.1,M39.2.3.2,M39.2.3.3,M39.2.3.4,M39.3.1.1,M39.3.1.2,M39.3.1.3,M39.3.1.4,M7.1.2,M7.6.1,M7.7.3,M7.7.4,M7.7.6,M8.3.1,M8.3.2,M8.3.4,M8.3.5,M8.4.1,M9.1.1,M9.1.2,M9.1.3,M9.2.3,M9.2.4"
     }
   ]
 }
