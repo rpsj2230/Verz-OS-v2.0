@@ -85,6 +85,14 @@ class BlockKind(enum.StrEnum):
     TABLE = "table"
 
 
+#: The ways a block may say it was read: `brain.knowledge.parse_paths.ParsePath`'s values, spelled
+#: here because that module imports this one. A test holds the two equal.
+READ_PATHS: Final = frozenset({"layout", "fallback", "ocr"})
+
+#: What an engine may be called, as `brain.knowledge.parse_paths` bounds it.
+_ENGINE_RE: Final = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+
+
 @dataclass(frozen=True)
 class Block:
     """One piece of a parsed document, and where it sits in the parsed text.
@@ -101,10 +109,26 @@ class Block:
     start: int
     page: int | None = None
     section: str = ""
+    #: How this block was read, as `brain.knowledge.parse_paths.ParseProvenance` names it: the
+    #: path and the engine, both or neither. **Set by the route that read it and never by the
+    #: reader's own answer**, so a server cannot say how its blocks were read (`parse_layout`
+    #: builds a block from a closed list of keys and these are not among them). Empty for a block
+    #: read before reading was recorded, which is every block of every document written until now.
+    path: str = ""
+    engine: str = ""
 
     def __post_init__(self) -> None:
         if self.start < 0:
             msg = f"block start {self.start} is not an offset"
+            raise ChunkingError(msg)
+        if bool(self.path) != bool(self.engine):
+            msg = "a block names how it was read by a path and an engine together, or by neither"
+            raise ChunkingError(msg)
+        if self.path and (self.path not in READ_PATHS or not _ENGINE_RE.match(self.engine)):
+            # Closed, so the two strings a route sets cannot carry anything but a name from the
+            # product's own lists: a path from three words and an engine from the bounded alphabet
+            # `parse_paths.ParseProvenance` holds. Neither is ever decoded from a reader's answer.
+            msg = f"{self.path!r} by {self.engine!r} is not a way a block was read"
             raise ChunkingError(msg)
         if not self.text:
             # An empty block would produce no chunk and a zero-width span, and a zero-width
@@ -194,6 +218,10 @@ class Passage:
     kind: BlockKind
     page: int | None = None
     section: str = ""
+    #: How the block it was cut from was read. A passage is cut from one block and never spans two,
+    #: so this is that block's, and a document read by two paths has passages of each.
+    path: str = ""
+    engine: str = ""
 
 
 #: Only `chunk_document` holds this. See `Chunk` for why that is the enforcement mechanism.
@@ -228,6 +256,9 @@ class Chunk:
     permissions: DocumentPermissions
     page: int | None = None
     section: str = ""
+    #: How the passage was read: the path and engine of its block, both or neither.
+    path: str = ""
+    engine: str = ""
     #: Not data. The constructor guard, and the reason a chunk has one origin.
     token: object = None
 
@@ -366,6 +397,8 @@ def chunk_blocks(blocks: Sequence[Block], *, bounds: ChunkBounds) -> tuple[Passa
                     kind=BlockKind.TABLE,
                     page=block.page,
                     section=block.section,
+                    path=block.path,
+                    engine=block.engine,
                 )
             )
             continue
@@ -378,6 +411,8 @@ def chunk_blocks(blocks: Sequence[Block], *, bounds: ChunkBounds) -> tuple[Passa
                     kind=BlockKind.PROSE,
                     page=block.page,
                     section=block.section,
+                    path=block.path,
+                    engine=block.engine,
                 )
             )
     return tuple(passages)
@@ -431,6 +466,8 @@ def chunk_document(
                 permissions=permissions,
                 page=passage.page,
                 section=passage.section,
+                path=passage.path,
+                engine=passage.engine,
                 token=_CHUNK_TOKEN,
             )
         )

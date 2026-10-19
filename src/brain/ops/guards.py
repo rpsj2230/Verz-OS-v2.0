@@ -321,7 +321,17 @@ def _graph(root: Path) -> Mapping[str, frozenset[str]]:
     A `MappingProxyType` rather than a dict, for the reason the `frozenset` above is frozen: a
     cached mapping handed out raw is one any caller can edit for every later caller.
     """
-    return MappingProxyType({module_name(path): _imports(path) for path in _python_files(root)})
+    # The application is the `brain` package. Another program built from this repository (the model
+    # server's own, `inference_server`, which imports nothing from `brain`) is not a module of it,
+    # has no test that reaches it through this graph, and would make `module_name` refuse the
+    # whole survey: so only `brain` is read when the root holds it.
+    package = root / "brain"
+    return MappingProxyType(
+        {
+            module_name(path): _imports(path)
+            for path in _python_files(package if package.is_dir() else root)
+        }
+    )
 
 
 def reaching(target: str, *, depth: int = 1, src: Path | None = None) -> set[str]:

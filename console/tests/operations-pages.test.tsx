@@ -594,7 +594,7 @@ describe("Runs and queue, Errors and Logs", () => {
     expect(text).not.toContain("f".repeat(64));
     const cells = [...container.querySelectorAll("td")].map((one) => one.textContent);
     expect(cells.filter((one) => one === "unknown" || one === "sent" || one === "verifying")).toEqual([]);
-    expect(within(container).queryAllByRole("button", { name: /send|resolve|retry|again/i })).toEqual([]);
+    expect(within(container).queryAllByRole("button", { name: /^(send|resolve|retry|run again|mark)/i })).toEqual([]);
   });
 
   test("with nothing waiting for a person the list says so, and a failed read draws a failure under the other two lists", async () => {

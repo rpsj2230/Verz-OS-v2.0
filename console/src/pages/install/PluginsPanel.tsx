@@ -75,7 +75,7 @@ function PluginCard({
             <Button
               key={verb}
               size="sm"
-              variant={verb === "enable" ? "default" : "outline"}
+              variant={verb === "enable" ? "primary" : "outline"}
               className="min-h-11 sm:min-h-8"
               disabled={busy}
               aria-label={`${VERB_LABEL[verb]}: ${row.plugin_id}`}

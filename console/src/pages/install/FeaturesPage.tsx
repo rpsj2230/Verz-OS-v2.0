@@ -76,7 +76,7 @@ function FeatureCard({ row, onAsk, busy }: { readonly row: FeatureRow; readonly 
           <Chip>{row.on ? ON : OFF}</Chip>
           <Button
             size="sm"
-            variant={row.on ? "outline" : "default"}
+            variant={row.on ? "outline" : "primary"}
             className="min-h-11 sm:min-h-8"
             disabled={busy}
             aria-label={`${row.on ? SWITCH_OFF : SWITCH_ON}: ${row.title}`}

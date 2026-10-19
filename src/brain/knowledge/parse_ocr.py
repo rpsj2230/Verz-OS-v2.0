@@ -43,34 +43,39 @@ to do the thing that has just been done. `ParseCause.ILLEGIBLE` was added to
 `brain.knowledge.ingest` for this, and it is the only cause in that taxonomy whose remedy is a
 better scan. See `OCR_MUST_NEVER_SAY_A_FILE_NEEDS_OCR`.
 
-**What the floor does not cover.** It is one number for a whole document, so a report that is
-clean for nine pages and noise on the tenth passes it, and the tenth page is indexed. Making
-that per passage needs `brain.knowledge.chunking.Block` to carry the figure and `chunk_blocks`
-to copy it onto every `Passage`, which is a change to a closed leaf for a case no engine in
-this repository can produce. Named rather than pre-built, and it is the more likely real
-failure of the two.
+**The floor is applied to each page, not to the document (M7.7.10).** One number for a whole
+document passes a report that is clean for nine pages and noise on the tenth, and the tenth is
+indexed and cited as though it had been read. So an engine that can report a figure per page
+(the model server's scanned-page part does) hands them in `pages`, `read_by_page` keeps the
+pages at or over the floor, lays the kept blocks out again so every offset is true of what was
+kept, and names the pages it left out. The parser then returns the kept blocks with the pages
+left out (`brain.knowledge.scanning.ReadWithGaps`), and the uploader is told which pages (see
+`left_out_notice`). **A page with no recognised word at all is not named**: nothing was read from
+it, so there is nothing to leave out, and a blank back side is the commonest page of a scan.
+Still not covered is a plausible misreading of one digit on a clear page, which no floor catches
+and which the passage's recorded path (`ParsePath.OCR`) exists to warn of.
 
-**Nothing calls anything in this module, and no OCR engine exists.** There is no inference
-server, and `brain.ops.inference.SERVED_MODELS` declares one parsing model whose weights figure
-is a judgement written for layout and table models; whether an OCR engine fits inside it is
-unknown and `ocr_gaps` says so rather than assuming. `OcrParser` with no engine refuses with
-`PARSER_UNAVAILABLE`, which is the honest state of this leaf.
+**The engine is the model server's scanned-page part, over `brain.ops.model_server_client`.**
+That module is the only one that speaks to it; this one holds the contract, the floor and the
+refusal. `OcrParser` with no engine refuses with `PARSER_UNAVAILABLE`, which is what an install
+with the part switched off gets.
 
 Scope: domain logic. Nothing here opens a connection, loads a model or reads a clock.
 
-Task ids: M7.2.4
+Task ids: M7.2.4, M7.7.10
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final, Protocol
 
 from brain.knowledge.chunking import Block
 from brain.knowledge.ingest import IngestRefused, ParseCause
 from brain.knowledge.parse_paths import ParsePath, ParseProvenance
-from brain.knowledge.scanning import ParseRefusal, ParseStage, ScannedContent
+from brain.knowledge.scanning import ParseRefusal, ParseStage, ReadWithGaps, ScannedContent
+from brain.knowledge.text_path import Drafted, laid_out
 from brain.ops.inference import SERVED_MODELS, InferenceTask, ServedModel
 
 # ------------------------------------------------------------------ written-down reasons
@@ -163,13 +168,15 @@ class OcrReading:
     that refuses everything, which would make every engine look broken until somebody found
     this line.
 
-    One figure for the whole reading rather than one per block, which is a limit rather than a
-    design: `Block` has no field for it and adding one is a change to a closed leaf. The
-    consequence is stated in the module docstring and it is the more likely real failure.
+    One figure for the whole reading, and the pages the floor already left out. An engine that
+    reports a figure per page does not build this directly: `read_by_page` applies the floor to
+    each page and builds it from what stayed, so `confidence` is then the mean of the pages kept
+    and `left_out_pages` names the others.
     """
 
     blocks: tuple[Block, ...]
     confidence: float
+    left_out_pages: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.confidence <= 1.0:
@@ -189,6 +196,137 @@ class OcrReading:
         once. See `A_GUESS_BELOW_THE_FLOOR_IS_WORSE_THAN_NO_TEXT` for the trade it makes.
         """
         return self.confidence >= OCR_FLOOR_CONFIDENCE
+
+
+@dataclass(frozen=True)
+class OcrPage:
+    """How sure an engine was of one page, from 0 to 1. The page is its number in the document."""
+
+    page: int
+    confidence: float
+
+    def __post_init__(self) -> None:
+        if isinstance(self.page, bool) or self.page < 1:
+            msg = f"an OCR page is numbered from 1, and {self.page} is not a page"
+            raise IngestRefused(msg)
+        if not 0.0 <= self.confidence <= 1.0:
+            msg = (
+                f"an OCR page reports confidence {self.confidence}, which is not a figure from 0 "
+                "to 1; it would be compared against a floor that is in those units"
+            )
+            raise IngestRefused(msg)
+
+
+#: The key holding each page's figure in a scanned-page answer, beside `blocks`.
+PAGES_KEY: Final = "pages"
+
+#: The keys one page carries, and the whole of them, as `BLOCK_KEYS` is for a block.
+PAGE_KEYS: Final[tuple[str, ...]] = ("page", "confidence")
+
+
+def decode_pages(payload: Mapping[str, object]) -> tuple[OcrPage, ...] | None:
+    """The per-page figures of an answer, or None when there are none that can be believed.
+
+    None for a list that is not a list of pages, a page number that is not a whole number from 1,
+    a figure that is not a number from 0 to 1, or a page named twice: each is this side being sent
+    something it cannot read, and the caller reads that as the answer being unreadable, never as a
+    page that was sure. Every other key on a page is dropped, as `decode_layout` drops them.
+    """
+    entries = payload.get(PAGES_KEY)
+    if not isinstance(entries, Sequence) or isinstance(entries, (str, bytes)):
+        return None
+    pages: list[OcrPage] = []
+    seen: set[int] = set()
+    for entry in entries:
+        if not isinstance(entry, Mapping):
+            return None
+        page, figure = entry.get("page"), entry.get("confidence")
+        if isinstance(page, bool) or not isinstance(page, int) or page in seen:
+            return None
+        if isinstance(figure, bool) or not isinstance(figure, (int, float)):
+            return None
+        try:
+            pages.append(OcrPage(page=page, confidence=float(figure)))
+        except IngestRefused:
+            return None
+        seen.add(page)
+    return tuple(pages)
+
+
+def read_by_page(blocks: Sequence[Block], pages: Sequence[OcrPage]) -> OcrReading:
+    """The reading of a document whose pages each have a figure: the sure pages and the others.
+
+    A page at or over `OCR_FLOOR_CONFIDENCE` is kept whole and a page under it is left out whole,
+    and **the kept blocks are laid out again**: a block's `start` is where it sits in the
+    document as parsed, so after a page is removed every later offset is wrong for what is left,
+    and a citation resolved against it would point at other words. A block on a page the engine
+    gave no figure for is left out as well, because a block nobody scored is a block nobody
+    vouches for.
+
+    Only a page that had text is named as left out (see the module docstring on blank pages).
+    """
+    figure = {one.page: one.confidence for one in pages}
+    kept = [
+        block
+        for block in blocks
+        if block.page is not None and figure.get(block.page, 0.0) >= OCR_FLOOR_CONFIDENCE
+    ]
+    had_text = {block.page for block in blocks if block.page is not None}
+    left_out = tuple(
+        sorted(page for page in had_text if figure.get(page, 0.0) < OCR_FLOOR_CONFIDENCE)
+    )
+    relaid = laid_out(
+        Drafted(text=block.text, kind=block.kind, page=block.page, section=block.section)
+        for block in kept
+    )
+    kept_pages = {block.page for block in relaid}
+    sure = [figure[page] for page in kept_pages if page is not None]
+    confidence = sum(sure) / len(sure) if sure else 0.0
+    return OcrReading(blocks=relaid, confidence=confidence, left_out_pages=left_out)
+
+
+#: The longest a notice about pages may be, in characters. The column that holds it is 400.
+NOTICE_CHARS: Final = 400
+
+
+def page_ranges(pages: Sequence[int]) -> str:
+    """Page numbers as an uploader reads them: `3, 7 to 9, 12`."""
+    ordered = sorted(set(pages))
+    runs: list[list[int]] = []
+    for page in ordered:
+        if runs and page == runs[-1][-1] + 1:
+            runs[-1].append(page)
+        else:
+            runs.append([page])
+    return ", ".join(str(run[0]) if len(run) == 1 else f"{run[0]} to {run[-1]}" for run in runs)
+
+
+def left_out_notice(pages: Sequence[int]) -> str:
+    """What the uploader is told about the pages of a scan that were not added, or nothing.
+
+    Names page numbers and nothing the file says, so it is safe to show and to keep. When the
+    pages would not fit the column it says how many instead, which is still true and still tells
+    the uploader to look at the scan.
+    """
+    ordered = sorted(set(pages))
+    if not ordered:
+        return ""
+    one = len(ordered) == 1
+    named = page_ranges(ordered)
+    ending = (
+        "was not clear enough to read reliably, so it is not searchable. A clearer scan of "
+        "it would add it."
+        if one
+        else "were not clear enough to read reliably, so they are not searchable. A clearer "
+        "scan of them would add them."
+    )
+    text = f"Page {named} {ending}" if one else f"Pages {named} {ending}"
+    if len(text) > NOTICE_CHARS:
+        text = (
+            f"{len(ordered)} pages of this scan were not clear enough to read reliably, so they "
+            "are not searchable. A clearer scan of them would add them."
+        )
+    return text
 
 
 class OcrEngine(Protocol):
@@ -224,7 +362,7 @@ class OcrParser:
 
     engine: OcrEngine | None = None
 
-    def parse(self, content: ScannedContent) -> Sequence[Block] | ParseRefusal:
+    def parse(self, content: ScannedContent) -> Sequence[Block] | ParseRefusal | ReadWithGaps:
         """Recognise one cleared document, or say why the reading may not be indexed (M7.2.4).
 
         Three outcomes and two of them are refusals. An engine that is not there is an outage.
@@ -246,6 +384,8 @@ class OcrParser:
             return outcome
         if not outcome.blocks or not outcome.is_legible:
             return ParseRefusal(cause=ParseCause.ILLEGIBLE, stage=ParseStage.OCR)
+        if outcome.left_out_pages:
+            return ReadWithGaps(blocks=outcome.blocks, left_out_pages=outcome.left_out_pages)
         return outcome.blocks
 
 

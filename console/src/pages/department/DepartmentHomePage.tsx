@@ -25,7 +25,7 @@
  * draws and no route serves, the lede explaining where each card came from, and every card's
  * trailing "on this other screen" paragraph (each block's heading links there now).
  *
- * Task ids: M27.7.29, M27.16.1, M33.2.1.3, M33.2.1.4
+ * Task ids: M27.7.29, M27.16.1, M33.2.1.3, M33.2.1.4, M27.16.3
  */
 
 import { Bot, Building2, FileText, Gauge, History, Inbox, LayoutDashboard, LibraryBig, SearchX, Settings2, Users } from "lucide-react";
@@ -465,7 +465,7 @@ function About({ slug }: { readonly slug: string }) {
             <EmptyState title="No history to show" description={NO_HISTORY} icon={<History aria-hidden />} />
           ) : (
             <div className="flex min-w-0 flex-col gap-2">
-              <EntityTable caption="Changes to this department" columns={columns} rows={rows} rowId={(row) => `${row.at} ${row.action} ${row.actor_id}`} rowLabel={(row) => whenWords(row.at)} />
+              <EntityTable exportName="department-changes" caption="Changes to this department" columns={columns} rows={rows} rowId={(row) => `${row.at} ${row.action} ${row.actor_id}`} rowLabel={(row) => whenWords(row.at)} />
               <p className="m-0 text-[12.5px]">
                 <Link to="/audit" className="text-acc-text underline-offset-4 hover:underline">
                   Open the audit log

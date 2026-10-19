@@ -18,7 +18,7 @@
  * What was removed from the old page: lower-case column headings that were field names, and the
  * one fixed window of a day (now the period every Report page offers).
  *
- * Task ids: M27.7.16, M27.16.1
+ * Task ids: M27.7.16, M27.16.1, M27.16.3
  */
 
 import { useState } from "react";

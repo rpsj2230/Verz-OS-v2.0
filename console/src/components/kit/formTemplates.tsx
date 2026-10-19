@@ -275,18 +275,18 @@ function ArrayFieldItemTemplate({ children, buttonsProps, hasToolbar, index, sch
     <div className="flex shrink-0 flex-wrap gap-1.5">
       {hasMoveUp || hasMoveDown ? (
         <>
-          <Button type="button" variant="ghost" size="sm" className={CONTROL} disabled={off || !hasMoveUp} onClick={onMoveUpItem} aria-label={`${MOVE_UP} ${lowerFirst(noun)}`}>
+          <Button type="button" variant="quiet" size="sm" className={CONTROL} disabled={off || !hasMoveUp} onClick={onMoveUpItem} aria-label={`${MOVE_UP} ${lowerFirst(noun)}`}>
             <ArrowUp aria-hidden />
             {MOVE_UP}
           </Button>
-          <Button type="button" variant="ghost" size="sm" className={CONTROL} disabled={off || !hasMoveDown} onClick={onMoveDownItem} aria-label={`${MOVE_DOWN} ${lowerFirst(noun)}`}>
+          <Button type="button" variant="quiet" size="sm" className={CONTROL} disabled={off || !hasMoveDown} onClick={onMoveDownItem} aria-label={`${MOVE_DOWN} ${lowerFirst(noun)}`}>
             <ArrowDown aria-hidden />
             {MOVE_DOWN}
           </Button>
         </>
       ) : null}
       {hasCopy ? (
-        <Button type="button" variant="ghost" size="sm" className={CONTROL} disabled={off} onClick={onCopyItem} aria-label={`${COPY} ${lowerFirst(noun)}`}>
+        <Button type="button" variant="quiet" size="sm" className={CONTROL} disabled={off} onClick={onCopyItem} aria-label={`${COPY} ${lowerFirst(noun)}`}>
           <Copy aria-hidden />
           {COPY}
         </Button>

@@ -16,7 +16,7 @@
  * **The holds are those the newest report cited**, which is the one list of holds the API serves;
  * a hold placed since is lifted by its reference from the Legal holds view's second button.
  *
- * Task ids: M27.7.24, M27.16.1
+ * Task ids: M27.7.24, M27.16.1, M27.16.3
  */
 
 import { Archive, FileDown, Gavel, MoreHorizontal, Plus, Trash2 } from "lucide-react";
@@ -180,7 +180,7 @@ function SweepView({ report, controls, onDone }: { readonly report: Report | nul
         {controls.kept.length === 0 ? (
           <Note>{NO_WINDOWS}</Note>
         ) : (
-          <EntityTable caption="How long each kind of thing is kept" columns={kept} rows={controls.kept} rowId={(one) => one.data_class} rowLabel={(one) => one.data_class} />
+          <EntityTable exportName="retention-periods" caption="How long each kind of thing is kept" columns={kept} rows={controls.kept} rowId={(one) => one.data_class} rowLabel={(one) => one.data_class} />
         )}
       </SectionCard>
     </div>
@@ -239,7 +239,7 @@ function HoldsView({ report, controls, onDone }: { readonly report: Report | nul
             rowActions={(one) => (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for legal hold ${one.hold_id}`}>
+                  <Button variant="quiet" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for legal hold ${one.hold_id}`}>
                     <MoreHorizontal aria-hidden />
                   </Button>
                 </DropdownMenuTrigger>

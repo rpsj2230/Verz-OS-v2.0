@@ -365,6 +365,56 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         # behalf of an install nobody here has looked at.
         default="unset",
     ),
+    # --- the model server, which an install switches on in INSTALL_SERVICES and sizes here
+    # (brain.ops.model_server). None of these four does anything while the service is off.
+    Setting(
+        name="INSTALL_MODEL_PARTS",
+        belongs=Belongs.MODELS,
+        meaning=(
+            "Which parts of the model server this install runs, separated by commas, each one "
+            "chosen because it costs memory: embedding finds passages by what they mean, layout "
+            "reads tables and page layout in PDFs and Office files, ocr reads scanned pages, "
+            "tika reads formats the layout part cannot open, and entities finds names and "
+            "details the standard rules miss. Only one part is held in memory at a time, so the "
+            "server's memory is the largest part chosen and not their sum. Changed on Install, "
+            "Settings."
+        ),
+        default="embedding",
+    ),
+    Setting(
+        name="INSTALL_MODEL_IDLE_SECONDS",
+        belongs=Belongs.MODELS,
+        meaning=(
+            "How long the model server keeps a part loaded with nothing to do before it ends "
+            "it and gives the memory back, between 30 seconds and a day. Work that arrives "
+            "afterwards loads the part again, which takes a little time and no memory it was "
+            "not already given. Changed on Install, Settings."
+        ),
+        default="300",
+    ),
+    Setting(
+        name="INSTALL_MODEL_MEMORY_MIB",
+        belongs=Belongs.MODELS,
+        meaning=(
+            "The most memory the model server may take, in MiB, or `auto` to work it out from "
+            "the parts chosen and the largest document. Set it by hand only to follow what the "
+            "server reports: /api/v1/install/model-server gives the largest figure it has "
+            "measured and the limit that suggests. A value too small for the parts chosen is "
+            "refused, and so is one the server's last measured memory cannot hold."
+        ),
+        default="auto",
+    ),
+    Setting(
+        name="INSTALL_MODEL_UPLOAD_MB",
+        belongs=Belongs.MODELS,
+        meaning=(
+            "The largest document, in MB, the model server is sized to read. 25 for every "
+            "kind of document is the owner's choice (needs-rupash 119): easy to remember, "
+            "covers nearly all everyday documents and costs the least memory of the choices "
+            "that do not refuse ordinary files. A larger figure makes the server larger."
+        ),
+        default="25",
+    ),
     # --- storage, M41.1.7
     Setting(
         name="INSTALL_OBJECT_STORE_URL",
@@ -512,7 +562,9 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         meaning=(
             "Comma-separated optional services this server runs beside its profile, started by "
             "the next release only where the server's measured memory has room for them: "
-            "presidio for the personal data detector, langfuse for the trace ledger and its file "
+            "presidio for the personal data detector, modelserver for the model server that reads "
+            "documents and finds passages by meaning (sized by the four INSTALL_MODEL settings), "
+            "langfuse for the trace ledger and its file "
             "store, sandbox for the script sandbox, which needs gVisor on the server, objectstore "
             "for the file store that holds uploaded documents and exports, and automation for the "
             "automation canvas, which takes 896 MiB. `none` runs none of them. Changed on "

@@ -285,7 +285,7 @@ function SectionsMenu({ agentId, sections }: { readonly agentId: string; readonl
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="min-h-11 text-body sm:min-h-8">
+        <Button variant="quiet" size="sm" className="min-h-11 text-body sm:min-h-8">
           {SECTIONS_LABEL} <ChevronDown aria-hidden />
         </Button>
       </DropdownMenuTrigger>

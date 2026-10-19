@@ -62,6 +62,18 @@ overlays="${project}-overlays"
 # script sandbox) is started from. Exported for compose's interpolation and nothing else.
 APP_IMAGE="$(docker inspect "$APP" --format '{{.Config.Image}}')"
 export APP_IMAGE
+# The model server's image, named from the application's: the same repository with `-modelserver`
+# on its name and the same tag, so a release's server and its application are built from one commit
+# and cannot disagree about a request's shape. An install that builds its own sets INFERENCE_IMAGE in
+# the overlays' environment file, which wins: compose reads that file and this export only fills a
+# gap. A reference with no tag (a digest) gets none derived and compose refuses it by name.
+case "${APP_IMAGE##*/}" in
+  *:*)
+    if ! grep -qs '^INFERENCE_IMAGE=' "$ENV_FILE"; then
+      INFERENCE_IMAGE="${APP_IMAGE%:*}-modelserver:${APP_IMAGE##*:}"
+      export INFERENCE_IMAGE
+    fi ;;
+esac
 
 facts="$(mktemp)"
 planned="$(mktemp)"
@@ -98,6 +110,10 @@ skipped=""
 anyskipped=""
 while IFS= read -r line; do
   case "$line" in
+    # A variable the overlay's compose file is started with, which the plan computed from the
+    # install's settings. Exported as it is read, so the preparation that follows it sees it and so
+    # does compose. A value never carries a space or a quote (brain.ops.model_server.environment).
+    "ENV "*) [ -n "$skipped" ] || export "${line#ENV }" ;;
     "START "*) current="${line#START }"; skipped="" ;;
     "PREPARE "*)
       if [ -z "$skipped" ] && ! BRAIN_OVERLAYS_SETTINGS="$SETTINGS" BRAIN_OVERLAYS_ENV="$ENV_FILE" \
