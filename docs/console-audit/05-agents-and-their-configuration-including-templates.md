@@ -7,7 +7,7 @@
 
 | Route | Called by |
 | --- | --- |
-| `GET /api/v1/agent-drafts` | `/agents/drafts`, `/approvals` |
+| `GET /api/v1/agent-drafts` | `/agents/drafts`, `/agents/new`, `/approvals` |
 | `GET /api/v1/agent-drafts/{draft_id}` | `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step` |
 | `GET /api/v1/agent-links/landing` | **no screen** |
 | `GET /api/v1/agent-templates` | `/agent-templates`, `/agents/new` |
