@@ -7,7 +7,7 @@ drives the routes through the application's own authentication, as
 `tests/unit/test_automation_gallery_routes.py` drives the gallery. What the store writes, and the
 ledger entry its row appends, are `tests/unit/test_automation_run_store.py`'s.
 
-Task ids: M39.6.1.4, M39.6.1.5, M39.6.2.2, M38.2.2.5
+Task ids: M39.6.1.4, M39.6.1.5, M39.6.2.2, M38.2.2.5, M39.9.2.3
 """
 
 from __future__ import annotations
@@ -580,6 +580,7 @@ def test_an_automation_a_person_wrote_is_listed_with_its_trigger_condition_and_t
     that cadence gives. Delete this and an automation a person wrote is dropped from the list
     because no template names it, or drawn without what they asked for."""
     from brain.console.automation_authoring import (
+        SKILLS_ARE_THE_AGENTS_TO_CHANGE,
         WRITES_WAIT_FOR_A_PERSON,
         Condition,
         ConditionOp,
@@ -607,11 +608,64 @@ def test_an_automation_a_person_wrote_is_listed_with_its_trigger_condition_and_t
         "condition": "only when the ticket due by (freshdesk) is more than 7 days ago",
         "instruction": one.instruction_text,
         "tools": ["search_tickets"],
+        "skills": [],
         "from_template": None,
         "writes_wait": WRITES_WAIT_FOR_A_PERSON,
+        "skills_rule": SKILLS_ARE_THE_AGENTS_TO_CHANGE,
     }
     assert shown["start_confirmation"] is not None
     assert items(client, "u_admin")["auto_one"]["authored"] is None
+
+
+class OfferedSkills:
+    """`brain.automation_skills.AutomationSkills` in memory, noting whose reach it was asked at."""
+
+    def __init__(self) -> None:
+        self.asked: list[str] = []
+
+    async def offered(self, agent: Any, *, reach: Any, now: Any) -> tuple[Any, ...]:
+        from brain.tools.skills import SkillCard
+
+        self.asked.append(reach.principal_id)
+        return (SkillCard(name="overdue_chase", description="Chase an overdue", version="1.0.0"),)
+
+
+def test_the_card_names_the_skills_to_the_automations_owner_and_asks_no_other_reach(
+    client: TestClient, schedules: Schedules
+) -> None:
+    """The skills a run would be offered are read at a reach, and the only reach a card can read
+    them at is its reader's own, so they are named on an automation that runs as the reader and
+    nowhere else, and nobody's reach is asked on behalf of somebody else's automation. A person
+    who owns none of the automations asks nothing at all. Delete this and one person is shown
+    skills read at another's reach, or every list costs a skill read nobody could use."""
+    from brain.console.automation_authoring import SKILLS_ARE_THE_AGENTS_TO_CHANGE, TriggerChoice
+    from brain.console.automation_gallery import Cadence, Every
+    from brain.orchestration.unattended import TriggerKind
+
+    skills = OfferedSkills()
+    client.app.state.automation_skills = skills  # type: ignore[attr-defined]
+    cadence = Cadence(every=Every.DAY, hour_utc=5)
+    one = written(TriggerChoice(kind=TriggerKind.SCHEDULE, cadence=cadence), task=QUESTIONS.task)
+    schedules.rows["auto_written"] = listed_authored(
+        an_automation("auto_written", template=QUESTIONS), one, cadence=cadence
+    )
+
+    other = items(client, "u_admin")["auto_written"]["authored"]
+    assert skills.asked == []
+    owner = items(client, "u_narrow")["auto_written"]["authored"]
+
+    assert other["skills"] == []
+    assert owner["skills"] == ["overdue_chase"]
+    assert skills.asked == ["u_narrow"]
+    # One list holding the reader's own automation and somebody else's: the skills, read at the
+    # reader's reach, are named on theirs and on no other card in the same answer.
+    schedules.rows["auto_theirs"] = listed_authored(
+        an_automation("auto_theirs", owner="u_admin", template=QUESTIONS), one, cadence=cadence
+    )
+    mixed = items(client, "u_narrow")
+    assert mixed["auto_written"]["authored"]["skills"] == ["overdue_chase"]
+    assert mixed["auto_theirs"]["authored"]["skills"] == []
+    assert owner["skills_rule"] == other["skills_rule"] == SKILLS_ARE_THE_AGENTS_TO_CHANGE
 
 
 def test_a_trigger_nothing_fires_is_listed_saying_so_and_cannot_be_started(
