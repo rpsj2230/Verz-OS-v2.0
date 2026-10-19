@@ -129,9 +129,16 @@ def test_every_scan_cause_has_its_own_words() -> None:
         ),
         (b"Sixteen bytes ok" + bytes(3), ScanVerdict.UNSCANNABLE, ScanCause.NOT_READABLE_TEXT),
         (
-            bytes((0x89,)) + b"PNG\r\n\x1a\n" + bytes(8),
+            bytes((0x00, 0x01, 0x02, 0x03)) * 8,
             ScanVerdict.UNSCANNABLE,
             ScanCause.NOT_CHECKABLE,
+        ),
+        (
+            # A PNG whose first chunk is not a header, which is damage and not a kind of file the
+            # check cannot look into (an image header is judged since the scanned-page reader).
+            bytes((0x89,)) + b"PNG\r\n\x1a\n" + bytes(8),
+            ScanVerdict.UNSCANNABLE,
+            ScanCause.UNOPENABLE,
         ),
     ],
 )

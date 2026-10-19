@@ -181,6 +181,11 @@ def layout_provenance() -> ParseProvenance:
 #: grow a key cannot grow one holding a filename.
 REQUEST_KEYS: Final[tuple[str, ...]] = ("model", "document")
 
+#: The key a request may carry beside those, and only the scanned-page part reads it: the pages of
+#: the document to read, as whole numbers from 1. Absent means every page. Used to fill in the pages
+#: a layout read left blank without recognising the pages it did read (M7.7.9, M7.7.10).
+OPTIONAL_REQUEST_KEYS: Final[tuple[str, ...]] = ("pages",)
+
 #: What is said about the document being sent. A digest so the far side can be asked about the
 #: same bytes twice, the media type so a server does not have to sniff, and the content.
 #: **No filename and no declared title**, which is the point.
@@ -218,8 +223,14 @@ def largest_admissible_bytes() -> tuple[MediaType, int]:
     return worst, sizes[worst]
 
 
-def layout_request(content: ScannedContent) -> Mapping[str, object]:
+def layout_request(
+    content: ScannedContent, *, model: str = LAYOUT_ENGINE, pages: Sequence[int] | None = None
+) -> Mapping[str, object]:
     """One document as it goes onto the wire. Read-only, and carrying no name.
+
+    `model` names which reader the body is for and is the only thing the three document parts of
+    the model server (layout, scanned pages, the general reader) differ in on the way in: they
+    are sent the same document the same way, so the filename-free shape is held in one place.
 
     `MappingProxyType` at both levels, matching `brain.ops.inference.embedding_request`, and
     the edge it protects is the same one: a mapping handed out of a builder is a mapping
@@ -233,18 +244,19 @@ def layout_request(content: ScannedContent) -> Mapping[str, object]:
     existed. It is worth saying out loud because the obvious alternative, streaming the bytes
     as a multipart body, is what a real client would do and would remove the copy entirely.
     """
-    return MappingProxyType(
-        {
-            "model": LAYOUT_ENGINE,
-            "document": MappingProxyType(
-                {
-                    "digest": content.upload.digest,
-                    "media_type": content.upload.media_type.value,
-                    "content_base64": base64.b64encode(content.body).decode("ascii"),
-                }
-            ),
-        }
-    )
+    request: dict[str, object] = {
+        "model": model,
+        "document": MappingProxyType(
+            {
+                "digest": content.upload.digest,
+                "media_type": content.upload.media_type.value,
+                "content_base64": base64.b64encode(content.body).decode("ascii"),
+            }
+        ),
+    }
+    if pages is not None:
+        request["pages"] = tuple(pages)
+    return MappingProxyType(request)
 
 
 def fits_request_ceiling(content: ScannedContent, *, ceiling_bytes: int | None = None) -> bool:

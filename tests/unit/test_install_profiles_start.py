@@ -69,7 +69,11 @@ def test_the_scripts_compose_invocation_starts_every_service_the_profile_promise
     assert started & component_names <= budgeted, "a component starts where nothing budgets it"
     if profile in {"standard", "full"}:
         assert set(WORKERS) <= started
-        assert "inference-server" in started
+        # An optional service since 2026-10-14: no profile starts the model server, and a release
+        # starts it where `INSTALL_SERVICES` names it (`brain.ops.overlays`). Asserted in this
+        # direction, so a profile that composes its file again is a red test and not a server
+        # nobody switched on.
+        assert "inference-server" not in started
     if profile == "full":
         assert "record-matcher" in started
     if profile == "lite":

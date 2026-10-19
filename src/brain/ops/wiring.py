@@ -401,14 +401,16 @@ COMPONENTS: Final[tuple[Component, ...]] = (
         # and entity recognition all go behind one service, because the alternative was
         # 83 further packages and roughly 1.5 GB installed inside a container budgeted 512.
         #
-        # **The figure is the largest in this file and it is arithmetic, not a measurement.**
-        # `brain.ops.inference.SERVED_MODELS` derives the weights from published parameter
-        # counts at a stated precision and adds a runtime reserve that is a judgement; the
-        # sum is what this limit has to hold before it holds a single request.
-        # `inference_gaps` compares the two ends and `budget_breaches` reports what it does
-        # to the profile, which is the point rather than the problem: sizing it to what is
-        # left over would produce a container that is OOM-killed the first time three models
-        # are resident at once, and on a shared host that is somebody else's outage.
+        # **1088 since 2026-10-14, and it is the default configuration's figure and not a fixed
+        # one.** It was 3072: three models resident together, in `standard` and `full`, which
+        # item 120 found would not fit the owner's server beside the detector and the trace
+        # ledger. The server is now an optional service (`brain.ops.overlays`, in no profile)
+        # that loads one part at a time, so its limit is the base plus its largest part, and an
+        # install chooses which parts (`brain.ops.model_server`). 1088 is what the default choice,
+        # the embedding part alone with documents up to 25 MB, needs; the release's plan costs the
+        # install's own figure from its settings, and a test holds this one to the default. **It
+        # is arithmetic and judgement, not a measurement**, every part says which, and the server
+        # reports its own peak for each batch so a measurement can replace them.
         #
         # `Wiring.NONE` is load-bearing rather than incidental. This service is handed the
         # text of documents that have already passed the permission layer, and it has no
@@ -416,13 +418,13 @@ COMPONENTS: Final[tuple[Component, ...]] = (
         # a row that was never sent to it. See
         # `brain.ops.inference.THE_INFERENCE_SERVER_IS_DOWNSTREAM_OF_THE_GATE`.
         name="inference-server",
-        memory_mib=3072,
-        profiles=frozenset({"standard", "full"}),
+        memory_mib=1088,
+        profiles=frozenset(),
         wiring=Wiring.NONE,
         ready_when=(
-            "every model in brain.ops.inference.SERVED_MODELS answers a probe of its own; a "
-            "server that has loaded one of three refuses two thirds of what it is asked "
-            "while presenting a listening socket"
+            "every part this install chose has its weights and its runtime on disk and the "
+            "supervisor answers; a part is loaded when work arrives and ended when it has been "
+            "idle, so a probe that loaded all of them would defeat the point of the server"
         ),
     ),
     Component(

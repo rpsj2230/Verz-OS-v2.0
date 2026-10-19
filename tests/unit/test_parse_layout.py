@@ -67,6 +67,8 @@ from brain.knowledge.scanning import (
 )
 from brain.knowledge.search import SECTION_CHARS
 from brain.ops.inference import InferenceTask, request_ceiling_bytes, served_model
+from brain.ops.model_server import config_from
+from brain.ops.model_server import request_ceiling_bytes as server_ceiling
 
 PDF = b"%PDF-1.7\n1 0 obj\n<< >>\nendobj\n"
 MIB = 1024 * 1024
@@ -260,8 +262,44 @@ def test_a_block_has_no_field_an_instruction_could_arrive_in() -> None:
     the corpus."""
     fields = {field.name for field in dataclasses.fields(Block)}
 
-    assert fields == {"kind", "text", "start", "page", "section"}
+    # `path` and `engine` say how a block was read. They are set by the route that read it, are
+    # closed to three words and a bounded name (`Block.__post_init__`), and are not keys the decoder
+    # reads, which the test below holds: so an answer cannot say how its blocks were read.
+    assert fields == {"kind", "text", "start", "page", "section", "path", "engine"}
     assert set(BLOCK_KEYS) <= fields, "a key is decoded that no field can hold"
+    assert {"path", "engine"}.isdisjoint(BLOCK_KEYS)
+
+
+def test_an_answer_cannot_say_how_its_blocks_were_read() -> None:
+    """A block in an answer carrying `path` and `engine` keys has them dropped, as every key
+    outside the closed list is: how a block was read is the route's to say and never the reader's.
+
+    Delete this and a server that grew the key can record its own reading as a layout read, which
+    is a guess filed as a reading."""
+    entry = _prose("a paragraph", path="layout", engine="docling-layout-and-tableformer")
+
+    [block] = decode_layout(_blocks_payload(entry))  # type: ignore[misc]
+
+    assert (block.path, block.engine) == ("", "")
+
+
+def test_a_block_names_how_it_was_read_from_a_closed_list_or_not_at_all() -> None:
+    """A path from three words and an engine from the bounded alphabet, together or neither, and
+    the three words are the ones `ParsePath` has.
+
+    Delete this and the two strings a route sets can carry a sentence into a shown column."""
+    from brain.knowledge.chunking import READ_PATHS, ChunkingError
+
+    assert {one.value for one in ParsePath} == READ_PATHS
+    assert Block(kind=BlockKind.PROSE, text="x", start=0, path="ocr", engine="docling-ocr")
+    for path, engine in [
+        ("ocr", ""),
+        ("", "docling-ocr"),
+        ("guess", "docling-ocr"),
+        ("ocr", "Docling OCR!"),
+    ]:
+        with pytest.raises(ChunkingError):
+            Block(kind=BlockKind.PROSE, text="x", start=0, path=path, engine=engine)
 
 
 def test_the_keys_a_document_carries_to_steer_a_reader_are_not_keys_this_decoder_reads() -> None:
@@ -634,14 +672,23 @@ def test_a_mapping_proxy_response_decodes_the_same_as_a_plain_one() -> None:
     assert decode_layout(payload) == (Block(kind=BlockKind.PROSE, text="the paragraph", start=0),)
 
 
-def test_the_request_ceiling_this_module_compares_against_is_the_inference_containers() -> None:
+def test_the_request_ceiling_compared_against_is_the_model_servers_for_this_install() -> None:
     """`fits_request_ceiling` defaults to `request_ceiling_bytes()`, which is derived from the
-    inference component's memory limit in another package. Delete this and the default can be
-    repointed at a figure of this module's own, and the two ends of a request would be sized
-    from two different containers."""
+    install's own choice of parts and upload size in another package (`brain.ops.model_server`),
+    and not from a container of one fixed size as it was before the server was sized by its
+    choice. Delete this and the default can be repointed at a figure of this module's own, and
+    the two ends of a request would be sized from two different servers.
+
+    Two installs are read: the default choice (the embedding part alone, whose largest request is
+    one embedding batch) and one that reads documents up to 25 MB, whose largest request is that
+    document encoded."""
     _, raw = largest_admissible_bytes()
     content = _cleared()
+    reads_documents = config_from(parts="layout", upload="25")
 
-    assert request_ceiling_bytes() == 64 * MIB
+    assert request_ceiling_bytes() == server_ceiling(config_from()) == 32 * MIB
+    assert server_ceiling(reads_documents) == 34 * MIB  # 25 MB, base64 encoded, in whole MiB
+    assert request_ceiling_bytes(reads_documents) == server_ceiling(reads_documents)
     assert fits_request_ceiling(content) is True
     assert encoded_size_bytes(raw) > request_ceiling_bytes()
+    assert encoded_size_bytes(raw) > request_ceiling_bytes(reads_documents)

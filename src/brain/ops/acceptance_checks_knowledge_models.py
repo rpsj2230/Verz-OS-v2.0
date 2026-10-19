@@ -593,10 +593,10 @@ async def the_install_s_inference_server_embeds_a_sentence_as_declared(
 @check(
     leaves=("M7.7.11",),
     sentence=(
-        "A worker on an install that declares a model server prints, at start, that the largest "
-        "file the door admits is larger than a request the parse service accepts, and prints "
-        "nothing about it on an install that declares none; the arithmetic fires on a ceiling "
-        "below the file and is silent on one above it."
+        "A worker on an install whose model server reads documents prints, at start, that the "
+        "largest file the door admits is larger than a request the server is sized to accept, and "
+        "prints nothing about it on an install with no model server or one that only embeds; the "
+        "arithmetic fires on a ceiling below the file and is silent on one above it."
     ),
 )
 async def the_worker_says_at_start_what_the_door_admits_beyond_the_server(
@@ -612,6 +612,8 @@ async def the_worker_says_at_start_what_the_door_admits_beyond_the_server(
         layout_request_gaps,
     )
     from brain.knowledge.scanning import parse_scanned
+    from brain.ops.model_server import config_from
+    from brain.ops.model_server import request_ceiling_bytes as server_request_ceiling
     from brain.ops.worker import advisories, model_server_advisory
 
     _, raw = largest_admissible_bytes()
@@ -623,11 +625,32 @@ async def the_worker_says_at_start_what_the_door_admits_beyond_the_server(
         raise CheckFailedError(
             "a request ceiling that holds the largest file the door admits was reported"
         )
-    if model_server_advisory(None) != ():
+    # The three installs, each read over settings the check supplies and nothing the install saved:
+    # one with no model server, one whose server only embeds, and one whose server reads a
+    # document and is sized for 25 MB against a door that admits more.
+    nothing: dict[str, str] = {}
+    if model_server_advisory(None, nothing, nothing) != ():
         raise CheckFailedError("an install with no model server was told about one")
-    declared = {REVISION_SETTING: f"acceptance-{h.run}"}
+    revision = f"acceptance-{h.run}"
+    embeds_only = {REVISION_SETTING: revision, "INSTALL_MODEL_PARTS": "embedding"}
+    if model_server_advisory(revision, embeds_only, nothing) != ():
+        raise CheckFailedError(
+            "an install whose server is sent no document was told about the door"
+        )
+    declared = {
+        REVISION_SETTING: revision,
+        "INSTALL_MODEL_PARTS": "layout",
+        "INSTALL_MODEL_UPLOAD_MB": "25",
+    }
+    expected = layout_request_gaps(
+        ceiling_bytes=server_request_ceiling(config_from(parts="layout", upload="25"))
+    )
+    if not expected or model_server_advisory(revision, declared, nothing) != expected:
+        raise CheckFailedError(
+            "an install whose server reads documents was not told what the door admits beyond it"
+        )
     printed = advisories(declared, worker_component=PARSE_WORKER_COMPONENT)
-    if set(layout_request_gaps()) - set(printed):
+    if set(model_server_advisory(revision, declared)) - set(printed):
         raise CheckFailedError(
             "the worker did not print the finding an install with a model server is owed"
         )
