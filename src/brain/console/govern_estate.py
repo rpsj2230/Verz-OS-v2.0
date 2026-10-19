@@ -191,6 +191,16 @@ AN_ESTATE_LISTING_IS_ASSEMBLED_FROM_WHAT_THE_READER_CAN_ALREADY_SEE: Final = (
     "re-derived from a record's shape, which is brain.console.workspace.resolve's rule."
 )
 
+#: Why an agent filter on an estate read is applied to what the reader may already see.
+AN_AGENT_FILTER_RUNS_AFTER_THE_READER_IS_ADMITTED_AND_NEVER_BEFORE: Final = (
+    "An estate read may be asked for one agent's slice, and the slice is cut from what the reader "
+    "may already see. Cut before, the answer to an agent the reader may not see would differ from "
+    "the answer to an agent that does not exist, and the filter would become a way of asking "
+    "which agents exist and what they have produced. Cut after, both are the same empty answer. "
+    "No value of the filter means every agent: leaving it off is the whole estate the reader may "
+    "see, as it always was, and the filter can only narrow that."
+)
+
 #: Why the reader's own output survives an agent they cannot see.
 AN_ARTIFACT_OF_AN_AGENT_YOU_CANNOT_SEE_IS_STILL_YOURS: Final = (
     "brain.console.agent_output.may_see admits an artifact whose caller is the reader, "
@@ -842,6 +852,34 @@ def artifact_estate(
     return tuple(sorted(found, key=lambda one: (one.at, one.artifact_id), reverse=True))
 
 
+def artifacts_of_agent(shown: Sequence[Artifact], agent_id: str | None) -> tuple[Artifact, ...]:
+    """One agent's slice of what `artifact_estate` already admitted, or all of it with no agent.
+
+    **Handed the answer and never the entries**, so the visibility decision cannot be skipped by
+    a caller who reached for the slice first. An agent the reader was shown nothing of, whether
+    because they may not see it or because it produced nothing or does not exist, is the same
+    empty tuple. There is no count of what the slice left out. See
+    `AN_AGENT_FILTER_RUNS_AFTER_THE_READER_IS_ADMITTED_AND_NEVER_BEFORE` (M27.15.34).
+    """
+    if agent_id is None:
+        return tuple(shown)
+    return tuple(one for one in shown if one.agent_id == agent_id)
+
+
+def records_of_agent(
+    visible: Sequence[AgentRecord], agent_id: str | None
+) -> tuple[AgentRecord, ...]:
+    """One agent's record out of the agents the reader's audience covers, or all of them.
+
+    `visible` is `brain.agents.model.visible_agent_ids`' answer already applied, so an agent the
+    reader may not see is not in it and the slice is empty, which is what a missing agent's is.
+    See `AN_AGENT_FILTER_RUNS_AFTER_THE_READER_IS_ADMITTED_AND_NEVER_BEFORE` (M27.15.34).
+    """
+    if agent_id is None:
+        return tuple(visible)
+    return tuple(one for one in visible if one.agent_id == agent_id)
+
+
 # ------------------------------------------------------------- the memory viewer (M27.3.17)
 @dataclass(frozen=True)
 class SubjectMemory:
@@ -919,6 +957,44 @@ def subject_memory(
             demotions=marked_down,
             where=where,
         ),
+    )
+
+
+def subject_memory_of_agent(
+    remembered: SubjectMemory,
+    agent_id: str | None,
+    *,
+    formed_by: Mapping[str, str],
+    visible_agents: Iterable[str],
+) -> SubjectMemory:
+    """What `subject_memory` admitted, cut to the memories one visible agent formed (M27.15.34).
+
+    **Handed the admitted memory and never the entries**, so the recall decision has been made
+    for every row before the slice is taken, and a diff was decided over both sides of a change
+    whichever agent formed each. `formed_by` is memory id to the agent a learning record names;
+    a memory with no learning record has no agent and is in no agent's slice.
+
+    **An agent the reader may not see is the empty slice**, and is checked here against
+    `visible_agents` rather than left to the rows: a memory the reader may recall and a hidden
+    agent's id would otherwise answer which agent formed it, and a memory carries no agent id
+    on any screen. A hidden agent, a missing agent and an agent that formed nothing about this
+    person are one answer. See `AN_AGENT_FILTER_RUNS_AFTER_THE_READER_IS_ADMITTED_AND_NEVER_BEFORE`.
+    """
+    if agent_id is None:
+        return remembered
+    ours = (
+        {memory_id for memory_id, who in formed_by.items() if who == agent_id}
+        if agent_id in frozenset(visible_agents)
+        else set[str]()
+    )
+    return SubjectMemory(
+        subject_id=remembered.subject_id,
+        memory=SplitMemoryView(
+            reader_id=remembered.memory.reader_id,
+            curated=tuple(one for one in remembered.memory.curated if one.memory_id in ours),
+            extracted=tuple(one for one in remembered.memory.extracted if one.memory_id in ours),
+        ),
+        history=tuple(one for one in remembered.history if one.memory_id in ours),
     )
 
 
