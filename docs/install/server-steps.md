@@ -168,6 +168,18 @@ secrets and settings files put in place by the release as
   and answers its health check and its tool calls, and staff cannot open the editor. The canvas
   costs 896 MiB: the editor, its egress proxy and its own database.
 
+**What the canvas is checked for, with nothing for you to do.** After a release starts the canvas it
+asks the server's docker what is actually running and keeps the answer for the release: which
+networks the canvas and its proxy sit on, the names (never the values) of the canvas's variables,
+whether the canvas has any route out, the hosts its proxy was started with, and what the proxy says
+when asked to open a tunnel to a host on no list. The install's checks then judge it, on the Install
+page: three services running and held to their memory limits; the canvas on its own internal network
+and the tool network and no other; no variable carrying a secret beyond its own three and no database
+address; a proxy that runs exactly the product's list and refuses an unlisted host; and the canvas
+running where `INSTALL_SERVICES` names it and nowhere else. A check that fails says which of these in
+a sentence, and the worker's log names the variables. An install that has not named `automation`
+shows these as not run, which is correct.
+
 The two overlays share the object store's container with the trace ledger when both are named, and
 share the store's access file: the application's identity and the ledger's are both in it, and
 neither release step replaces the other's.

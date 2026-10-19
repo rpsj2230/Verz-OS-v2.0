@@ -72,6 +72,8 @@ export const NO_CONDITION = "No condition: it runs every time";
 export const NOTHING_FIRES_HERE = "Starting on a change is switched off on this install, so it is saved and cannot be started until an administrator switches it on.";
 export const NO_CONNECTORS = "No connected source is bound to this agent, so there is nothing to listen to.";
 export const NO_TOOLS = "This agent's ceiling allows no tools, so this automation can use none.";
+export const NO_SKILLS = "This agent has no approved skill attached that an automation of yours would be offered.";
+export const SKILLS_LABEL = "Skills it would be offered";
 export const PREVIEW_UNREADABLE =
   "The API's answer about this automation could not be read, so nothing can be confirmed. Nothing was saved.";
 export const SOMETHING_DID_NOT_WORK = "Something did not work";
@@ -357,6 +359,10 @@ function Review({ shown }: { readonly shown: AuthoringPreview }) {
           <dd>{shown.tools.length === 0 ? NO_TOOLS : shown.tools.join(", ")}</dd>
         </div>
         <div className="fields__row">
+          <dt>Skills</dt>
+          <dd>{shown.skills.length === 0 ? NO_SKILLS : shown.skills.join(", ")}</dd>
+        </div>
+        <div className="fields__row">
           <dt>What it can reach</dt>
           <dd>{shown.reach.length === 0 ? "Nothing: your access and this agent's ceiling have no read in common." : shown.reach.join(", ")}</dd>
         </div>
@@ -366,7 +372,9 @@ function Review({ shown }: { readonly shown: AuthoringPreview }) {
         </div>
       </dl>
       {shown.nothingFires === undefined ? null : <Status>{shown.nothingFires}</Status>}
+      {shown.cannotRun === undefined ? null : <Status>{shown.cannotRun}</Status>}
       <p className="m-0 text-[12.5px] text-body">{shown.writesWait}</p>
+      <p className="m-0 text-[12px] text-dim">{shown.skillsRule}</p>
       <section aria-label="Rehearsal" data-slot="authoring-rehearsal" className="flex flex-col gap-2">
         <h4 className="m-0 text-[13px] font-medium text-ink">What it would have done</h4>
         <p className="m-0 text-[12px] text-dim">{shown.rehearsalRule}</p>
@@ -571,8 +579,25 @@ function Form({
                 </label>
               ))
             )}
+            <p className="m-0 text-[12px] text-dim">{options.mayUse}</p>
             <p className="m-0 text-[12px] text-dim">{options.writesWait}</p>
           </fieldset>
+          <section aria-label={SKILLS_LABEL} data-slot="authoring-skills" className="flex min-w-0 flex-col gap-1">
+            <h4 className="m-0 text-[13px] font-medium text-ink">{SKILLS_LABEL}</h4>
+            {options.skills.length === 0 ? (
+              <Status>{NO_SKILLS}</Status>
+            ) : (
+              <ul className="m-0 flex list-none flex-col gap-1 p-0 text-[13px]">
+                {options.skills.map((one) => (
+                  <li key={one.name}>
+                    <span className="font-medium text-ink">{one.name}</span>
+                    <span className="text-dim">{` ${one.version}, ${one.description}`}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="m-0 text-[12px] text-dim">{options.skillsRule}</p>
+          </section>
           {busy ? <Status>{REVIEWING}</Status> : null}
           <div className="flex items-center justify-end gap-3">
             <Button type="button" variant="ghost" className="min-h-11 sm:min-h-9" onClick={onClose}>
