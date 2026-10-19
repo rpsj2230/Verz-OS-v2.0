@@ -22,7 +22,7 @@ import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
-import { ConfirmDialog, FailureState, Note, type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, ConfirmDialog, type EntityColumn, Explanation, FailureState, Note } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import {
   DropdownMenu,
@@ -34,7 +34,6 @@ import {
 import {
   ACTION_LABELS,
   actionsFor,
-  CONTROLS_SWITCHED_OFF,
   DEAD_LETTERS_API_PATH,
   DEAD_LETTERS_CAPTION,
   DEAD_LETTERS_LABEL,
@@ -48,7 +47,6 @@ import {
   redrivePath,
   RUN_AGAIN,
   RUN_AGAIN_ASKED,
-  RUN_AGAIN_SWITCHED_OFF,
   runAgainConsequence,
   runAgainQuestion,
   REFERENCES_OUTLIVED,
@@ -195,7 +193,7 @@ function DeadLetters() {
   const mayAsk = body.may_run_again && body.items.length > 0;
   return (
     <>
-      {mayAsk && !body.run_again_switched_on ? <Note kind="not-yet">{RUN_AGAIN_SWITCHED_OFF}</Note> : null}
+      {mayAsk && !body.run_again_switched_on ? <Explanation form="note" act="job.run_again_switched_off" /> : null}
       {failure === null ? null : <FailureState failure={failure} />}
       {asked ? (
         <div role="status" aria-live="polite">
@@ -250,6 +248,8 @@ function DeadLetters() {
         exportName="jobs-set-aside"
         empty={NO_DEAD_LETTERS}
         emptyDescription={NO_DEAD_LETTERS_MORE}
+        emptyAdds="A job is set aside when it fails every attempt, and none is added by hand."
+        emptyBy={BY_THE_INSTALL}
         footer={body.items.some((row) => !row.actionable) ? <Line>{REFERENCES_OUTLIVED}</Line> : null}
       />
     </>
@@ -333,7 +333,7 @@ export function JobsPage() {
         const anyFailed = page.jobs.some((row) => row.last_outcome === "failed");
         return (
           <>
-            {page.may_control && !page.controls_switched_on ? <Note kind="not-yet">{CONTROLS_SWITCHED_OFF}</Note> : null}
+            {page.may_control && !page.controls_switched_on ? <Explanation form="note" act="job.controls_switched_off" /> : null}
             <WholeList
               title={JOBS_LABEL}
               hideTitle
@@ -353,6 +353,8 @@ export function JobsPage() {
               exportName="background-jobs"
               empty={NO_JOBS}
               emptyDescription={NO_JOBS_MORE}
+              emptyAdds="A job is listed for each scheduled control a release declares, and none is added by hand."
+              emptyBy={BY_THE_INSTALL}
               footer={
                 <>
                   {page.no_run_can_be_stopped === false ? null : <Line>{NO_RUN_CAN_BE_STOPPED}</Line>}

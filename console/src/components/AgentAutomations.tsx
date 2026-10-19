@@ -28,7 +28,7 @@ import { useEffect, useRef, useState } from "react";
 import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import type { Resource } from "../api/useResource";
-import { FailureNotice } from "../ui/FailureNotice";
+import { FailureNotice, SOMETHING_DID_NOT_WORK, THE_BRAIN_COULD_NOT_BE_REACHED } from "../ui/FailureNotice";
 import { Notice } from "../ui/Notice";
 import { ConfirmAction } from "./ConfirmAction";
 import {
@@ -50,8 +50,7 @@ export const KEEP_LABEL = "Not now";
 export const NOT_CHANGED = "Nothing was changed";
 export const STARTED_TITLE = "Started";
 export const STOPPED_TITLE = "Stopped";
-export const SOMETHING_DID_NOT_WORK = "Something did not work";
-export const THE_BRAIN_COULD_NOT_BE_REACHED = "The Brain could not be reached";
+export { SOMETHING_DID_NOT_WORK, THE_BRAIN_COULD_NOT_BE_REACHED };
 
 export const RUNS_AS_LABEL = "Runs as";
 export const SCHEDULE_LABEL = "Cadence";

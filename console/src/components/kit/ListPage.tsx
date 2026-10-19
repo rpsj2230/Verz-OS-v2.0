@@ -24,7 +24,7 @@ import { Button } from "../ui/button";
 import { EntityTable, type EntityColumn } from "./EntityTable";
 import { ListToolbar, RESET_LABEL } from "./ListToolbar";
 import { PageHeader, type Crumb } from "./PageHeader";
-import { EmptyState, FailureState, LoadingState } from "./states";
+import { EmptyList, EmptyState, FailureState, LoadingState, type EmptyBy } from "./states";
 
 /** "Show more" while there is more, and what happened to the last attempt. `ShowMore`'s contract. */
 function MoreRows<Row>({ listing }: { readonly listing: Listing<Row> }) {
@@ -83,6 +83,10 @@ export interface ListPageProps<Row extends object> {
   /** The empty state of an unnarrowed list: what it is, and what would put a row here. */
   readonly emptyTitle: string;
   readonly emptyDescription: ReactNode;
+  /** The act that puts a row on the list, as one sentence. Required: see `EmptyList`. */
+  readonly emptyAdds: string;
+  /** Who does it. Required: see `EmptyList`. */
+  readonly emptyBy: EmptyBy;
   readonly emptyAction?: ReactNode | undefined;
   readonly emptyIcon?: ReactNode | undefined;
   /** Drawn under the list: anything the page states about the list as a whole. */
@@ -114,6 +118,8 @@ export function ListPage<Row extends object>({
   loading,
   emptyTitle,
   emptyDescription,
+  emptyAdds,
+  emptyBy,
   emptyAction,
   emptyIcon,
   footer,
@@ -140,7 +146,14 @@ export function ListPage<Row extends object>({
         }
       />
     ) : (
-      <EmptyState title={emptyTitle} description={emptyDescription} action={emptyAction} icon={emptyIcon} />
+      <EmptyList
+        title={emptyTitle}
+        description={emptyDescription}
+        adds={emptyAdds}
+        by={emptyBy}
+        action={emptyAction}
+        icon={emptyIcon}
+      />
     );
   } else {
     body = (

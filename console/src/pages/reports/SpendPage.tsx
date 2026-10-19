@@ -23,7 +23,7 @@
 
 import { useState } from "react";
 import { useResource } from "../../api/useResource";
-import { EmptyState, FailureState, KpiStrip, LoadingState, Note, SectionCard, StatCard } from "../../components/kit";
+import { BY_THE_INSTALL, EmptyList, FailureState, KpiStrip, LoadingState, Note, SectionCard, StatCard } from "../../components/kit";
 import { capitalised } from "../overview/overviewQuery";
 import {
   SPEND_DIMENSIONS,
@@ -41,7 +41,6 @@ import { USAGE_AND_COST } from "./UsagePage";
 import {
   BarList,
   DEFAULT_PERIOD,
-  Quiet,
   REPORTS_CRUMB,
   ReportHeader,
   Switch,
@@ -124,7 +123,12 @@ function Recorded({ report }: { readonly report: SpendReportBody }) {
       {hint === null ? null : <Note>{hint}</Note>}
       <SectionCard title={byWords(report.dimension)}>
         {ordered.length === 0 ? (
-          <Quiet>{NO_COST_IN_PERIOD}</Quiet>
+          <EmptyList
+            compact
+            title={NO_COST_IN_PERIOD}
+            adds="A cost is recorded each time a model answers a question, and none is added by hand."
+            by={BY_THE_INSTALL}
+          />
         ) : (
           <BarList
             caption={byWords(report.dimension)}
@@ -155,7 +159,12 @@ function NotRecorded({ why }: { readonly why: string }) {
       <KpiStrip label={FIGURES_LABEL} count={1}>
         <StatCard label={COST_LABEL} unrecordedWhy={why} />
       </KpiStrip>
-      <EmptyState title={NO_COST_YET} description={asSentence(why)} />
+      <EmptyList
+        title={NO_COST_YET}
+        description={asSentence(why)}
+        adds="A cost is recorded each time a model answers a question, and none is added by hand."
+        by={BY_THE_INSTALL}
+      />
     </>
   );
 }
@@ -174,7 +183,14 @@ export function SpendPage() {
   } else if (answer.busy) {
     content = <LoadingState label={LOADING_SPEND} />;
   } else if (report === null) {
-    content = <EmptyState title={NO_COST_YET} description={NOT_BUILT} />;
+    content = (
+      <EmptyList
+        title={NO_COST_YET}
+        description={NOT_BUILT}
+        adds="A cost is recorded each time a model answers a question, and none is added by hand."
+        by={BY_THE_INSTALL}
+      />
+    );
   } else {
     const why = costNotRecorded(report);
     content =

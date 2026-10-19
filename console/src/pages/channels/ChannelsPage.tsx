@@ -26,7 +26,7 @@ import { MessagesSquare, MoreHorizontal } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useListing } from "../../components/useListing";
-import { ListPage, type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, ListPage, type EntityColumn } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import {
   DropdownMenu,
@@ -179,6 +179,8 @@ export function ChannelsPage() {
       loading={LOADING_CHANNELS}
       emptyTitle={NO_CHANNELS}
       emptyDescription={NO_CHANNELS_DESCRIPTION}
+      emptyAdds="Each chat surface a release declares is listed here as it ships, and none is added by hand."
+      emptyBy={BY_THE_INSTALL}
       emptyIcon={<MessagesSquare aria-hidden />}
     />
   );

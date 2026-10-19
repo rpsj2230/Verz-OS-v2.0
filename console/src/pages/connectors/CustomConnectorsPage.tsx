@@ -30,7 +30,7 @@ import { unmatchedProblems } from "../../api/problems";
 import { useResource } from "../../api/useResource";
 import {
   ConfirmDialog,
-  EmptyState,
+  EmptyList,
   FailureState,
   Fact,
   FactList,
@@ -629,7 +629,12 @@ export function CustomConnectorsPage() {
           <SubmitForm page={answer.data} onKept={after} />
           <SectionCard title="Added APIs" lede={answer.data.review}>
             {answer.data.definitions.length === 0 ? (
-              <EmptyState title="No API has been added" description="One submitted here is listed for review." />
+              <EmptyList
+                title="No API has been added"
+                description="One submitted here is listed for review."
+                adds="Submit an API's definition with the form above, and a second person reviews it."
+                by={["connector_admin", "super_admin"]}
+              />
             ) : (
               <div className="grid gap-3">
                 {answer.data.definitions.map((one) => (

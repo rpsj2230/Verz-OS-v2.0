@@ -30,7 +30,7 @@ export const ERRORS_LEDE =
   "Jobs that failed and questions that failed or degraded, newest first. The reference is the one a person was shown.";
 
 export const READING_ERRORS = "Loading the failures.";
-export const THE_BRAIN_COULD_NOT_BE_REACHED = "The Brain could not be reached";
+export { THE_BRAIN_COULD_NOT_BE_REACHED } from "../ui/FailureNotice";
 export const UNREADABLE_ANSWER =
   "The API answered in a shape this console does not read, so no failure is listed. The console " +
   "and the API are probably from different releases.";

@@ -22,6 +22,7 @@ import { cn } from "../../lib/utils";
 import { FailureNotice } from "../../ui/FailureNotice";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
 import { Skeleton } from "../ui/skeleton";
+import { ROLE_WORDS, type PlatformRole } from "./roles";
 
 /** A page or a block whose answer has not come yet. The words are what a screen reader hears. */
 export function LoadingState({
@@ -67,6 +68,112 @@ export function EmptyState({
       </EmptyHeader>
       {action === undefined ? null : <EmptyContent>{action}</EmptyContent>}
     </Empty>
+  );
+}
+
+/** Said when no role adds a row of this list: the install records its rows itself. */
+export const THE_INSTALL_RECORDS_THESE = "The install records these itself, and no role adds one by hand.";
+
+/** The `by` of a list that fills itself. */
+export const BY_THE_INSTALL = "install" as const;
+
+/** Who adds a row to an empty list: the roles the screen is designed for, or the install itself. */
+export type EmptyBy = readonly PlatformRole[] | typeof BY_THE_INSTALL;
+
+/** "a Super Admin", "an Auditor": a role with the article a person would say it with. */
+function withArticle(role: PlatformRole): string {
+  const word = ROLE_WORDS[role];
+  return `${/^[AEIOU]/u.test(word) ? "an" : "a"} ${word}`;
+}
+
+/**
+ * The sentence for who adds a row, the same for every reader.
+ *
+ * Roles, in the order given, joined as a person would say them. A role is named as who the screen
+ * is designed for and never as what lets somebody press the button: a role grants no capability,
+ * and the grant decides, so the sentence says who does it and leaves out who may.
+ */
+export function whoAdds(by: EmptyBy): string {
+  if (by === BY_THE_INSTALL) {
+    return THE_INSTALL_RECORDS_THESE;
+  }
+  const named = by.map(withArticle);
+  const last = named[named.length - 1] ?? "";
+  const joined = named.length < 2 ? last : `${named.slice(0, -1).join(", ")} or ${last}`;
+  return `${joined.charAt(0).toUpperCase()}${joined.slice(1)} adds one.`;
+}
+
+/**
+ * A list with nothing in it, saying what is there for, what would put a row on it and who does that.
+ *
+ * **Three sentences, and the second and third are required by the type.** `adds` is the act that
+ * makes a row, in a sentence, and `by` is who does it, from the platform's six roles or the install
+ * itself. A page cannot draw an empty list without both, which is `docs/admin-console-architecture.md`
+ * 5.2 and M27.15.69: an empty list that says only "No agents" sends a person to ask somebody what
+ * they would have to do.
+ *
+ * **The same words for every reader and every reason**, as `EmptyState` is: a company with none and
+ * a reader whose reach covers none are one event to this browser. Nothing here takes a count, a
+ * reason or a flag that varies with what the reader may see, and `tests/empty-lists.test.tsx` holds
+ * the words to naming no cause.
+ */
+export function EmptyList({
+  title,
+  description,
+  adds,
+  by,
+  action,
+  icon,
+  className,
+  compact = false,
+}: {
+  readonly title: string;
+  /** What the list is for, said once. Left out where the title already says it. */
+  readonly description?: ReactNode | undefined;
+  /** The act that puts a row on the list, as one sentence. */
+  readonly adds: string;
+  /** Who does it. */
+  readonly by: EmptyBy;
+  readonly action?: ReactNode | undefined;
+  readonly icon?: ReactNode | undefined;
+  readonly className?: string | undefined;
+  /**
+   * One paragraph in place of the dashed block, for a small list inside a card or a tab, where the
+   * block's padding would be larger than the list it stands for. The same three sentences.
+   */
+  readonly compact?: boolean | undefined;
+}) {
+  if (compact) {
+    return (
+      <p data-slot="empty-list" data-compact="" className={cn("m-0 min-w-0 text-[13px] leading-snug text-dim", className)}>
+        <span data-slot="empty-title" className="text-body">
+          {title}
+        </span>{" "}
+        {description === undefined ? null : (
+          <>
+            <span data-slot="empty-what">{description}</span>{" "}
+          </>
+        )}
+        <span data-slot="empty-adds">{adds}</span> <span data-slot="empty-by">{whoAdds(by)}</span>
+      </p>
+    );
+  }
+  return (
+    <div data-slot="empty-list" className="min-w-0">
+      <EmptyState
+        title={title}
+        description={
+          <>
+            <span data-slot="empty-what">{description}</span>{" "}
+            <span data-slot="empty-adds">{adds}</span>{" "}
+            <span data-slot="empty-by">{whoAdds(by)}</span>
+          </>
+        }
+        action={action}
+        icon={icon}
+        className={className}
+      />
+    </div>
   );
 }
 

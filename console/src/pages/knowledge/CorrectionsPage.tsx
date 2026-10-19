@@ -24,7 +24,7 @@ import { useState, type FormEvent } from "react";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
-import { ConfirmDialog, EmptyState, Fact, FactList, FailureState, LoadingState, PageHeader, SectionCard } from "../../components/kit";
+import { ConfirmDialog, EmptyList, Fact, FactList, FailureState, LoadingState, PageHeader, SectionCard } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Textarea } from "../../components/ui/textarea";
@@ -230,7 +230,15 @@ export function CorrectionsPage() {
   } else if (rows === null) {
     body = <LoadingState label={LOADING_CORRECTIONS} />;
   } else if (rows.length === 0) {
-    body = <EmptyState title={NONE_WAITING} description={NONE_WAITING_DESCRIPTION} icon={<FileText aria-hidden />} />;
+    body = (
+      <EmptyList
+        title={NONE_WAITING}
+        description={NONE_WAITING_DESCRIPTION}
+        adds="Somebody who finds an answer wrong marks it wrong and says what is right."
+        by={["member"]}
+        icon={<FileText aria-hidden />}
+      />
+    );
   } else {
     body = (
       <ul className="m-0 flex list-none flex-col gap-4 p-0">

@@ -36,6 +36,7 @@
  */
 
 import { Chip } from "../ui/Chip";
+import { BY_THE_INSTALL, EmptyList } from "./kit/states";
 import { isKnown, type Fact } from "../pages/installQuery";
 
 interface FactsProps {
@@ -50,7 +51,14 @@ export const NO_FACTS = "Nothing was reported here.";
 
 export function Facts({ facts, label }: FactsProps) {
   if (facts.length === 0) {
-    return <p className="note">{NO_FACTS}</p>;
+    return (
+      <EmptyList
+        compact
+        title={NO_FACTS}
+        adds="A statement is listed for each fact the install reports, and none is added by hand."
+        by={BY_THE_INSTALL}
+      />
+    );
   }
   return (
     <dl className="fields" aria-label={label}>

@@ -25,7 +25,7 @@ import { LANE_BASIS_WORDS, TIER_BASIS_WORDS } from "../src/pages/errorsQuery";
 import { ARTIFACT_FILTERS, ARTIFACT_SORTS, keptUntil, kindWords } from "../src/pages/artifactsQuery";
 import { windowOf } from "../src/pages/dataTransferQuery";
 import { filtersFrom, logsApiPath, logsExportApiPath, LOGS_PAGE_SIZE } from "../src/pages/logsQuery";
-import { UNAVAILABLE } from "../src/pages/operations/operationsActions";
+import { ACT_LABELS } from "../src/pages/operations/operationsActions";
 import { jobName } from "../src/pages/operations/parts";
 import { NOTHING_LOOKED as NOTHING_LOOKED_AT_COPIES } from "../src/pages/operations/RecoveryPage";
 import {
@@ -44,6 +44,7 @@ import { apiDocument, declaredRequestBodySchema } from "./support/openapi";
 import { backendEnumMembers, backendModelFields } from "./support/python";
 import { installRadixStubs } from "./support/radix";
 import { readRepoFile } from "./support/repo";
+import { noRouteRetires, retiringPattern } from "./support/explanations";
 
 const CONSOLE_ORIGIN = "https://console.test";
 const JOBS_ROUTES = "src/brain/jobs_routes.py";
@@ -236,14 +237,11 @@ describe("what the Operations pages agree with the API about", () => {
   test("every act drawn as unavailable names no route the API document declares", () => {
     // What breaks if this is deleted: a route for stopping a run, starting a rehearsal or
     // importing lands and the page goes on saying "coming soon" about it.
-    const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
-    for (const [act, { retiredBy }] of Object.entries(UNAVAILABLE)) {
-      expect(paths.filter((path) => retiredBy.test(path)), act).toEqual([]);
-    }
+    noRouteRetires(["operations.stop_run", "operations.start_rehearsal", "operations.import_data"]);
     // The positive case: each pattern does match the path it is waiting for.
-    expect(UNAVAILABLE.stopRun.retiredBy.test("/api/v1/jobs/{name}/stop")).toBe(true);
-    expect(UNAVAILABLE.startRehearsal.retiredBy.test("/api/v1/install/recovery/rehearsals")).toBe(true);
-    expect(UNAVAILABLE.importData.retiredBy.test("/api/v1/data-transfer/imports")).toBe(true);
+    expect(retiringPattern("operations.stop_run").test("/api/v1/jobs/{name}/stop")).toBe(true);
+    expect(retiringPattern("operations.start_rehearsal").test("/api/v1/install/recovery/rehearsals")).toBe(true);
+    expect(retiringPattern("operations.import_data").test("/api/v1/data-transfer/imports")).toBe(true);
   });
 
   test("the log page sends only parameters the log and export routes declare", () => {
@@ -380,12 +378,13 @@ describe("Background jobs", () => {
       "GET /api/v1/jobs": () => ({ body: jobsPage() }),
       "GET /api/v1/jobs/dead": () => ({ body: deadLettersPage([deadLetter()], { may_run_again: true }) }),
     });
-    expect(mainText(holder.container)).toContain("Running a job that was set aside again is switched off");
+    await waitFor(() => expect(mainText(holder.container)).toContain("running a job that was set aside again is switched off"));
     const other = await open("/jobs", {
       "GET /api/v1/jobs": () => ({ body: jobsPage() }),
       "GET /api/v1/jobs/dead": () => ({ body: deadLettersPage([deadLetter()]) }),
     });
-    expect(mainText(other.container)).not.toContain("Running a job that was set aside again is switched off");
+    await waitFor(() => expect(mainText(other.container)).toContain("brain.controls.run"));
+    expect(mainText(other.container)).not.toContain("running a job that was set aside again is switched off");
   });
 
   test("Run again names the job, says what the worker will do, sends one request from the dialog and asks the list again", async () => {
@@ -507,7 +506,7 @@ describe("one background job's page", () => {
     });
     await waitFor(() => expect(container.querySelector('[data-slot="detail-header"] h1')).not.toBeNull());
     const stop = container.querySelector(`[${UNAVAILABLE_MARK}]`);
-    expect(stop?.textContent).toContain(UNAVAILABLE.stopRun.label);
+    expect(stop?.textContent).toContain(ACT_LABELS.stopRun);
     expect(stop?.getAttribute("aria-disabled")).toBe("true");
   });
 
@@ -724,7 +723,7 @@ describe("Backup and recovery, Rate limits and Capacity", () => {
     expect(strip.textContent).toContain("never verified");
     expect(mainText(read.container)).toContain("NOTHING-COPIES-FILES");
     expect(mainText(read.container)).toContain("NO-CONTROL-HERE");
-    expect(read.container.querySelector(`[${UNAVAILABLE_MARK}]`)?.textContent).toContain(UNAVAILABLE.startRehearsal.label);
+    expect(read.container.querySelector(`[${UNAVAILABLE_MARK}]`)?.textContent).toContain(ACT_LABELS.startRehearsal);
   });
 
   test("an absent throttling list is a sentence, the windows are listed, and nothing is drawn as coming soon", async () => {
@@ -1251,6 +1250,6 @@ describe("Artifacts and Import and export", () => {
     });
     expect(mainText(container)).toContain(NOT_EXPORTABLE);
     expect(container.querySelector(`form[aria-label="${EXPORT_LABEL}"]`)).toBeNull();
-    expect(container.querySelector(`[${UNAVAILABLE_MARK}]`)?.textContent).toContain(UNAVAILABLE.importData.label);
+    expect(container.querySelector(`[${UNAVAILABLE_MARK}]`)?.textContent).toContain(ACT_LABELS.importData);
   });
 });

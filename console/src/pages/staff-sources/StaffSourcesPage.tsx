@@ -44,7 +44,9 @@ import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
 import {
   Advanced,
+  BY_THE_INSTALL,
   Chip,
+  EmptyList,
   Fact,
   FactList,
   FailureState,
@@ -381,7 +383,12 @@ export function StaffSourcesPage() {
           {runsAnswer.failure !== null ? (
             <FailureState failure={runsAnswer.failure} />
           ) : runs.length === 0 ? (
-            <p className="m-0 text-[13px] text-dim">{NO_RUNS}</p>
+            <EmptyList
+              compact
+              title={NO_RUNS}
+              adds="A run is recorded each time the staff sync runs, on its schedule or when asked."
+              by={BY_THE_INSTALL}
+            />
           ) : (
             <ul aria-label={RUNS_HEADING} className="m-0 flex min-w-0 list-none flex-col p-0">
               {runs.map((run) => (

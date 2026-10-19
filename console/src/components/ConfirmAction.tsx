@@ -72,7 +72,7 @@ export function ConfirmAction({
 
   return (
     <section className="card confirm" role="group" aria-label={question} onKeyDown={onKeyDown}>
-      <p className="confirm__question">
+      <p>
         <strong>{question}</strong>
       </p>
       <p>{consequence}</p>

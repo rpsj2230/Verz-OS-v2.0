@@ -23,7 +23,7 @@
 
 import { useState } from "react";
 import { useResource } from "../../api/useResource";
-import { EmptyState, EntityTable, FailureState, KpiStrip, LoadingState, SectionCard, StatCard, type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, EmptyList, EntityTable, FailureState, KpiStrip, LoadingState, SectionCard, StatCard, type EntityColumn } from "../../components/kit";
 import { cn } from "../../lib/utils";
 import { countWords } from "../agents/agentStats";
 import { milliseconds, ratePercent, readServiceLevels, serviceLevelsPathFor, type LaneReadingRow } from "../serviceLevelsQuery";
@@ -151,7 +151,14 @@ export function ServiceLevelsPage() {
   } else if (answer.busy) {
     content = <LoadingState label={LOADING_LANES} />;
   } else if (reading === null || reading.lanes.length === 0) {
-    content = <EmptyState title={NO_LANES} description={NO_LANES_MORE} />;
+    content = (
+      <EmptyList
+        title={NO_LANES}
+        description={NO_LANES_MORE}
+        adds="A reading is taken for each lane as requests pass through it, and none is added by hand."
+        by={BY_THE_INSTALL}
+      />
+    );
   } else {
     content = <Reading lanes={reading.lanes} />;
   }

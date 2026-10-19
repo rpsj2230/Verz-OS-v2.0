@@ -23,7 +23,8 @@ import { useResource, type Resource } from "../../api/useResource";
 import {
   Advanced,
   Chip,
-  EmptyState,
+  BY_THE_INSTALL,
+  EmptyList,
   EntityTable,
   Fact,
   FactList,
@@ -131,7 +132,14 @@ function Deliveries({ row, version }: { readonly row: ChannelRow; readonly versi
     return <LoadingState label={READING_DELIVERIES} />;
   }
   if (answer.data.deliveries.length === 0) {
-    return <EmptyState title={NO_DELIVERIES} description={NO_DELIVERIES_DESCRIPTION} />;
+    return (
+      <EmptyList
+        title={NO_DELIVERIES}
+        description={NO_DELIVERIES_DESCRIPTION}
+        adds="A delivery is recorded whenever a message is received or sent on the channel."
+        by={BY_THE_INSTALL}
+      />
+    );
   }
   return (
     <EntityTable

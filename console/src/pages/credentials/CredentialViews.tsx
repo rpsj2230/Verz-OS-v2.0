@@ -16,15 +16,16 @@ import type { GridColumn } from "../../components/gridFeatures";
 import { GridTable } from "../../components/kit/GridTable";
 import {
   Advanced,
+  BY_THE_INSTALL,
+  EmptyList,
+  Explanation,
   Fact,
   FactList,
-  Note,
-  NotOffered,
   NOT_RECORDED,
+  Note,
   SectionCard,
-  UnavailableAction,
 } from "../../components/kit";
-import { NOT_REMOVED, UNAVAILABLE, WORKS_AT } from "./credentialActions";
+import { WORKS_AT } from "./credentialActions";
 import { READ_BY_WORDS, stateWords, whenWords, type CredentialChange, type CredentialDetail } from "./credentialRows";
 import { SetValueForm } from "./SetValueForm";
 
@@ -97,9 +98,16 @@ export function CredentialDashboard({ detail }: { readonly detail: CredentialDet
       footer={
         outranked || !row.writable || detail.history?.length === 0 ? (
           <>
-            {outranked ? <Note kind="not-yet">{detail.takesEffectTold}</Note> : null}
+            {outranked ? <Explanation form="note" lead="not-yet" told={detail.takesEffectTold} /> : null}
             {row.writable ? null : <Note>{row.writeTold}</Note>}
-            {detail.history?.length === 0 ? <Note>{NO_CHANGES}</Note> : null}
+            {detail.history?.length === 0 ? (
+              <EmptyList
+                compact
+                title={NO_CHANGES}
+                adds="A change is recorded each time a value is written into the slot."
+                by={BY_THE_INSTALL}
+              />
+            ) : null}
           </>
         ) : undefined
       }
@@ -131,7 +139,7 @@ function ElsewhereLinks({ detail }: { readonly detail: CredentialDetail }) {
           <Link to={WORKS_AT.connectors} className={link}>
             {CONNECT_ON_CONNECTORS}
           </Link>
-          <UnavailableAction label={CHECK_SOURCE} text={CHECK_SOURCE} reason={UNAVAILABLE.checkSource.reason} />
+          <Explanation form="action" act="credential.check_source" label={CHECK_SOURCE} text={CHECK_SOURCE} />
         </>
       ) : null}
       {kind === "relay" ? (
@@ -157,7 +165,14 @@ export function CredentialProfile({
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <SectionCard title={WHAT_IT_IS_FOR} lede={detail.description === "" ? undefined : detail.description}>
-        {detail.askFor.length === 0 && detail.never.length === 0 ? <p className="m-0 text-[12.5px] text-dim">{NO_HINTS}</p> : null}
+        {detail.askFor.length === 0 && detail.never.length === 0 ? (
+          <EmptyList
+            compact
+            title={NO_HINTS}
+            adds="A hint is listed for each credential a release declares, and none is added by hand."
+            by={BY_THE_INSTALL}
+          />
+        ) : null}
         <FactList>
           {detail.askFor.length > 0 ? (
             <Fact label={ASK_FOR}>
@@ -177,7 +192,7 @@ export function CredentialProfile({
         lede={SET_OR_REPLACE_LEDE}
         footer={
           <>
-            <NotOffered>{NOT_REMOVED}</NotOffered>
+            <Explanation form="line" act="credential.not_removed" />
             <ElsewhereLinks detail={detail} />
           </>
         }
@@ -204,7 +219,12 @@ export function CredentialAbout({ detail }: { readonly detail: CredentialDetail 
       </SectionCard>
       <SectionCard title={HISTORY_HEADING} footer={<Note>{detail.historyTold}</Note>}>
         {detail.history === null ? null : detail.history.length === 0 ? (
-          <p className="m-0 text-[12.5px] text-dim">{NO_CHANGES}</p>
+          <EmptyList
+            compact
+            title={NO_CHANGES}
+            adds="A change is recorded each time a value is written into the slot."
+            by={BY_THE_INSTALL}
+          />
         ) : (
           <div className="overflow-x-auto">
             <GridTable

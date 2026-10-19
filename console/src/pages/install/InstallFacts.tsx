@@ -11,7 +11,7 @@
  * Task ids: M27.7.25, M27.16.1
  */
 
-import { Chip, Fact } from "../../components/kit";
+import { BY_THE_INSTALL, Chip, EmptyList, Fact } from "../../components/kit";
 import { isKnown, type Fact as InstallFact } from "../installQuery";
 
 /** What a list with nothing in it says. */
@@ -19,7 +19,12 @@ export const NO_FACTS = "Nothing was reported here.";
 
 export function InstallFacts({ facts, label }: { readonly facts: readonly InstallFact[]; readonly label: string }) {
   if (facts.length === 0) {
-    return <p className="m-0 text-[12.5px] text-dim">{NO_FACTS}</p>;
+    return <EmptyList
+        compact
+        title={NO_FACTS}
+        adds="A statement is listed for each fact the install reports, and none is added by hand."
+        by={BY_THE_INSTALL}
+      />;
   }
   return (
     <dl data-slot="fact-list" aria-label={label} className="m-0 flex min-w-0 flex-col">

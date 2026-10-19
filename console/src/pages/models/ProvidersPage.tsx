@@ -43,7 +43,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { useListing } from "../../components/useListing";
-import { ConfirmDialog, EmptyState, FailureState, LoadingState, Note, PageHeader } from "../../components/kit";
+import { ConfirmDialog, EmptyList, FailureState, LoadingState, Note, PageHeader } from "../../components/kit";
 import { SHOW_MORE } from "../../components/ListControls";
 import { ModelPrices } from "../../components/ModelPrices";
 import { Button } from "../../components/ui/button";
@@ -336,7 +336,14 @@ export function ProvidersPage() {
   } else if (listing.busy) {
     cards = <LoadingState label={LOADING_PROVIDERS} />;
   } else if (rows.length === 0) {
-    cards = <EmptyState title={NO_PROVIDERS} description={NO_PROVIDERS_DESCRIPTION} />;
+    cards = (
+      <EmptyList
+        title={NO_PROVIDERS}
+        description={NO_PROVIDERS_DESCRIPTION}
+        adds="A provider is built in with a release, or added with Add a provider."
+        by={["super_admin"]}
+      />
+    );
   } else {
     cards = (
       <ul aria-label={PROVIDERS_CAPTION} className="m-0 [display:grid] list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 xl:grid-cols-3">

@@ -21,7 +21,7 @@
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
 import { AGENT_ADDRESS_PREFIX } from "../../components/agentWorkspaceState";
-import { Chip, FailureState, LoadingState, Note, SectionCard } from "../../components/kit";
+import { BY_THE_INSTALL, Chip, EmptyList, FailureState, LoadingState, Note, SectionCard } from "../../components/kit";
 import { connectorAddress } from "../connectors/connectorSources";
 import { documentAddress } from "../knowledge/knowledgeDocuments";
 import { whenWords } from "../review/parts";
@@ -138,7 +138,12 @@ export function SelfGrantNoticesSection() {
     const found = readSelfGrants(answer.data);
     body =
       found.items.length === 0 ? (
-        <p className="m-0 text-dim">{NO_SELF_GRANTS}</p>
+        <EmptyList
+          compact
+          title={NO_SELF_GRANTS}
+          adds="A notice is raised when somebody gives themselves access to something you look after."
+          by={BY_THE_INSTALL}
+        />
       ) : (
         <ul className="m-0 flex list-none flex-col gap-3 p-0" aria-label={SELF_GRANTS_HEADING}>
           {found.items.map((one) => (

@@ -17,8 +17,9 @@
 
 import { useId, useState } from "react";
 import { request } from "../../api/client";
+import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
-import { ConfirmDialog, FailureState, LoadingState, Note } from "../../components/kit";
+import { ConfirmDialog, Explanation, FailureState, LoadingState, Note } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Label } from "../../components/ui/label";
 import { dayWords } from "../access/formParts";
@@ -169,7 +170,7 @@ export function AgentLeash({ agentId, unnamed }: { readonly agentId: string; rea
   const answer = useResource<unknown>(agentLeashApiPath(agentId), version);
   const [asking, setAsking] = useState<Asking | null>(null);
   const [busy, setBusy] = useState(false);
-  const [said, setSaid] = useState<string | null>(null);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
 
   if (answer.failure !== null) {
     return <FailureState failure={answer.failure} />;
@@ -195,7 +196,7 @@ export function AgentLeash({ agentId, unnamed }: { readonly agentId: string; rea
           : await request<unknown>(supervisionApiPath(agentId, one.kind), { method: "POST" });
     setBusy(false);
     setAsking(null);
-    setSaid(result.ok ? null : result.failure.message);
+    setFailure(result.ok ? null : result.failure);
     setVersion((count) => count + 1);
   };
 
@@ -205,11 +206,7 @@ export function AgentLeash({ agentId, unnamed }: { readonly agentId: string; rea
   const proposals = leash.entries.filter((one) => one.proposed !== undefined);
   return (
     <div data-slot="agent-leash" className="flex min-w-0 flex-col gap-3">
-      {said === null ? null : (
-        <p role="alert" className="m-0 text-[12.5px] text-crit">
-          {said}
-        </p>
-      )}
+      {failure === null ? null : <FailureState failure={failure} />}
       {leash.mayMove ? <ChangeForm choices={settables(leash.entries, unnamed)} onAsk={setAsking} /> : null}
       {proposals.map((one) => (
         <span key={`${one.target}-${JSON.stringify(one.scope)}`} data-slot="leash-proposal" className="text-[11.5px] text-warn">
@@ -235,7 +232,7 @@ export function AgentLeash({ agentId, unnamed }: { readonly agentId: string; rea
                 ? ""
                 : ` Last review: ${String(supervision.understood)} of ${String(supervision.reviewed)} judged actions accepted unchanged.`}
             </span>
-            {supervision.held ? <Note kind="not-yet">every action it takes only practises until a review finds it ready.</Note> : null}
+            {supervision.held ? <Explanation form="note" act="agent.practising_only" /> : null}
             {leash.mayMove && supervision.held && supervision.due ? (
               <div>
                 <Button size="xs" variant="outline" onClick={() => setAsking({ kind: "review" })}>

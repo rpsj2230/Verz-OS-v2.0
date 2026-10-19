@@ -19,7 +19,7 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
 import {
-  EmptyState,
+  EmptyList,
   EntityTable,
   FailureState,
   LoadingState,
@@ -121,7 +121,13 @@ export function DraftsPage() {
           )}
           <SectionCard title={YOURS_HEADING}>
             {drafts.items.length === 0 ? (
-              <EmptyState title={NO_DRAFTS} description={NO_DRAFTS_DESCRIPTION} icon={<FileStack aria-hidden />} />
+              <EmptyList
+                title={NO_DRAFTS}
+                description={NO_DRAFTS_DESCRIPTION}
+                adds="Start a new agent, or edit an agent as a draft from its page."
+                by={["super_admin", "department_admin", "member"]}
+                icon={<FileStack aria-hidden />}
+              />
             ) : (
               <EntityTable
                 exportName="drafts-yours"

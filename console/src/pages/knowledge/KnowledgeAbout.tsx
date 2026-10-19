@@ -12,7 +12,7 @@
 
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
-import { EmptyState, FailureState, LoadingState, Note, SectionCard } from "../../components/kit";
+import { BY_THE_INSTALL, EmptyList, FailureState, LoadingState, Note, SectionCard } from "../../components/kit";
 import { dayWords, documentAddress, eventWords, historyPath, readHistory, type VersionRow } from "./knowledgeDocuments";
 import { StatePill } from "./parts";
 
@@ -44,7 +44,12 @@ export function KnowledgeAbout({
     const { events, truncated } = readHistory(answer.data);
     history =
       events.length === 0 ? (
-        <EmptyState title={NO_HISTORY} description={NO_HISTORY_DESCRIPTION} />
+        <EmptyList
+          title={NO_HISTORY}
+          description={NO_HISTORY_DESCRIPTION}
+          adds="An entry is written whenever the document is added to, verified, handed over or replaced."
+          by={BY_THE_INSTALL}
+        />
       ) : (
         <>
           <ol className="m-0 flex list-none flex-col p-0">

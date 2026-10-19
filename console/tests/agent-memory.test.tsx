@@ -188,9 +188,9 @@ describe("the Memory section", () => {
     expect([...inferred.querySelectorAll("button")].map((one) => one.textContent)).toEqual([]);
     const mine = container.querySelector('[data-slot="memory-about-you"] [data-slot="memory-item"]') as Element;
     await act(async () => {
-      fireEvent.click([...mine.querySelectorAll("button")].find((one) => one.textContent === "Delete") as Element);
+      fireEvent.click([...mine.querySelectorAll("button")].find((one) => one.textContent === "Retire") as Element);
     });
-    await confirm("Delete");
+    await confirm("Retire");
     expect(posts(idp)[0]?.url).toContain(memoryDeletionApiPath(AGENT, "m3"));
   });
 

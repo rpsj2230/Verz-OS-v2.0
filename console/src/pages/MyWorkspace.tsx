@@ -49,7 +49,7 @@ import { MyChannels } from "../components/MyChannels";
 import type { GridColumn } from "../components/gridFeatures";
 import { GridTable } from "../components/kit/GridTable";
 import { MyPreferences } from "../components/MyPreferences";
-import { ConfirmDialog } from "../components/kit";
+import { BY_THE_INSTALL, ConfirmDialog, EmptyList } from "../components/kit";
 import { Button } from "../components/ui/button";
 import { FailureNotice } from "../ui/FailureNotice";
 import { when } from "./artifactsQuery";
@@ -85,7 +85,7 @@ export const READING_WORKSPACE = "Reading your workspace.";
 export const OPENS_ON_THE_MEMBER_GRANT =
   "This page opens for anybody holding the member grant, and for nobody else, whatever else they " +
   "hold. If you expected to see it, ask your department administrator for it.";
-export const THE_BRAIN_COULD_NOT_BE_REACHED = "The Brain could not be reached";
+export { THE_BRAIN_COULD_NOT_BE_REACHED } from "../ui/FailureNotice";
 
 export const NO_AGENTS = "There are no agents you can call.";
 export const NO_CEILING = "No budget of your own is set.";
@@ -195,7 +195,12 @@ function MyAgents({ workspace }: { readonly workspace: Workspace }) {
     <section className="card">
       <h2>My agents</h2>
       {workspace.agents.length === 0 ? (
-        <p className="note">{NO_AGENTS}</p>
+        <EmptyList
+          compact
+          title={NO_AGENTS}
+          adds="An agent is listed once it is published to a department or the company you can reach."
+          by={["super_admin", "department_admin", "member"]}
+        />
       ) : (
         <GridTable
           look="grid"
@@ -288,7 +293,12 @@ function WhatItLearned({
       )}
       {outcome.failure === null ? null : <FailureNotice failure={outcome.failure} />}
       {workspace.learned.length === 0 ? (
-        <p className="note">{NOTHING_LEARNED}</p>
+        <EmptyList
+          compact
+          title={NOTHING_LEARNED}
+          adds="The system forms what it learns from what you ask and correct, and none is added by hand."
+          by={BY_THE_INSTALL}
+        />
       ) : (
         <ul aria-label={LEARNED_CAPTION}>
           {workspace.learned.map((one) => (
@@ -422,7 +432,12 @@ function KnowledgeIOwn({ workspace }: { readonly workspace: Workspace }) {
     <section className="card">
       <h2>{ITEMS_CAPTION}</h2>
       {workspace.knowledge.length === 0 ? (
-        <p className="note">{NO_ITEMS}</p>
+        <EmptyList
+          compact
+          title={NO_ITEMS}
+          adds="A document is listed once you add one, or somebody hands one to you to look after."
+          by={["super_admin", "department_admin", "member"]}
+        />
       ) : (
         <GridTable
           look="grid"

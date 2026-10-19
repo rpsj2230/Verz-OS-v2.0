@@ -29,31 +29,33 @@ import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
 import {
   Advanced,
+  BY_THE_INSTALL,
   DetailHeader,
   DetailPage,
+  type DetailView,
   Drawer,
+  EmptyList,
   EmptyState,
+  type EntityColumn,
   EntityTable,
+  Explanation,
   Fact,
   FactList,
   FailureState,
   KpiStrip,
   LoadingState,
   Note,
-  NotOffered,
   RESET_LABEL,
   SectionCard,
   StatCard,
   ViewSwitch,
-  type DetailView,
-  type EntityColumn,
 } from "../../components/kit";
 import { NOTHING_MATCHES } from "../../components/ListControls";
 import { Button } from "../../components/ui/button";
 import { cn } from "../../lib/utils";
 import { dayWords, whenWords } from "../access/formParts";
 import { personApiPath, readPersonDetail } from "../people/peopleQuery";
-import { EDIT_NOT_OFFERED, changeWords } from "../learning/learningActions";
+import { changeWords } from "../learning/learningActions";
 import {
   KIND_WORDS,
   MEMORY_PATH,
@@ -167,16 +169,22 @@ function RememberedView({ memory, onOpen }: { readonly memory: Memory; readonly 
       title="What is remembered"
       lede="In its own words, newest first."
       footer={
-        <NotOffered>
-          {EDIT_NOT_OFFERED}{" "}
+        <>
+          <Explanation form="line" act="learning.memory_not_edited" />
           <Link to="/learning" className="text-acc-text underline-offset-4 hover:underline">
             Open Learning
           </Link>
-        </NotOffered>
+        </>
       }
     >
       {all.length === 0 ? (
-        <EmptyState title={NOTHING_TO_READ} description={NOTHING_TO_READ_DESCRIPTION} icon={<Brain aria-hidden />} />
+        <EmptyList
+          title={NOTHING_TO_READ}
+          description={NOTHING_TO_READ_DESCRIPTION}
+          adds="A memory forms from what the person asks and corrects, and none is added by hand."
+          by={BY_THE_INSTALL}
+          icon={<Brain aria-hidden />}
+        />
       ) : (
         <div className="flex min-w-0 flex-col gap-3">
           <Narrowing
@@ -242,7 +250,13 @@ function HistoryView({ memory }: { readonly memory: Memory }) {
       footer={<Note>{consideredSentence(memory.consideredPerKind)}</Note>}
     >
       {steps.length === 0 ? (
-        <EmptyState title={NO_CHANGE} description={NO_CHANGE_DESCRIPTION} icon={<HistoryIcon aria-hidden />} />
+        <EmptyList
+          title={NO_CHANGE}
+          description={NO_CHANGE_DESCRIPTION}
+          adds="An entry is written whenever a memory about this person forms, is replaced or is undone."
+          by={BY_THE_INSTALL}
+          icon={<HistoryIcon aria-hidden />}
+        />
       ) : (
         <EntityTable
           caption="Changes you may read, newest first"

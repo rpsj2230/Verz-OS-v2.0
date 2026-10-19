@@ -88,6 +88,8 @@ export function SubscribersPage() {
             exportName="subscribers"
             empty={NO_SUBSCRIBERS}
             emptyDescription={NO_SUBSCRIBERS_DESCRIPTION}
+            emptyAdds="Register a subscriber on the Webhooks screen, and it is listed here."
+            emptyBy={["super_admin"]}
             footer={
               <>
                 {body.stopping === "" ? null : <Line>{body.stopping}</Line>}

@@ -50,12 +50,12 @@ export function AskWelcome({ onChoose }: { readonly onChoose: (question: string)
     return null;
   }
   return (
-    <div className="ask__welcome">
+    <div>
       <p className="note">{TRY_ASKING}</p>
       <ul>
         {questions.map((one) => (
           <li key={one}>
-            <button type="button" className="button button--link" onClick={() => onChoose(one)}>
+            <button type="button" className="button" onClick={() => onChoose(one)}>
               {one}
             </button>
           </li>

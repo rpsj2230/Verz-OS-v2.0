@@ -25,11 +25,10 @@ import { Link } from "react-router-dom";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
-import { ConfirmDialog, Drawer, FailureState, NotOffered, SectionCard } from "../../components/kit";
+import { ConfirmDialog, Drawer, Explanation, FailureState, SectionCard } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { listPath, NO_QUESTION } from "../../components/listing";
 import { Field, FormProblem, NativeSelect } from "../access/formParts";
-import { DEPARTMENT_SET_ON_PEOPLE, EDITED_AT_THE_SOURCE } from "./peopleActions";
 import type { PersonDetail } from "./peopleQuery";
 
 export const DEPARTMENTS_API_PATH = "/govern/departments";
@@ -84,7 +83,7 @@ function questionFor(act: Act, person: string): string {
 function labelFor(act: Act): string {
   switch (act.kind) {
     case "leave":
-      return "Take out";
+      return "End membership";
     case "appoint":
       return "Make lead";
     case "stand_down":
@@ -283,7 +282,7 @@ export function PersonPlacements({ detail, onWritten }: { readonly detail: Perso
       <SectionCard
         title="Department"
         lede="Where they sit, as the staff source records it."
-        footer={<NotOffered>{detail.departmentSetOnPeople ? DEPARTMENT_SET_ON_PEOPLE : EDITED_AT_THE_SOURCE}</NotOffered>}
+        footer={<Explanation form="line" act={detail.departmentSetOnPeople ? "person.department_set_on_people" : "person.changed_at_the_source"} />}
         action={
           department !== undefined && mayOrganise && !leads.has(department.slug) ? (
             <PlacementAct

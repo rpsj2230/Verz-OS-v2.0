@@ -30,12 +30,13 @@ import {
   START_AGAIN,
   installDraftKey,
 } from "../src/pages/agent-templates/AgentTemplateDetailPage";
-import { ACT_LABELS, originWords, UNAVAILABLE } from "../src/pages/agent-templates/templateActions";
+import { ACT_LABELS, originWords } from "../src/pages/agent-templates/templateActions";
 import { NO_TEMPLATES } from "../src/pages/AgentTemplates";
 import { readTemplates } from "../src/pages/agentTemplatesQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { apiDocument, declaredPropertyNames, declaredResponseSchema } from "./support/openapi";
 import { installRadixStubs } from "./support/radix";
+import { noRouteRetires, retiringPattern } from "./support/explanations";
 
 const CONSOLE_ORIGIN = "https://console.test";
 const DIGEST = "d".repeat(64);
@@ -137,11 +138,8 @@ describe("what this module agrees with the API about", () => {
     // What breaks if this is deleted: "coming soon" said about a route that has arrived, or a
     // count of installs added to the gallery, which counts agents the reader may not see.
     const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
-    for (const [one, { retiredBy }] of Object.entries(UNAVAILABLE)) {
-      expect(paths.filter((path) => retiredBy.test(path)), one).toEqual([]);
-    }
+    noRouteRetires(["template.author"]);
     // Withdrawing is not among them: its route is served, and its card is `TemplateTransfer.tsx`'s.
-    expect(Object.keys(UNAVAILABLE)).toEqual(["author"]);
     expect(paths).toContain("/api/v1/agent-templates/{template_id}/versions/{version}/withdrawal");
     expect(paths).toContain("/api/v1/agent-templates/{template_id}");
     const gallery = declaredPropertyNames(declaredResponseSchema("/api/v1/agent-templates", "get"));

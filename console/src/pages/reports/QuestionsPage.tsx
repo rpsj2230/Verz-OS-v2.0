@@ -24,7 +24,7 @@ import { Plug } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
-import { EmptyState, EntityTable, FailureState, KpiStrip, LoadingState, SectionCard, StatCard, type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, EmptyList, EntityTable, FailureState, KpiStrip, LoadingState, SectionCard, StatCard, type EntityColumn } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { countWords } from "../agents/agentStats";
 import {
@@ -36,7 +36,7 @@ import {
   type GapLineBody,
   type QuestionsBody,
 } from "../questionsQuery";
-import { BarList, DEFAULT_PERIOD, Quiet, REPORTS_CRUMB, ReportHeader, counted, periodWords, sheetOf, type ReportPeriod } from "./reportParts";
+import { BarList, DEFAULT_PERIOD, REPORTS_CRUMB, ReportHeader, counted, periodWords, sheetOf, type ReportPeriod } from "./reportParts";
 
 export const QUESTIONS_HEADING = "Questions and gaps";
 export const QUESTIONS_LEDE = "What people asked that no connected source could answer, and what would fix it.";
@@ -108,7 +108,12 @@ function Gaps({ body }: { readonly body: QuestionsBody }) {
       {body.nothing_connected ? <NothingConnected body={body} /> : null}
       <SectionCard title={BY_DEPARTMENT} lede={BY_DEPARTMENT_LEDE}>
         {departments.length === 0 ? (
-          <Quiet>{NO_GAP_IN_PERIOD}</Quiet>
+          <EmptyList
+            compact
+            title={NO_GAP_IN_PERIOD}
+            adds="A gap is recorded whenever somebody asks a question no connected source could answer."
+            by={BY_THE_INSTALL}
+          />
         ) : (
           <BarList
             caption={BY_DEPARTMENT}
@@ -149,7 +154,14 @@ export function QuestionsPage() {
   } else if (answer.busy) {
     content = <LoadingState label={LOADING_GAPS} />;
   } else if (body === null) {
-    content = <EmptyState title={NO_GAPS} description={NO_GAPS_MORE} />;
+    content = (
+      <EmptyList
+        title={NO_GAPS}
+        description={NO_GAPS_MORE}
+        adds="A gap is recorded whenever somebody asks a question no connected source could answer."
+        by={BY_THE_INSTALL}
+      />
+    );
   } else {
     content = <Gaps body={body} />;
   }

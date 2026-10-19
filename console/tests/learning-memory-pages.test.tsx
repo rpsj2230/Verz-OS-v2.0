@@ -19,13 +19,12 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import { UNAVAILABLE_MARK } from "../src/components/kit";
-import { UNAVAILABLE } from "../src/pages/learning/learningActions";
+import { ACT_LABELS } from "../src/pages/learning/learningActions";
 import {
   KEEP_IT,
   MARKED_HELPFUL,
   MARKED_NOT_HELPFUL,
   MARKS_LABEL,
-  TIER_THREE_WITHHELD,
   UNDO_LABEL,
   UNDONE,
 } from "../src/pages/learning/LearningPage";
@@ -54,6 +53,7 @@ import { fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
 import { apiDocument, declaredParameterSchema } from "./support/openapi";
 import { backendModelFields } from "./support/python";
 import { installRadixStubs } from "./support/radix";
+import { noRouteRetires, retiringPattern, sentenceFor } from "./support/explanations";
 
 const ROUTES = "src/brain/estate_routes.py";
 const API = "/api/v1";
@@ -323,13 +323,15 @@ describe("the Learning page", () => {
     // the acts hidden so the page says the product has no such thing.
     const shadow = await consoleAt("/learning/shadow", reviewing(learningBody({ tier_two: [aTierTwo()] })));
     const promote = shadow.container.querySelector(`[${UNAVAILABLE_MARK}]`);
-    expect(promote?.textContent).toBe(UNAVAILABLE.promote.label);
-    expect(mainText(shadow.container)).toContain(UNAVAILABLE.promote.reason);
+    expect(promote?.textContent).toBe(ACT_LABELS.promote);
+    await waitFor(() => {
+      expect(mainText(shadow.container)).toContain(sentenceFor("learning.promote"));
+    });
     fireEvent.click(promote as HTMLElement);
     expect(shadow.sent.filter((one) => one.method === "POST")).toEqual([]);
 
     const waiting = await consoleAt("/learning/waiting", reviewing(learningBody({ tier_three: [{ memory_id: "m3", department: "maintenance", back_to: "a1" }] })));
-    expect(waiting.container.querySelector(`[${UNAVAILABLE_MARK}]`)?.textContent).toBe(UNAVAILABLE.decide.label);
+    expect(waiting.container.querySelector(`[${UNAVAILABLE_MARK}]`)?.textContent).toBe(ACT_LABELS.decide);
     expect(mainText(waiting.container)).toContain("maintenance");
   });
 
@@ -357,11 +359,13 @@ describe("the Learning page", () => {
     // empty Waiting view, which says none went anywhere.
     const withheld = await consoleAt("/learning/waiting", reviewing(learningBody({ tier_three: null })));
     expect(viewLinks(withheld.container)).toEqual(["Applied", "Shadow", "About"]);
-    expect(mainText(withheld.container)).toContain(TIER_THREE_WITHHELD);
+    await waitFor(() => {
+      expect(mainText(withheld.container)).toContain(sentenceFor("learning.tier_three_withheld"));
+    });
 
     const empty = await consoleAt("/learning/waiting", reviewing(learningBody({ tier_three: [] })));
     expect(viewLinks(empty.container)).toContain("Waiting");
-    expect(mainText(empty.container)).not.toContain(TIER_THREE_WITHHELD);
+    expect(mainText(empty.container)).not.toContain(sentenceFor("learning.tier_three_withheld"));
   });
 
   test("About lists the change kinds the API puts at each tier and the bound on the review", async () => {
@@ -427,12 +431,9 @@ describe("the Learning page", () => {
   test("an act listed as not built yet has no route in the API document, and each pattern matches its path", () => {
     // What breaks if this is deleted: a page that goes on saying "coming soon" about a route that
     // has landed, so a person is told they cannot do what they can.
-    const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
-    for (const [act, { retiredBy }] of Object.entries(UNAVAILABLE)) {
-      expect(paths.filter((path) => retiredBy.test(path)), act).toEqual([]);
-    }
-    expect(UNAVAILABLE.promote.retiredBy.test("/api/v1/govern/learning/promote")).toBe(true);
-    expect(UNAVAILABLE.decide.retiredBy.test("/api/v1/govern/learning/decisions")).toBe(true);
+    noRouteRetires(["learning.promote", "learning.decide"]);
+    expect(retiringPattern("learning.promote").test("/api/v1/govern/learning/promote")).toBe(true);
+    expect(retiringPattern("learning.decide").test("/api/v1/govern/learning/decisions")).toBe(true);
   });
 
   test("recent means the seven days before the API's own instant, over tiers one and two", () => {

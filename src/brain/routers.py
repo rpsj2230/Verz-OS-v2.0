@@ -264,6 +264,10 @@ from brain.escalation_routes import router as escalation_router
 # See `brain.estate_routes`.
 from brain.estate_routes import router as estate_router
 
+# Why one act cannot be done, in the words every console screen uses for it: the same sentence
+# for every reader, behind sign-in and nothing else. See `brain.explanation_routes`.
+from brain.explanation_routes import router as explanation_router
+
 # Features: which genuinely new features this install has switched on, and the switch, behind
 # `admin:feature` over everything. See `brain.feature_routes` and `brain.ops.features`.
 from brain.feature_routes import router as feature_router

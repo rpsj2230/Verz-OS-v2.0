@@ -348,7 +348,7 @@ function Marking({ traceId }: { readonly traceId: string }) {
     );
   }
   return (
-    <section className="ask__marks" aria-label={WAS_IT_HELPFUL}>
+    <section aria-label={WAS_IT_HELPFUL}>
       <p className="note">{WAS_IT_HELPFUL}</p>
       <div className="form-actions">
         <button type="button" className="button" disabled={busy} onClick={() => mark(true)}>
@@ -384,7 +384,7 @@ function CopyAnswer({ text, traceId }: { readonly text: string; readonly traceId
   }, [text, traceId]);
 
   return (
-    <div className="ask__copy">
+    <div>
       <button type="button" className="button" onClick={copy}>
         {COPY_ANSWER}
       </button>
@@ -648,7 +648,7 @@ export function Ask() {
       ) : null}
 
       {busy ? (
-        <section className="ask__progress" role="status" aria-label={PROGRESS_LABEL}>
+        <section role="status" aria-label={PROGRESS_LABEL}>
           {view.steps.length === 0 ? <p className="note">{ASKING}</p> : null}
           <ul className="ask__steps">
             {view.steps.map((step, at) => (
@@ -678,7 +678,6 @@ export function Ask() {
         <section
           id={ANSWER_REGION_ID}
           ref={answerRegion}
-          className="ask__result"
           tabIndex={-1}
           aria-label={ANSWER_LABEL}
         >
@@ -688,7 +687,6 @@ export function Ask() {
 
           {thread !== "" && !busy && view.answer !== "" ? (
             <form
-              className="ask__correction"
               onSubmit={(submitted) => {
                 submitted.preventDefault();
                 void (async () => {
@@ -741,7 +739,7 @@ export function Ask() {
           ) : null}
 
           {thread !== "" && !busy && view.answer !== "" ? (
-            <div className="ask__export">
+            <div>
               <button
                 type="button"
                 className="button"
@@ -789,7 +787,7 @@ export function Ask() {
       ) : null}
 
       {thread !== "" ? (
-        <div className="ask__thread">
+        <div>
           <p className="note">{CONTINUING}</p>
           <button
             type="button"
@@ -806,9 +804,9 @@ export function Ask() {
       ) : null}
 
       {reopened !== null ? (
-        <section className="card ask__reopened" aria-label={reopened.title}>
+        <section className="card" aria-label={reopened.title}>
           <h2>{reopened.title}</h2>
-          <ol className="ask__messages">
+          <ol>
             {reopened.messages.map((one, at) => (
               <li key={`${at}-${one.at}`}>
                 <strong>{speaker(one.role)}</strong> {channelWords(one.channel)}: {messageWords(one.body)}
@@ -819,10 +817,9 @@ export function Ask() {
       ) : null}
 
       {threads !== null && threads.length > 0 ? (
-        <section className="card ask__conversations">
+        <section className="card">
           <h2>{CONVERSATIONS_HEADING}</h2>
           <form
-            className="ask__search"
             role="search"
             onSubmit={(submitted) => {
               submitted.preventDefault();
@@ -859,7 +856,7 @@ export function Ask() {
               <li key={one.threadId}>
                 <button
                   type="button"
-                  className="button button--link"
+                  className="button"
                   onClick={() => {
                     void (async () => {
                       const opened = await request<unknown>(threadPath(one.threadId));

@@ -41,6 +41,7 @@ import {
 } from "../pages/myAccountQuery";
 import { FailureNotice } from "../ui/FailureNotice";
 import { ConfirmAction } from "./ConfirmAction";
+import { BY_THE_INSTALL, EmptyList } from "./kit/states";
 
 export const DEVICES_CAPTION = "Where I am signed in";
 export const READS_CAPTION = "Who has read my record";
@@ -169,7 +170,12 @@ export function MyReads() {
       ) : answer.data === null ? (
         <Reading what="who has read your record" />
       ) : answer.data.reads.length === 0 ? (
-        <p className="note">{NO_READS}</p>
+        <EmptyList
+          compact
+          title={NO_READS}
+          adds="A read is recorded each time an agent reads your record."
+          by={BY_THE_INSTALL}
+        />
       ) : (
         <ul aria-label={READS_CAPTION}>
           {answer.data.reads.map((one) => (
@@ -233,7 +239,12 @@ export function MyArtifacts() {
       ) : answer.data === null ? (
         <Reading what="what was made for you" />
       ) : answer.data.artifacts.length === 0 ? (
-        <p className="note">{NO_ARTIFACTS}</p>
+        <EmptyList
+          compact
+          title={NO_ARTIFACTS}
+          adds="An artifact is listed when an agent produces a document, a deck, a report or an image for you."
+          by={BY_THE_INSTALL}
+        />
       ) : (
         <>
           <ul aria-label={ARTIFACTS_CAPTION}>
@@ -335,7 +346,12 @@ export function MyShared() {
       ) : received.data === null ? (
         <Reading what="what was shared with you" />
       ) : received.data.items.length === 0 ? (
-        <p className="note">{NOTHING_SHARED_WITH_ME}</p>
+        <EmptyList
+          compact
+          title={NOTHING_SHARED_WITH_ME}
+          adds="A colleague shares one of their artifacts with you."
+          by={["member"]}
+        />
       ) : (
         <ul aria-label={SHARED_CAPTION}>
           {received.data.items.map((one) => (
@@ -411,7 +427,12 @@ export function MyRequestableAgents() {
       ) : answer.data === null ? (
         <Reading what="the agents you can ask for" />
       ) : answer.data.agents.length === 0 ? (
-        <p className="note">{NOTHING_REQUESTABLE}</p>
+        <EmptyList
+          compact
+          title={NOTHING_REQUESTABLE}
+          adds="An agent is listed once it is published to a department you can reach."
+          by={["super_admin", "department_admin"]}
+        />
       ) : (
         <ul aria-label={REQUESTABLE_CAPTION}>
           {answer.data.agents.map((one) => (

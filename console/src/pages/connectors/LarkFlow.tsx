@@ -40,6 +40,7 @@ import {
   ConfirmDialog,
   ConnectFlow,
   copied,
+  Explanation,
   Fact,
   FactList,
   FailureState,
@@ -94,8 +95,6 @@ export const NOT_COPIED = "Your browser did not allow copying. Select the text b
 export const ONE_AT_A_TIME = "Or add them one at a time";
 export const EVENTS_ADDRESS = "Events address to paste in Lark";
 export const COPY_ADDRESS = "Copy the address";
-export const NO_ADDRESS =
-  "This install names no address of its own yet, so there is no events address to paste. Set the install's sign-in redirect address first.";
 export const LARK_EVENTS = "Lark's events";
 export const SAVE_CHANNEL = "Save the chat channel now";
 export const CHANNEL_SAVED = "The chat channel is saved. Now point Lark's events at this install.";
@@ -219,7 +218,7 @@ function RedoSteps({
 function Results({ guide, tested, onGo }: { readonly guide: LarkGuide; readonly tested: LarkTested; readonly onGo: (key: string) => void }) {
   return (
     <section aria-label={TEST_RESULTS} className="flex min-w-0 flex-col gap-3">
-      <Note kind={tested.accepted ? "done" : "not-yet"}>{tested.told}</Note>
+      {tested.accepted ? <Note kind="done">{tested.told}</Note> : <Explanation form="note" lead="not-yet" told={tested.told} />}
       <RedoSteps steps={stepsFor(guide, tested.redo)} all={guide.steps} onGo={onGo} />
       {tested.uses.length === 0 ? null : (
         <ul aria-label="What the test found for each use" className="m-0 flex list-none flex-col gap-3 p-0">
@@ -540,7 +539,7 @@ function Flow({
         {copy === "done" ? <Note kind="done">{COPIED}</Note> : null}
         {copy === "failed" ? (
           <>
-            <Note kind="not-yet">{NOT_COPIED}</Note>
+            <Note kind="attention">{NOT_COPIED}</Note>
             <textarea
               readOnly
               aria-label="The permissions to paste into Lark"
@@ -585,7 +584,7 @@ function Flow({
     events_address: (
       <div className="flex min-w-0 flex-col gap-3">
         {guide.events_address === "" ? (
-          <Note kind="not-yet">{NO_ADDRESS}</Note>
+          <Explanation form="note" act="channel.no_address" />
         ) : (
           <div className="flex min-w-0 flex-col gap-1.5">
             <p className="m-0 text-[12.5px] text-dim">{EVENTS_ADDRESS}</p>
@@ -626,7 +625,7 @@ function Flow({
     ),
     test: (
       <div className="flex min-w-0 flex-col gap-3">
-        {guide.vault_told === "" ? null : <Note kind="not-yet">{guide.vault_told}</Note>}
+        {guide.vault_told === "" ? null : <Explanation form="note" lead="not-yet" told={guide.vault_told} />}
         {current === "test" ? failureNotice : null}
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" className="min-h-11 sm:min-h-9" disabled={busy || !mayAll || !typed} onClick={test}>

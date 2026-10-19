@@ -536,11 +536,11 @@ describe("what the canvas draws", () => {
     // shared constant, so this fails if either screen starts saying something of its own.
     const columns: GridColumn<{ id: string }>[] = [{ id: "id", accessorKey: "id", header: "Id" }];
     const grid = render(
-      <DataTable caption="Records" columns={columns} rows={[]} rowId={(row) => row.id} />,
+      <DataTable caption="Records" columns={columns} rows={[]} rowId={(row) => row.id} emptyAdds="Add a record." emptyBy={["super_admin"]} />,
     ).container;
     const canvas = render(<TraceGraph caption="A run" run={ended({ nodes: [] })} />).container;
 
-    const sentence = grid.querySelector(".grid__empty")?.textContent;
+    const sentence = grid.querySelector('.grid__empty [data-slot="empty-title"]')?.textContent;
     expect(sentence).toBeTruthy();
     expect(canvas.querySelector(".graph__empty")?.textContent).toBe(sentence);
     // And an empty canvas is not mounted at all: an expanse of blank drawing surface is

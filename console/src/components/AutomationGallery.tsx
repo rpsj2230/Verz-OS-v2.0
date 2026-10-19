@@ -38,7 +38,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import type { Resource } from "../api/useResource";
-import { FailureNotice } from "../ui/FailureNotice";
+import { FailureNotice, SOMETHING_DID_NOT_WORK, THE_BRAIN_COULD_NOT_BE_REACHED } from "../ui/FailureNotice";
 import { Notice } from "../ui/Notice";
 import { ConfirmAction } from "./ConfirmAction";
 import {
@@ -58,8 +58,7 @@ export const GALLERY_LABEL = "Automation templates";
 export const READING_GALLERY = "Reading the automations this agent can take on.";
 export const NO_TEMPLATES = "This install offers no automation templates.";
 export const READING_PREVIEW = "Reading what installing it would do.";
-export const SOMETHING_DID_NOT_WORK = "Something did not work";
-export const THE_BRAIN_COULD_NOT_BE_REACHED = "The Brain could not be reached";
+export { SOMETHING_DID_NOT_WORK, THE_BRAIN_COULD_NOT_BE_REACHED };
 export const NOT_INSTALLED = "Nothing was installed";
 export const INSTALLED_TITLE = "Installed";
 

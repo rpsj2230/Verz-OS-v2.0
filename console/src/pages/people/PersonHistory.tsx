@@ -18,7 +18,7 @@ import { History } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
-import { EmptyState, FailureState, LoadingState, Note, SectionCard } from "../../components/kit";
+import { BY_THE_INSTALL, EmptyList, FailureState, LoadingState, Note, SectionCard } from "../../components/kit";
 import { phraseFor } from "../auditQuery";
 import { whenWords } from "../access/formParts";
 import { PersonName, useNames } from "../access/PersonName";
@@ -41,7 +41,15 @@ export function PersonHistory({ detail }: { readonly detail: PersonDetail }) {
   } else if (answer.data === null) {
     body = <LoadingState label="Loading their history." rows={3} />;
   } else if (history.events.length === 0) {
-    body = <EmptyState title={NO_HISTORY} description={NO_HISTORY_DESCRIPTION} icon={<History aria-hidden />} />;
+    body = (
+      <EmptyList
+        title={NO_HISTORY}
+        description={NO_HISTORY_DESCRIPTION}
+        adds="An entry is written whenever a grant, a placement or a sign-in about this person changes."
+        by={BY_THE_INSTALL}
+        icon={<History aria-hidden />}
+      />
+    );
   } else {
     body = (
       <ol className="m-0 flex list-none flex-col divide-y divide-line p-0">

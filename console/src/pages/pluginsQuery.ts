@@ -46,7 +46,7 @@ export type Verb = "enable" | "disable" | "remove";
 export const VERB_LABEL: Readonly<Record<Verb, string>> = {
   enable: "Switch on",
   disable: "Switch off",
-  remove: "Remove",
+  remove: "Retire",
 };
 
 /** Which acts a state offers: a plugin is removed only once it is off. */

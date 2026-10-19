@@ -23,7 +23,7 @@
 
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
-import { FailureState, Note, type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, FailureState, Note, type EntityColumn } from "../../components/kit";
 import { jobAddress } from "../jobsQuery";
 import {
   ACTING,
@@ -99,6 +99,8 @@ function InterruptedActions() {
       exportName="actions-waiting-for-a-person"
       empty={NOTHING_INTERRUPTED}
       emptyDescription={NOTHING_INTERRUPTED_MORE}
+      emptyAdds="An action waits here when a worker stops while sending it and nobody has confirmed whether it happened."
+      emptyBy={BY_THE_INSTALL}
       footer={body.operations.length === 0 ? null : <Note>{NOTHING_IS_SENT_AGAIN_FROM_HERE}</Note>}
     />
   );
@@ -162,6 +164,8 @@ export function LiveRunsPage() {
               exportName="running-now"
               empty={NOTHING_RUNNING}
               emptyDescription={NOTHING_RUNNING_MORE}
+              emptyAdds="A run is listed while a scheduled job or an agent's turn is under way, and none is added by hand."
+              emptyBy={BY_THE_INSTALL}
             />
             <WholeList
               title={WAITING_HEADING}
@@ -173,6 +177,8 @@ export function LiveRunsPage() {
               exportName="waiting"
               empty={NOTHING_WAITING}
               emptyDescription={NOTHING_WAITING_MORE}
+              emptyAdds="A run waits here when it is queued behind a ceiling, and none is added by hand."
+              emptyBy={BY_THE_INSTALL}
             />
             <InterruptedActions />
             <div className="flex flex-col gap-1.5">

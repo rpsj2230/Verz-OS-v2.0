@@ -31,12 +31,13 @@ import { useResource } from "../../api/useResource";
 import {
   Advanced,
   ConfirmDialog,
+  EmptyList,
+  Explanation,
   Fact,
   FactList,
   FailureState,
   LoadingState,
   Note,
-  NotOffered,
   SectionCard,
 } from "../../components/kit";
 import { Button } from "../../components/ui/button";
@@ -44,7 +45,6 @@ import { agentAddress } from "../agents/AgentsPage";
 import { AUTOMATIONS_API_PATH, automationAddress } from "../automations/automationsQuery";
 import { StatePill } from "../agents/pills";
 import { dayWords } from "../access/formParts";
-import { DEPARTMENT_SET_ON_PEOPLE, EDITED_AT_THE_SOURCE } from "./peopleActions";
 import { WorkEmail } from "./WorkEmail";
 import { useLifecycleActs } from "../agents/LifecycleActs";
 import { SecondFactorPill, StaffStatusPill, StandingPill } from "./pills";
@@ -135,7 +135,12 @@ function OwnedAutomations({ principalId }: { readonly principalId: string }) {
   } else if (found.data === null) {
     body = <LoadingState label="Loading the automations they own." rows={2} />;
   } else if (owned.length === 0) {
-    body = <p className="m-0 text-[13px] text-dim">{NO_AUTOMATIONS_OWNED}</p>;
+    body = <EmptyList
+        compact
+        title={NO_AUTOMATIONS_OWNED}
+        adds="An automation runs as a person once it is installed on an agent they own."
+        by={["super_admin", "department_admin"]}
+      />;
   } else {
     body = (
       <ul data-slot="owned-automations" className="m-0 flex list-none flex-col divide-y divide-line p-0">
@@ -180,7 +185,12 @@ function Stewarded({ principalId }: { readonly principalId: string }) {
   } else if (agents.data === null) {
     body = <LoadingState label="Loading the agents they steward." rows={2} />;
   } else if (owned.length === 0 && waiting.length === 0) {
-    body = <p className="m-0 text-[13px] text-dim">{NO_AGENTS_STEWARDED}</p>;
+    body = <EmptyList
+        compact
+        title={NO_AGENTS_STEWARDED}
+        adds="Hand an agent to the person as its steward from the agent's own page."
+        by={["super_admin", "department_admin"]}
+      />;
   } else {
     body = (
       <ul className="m-0 flex list-none flex-col divide-y divide-line p-0">
@@ -254,8 +264,8 @@ export function PersonOverview({
   const { person, placements } = detail;
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <SectionCard title={ABOUT_HEADING} footer={<NotOffered>{detail.departmentSetOnPeople ? DEPARTMENT_SET_ON_PEOPLE : EDITED_AT_THE_SOURCE}</NotOffered>}>
-        {detail.keptOut === undefined ? null : <Note kind="not-yet">{detail.keptOut}</Note>}
+      <SectionCard title={ABOUT_HEADING} footer={<Explanation form="line" act={detail.departmentSetOnPeople ? "person.department_set_on_people" : "person.changed_at_the_source"} />}>
+        {detail.keptOut === undefined ? null : <Explanation form="note" lead="not-yet" told={detail.keptOut} />}
         <FactList>
           <Fact label="Department">{placements.department?.name ?? person.departmentName ?? person.department ?? "Not placed"}</Fact>
           {placements.teams.length === 0 ? null : <Fact label="Teams">{placements.teams.map((one) => one.name).join(", ")}</Fact>}

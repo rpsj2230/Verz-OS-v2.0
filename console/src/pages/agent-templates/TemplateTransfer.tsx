@@ -24,7 +24,7 @@ import { useId, useState, type FormEvent } from "react";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
-import { Advanced, Chip, ConfirmDialog, Fact, FactList, FailureState, Note, SectionCard } from "../../components/kit";
+import { Advanced, Chip, ConfirmDialog, EmptyList, Explanation, Fact, FactList, FailureState, Note, SectionCard } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
@@ -197,7 +197,7 @@ export function WithdrawCard({ templateId, version, name }: { readonly templateI
             </div>
           </form>
         ) : (
-          <Note kind="not-yet">{reading.unavailable}</Note>
+          <Explanation form="note" lead="not-yet" told={reading.unavailable} />
         )}
         <div>
           <Button type="button" variant="outline" className="min-h-11 sm:min-h-9" disabled={reading.unavailable !== "" && !reading.withdrawn} onClick={save}>
@@ -274,7 +274,12 @@ export function WithdrawnCard() {
   return (
     <SectionCard title={WITHDRAWN_HEADING} lede={WITHDRAWN_LEDE}>
       {versions.length === 0 ? (
-        <Note>{NONE_WITHDRAWN}</Note>
+        <EmptyList
+          compact
+          title={NONE_WITHDRAWN}
+          adds="A version is listed here when it is withdrawn from the library, and none is added by hand."
+          by={["super_admin"]}
+        />
       ) : (
         <ul className="m-0 flex min-w-0 list-none flex-col gap-3 p-0">
           {versions.map((one) => (

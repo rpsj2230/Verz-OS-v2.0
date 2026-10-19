@@ -18,7 +18,8 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import type { ReactElement } from "react";
 import { createMemoryRouter, MemoryRouter, RouterProvider } from "react-router-dom";
 import { beforeAll, describe, expect, test } from "vitest";
-import { ADVANCED_LABEL, UNAVAILABLE_MARK } from "../src/components/kit/parts";
+import { UNAVAILABLE_MARK } from "../src/components/kit";
+import { ADVANCED_LABEL } from "../src/components/kit/parts";
 import { AddFileForm, AddLinkForm, AddManyForm } from "../src/pages/knowledge/addForms";
 import { ArchiveForm, HandOverForm, NewVersionForm, ProposeForm, VerifyForm } from "../src/pages/knowledge/actForms";
 import {
@@ -34,7 +35,6 @@ import {
   PROBLEMS,
   acceptsWords,
 } from "../src/pages/knowledge/formParts";
-import { UNAVAILABLE } from "../src/pages/knowledge/knowledgeActions";
 import {
   DOCUMENTS_API_PATH,
   EVENT_WORDS,
@@ -79,6 +79,7 @@ import { apiDocument } from "./support/openapi";
 import { backendEnumMembers, backendModelFields } from "./support/python";
 import { installRadixStubs } from "./support/radix";
 import { readRepoFile } from "./support/repo";
+import { noRouteRetires, retiringPattern, sentenceFor } from "./support/explanations";
 
 const API = "/api/v1";
 const ORIGIN = "https://console.test";
@@ -269,7 +270,9 @@ describe("the Knowledge list", () => {
     const inert = [...container.querySelectorAll(`[${UNAVAILABLE_MARK}]`)].map((one) => one.textContent ?? "");
 
     expect(inert).toContain("Export inventory");
-    expect(container.textContent).toContain(UNAVAILABLE.exportInventory.reason);
+    await waitFor(() => {
+      expect(container.textContent).toContain(sentenceFor("knowledge.export_inventory"));
+    });
     expect([...container.querySelectorAll("button")].some((one) => (one.textContent ?? "").includes(ADD_LABEL))).toBe(true);
   });
 
@@ -776,11 +779,9 @@ describe("what the module reads and says", () => {
     // What breaks if this is deleted: "coming soon" said about Archive or Export after its route has
     // landed. The positive sibling holds that each pattern matches the path it is written for.
     const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
-    for (const [act, { retiredBy }] of Object.entries(UNAVAILABLE)) {
-      expect(paths.filter((path) => retiredBy.test(path)), act).toEqual([]);
-    }
+    noRouteRetires(["knowledge.export_inventory"]);
     expect(paths).toContain(`${API}/knowledge/items/{item_id}/archive`);
-    expect(UNAVAILABLE.exportInventory.retiredBy.test("/api/v1/knowledge/inventory")).toBe(true);
+    expect(retiringPattern("knowledge.export_inventory").test("/api/v1/knowledge/inventory")).toBe(true);
     expect(paths).toContain(`${API}${DOCUMENTS_API_PATH}`);
     expect(paths).toContain(`${API}${VERIFICATIONS_API_PATH}`);
   });

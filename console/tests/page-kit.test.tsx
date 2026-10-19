@@ -38,7 +38,7 @@ import {
   StatCard,
   StatsStrip,
   toCsv,
-  UnavailableAction,
+  Explanation,
   ViewSwitch,
   type EntityColumn,
 } from "../src/components/kit";
@@ -508,7 +508,7 @@ describe("an action that is not built yet", () => {
     const outside = vi.fn();
     render(
       <div onClickCapture={outside}>
-        <UnavailableAction text="Archive" label="Archive" reason="Coming soon: archiving an agent." />
+        <Explanation form="action" told="Coming soon: archiving an agent." text="Archive" label="Archive" />
       </div>,
     );
     const control = screen.getByRole("button", { name: "Archive" });

@@ -16,6 +16,8 @@ import { useId, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useResource } from "../../api/useResource";
 import {
+  BY_THE_INSTALL,
+  EmptyList,
   EmptyState,
   EntityTable,
   FailureState,
@@ -293,7 +295,14 @@ export function EstatePage() {
   } else if (answer.busy || body === null) {
     content = <LoadingState label={LOADING_ESTATE} />;
   } else if (body.items.length === 0) {
-    content = <EmptyState title={NOTHING_HERE} description={NOTHING_HERE_MORE} />;
+    content = (
+      <EmptyList
+        title={NOTHING_HERE}
+        description={NOTHING_HERE_MORE}
+        adds="A row is listed here as an agent, a skill or a source is added on its own screen."
+        by={BY_THE_INSTALL}
+      />
+    );
   } else {
     content = (
       <EntityTable
@@ -354,7 +363,14 @@ export function ActivityPage() {
   } else if (answer.busy || body === null) {
     content = <LoadingState label={LOADING_ACTIVITY} />;
   } else if (body.items.length === 0) {
-    content = <EmptyState title={NO_ACTIVITY} description={NO_ACTIVITY_MORE} />;
+    content = (
+      <EmptyList
+        title={NO_ACTIVITY}
+        description={NO_ACTIVITY_MORE}
+        adds="An entry is written whenever somebody changes a person, a grant, an agent or a setting."
+        by={BY_THE_INSTALL}
+      />
+    );
   } else {
     content = (
       <EntityTable

@@ -25,17 +25,18 @@ import type { FilterChoice } from "../../components/listing";
 import { useListing } from "../../components/useListing";
 import {
   ConfirmDialog,
+  EmptyList,
   EmptyState,
+  type EntityColumn,
   EntityTable,
+  Explanation,
   FailureState,
   ListToolbar,
   LoadingState,
-  NotOffered,
   Note,
   SectionCard,
   StatCard,
   StatsStrip,
-  type EntityColumn,
 } from "../../components/kit";
 import { FETCHING_MORE, SHOW_MORE } from "../../components/ListControls";
 import { Button } from "../../components/ui/button";
@@ -52,7 +53,7 @@ import {
   type UnboundBody,
 } from "../channelsQuery";
 import { at } from "../operations/parts";
-import { ACT_LABELS, NOT_OFFERED } from "./channelActions";
+import { ACT_LABELS } from "./channelActions";
 import type { ChannelRow } from "./channelRows";
 import { boundBasisWords, channelPeriodOf, channelStatsApiPath, FIRST_PERIOD, readChannelStats } from "./channelStats";
 
@@ -186,7 +187,14 @@ function Bound({ row, version, onChanged }: { readonly row: ChannelRow; readonly
   } else if (listing.busy) {
     body = <LoadingState label={READING_BOUND} />;
   } else if (listing.rows.length === 0) {
-    body = <EmptyState title={NOBODY_BOUND} description={NOBODY_BOUND_DESCRIPTION} />;
+    body = (
+      <EmptyList
+        title={NOBODY_BOUND}
+        description={NOBODY_BOUND_DESCRIPTION}
+        adds="A person binds themselves by sending, from their own chat, the code they asked for in My workspace."
+        by={["member"]}
+      />
+    );
   } else {
     body = (
       <EntityTable
@@ -220,7 +228,7 @@ function Bound({ row, version, onChanged }: { readonly row: ChannelRow; readonly
       title={BOUND_HEADING}
       footer={
         <>
-          <NotOffered>{NOT_OFFERED.bindForSomebody}</NotOffered>
+          <Explanation form="line" act="channel.bind_for_somebody" />
           {truncated ? <Note>{MORE_BOUND}</Note> : null}
         </>
       }
