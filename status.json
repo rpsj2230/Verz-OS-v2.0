@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-19T12:00:59.399980+00:00",
-  "commit": "16098818",
-  "commit_subject": "The console's fonts and licences are checked on what is built, and each reference screen records what was adapted and refused (#630)",
+  "generated_at": "2026-10-19T12:35:58.198013+00:00",
+  "commit": "c13814f8",
+  "commit_subject": "Pull requests stop committing the generated work-breakdown files, so merging one no longer makes the others conflict (#632)",
   "total": 1626,
   "done": 1141,
   "percent": 70.2,
