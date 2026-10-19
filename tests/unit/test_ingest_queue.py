@@ -18,6 +18,7 @@ from typing import Any
 
 import pytest
 
+from brain.connectors.throttle import CallOutcome
 from brain.core.entitlement import EntitlementSet, Grant
 from brain.core.scope import Scope
 from brain.knowledge import ingest_queue
@@ -37,6 +38,7 @@ from brain.knowledge.ingest_queue import (
     STANDARD_PARSE_BUDGET,
     IngestJobError,
     IngestRun,
+    ReaderNotAvailableError,
     Ticket,
     TicketState,
     Uploader,
@@ -51,12 +53,15 @@ from brain.knowledge.ingest_queue import (
     ticket_key,
 )
 from brain.knowledge.kinds import KnowledgeKind
+from brain.knowledge.model_server_parsers import services_for
 from brain.knowledge.parse_budget import MIB
 from brain.knowledge.scanning import scan_for_parsing
 from brain.knowledge.search import KNOWLEDGE_READ, KNOWLEDGE_UPLOAD
 from brain.knowledge.text_path import StructuralCheck
 from brain.knowledge.uploads import UPLOAD_ID_PREFIX, original_bucket, store_original
 from brain.knowledge.visibility import KnowledgeVisibility
+from brain.ops.model_server import Part
+from brain.ops.model_server_client import Reply
 from brain.ops.queue import (
     MAX_ARGUMENT_CHARS,
     MIB_PER_SLOT,
@@ -383,3 +388,119 @@ def test_the_worker_registers_the_task_on_the_queue_its_class_derives() -> None:
     register_ingest_tasks(app, database_url="postgresql://brain@db:5432/brain", env={})
 
     assert app.tasks[INGEST_TASK].queue == queue_name_for(INGEST_TRAFFIC_CLASS) == "system"
+
+
+# ------------------------------------------------------------------ the model server's readers
+def _with(store: MemoryStore, services: Any) -> IngestRun:
+    return dataclasses.replace(a_run(store), services=services)
+
+
+class _Parts:
+    """Answers each part of the model server with what the test scripted."""
+
+    def __init__(self, **replies: Any) -> None:
+        self.replies = {Part(name): reply for name, reply in replies.items()}
+        self.asked: list[Part] = []
+
+    def ask(self, part: Part, request: object) -> Any:
+        self.asked.append(part)
+        return self.replies.get(part, Reply(CallOutcome.UNAVAILABLE))
+
+
+def _a_photograph() -> bytes:
+    header = (2480).to_bytes(4, "big") + (3508).to_bytes(4, "big") + bytes((8, 2, 0, 0, 0))
+    return b"\x89PNG\r\n\x1a\n" + (13).to_bytes(4, "big") + b"IHDR" + header + bytes(4)
+
+
+def test_a_reader_that_does_not_answer_fails_the_job_and_leaves_the_ticket_queued(
+    monkeypatch: pytest.MonkeyPatch, written: Written
+) -> None:
+    """**An outage is not a verdict on the file.** The layout part is down, so the job raises and
+    the recovery sweep (the task is `Redrive.SAFE`) puts it back; the ticket still says queued and
+    nothing was added or refused.
+
+    Delete this and a file is refused as unreadable because a model was loading, and the uploader
+    is told to re-export a document that was fine."""
+    store = MemoryStore()
+    ticket = queued(store, a_pdf("Quarterly report"), media_type=MediaType.PDF, filename="q.pdf")
+    grants(monkeypatch, MAY_ADD_IN_WEB)
+    services = services_for((Part.LAYOUT,), _Parts())
+
+    with pytest.raises(ReaderNotAvailableError):
+        asyncio.run(run_ingest_job(ticket.ticket, _with(store, services)))
+
+    assert get_ticket(store, ticket.ticket, prefix=PREFIX).state is TicketState.QUEUED
+    assert written.items == []
+
+
+def test_a_photograph_queued_on_an_install_with_the_scanned_page_reader_is_added(
+    monkeypatch: pytest.MonkeyPatch, written: Written
+) -> None:
+    """The positive case, end to end over the stand-in: the structural check clears the header,
+    the scanned-page reader's sure page is the item, and the ticket says added.
+
+    Delete this and every refusal above is satisfied by a path that adds nothing."""
+    store = MemoryStore()
+    ticket = queued(store, _a_photograph(), media_type=MediaType.PNG, filename="scan.png")
+    grants(monkeypatch, MAY_ADD_IN_WEB)
+    answer = {
+        "blocks": [{"kind": "prose", "text": "Invoice 1042", "start": 0, "page": 1, "section": ""}],
+        "pages": [{"page": 1, "confidence": 0.95}],
+    }
+    parts = _Parts(ocr=Reply(CallOutcome.OK, answer))
+
+    outcome = asyncio.run(
+        run_ingest_job(ticket.ticket, _with(store, services_for((Part.OCR,), parts)))
+    )
+
+    assert outcome.state is TicketState.ADDED
+    [(item, blocks)] = written.items
+    assert item.content == "Invoice 1042" and len(blocks) == 1
+    assert parts.asked == [Part.OCR]
+
+
+def test_a_photograph_on_an_install_without_the_reader_is_refused_as_it_always_was(
+    monkeypatch: pytest.MonkeyPatch, written: Written
+) -> None:
+    """With no services the job reads by the one reader and a PNG is unsupported at admission.
+
+    Delete this and a photograph is accepted on installs that never chose a reader for it."""
+    store = MemoryStore()
+    ticket = queued(store, _a_photograph(), media_type=MediaType.PNG, filename="scan.png")
+    grants(monkeypatch, MAY_ADD_IN_WEB)
+
+    outcome = ran(store, ticket)
+
+    assert (outcome.state, outcome.code) == (TicketState.NOT_ADDED, ParseCause.UNSUPPORTED.value)
+    assert written.items == []
+
+
+def test_a_scan_added_with_unclear_pages_left_out_says_which_on_the_ticket_and_in_the_sentence(
+    monkeypatch: pytest.MonkeyPatch, written: Written
+) -> None:
+    """The added ticket carries the pages that were not clear enough, in the words the item holds,
+    and the sentence the console shows adds them to "was added".
+
+    Delete this and an uploader is told their scan was added and never that a page of it was not."""
+    from brain.knowledge.ingest_queue import outcome_sentence
+
+    store = MemoryStore()
+    mixed = a_pdf("Quarterly report", "")
+    ticket = queued(store, mixed, media_type=MediaType.PDF, filename="mixed.pdf")
+    grants(monkeypatch, MAY_ADD_IN_WEB)
+    layout = {"blocks": [{"kind": "prose", "text": "Quarterly report", "start": 0, "page": 1}]}
+    scan = {
+        "blocks": [{"kind": "prose", "text": "noise", "start": 0, "page": 2, "section": ""}],
+        "pages": [{"page": 2, "confidence": 0.2}],
+    }
+    parts = _Parts(layout=Reply(CallOutcome.OK, layout), ocr=Reply(CallOutcome.OK, scan))
+
+    outcome = asyncio.run(
+        run_ingest_job(ticket.ticket, _with(store, services_for((Part.LAYOUT, Part.OCR), parts)))
+    )
+
+    assert outcome.state is TicketState.ADDED
+    assert outcome.reason.startswith("Page 2 was not clear enough")
+    assert outcome_sentence(outcome) == f"mixed.pdf was added. {outcome.reason}"
+    [(item, _blocks)] = written.items
+    assert item.parse_notice == outcome.reason

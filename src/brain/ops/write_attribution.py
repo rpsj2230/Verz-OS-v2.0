@@ -131,6 +131,13 @@ NOT_A_REQUEST_WITH_A_REACH: Final[Mapping[str, str]] = MappingProxyType(
             "step as their writer, which the trigger records as the actor, and there is no "
             "request and no person's reach."
         ),
+        "brain.ops.queue:<module>": (
+            "The worker's minute answers a person's ask to run a set-aside job again by writing "
+            "its own row under `queue.redrive_answered`, on the queue's own connection with nobody "
+            "signed in. The person's press, which is the console write, is attributed by "
+            "`brain.jobs_routes`; this row is the worker saying what it did about it, written as "
+            "the worker, so there is no request and no person's reach to carry."
+        ),
         "brain.ops.vault_audit_ship:StoredVaultAccess.ship": (
             "The worker copies the vault's own audit log into the ledger; the actor is the vault, "
             "and no person's request or reach is involved."

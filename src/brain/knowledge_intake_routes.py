@@ -70,6 +70,7 @@ from brain.core.department import SLUG_RE
 from brain.core.errors import Absent, Failed
 from brain.knowledge.app_parse_budget import app_parse_budget_bytes
 from brain.knowledge.chunk_store import ChunkStoreError
+from brain.knowledge.document_services import document_parts, door_services
 from brain.knowledge.ingest import (
     IngestRefused,
     ParseFailure,
@@ -495,9 +496,13 @@ async def queue_upload(
 
     length = request.headers.get("content-length")
     queue = queue_for(request)
+    # What the model server's chosen parts open is allowed through this door and no other: a file
+    # queued here is read by the worker, which can wait for a part to load, where the console's
+    # own single-file upload reads in this process and must not.
+    parts = await document_parts(sessions_of(request))
     try:
         assert_safe_filename(filename)
-        media_type = text_path_type(declared)
+        media_type = text_path_type(declared, door_services(parts))
         assert_declared_length(
             media_type=media_type,
             content_length=int(length) if length and length.isdigit() else None,

@@ -82,7 +82,7 @@ function RowMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${holdingTitle(row)}, ${who}`}>
+        <Button variant="quiet" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${holdingTitle(row)}, ${who}`}>
           <MoreHorizontal aria-hidden />
         </Button>
       </DropdownMenuTrigger>
@@ -233,7 +233,7 @@ export function ReviewPage() {
               <Button
                 key={decision}
                 size="sm"
-                variant={decision === "remove" ? "destructive" : "outline"}
+                variant={decision === "remove" ? "danger" : "outline"}
                 disabled={acts.busy}
                 onClick={() => {
                   acts.decideMany(selected, decision);

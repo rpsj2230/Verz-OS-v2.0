@@ -13,7 +13,7 @@
  * and the kind and state filters that narrowed one answer in the browser, which the list's column
  * choice and export replace for a list this short.
  *
- * Task ids: M27.7.12, M27.16.1
+ * Task ids: M27.7.12, M27.16.1, M27.16.2
  */
 
 import { Link } from "react-router-dom";
@@ -79,6 +79,7 @@ export function SubscribersPage() {
           )}
           <WholeList
             title={SUBSCRIBERS_HEADING}
+            hideTitle
             caption={SUBSCRIBERS_HEADING}
             columns={COLUMNS}
             rows={body.rows}

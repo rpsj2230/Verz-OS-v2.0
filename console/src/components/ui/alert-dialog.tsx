@@ -132,7 +132,7 @@ function AlertDialogDescription({ className, ...props }: ComponentProps<typeof A
 
 function AlertDialogAction({
   className,
-  variant = "default",
+  variant = "primary",
   size = "default",
   ...props
 }: ComponentProps<typeof AlertDialogPrimitive.Action> & Pick<ComponentProps<typeof Button>, "variant" | "size">) {

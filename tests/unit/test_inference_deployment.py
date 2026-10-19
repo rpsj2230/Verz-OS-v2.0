@@ -22,6 +22,7 @@ Task ids: none
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -36,10 +37,21 @@ from brain.ops.inference import (
     SERVED_MODELS,
     request_ceiling_bytes,
 )
+from brain.ops.model_server import config_from, environment, requirement
 from brain.ops.wiring import COMPONENTS, components_for
 
 REPO = Path(__file__).resolve().parents[2]
 COMPOSE = REPO / "docker-compose.inference.yml"
+
+#: `${NAME:-default}` as the compose file writes a figure the install chooses.
+_INTERPOLATED = re.compile(r"^\$\{([A-Z_]+):-([^}]*)\}(M?)$")
+
+
+def _default(written: object) -> str:
+    """What a variable falls back to when the install sets nothing, with any unit kept."""
+    found = _INTERPOLATED.match(str(written))
+    assert found is not None, f"{written!r} is not `${{NAME:-default}}`"
+    return f"{found.group(2)}{found.group(3)}"
 
 
 def _compose() -> dict[str, Any]:
@@ -65,9 +77,31 @@ def test_the_container_is_sized_to_the_component_it_is_budgeted_as() -> None:
     Delete this and the compose file can be edited to whatever makes a deployment start while
     `budget_breaches` keeps reporting the old figure."""
     declared = {c.name: c.memory_mib for c in COMPONENTS}
-    limit = _service()["deploy"]["resources"]["limits"]["memory"]
+    limit = _default(_service()["deploy"]["resources"]["limits"]["memory"])
 
-    assert int(str(limit).rstrip("M")) == declared[INFERENCE_COMPONENT]
+    assert int(limit.rstrip("M")) == declared[INFERENCE_COMPONENT]
+    # And a third source, which is arithmetic rather than a copy of either: the default choice's
+    # own need, worked out from the parts and the largest document.
+    assert declared[INFERENCE_COMPONENT] == requirement(config_from()).limit_mib
+
+
+def test_every_figure_the_file_falls_back_to_is_the_default_choices() -> None:
+    """The compose file's defaults are what runs when nothing hands it a value, and the plan hands
+    it every one of them (`brain.ops.model_server.environment`). Held equal in one place: each
+    variable the file reads, with its default, against what the default choice produces. A
+    default that drifted would start a server sized for something other than what was costed.
+
+    Delete this and a figure in the file can be edited alone, so the server is costed at one size
+    and started at another when an install sets nothing."""
+    produced = dict(environment(config_from()))
+    declared = {
+        key: _default(value)
+        for key, value in _environment().items()
+        if isinstance(value, str) and value.startswith("${")
+    }
+
+    assert declared == produced
+    assert _default(_service()["memswap_limit"]) == f"{produced['INFERENCE_MEMORY_MIB']}M"
 
 
 def test_the_request_ceiling_in_the_file_is_the_one_the_arithmetic_produces() -> None:
@@ -85,7 +119,9 @@ def test_the_request_ceiling_in_the_file_is_the_one_the_arithmetic_produces() ->
     Delete this and the ceiling can be raised to whatever makes a large batch go through, the
     container is then promised memory the weights already hold, and the enforcement left is
     the kernel's."""
-    assert int(_environment()["INFERENCE_MAX_REQUEST_BYTES"]) == request_ceiling_bytes()
+    assert int(_default(_environment()["INFERENCE_MAX_REQUEST_BYTES"])) == request_ceiling_bytes(
+        config_from()
+    )
 
 
 def test_the_request_ceiling_sits_strictly_below_the_cgroup_limit_it_lives_under() -> None:
@@ -98,8 +134,8 @@ def test_the_request_ceiling_sits_strictly_below_the_cgroup_limit_it_lives_under
 
     Delete this and the gap can be closed to reclaim what looks like waste, and the container
     dies on its first request."""
-    ceiling = int(_environment()["INFERENCE_MAX_REQUEST_BYTES"])
-    limit_mib = int(str(_service()["deploy"]["resources"]["limits"]["memory"]).rstrip("M"))
+    ceiling = int(_default(_environment()["INFERENCE_MAX_REQUEST_BYTES"]))
+    limit_mib = int(_default(_service()["deploy"]["resources"]["limits"]["memory"]).rstrip("M"))
 
     assert ceiling < limit_mib * MIB
 
@@ -229,7 +265,11 @@ def test_every_model_the_file_names_is_one_the_budget_accounted_for() -> None:
         value for key, value in _environment().items() if key.endswith("_MODEL") and value.strip()
     }
 
-    assert named == declared, f"compose names {sorted(named)}, module declares {sorted(declared)}"
+    # Only the embedding model is named in the file: the other parts' models are chosen by the
+    # parts an install switches on and are found by the part itself, so the file names what it
+    # points the supervisor at and nothing else. Whatever it names is declared.
+    assert named == {"qwen3-embedding-0.6b"}
+    assert named <= declared, f"compose names {sorted(named)}, module declares {sorted(declared)}"
 
 
 def test_the_profiles_in_the_file_match_the_profiles_the_component_is_budgeted_in() -> None:

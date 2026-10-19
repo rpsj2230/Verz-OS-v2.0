@@ -11,7 +11,7 @@ Task ids: M17.1.5, M17.1.1
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -200,3 +200,107 @@ def test_a_reason_the_table_admits_is_a_reason_the_screen_can_say() -> None:
     spec.loader.exec_module(module)
     assert set(module.REASONS) == {one.value for one in DeadLetterReason}
     assert set(module.TRAFFIC_CLASSES) == {one.value for one in TrafficClass}
+
+
+@pytest.mark.needs_db
+def test_a_persons_ask_puts_one_job_back_through_the_drivers_retry_and_is_answered_once() -> None:
+    """**The control against the driver's own tables and `ops.setting`.** A database at head with
+    the queue installed, holding two failed jobs of a task nobody declared safe to run twice and a
+    live one. A person asks for one failed job and for the live one; the worker's minute puts the
+    failed one back on its queue with the arguments it already had, refuses the live one in an
+    answer rather than a run, writes both answers under the worker's name, and a second minute
+    over the same rows does nothing.
+
+    Delete this and the SQL that reads the asks could name a column `ops.setting` does not have,
+    the driver's retry could be asked for a job it refuses, or the answer's row could be written
+    in a shape the screen cannot read back."""
+    import json
+
+    import psycopg
+
+    from brain.ops.queue import install_queue
+    from brain.ops.recovery_run import run_queue_redrive_now
+    from brain.ops.redrive_control import ANSWERED_NAMESPACE, ASKED_NAMESPACE
+    from tests.fixtures.scratch_postgres import sql
+
+    with at_head("brain_redrive") as url:
+        install_queue(url, pool_max=5)
+        with psycopg.connect(url, autocommit=True, options="-c search_path=ops") as conn:
+
+            def one(statement: str, *params: object) -> int:
+                row = conn.execute(statement, params or None).fetchone()
+                assert row is not None
+                return int(row[0])
+
+            worker = one("INSERT INTO procrastinate_workers DEFAULT VALUES RETURNING id")
+
+            def job(status: str) -> int:
+                made = one(
+                    "INSERT INTO procrastinate_jobs (queue_name, task_name, args) "
+                    "VALUES ('system', %s, '{\"keep\": 1}') RETURNING id",
+                    CONTROL_TASK,
+                )
+                conn.execute(
+                    "UPDATE procrastinate_jobs SET status = 'doing', worker_id = %s WHERE id = %s",
+                    (worker, made),
+                )
+                if status == "failed":
+                    conn.execute(
+                        "UPDATE procrastinate_jobs SET status = 'failed' WHERE id = %s", (made,)
+                    )
+                return made
+
+            failed = job("failed")
+            also_failed = job("failed")
+            live = job("doing")
+
+        def ask(job_id: int, at: datetime) -> None:
+            sql(
+                url,
+                "INSERT INTO ops.setting (key, value_type, value, description, updated_by) "
+                "VALUES (%s, 'string', to_jsonb(%s::text), 'when asked', 'u_admin')",
+                f"{ASKED_NAMESPACE}.job_{job_id}",
+                at.isoformat(),
+            )
+
+        ask(failed, datetime.now(tz=UTC) - timedelta(minutes=1))
+        ask(live, datetime.now(tz=UTC) - timedelta(minutes=1))
+
+        def minute() -> tuple[tuple[str, ...], tuple[str, ...]]:
+            # The worker's own entry point, so the sweep's decisions are made first and the asks
+            # carried out after them, as the schedule runs it.
+            swept = run_queue_redrive_now(url, now=datetime.now(tz=UTC))
+            return swept.asked.put_back, swept.asked.could_not
+
+        first = minute()
+        statuses = {
+            str(r[0]): (str(r[1]), r[2])
+            for r in sql(url, "SELECT id, status, args FROM ops.procrastinate_jobs ORDER BY id")
+        }
+        answers = {
+            str(r[0]): r[1]
+            for r in sql(
+                url,
+                "SELECT key, value FROM ops.setting WHERE starts_with(key, %s) ORDER BY key",
+                f"{ANSWERED_NAMESPACE}.",
+            )
+        }
+        written_by = sql(
+            url,
+            "SELECT DISTINCT updated_by FROM ops.setting WHERE starts_with(key, %s)",
+            f"{ANSWERED_NAMESPACE}.",
+        )
+        second = minute()
+
+    assert first == ((str(failed),), (str(live),))
+    assert second == ((), ())
+    assert statuses[str(failed)][0] == "todo"
+    assert statuses[str(failed)][1] == {"keep": 1}
+    assert statuses[str(also_failed)][0] == "failed"
+    assert statuses[str(live)][0] == "doing"
+    assert {key.rsplit(".", 1)[1]: bool(value["put_back"]) for key, value in answers.items()} == {
+        f"job_{failed}": True,
+        f"job_{live}": False,
+    }
+    assert all(json.dumps(value) for value in answers.values())
+    assert written_by == [("system",)]

@@ -21,7 +21,7 @@
  * **What was removed.** The breadcrumb as text, the file digest as a default column (a column a
  * reader turns on), and the per-row "Available." prefix (a pill now).
  *
- * Task ids: M27.8.16, M27.9.4, M27.16.1
+ * Task ids: M27.8.16, M27.9.4, M27.16.1, M27.16.3
  */
 
 import { Download, Upload } from "lucide-react";
@@ -281,6 +281,7 @@ function Transfer({ page, onTaken }: { readonly page: DataTransferBody; readonly
         {page.exportable ? <ExportForm page={page} onTaken={onTaken} /> : <Note>{NOT_EXPORTABLE}</Note>}
       </SectionCard>
       <WholeList
+        exportName="your-exports"
         title="Your exports"
         caption="Your exports"
         columns={EXPORT_COLUMNS}
@@ -292,6 +293,7 @@ function Transfer({ page, onTaken }: { readonly page: DataTransferBody; readonly
         footer={<Line>{page.own_exports_told}</Line>}
       />
       <WholeList
+        exportName="export-catalogue"
         title={CATALOGUE_HEADING}
         caption={CATALOGUE_HEADING}
         columns={CATALOGUE_COLUMNS}

@@ -9,13 +9,27 @@
  * install sent without its confirmation or with a digest the page did not read, a built-in
  * template offered an install it cannot have, and "coming soon" said of a route that has arrived.
  *
- * Task ids: M27.8.6, M27.11.7, M27.16.1
+ * **Installing is a stepped wizard whose draft survives leaving the page**, so the install is walked
+ * here step by step, and the draft is read back out of the flow memory as the page keeps it: per
+ * person, in this tab only, never a secret, removed on install, on starting again and on sign-out.
+ *
+ * Task ids: M27.8.6, M27.11.7, M27.16.1, M27.15.68
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
-import { NO_INSTALLABLE_VERSION } from "../src/pages/agent-templates/AgentTemplateDetailPage";
+import {
+  CHANNELS_STEP,
+  CHECK_STEP,
+  DRAFT_IS_KEPT,
+  FIND_STEP,
+  NAME_STEP,
+  NO_INSTALLABLE_VERSION,
+  PICKED_UP_WHERE_YOU_WERE,
+  START_AGAIN,
+  installDraftKey,
+} from "../src/pages/agent-templates/AgentTemplateDetailPage";
 import { ACT_LABELS, originWords, UNAVAILABLE } from "../src/pages/agent-templates/templateActions";
 import { NO_TEMPLATES } from "../src/pages/AgentTemplates";
 import { readTemplates } from "../src/pages/agentTemplatesQuery";
@@ -26,6 +40,7 @@ import { installRadixStubs } from "./support/radix";
 const CONSOLE_ORIGIN = "https://console.test";
 const DIGEST = "d".repeat(64);
 const PUBLISHER = "u_publisher_sentinel";
+const INSTALLER = "u_installer_sentinel";
 
 beforeAll(async () => {
   installRadixStubs();
@@ -56,6 +71,7 @@ const LIST = { items: [card("pricing_desk", "Pricing desk", { origin: "published
 
 async function consoleAt(path: string, gets: Readonly<Record<string, { status?: number; body: unknown }>> = {}): Promise<{ container: HTMLElement; idp: FakeIdp; router: ReturnType<typeof createMemoryRouter> }> {
   const answers: Record<string, { status?: number; body: unknown }> = {
+    "/api/v1/me": { body: { principal_id: INSTALLER, display_name: "Installer", assurance: "strong", channel: "web", ent_hash: "f".repeat(64), withheld_verbs: [], second_factor_needed: false } },
     "/api/v1/agent-templates": { body: LIST },
     "/api/v1/agent-templates/pricing_desk": { body: detail() },
     "/api/v1/agent-templates/pricing_desk/versions/3": {
@@ -97,6 +113,15 @@ function posts(idp: FakeIdp): { path: string; body: unknown }[] {
   return idp.calls
     .filter((call) => call.init?.method === "POST" && new URL(call.url, CONSOLE_ORIGIN).pathname.startsWith("/api/"))
     .map((call) => ({ path: new URL(call.url, CONSOLE_ORIGIN).pathname, body: JSON.parse(String(call.init?.body)) as unknown }));
+}
+
+/** Press Next from the first step to the one that asks where the agent answers. */
+async function walkToChannels(): Promise<void> {
+  await screen.findByRole("heading", { name: NAME_STEP });
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await screen.findByRole("heading", { name: FIND_STEP });
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await screen.findByRole("heading", { name: CHANNELS_STEP });
 }
 
 function outsideAdvanced(container: HTMLElement): string {
@@ -171,13 +196,17 @@ describe("one template's page", () => {
 
   test("installing sends the digest the page read, only from its confirmation, and opens the new agent", async () => {
     // What breaks if this is deleted: an install of a version the person did not see, or one sent
-    // from a single press.
+    // from a single press, or one sent by walking the steps with Next.
     const { idp, router } = await consoleAt("/agent-templates/pricing_desk");
 
+    await walkToChannels();
     const boxes = await screen.findAllByRole("checkbox", { name: /Web console|Lark/ });
     expect(boxes.map((one) => (one as HTMLInputElement).checked)).toEqual([false, false]);
     expect(document.body.textContent).toContain("NO-CHANNEL-SENTENCE");
     fireEvent.click(screen.getByRole("checkbox", { name: "Web console" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(posts(idp)).toEqual([]);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: ACT_LABELS.install }));
     });
@@ -209,3 +238,126 @@ describe("one template's page", () => {
     expect(screen.queryByRole("button", { name: ACT_LABELS.install })).toBeNull();
   });
 });
+
+describe("the install is a stepped wizard whose draft survives leaving the page", () => {
+  test("it asks one thing at a time, in order, and the last step is the one that installs", async () => {
+    // What breaks if this is deleted: the install drawn as one long form again, or a last step with
+    // no summary of what is about to be installed, or Next installing on its own.
+    await consoleAt("/agent-templates/pricing_desk");
+    await screen.findByRole("heading", { name: NAME_STEP });
+    expect(screen.getByText("Step 1 of 4")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: ACT_LABELS.install })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await screen.findByRole("heading", { name: FIND_STEP });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await screen.findByRole("heading", { name: CHANNELS_STEP });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await screen.findByRole("heading", { name: CHECK_STEP });
+    expect(screen.getByText("Step 4 of 4")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Next" })).toBeNull();
+    expect(screen.getByRole("button", { name: ACT_LABELS.install })).toBeTruthy();
+    expect(document.body.textContent).toContain("Nowhere yet");
+  });
+
+  test("a version that offers no channel has no step for them", async () => {
+    // What breaks if this is deleted: an empty "Where it answers" step with nothing on it.
+    await consoleAt("/agent-templates/pricing_desk", {
+      "/api/v1/agent-templates/pricing_desk/versions/3": {
+        body: { template_id: "pricing_desk", version: 3, display_name: "Pricing desk", summary: null, content_digest: DIGEST, starts: "STARTS-SENTENCE", unavailable: null, channels: [], channels_note: "" },
+      },
+    });
+    await screen.findByRole("heading", { name: NAME_STEP });
+    expect(screen.getByText("Step 1 of 3")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: CHANNELS_STEP })).toBeNull();
+  });
+
+  test("leaving the page and coming back finds the step and the answers, and Start again clears them", async () => {
+    // What breaks if this is deleted: the owner's ask for this wizard, that a draft survives leaving
+    // the page. Somebody who goes to check a name elsewhere would find an empty form on their return.
+    const { router } = await consoleAt("/agent-templates/pricing_desk");
+    await screen.findByRole("heading", { name: NAME_STEP });
+    fireEvent.change(screen.getByLabelText("Name of the new agent"), { target: { value: "My pricing desk" } });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await screen.findByRole("heading", { name: FIND_STEP });
+    fireEvent.click(screen.getByRole("checkbox", { name: "For my department" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await screen.findByRole("heading", { name: CHANNELS_STEP });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Lark" }));
+
+    await act(async () => {
+      await router.navigate("/agent-templates");
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("heading", { name: CHANNELS_STEP })).toBeNull();
+    });
+    await act(async () => {
+      await router.navigate("/agent-templates/pricing_desk");
+    });
+    await screen.findByRole("heading", { name: CHANNELS_STEP });
+    expect((screen.getByRole("checkbox", { name: "Lark" }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole("checkbox", { name: "Web console" }) as HTMLInputElement).checked).toBe(false);
+    expect(document.body.textContent).toContain(PICKED_UP_WHERE_YOU_WERE);
+    expect(document.body.textContent).toContain(DRAFT_IS_KEPT);
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    await screen.findByRole("heading", { name: FIND_STEP });
+    expect((screen.getByRole("checkbox", { name: "For my department" }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    await screen.findByRole("heading", { name: NAME_STEP });
+    expect((screen.getByLabelText("Name of the new agent") as HTMLInputElement).value).toBe("My pricing desk");
+
+    fireEvent.click(screen.getByRole("button", { name: START_AGAIN }));
+    await screen.findByRole("heading", { name: NAME_STEP });
+    expect((screen.getByLabelText("Name of the new agent") as HTMLInputElement).value).toBe("Pricing desk");
+    expect((await memory()).recallFlow(installDraftKey(INSTALLER, "pricing_desk", 3))).toBeUndefined();
+  });
+
+  test("the draft is kept under the person and holds a name, a tick and some channels and nothing else", async () => {
+    // What breaks if this is deleted: a draft that anybody in the tab could be handed, or one that
+    // grows a field a credential could be put in. Read out of the memory exactly as the page wrote it.
+    await consoleAt("/agent-templates/pricing_desk");
+    await screen.findByRole("heading", { name: NAME_STEP });
+    fireEvent.change(screen.getByLabelText("Name of the new agent"), { target: { value: "Kept name" } });
+    const kept = (await memory()).recallFlow<Record<string, unknown>>(installDraftKey(INSTALLER, "pricing_desk", 3));
+    expect(Object.keys(kept ?? {}).sort()).toEqual(["at", "channels", "forDepartment", "name"]);
+    expect(kept).toMatchObject({ name: "Kept name", at: 0, forDepartment: false, channels: [] });
+    // Another person's key is another entry, and nobody's key is no entry at all.
+    expect((await memory()).recallFlow(installDraftKey("somebody-else", "pricing_desk", 3))).toBeUndefined();
+    expect(installDraftKey(null, "pricing_desk", 3)).toBeNull();
+    expect(installDraftKey(INSTALLER, "pricing_desk", 3)).not.toBe(installDraftKey(INSTALLER, "pricing_desk", 4));
+  });
+
+  test("installing removes the draft, and so does signing out", async () => {
+    // What breaks if this is deleted: a finished install that reopens half way, or what one person
+    // typed still in memory when the next sits down in the same tab.
+    const first = await consoleAt("/agent-templates/pricing_desk");
+    await walkToChannels();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Web console" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect((await memory()).recallFlow(installDraftKey(INSTALLER, "pricing_desk", 3))).toBeDefined();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: ACT_LABELS.install }));
+    });
+    const dialog = await screen.findByRole("alertdialog");
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: ACT_LABELS.install }));
+    });
+    await waitFor(() => {
+      expect(first.router.state.location.pathname).toBe("/agents/pricing_desk_1");
+    });
+    expect((await memory()).recallFlow(installDraftKey(INSTALLER, "pricing_desk", 3))).toBeUndefined();
+
+    await act(async () => {
+      await first.router.navigate("/agent-templates/pricing_desk");
+    });
+    await screen.findByRole("heading", { name: NAME_STEP });
+    fireEvent.change(screen.getByLabelText("Name of the new agent"), { target: { value: "Half typed" } });
+    expect((await memory()).recallFlow(installDraftKey(INSTALLER, "pricing_desk", 3))).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    expect((await memory()).recallFlow(installDraftKey(INSTALLER, "pricing_desk", 3))).toBeUndefined();
+  });
+});
+
+/** The flow memory as the page under test sees it: sign-in resets the module registry. */
+async function memory(): Promise<typeof import("../src/components/kit/flowMemory")> {
+  return import("../src/components/kit/flowMemory");
+}

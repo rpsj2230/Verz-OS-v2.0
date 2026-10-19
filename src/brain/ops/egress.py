@@ -65,7 +65,9 @@ from brain.ops.pii import (
     PRESIDIO_LANGUAGE,
     Detection,
     PiiError,
+    decode_entity_spans,
     detect,
+    entity_request,
     merge_detections,
 )
 
@@ -107,6 +109,17 @@ DETECTIONS_ARE_COUNTED_AND_NEVER_OBEYED: Final = (
 #: install's own network, it answers a question's worth of text in tens of milliseconds when it is
 #: up, and a person waiting on an answer should not wait longer than this for a leg that only adds.
 ANALYSER_BUDGET_SECONDS: Final = 2.0
+
+#: The same, where the install's entity model is one of the legs. A model reads text in windows on
+#: a CPU and takes the better part of a second for each, so the two seconds that suit a pattern
+#: engine would give it up on the first long passage and the leg would never be heard from. Six is
+#: a judgement, not a measurement (nothing here has run the model), and a call that goes over it
+#: loses only what the leg would have added: the rules' scrub goes ahead.
+ENTITY_BUDGET_SECONDS: Final = 6.0
+
+#: The entity part's path, as the model server serves it. Spelled as
+#: `brain.ops.model_server.PATH_OF_PART[Part.ENTITIES]`, which a test holds equal.
+ENTITIES_PATH: Final = "/entities"
 
 #: The analyser's path, as the deployed service serves it.
 ANALYSE_PATH: Final = "/analyze"
@@ -199,6 +212,99 @@ def analyser(address: str, client: httpx.Client) -> Detector:
     return ask
 
 
+def entities(address: str, client: httpx.Client) -> Detector:
+    """The install's entity model at `address`, asked for the labels `brain.ops.pii` declares.
+
+    The request is `pii.entity_request` and the answer is read by `pii.decode_entity_spans`, which
+    holds each span to its label's own threshold and refuses one that is not an offset into the text
+    or a label nobody asked for. A server that does not answer, answers anything but a 200 or
+    answers something that is not JSON is `AnalyserUnavailableError`; one that answers and is not
+    understood is `PiiError`. Either leaves the rules' scrub, which is the whole of how this leg
+    degrades (`THE_ANALYSER_ONLY_EVER_ADDS`).
+    """
+    url = f"{address.rstrip('/')}{ENTITIES_PATH}"
+
+    def ask(text: str, *, timeout_seconds: float) -> Sequence[Detection]:
+        import httpx
+
+        request = entity_request(text)
+        body = {
+            key: list(value) if isinstance(value, tuple) else value
+            for key, value in request.items()
+        }
+        try:
+            response = client.post(url, json=body, timeout=timeout_seconds)
+        except httpx.HTTPError:
+            raise AnalyserUnavailableError from None
+        if response.status_code != ANALYSED:
+            raise AnalyserUnavailableError
+        try:
+            payload = response.json()
+        except ValueError:
+            raise AnalyserUnavailableError from None
+        if not isinstance(payload, Mapping):
+            msg = "the entity model's answer is not an object"
+            raise PiiError(msg)
+        return decode_entity_spans(text, payload)
+
+    return ask
+
+
+@dataclass(frozen=True)
+class Detectors:
+    """Detectors asked one after another, each only adding to what the ones before found.
+
+    **A leg that fails costs its own additions and nothing else.** Each is asked within what is left
+    of the time it was given, a leg that is down or unreadable is passed over, and the call fails
+    (`AnalyserUnavailableError`) only when none answered, so the caller falls back to the rules
+    exactly as it does for a single analyser. The first leg's spans are kept whole and the later
+    ones add where nothing was found (`pii.merge_detections`), so a model's extent can never move a
+    pattern's.
+
+    `budget_seconds` is how long the whole of a request may spend here, read by `scrub_for_egress`
+    in place of `ANALYSER_BUDGET_SECONDS` when it is present.
+    """
+
+    legs: tuple[Detector, ...]
+    budget_seconds: float = ANALYSER_BUDGET_SECONDS
+    clock: Callable[[], float] = time.monotonic
+
+    def __call__(self, text: str, *, timeout_seconds: float) -> Sequence[Detection]:
+        deadline = self.clock() + timeout_seconds
+        found: tuple[Detection, ...] = ()
+        answered = 0
+        for leg in self.legs:
+            remaining = deadline - self.clock()
+            if remaining <= 0:
+                break
+            try:
+                added = leg(text, timeout_seconds=remaining)
+            except (AnalyserUnavailableError, PiiError):
+                continue
+            found = merge_detections(found, added)
+            answered += 1
+        if not answered:
+            raise AnalyserUnavailableError
+        return found
+
+
+def detector_for(
+    *, analyser_detector: Detector | None, entity_detector: Detector | None
+) -> Detector | None:
+    """The detector a transport scrubs with: the analyser, the entity model, both, or none.
+
+    None where neither is deployed, which is the rules alone. The analyser alone is returned as it
+    is, so an install with only the analyser behaves exactly as it did before the entity model
+    existed.
+    """
+    if entity_detector is None:
+        return analyser_detector
+    legs = tuple(one for one in (analyser_detector, entity_detector) if one is not None)
+    # Always wrapped when the entity model is a leg, so the longer budget it needs applies even
+    # where it is the only one.
+    return Detectors(legs=legs, budget_seconds=ENTITY_BUDGET_SECONDS)
+
+
 # ------------------------------------------------------------------------ the scrub
 @dataclass(frozen=True)
 class EgressScrub:
@@ -234,7 +340,7 @@ def scrub_for_egress(
     numbered: Counter[str] = Counter()
     found: Counter[str] = Counter()
     analysed = detector is not None
-    deadline = clock() + ANALYSER_BUDGET_SECONDS
+    deadline = clock() + getattr(detector, "budget_seconds", ANALYSER_BUDGET_SECONDS)
     out: list[str] = []
     for text in texts:
         spans = detect(text)

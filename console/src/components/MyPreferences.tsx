@@ -8,7 +8,7 @@
  * a refusal in the API's words. Switching learning off says what it costs and removes nothing.
  * Quiet hours say they never hold an approval.
  *
- * Task ids: M40.4.1.4, M40.5.2.1, M40.5.2.2, M40.5.2.3, M40.5.2.4
+ * Task ids: M40.4.1.4, M40.5.2.1, M40.5.2.2, M40.5.2.3, M40.5.2.4, M27.16.2
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -118,7 +118,7 @@ export function MyPreferences() {
               );
             }}
           >
-            <h3>Channels</h3>
+            <h3>Where you are told</h3>
             {saved.channels.length === 0 ? (
               <p className="note">{NO_CHANNELS}</p>
             ) : (

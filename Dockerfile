@@ -149,6 +149,7 @@ COPY --chown=brain:brain docker-compose.objectstore.yml /app/ops/deploy/overlays
 COPY --chown=brain:brain docker-compose.langfuse.yml /app/ops/deploy/overlays/docker-compose.langfuse.yml
 COPY --chown=brain:brain docker-compose.sandbox.yml /app/ops/deploy/overlays/docker-compose.sandbox.yml
 COPY --chown=brain:brain docker-compose.automation.yml /app/ops/deploy/overlays/docker-compose.automation.yml
+COPY --chown=brain:brain docker-compose.inference.yml /app/ops/deploy/overlays/docker-compose.inference.yml
 # The settings files those compose files mount, which each overlay's preparation puts on the
 # server where they are missing (ops/deploy/overlays/langfuse.prepare.sh, objectstore.prepare.sh and
 # automation.prepare.sh): the ledger's memory ceiling, the object store's provisioning script and

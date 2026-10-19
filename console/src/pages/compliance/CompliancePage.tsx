@@ -13,7 +13,7 @@
  * deadline would be a second opinion on a legal deadline. **The tally is drawn as the API released
  * it**: a suppressed month says it is suppressed and draws no number.
  *
- * Task ids: M24.2.2, M24.2.3, M24.2.4, M27.16.1, M8.3.2
+ * Task ids: M24.2.2, M24.2.3, M24.2.4, M27.16.1, M8.3.2, M27.16.3
  */
 
 import { FileWarning, MoreHorizontal, Plus } from "lucide-react";
@@ -179,6 +179,7 @@ function TopicsView({ onDone, version }: { readonly onDone: (told: string) => vo
           <Note>{NO_TOPICS}</Note>
         ) : (
           <EntityTable
+            exportName="sensitive-topic-routing"
             caption="Who each sensitive topic is routed to"
             columns={columns}
             rows={topics.topics}
@@ -187,7 +188,7 @@ function TopicsView({ onDone, version }: { readonly onDone: (told: string) => vo
             rowActions={(one) => (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${one.label}`}>
+                  <Button variant="quiet" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${one.label}`}>
                     <MoreHorizontal aria-hidden />
                   </Button>
                 </DropdownMenuTrigger>
@@ -237,7 +238,7 @@ function Source({ row, people }: { readonly row: RegisterRow; readonly people: R
           {row.problem === "" ? null : <Fact label="Problem">{row.problem}</Fact>}
         </FactList>
         {row.entities.length === 0 ? null : (
-          <EntityTable caption={`What ${row.label} reads, by entity`} columns={entities} rows={row.entities} rowId={(one) => one.entity} rowLabel={(one) => one.entity} />
+          <EntityTable exportName="reads-by-entity" caption={`What ${row.label} reads, by entity`} columns={entities} rows={row.entities} rowId={(one) => one.entity} rowLabel={(one) => one.entity} />
         )}
       </div>
     </SectionCard>

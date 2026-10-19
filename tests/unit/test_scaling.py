@@ -388,10 +388,16 @@ def test_a_report_nobody_measured_is_not_due_and_a_slow_one_is():
 
 def test_the_hosts_are_split_exactly_when_the_profile_does_not_fit_the_measured_machine():
     """Delete this and the memory trigger stops agreeing with `brain.ops.wiring`, which is the
-    module that has the measurement. Lite fits and standard does not, on the host recorded
-    there today."""
+    module that has the measurement. Lite and standard fit and full does not, on the host
+    recorded there today. Standard stopped being over on 2026-10-14, when the model server left
+    every profile to become an optional service that holds one part at a time (its three
+    models resident at once were 3,072 MiB of standard's total), so the line this test draws
+    moved with a decision and not with a measurement, and the test says which.
+
+    The pair that must stay true is the last two together: the answer is a function of the
+    profile's own components and nothing else, so a profile that is over reads as due."""
     assert not host_split_is_due("lite")
-    assert host_split_is_due("standard")
+    assert not host_split_is_due("standard")
     assert host_split_is_due("full")
 
 

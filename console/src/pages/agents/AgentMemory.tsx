@@ -115,10 +115,10 @@ function MemoryRow({
         {item.aboutYou ? <span>about you</span> : null}
         {item.changeable ? (
           <span className="ml-auto flex gap-1">
-            <Button variant="ghost" size="xs" aria-expanded={editing} onClick={() => setEditing((was) => !was)}>
+            <Button variant="quiet" size="xs" aria-expanded={editing} onClick={() => setEditing((was) => !was)}>
               Correct
             </Button>
-            <Button variant="ghost" size="xs" onClick={() => onAsk({ kind: "delete", item })}>
+            <Button variant="quiet" size="xs" onClick={() => onAsk({ kind: "delete", item })}>
               Delete
             </Button>
           </span>
@@ -225,7 +225,7 @@ function Tiers({ memory, onAsk }: { readonly memory: Memory; readonly onAsk: (as
                 <span className="text-dim">{dayWords(one.learnedAt)}</span>
                 {one.inEffect ? null : <span className="text-dim">undone</span>}
                 {one.undoOffered ? (
-                  <Button className="ml-auto" variant="ghost" size="xs" onClick={() => onAsk({ kind: "undo", memoryId: one.memoryId, change: one.change })}>
+                  <Button className="ml-auto" variant="quiet" size="xs" onClick={() => onAsk({ kind: "undo", memoryId: one.memoryId, change: one.change })}>
                     Undo
                   </Button>
                 ) : null}
@@ -246,7 +246,7 @@ function Tiers({ memory, onAsk }: { readonly memory: Memory; readonly onAsk: (as
                 {one.state === undefined ? null : <span className="text-dim">{PROMOTION_STATE_WORDS[one.state] ?? one.state}</span>}
                 {one.agreeing === undefined ? null : <span className="text-dim">{agreeingWords(one.agreeing)}</span>}
                 {one.promoteOffered ? (
-                  <Button className="ml-auto" variant="ghost" size="xs" onClick={() => onAsk({ kind: "promote", memoryId: one.memoryId, change: one.change })}>
+                  <Button className="ml-auto" variant="quiet" size="xs" onClick={() => onAsk({ kind: "promote", memoryId: one.memoryId, change: one.change })}>
                     {PROMOTE}
                   </Button>
                 ) : null}

@@ -235,13 +235,14 @@ export const AREAS: Readonly<Record<string, Area>> = {
     routes: [
       "/api/v1/install",
       "/api/v1/install/settings*",
+      "/api/v1/install/model-server",
       "/api/v1/install/limits",
       "/api/v1/install/tuning*",
       "/api/v1/install/capacity",
       "/api/v1/digest/destination",
       "/setup/*",
     ],
-    tables: ["ops.setting", "ops.budget_version", "ops.budget_stop"],
+    tables: ["ops.setting", "ops.budget_version", "ops.budget_stop", "ops.model_server_peak"],
     installation: [
       "INSTALL_LOCALES",
       "INSTALL_CURRENCY",
@@ -249,6 +250,10 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "INSTALL_DIGEST_DESTINATION",
       "INSTALL_DIGEST_TIME",
       "INSTALL_SERVICES",
+      "INSTALL_MODEL_PARTS",
+      "INSTALL_MODEL_IDLE_SECONDS",
+      "INSTALL_MODEL_MEMORY_MIB",
+      "INSTALL_MODEL_UPLOAD_MB",
     ],
     gaps: [
       {
@@ -799,8 +804,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
         because: "The route says no_run_can_be_stopped: a control runs to its end inside the worker's tick and there is nothing to signal.",
       },
       {
-        what: "The interrupted actions a stopped worker left unconfirmed are served and no screen draws them or resolves one yet.",
-        leaf: "M27.15.46",
+        what: "A person cannot mark an interrupted action resolved by their word, and nothing sends one again.",
+        because:
+          "An action whose result is unknown leaves that state only by being checked against the system it went to (brain.ops.idempotency.UNKNOWN_IS_NOT_FAILED). Whether a person's word may stand in for that check is the owner's question (needs-rupash 188, item 5), and it is not decided here.",
       },
     ],
   },
