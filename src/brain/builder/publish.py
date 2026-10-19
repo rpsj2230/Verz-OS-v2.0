@@ -79,7 +79,7 @@ against the real gate, leash and redactor, and nothing in this repository assemb
 M20.3.4 wants a measured cost, which is a figure the run produces and there is no run. None of
 the three is claimed.
 
-Task ids: M20.3.3, M20.4.1, M20.4.2, M20.4.3, M20.4.4, M20.4.5, M20.4.6
+Task ids: M20.3.3, M20.4.1, M20.4.2, M20.4.3, M20.4.4, M20.4.5, M20.4.6, M20.5.2
 """
 
 from __future__ import annotations
@@ -95,6 +95,7 @@ from typing import Any, Final
 from brain.agents.template import MANIFEST_PATHS
 from brain.audit.ledger import changed_fields
 from brain.builder.compose import BuilderError
+from brain.builder.run_cost import cost_of_document
 from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.core.entitlement import EntitlementSet
@@ -679,6 +680,11 @@ class PublishRecord:
     paths: tuple[str, ...]
     rung: AutonomyTier
     approvers: tuple[str, ...]
+    #: What one run of the version cost, priced as the publish gate priced it, in minor units of
+    #: the install's currency (M20.5.2). A figure about the version and not about anybody's data,
+    #: and `None` for a version whose document names no tier this install can price. See
+    #: `brain.builder.run_cost.A_PRICED_RUN_IS_NOT_A_MEASURED_ONE`.
+    cost_minor: int | None = None
 
     def __post_init__(self) -> None:
         if not self.actor_id.strip():
@@ -701,6 +707,7 @@ def record_publish(
     after: Mapping[str, object],
     decision: PublishDecision,
     approvers: Iterable[str] = (),
+    cost_minor: int | None = None,
 ) -> PublishRecord:
     """The record of one publish (M20.4.6).
 
@@ -719,6 +726,7 @@ def record_publish(
         paths=changed_fields(before, after),
         rung=decision.rung,
         approvers=tuple(approvers),
+        cost_minor=cost_minor,
     )
 
 
@@ -791,6 +799,7 @@ def publication_history(
                     refusals=(),
                 ),
                 approvers=named,
+                cost_minor=cost_of_document(one.document),
             )
         )
         before = after

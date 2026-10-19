@@ -35,7 +35,7 @@ because the gallery reads the reader's installs back and marks the card. What it
 is anything that runs, and the gallery says so in words: see
 `NOTHING_RUNS_AN_INSTALLED_AUTOMATION_YET`.
 
-Task ids: M39.6.1.3
+Task ids: M39.6.1.3, M39.9.2.3
 """
 
 from __future__ import annotations
@@ -51,6 +51,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.agent_routes import one_agent, record_of, viewer_of
+from brain.agents.attachments import narrowed
 from brain.agents.model import AgentRecord, visible_agent_ids
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked, Asking
@@ -73,6 +74,7 @@ from brain.console.automation_gallery import (
 )
 from brain.core.errors import Absent, Failed
 from brain.ops.agent_automation_store import Installed, StoredAgentAutomations
+from brain.ops.attachment_store import changes_in
 from brain.routing_routes import sessions_of
 
 log = structlog.get_logger()
@@ -221,7 +223,15 @@ class AutomationInstalls(Protocol):
 
 
 class StoredAgentRecords:
-    """`AgentRecords` over `agent.agent`, read the way `brain.agent_routes` reads one agent."""
+    """`AgentRecords` over `agent.agent`, read the way `brain.agent_routes` reads one agent.
+
+    **The record is the agent as a run carries it, folded over its stored attachments** exactly as
+    `brain.agent_roster` does before it builds a run's ceiling. An automation names tools and a
+    run offers skills off this record, so reading the manifest's tools alone would let a tool that
+    somebody detached from the agent be named on a new automation, and leave one they attached
+    unoffered. Rejected: narrowing in the one route that names tools, which would leave the gallery
+    and the Automations module reading a different agent from the one a run is made through.
+    """
 
     def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
         self._sessions = sessions
@@ -229,7 +239,10 @@ class StoredAgentRecords:
     async def agent(self, agent_id: str) -> AgentRecord | None:
         async with self._sessions() as session:
             row = (await session.execute(one_agent(agent_id))).scalar_one_or_none()
-        return None if row is None else record_of(row)
+            record = None if row is None else record_of(row)
+            if record is None:
+                return None
+            return narrowed(record, await changes_in(session, (agent_id,)))
 
 
 def _sessions(request: Request) -> async_sessionmaker[AsyncSession]:
