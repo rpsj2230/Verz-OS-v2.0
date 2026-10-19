@@ -190,6 +190,9 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.automation_authoring_routes:AutomationAuthors.author": (
             Repeat.WRITES_THIS_SYSTEMS_DATABASE
         ),
+        # The skills a run of an automation would be offered: the answer lane's own read of an
+        # agent's pins and the library, nothing written.
+        "brain.automation_skills:AutomationSkills.offered": Repeat.READS,
         # Starting and stopping an installed automation: a read of an agent's automations and a
         # write of its next run and the schedule row beside it, conditional on the next run shown,
         # so a second press finds the automation already moved and writes nothing.
@@ -203,6 +206,12 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.automations_routes:AutomationDirectory.every": Repeat.READS,
         "brain.automations_routes:AutomationDirectory.one": Repeat.READS,
         "brain.automations_routes:AutomationDirectory.apply": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # Who an agent is offered to beside its level: a read, and an offer or a withdrawal in this
+        # system's own table, where a second offer of a name that is live returns the first row and
+        # a second withdrawal finds none live and writes nothing.
+        "brain.agent_audience_routes:AudienceExtras.of": Repeat.READS,
+        "brain.agent_audience_routes:AudienceExtras.add": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.agent_audience_routes:AudienceExtras.remove": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         # The skill library: reads, and inserts into this system's own tables, where a second
         # import or decision is refused by the key and appends nothing, and an assignment writes
         # only when the install is the one it was decided about.

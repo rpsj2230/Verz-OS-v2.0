@@ -52,6 +52,10 @@ from brain.agent_artifact_routes import router as agent_artifact_router
 # it is pressed and written to the ledger with who, when and why.
 from brain.agent_attachment_routes import router as agent_attachment_router
 
+# Who an agent is offered to beside its level, from its Profile: the read, and the add and
+# withdraw behind the `agent_audience_extras` switch.
+from brain.agent_audience_routes import router as agent_audience_router
+
 # New agent and Edit as a draft: the builder's form, drafts saved as revisions, checked,
 # rehearsed and published, and the second person a wider publish waits for. See
 # `brain.agent_builder_routes`.

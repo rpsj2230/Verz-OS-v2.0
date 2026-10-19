@@ -12,8 +12,14 @@
  * with the agent in the body; the page asks the capabilities again after either, so the chips are
  * what the install now holds.
  *
+ * **The two sentences the page used to type are read from the API.** A skill chip carries why no run
+ * of the agent could use it (`not_used_because`, `brain.console.agent_behaviour.skill_standing`), and
+ * the body carries whether computer use is offered with the sentence to say either way
+ * (`computer_use`). Neither is a constant in the page, so neither can go on being right for the wrong
+ * reason the day a run starts to read skills or a desktop runner is added.
+ *
  * Task ids: M39.2.1.1, M39.2.1.3, M39.2.1.5, M39.2.2.1, M39.2.2.2, M39.2.2.3, M39.2.2.4
- * Task ids: M39.2.3.1, M39.2.3.3, M39.2.3.4, M39.3.1.1, M39.3.1.3, M39.3.1.4
+ * Task ids: M39.2.3.1, M39.2.3.3, M39.2.3.4, M39.3.1.1, M39.3.1.3, M39.3.1.4, M27.11.12, M27.15.32
  */
 
 /** Where one agent's capability detail is asked for, under the API base. */
@@ -60,6 +66,8 @@ export interface SkillChip {
   readonly review?: string;
   readonly runs: number;
   readonly detachable: boolean;
+  /** Why no run of this agent could use the skill; absent when nothing about the agent stops it. */
+  readonly notUsedBecause?: string;
 }
 
 export interface SkillOffer {
@@ -87,8 +95,15 @@ export interface KnowledgeSlice {
   readonly atLeast: boolean;
 }
 
+/** Whether computer use is offered, and the sentence to say either way: `ComputerUseView`. */
+export interface ComputerUse {
+  readonly offered: boolean;
+  readonly sentence: string;
+}
+
 export interface AgentCapabilities {
   readonly availability?: Availability;
+  readonly computerUse?: ComputerUse;
   readonly connectors: readonly ConnectorDetail[];
   readonly skills: readonly SkillChip[];
   readonly unusedSkills: readonly string[];
@@ -188,6 +203,7 @@ function readChip(value: unknown): SkillChip | null {
   const version = said(fields["version"]);
   const source = said(fields["source"]);
   const review = said(fields["review"]);
+  const notUsedBecause = said(fields["not_used_because"]);
   return {
     name,
     digest,
@@ -196,7 +212,17 @@ function readChip(value: unknown): SkillChip | null {
     ...(version === undefined ? {} : { version }),
     ...(source === undefined ? {} : { source }),
     ...(review === undefined ? {} : { review }),
+    ...(notUsedBecause === undefined ? {} : { notUsedBecause }),
   };
+}
+
+function readComputerUse(value: unknown): ComputerUse | undefined {
+  const fields = fieldsOf(value);
+  const sentence = said(fields?.["sentence"]);
+  if (fields === null || sentence === undefined || typeof fields["offered"] !== "boolean") {
+    return undefined;
+  }
+  return { offered: fields["offered"], sentence };
 }
 
 function readOffer(value: unknown): SkillOffer | null {
@@ -249,6 +275,7 @@ export function readAgentCapabilities(payload: unknown): AgentCapabilities | nul
   const availability = readAvailability(fields["availability"]);
   const knowledge = readKnowledge(fields["knowledge"]);
   const usageBasis = said(fields["usage_basis"]);
+  const computerUse = readComputerUse(fields["computer_use"]);
   return {
     connectors: each(fields["connectors"], readConnector),
     skills: each(fields["skills"], readChip),
@@ -258,6 +285,7 @@ export function readAgentCapabilities(payload: unknown): AgentCapabilities | nul
     ...(availability === undefined ? {} : { availability }),
     ...(knowledge === undefined ? {} : { knowledge }),
     ...(usageBasis === undefined ? {} : { usageBasis }),
+    ...(computerUse === undefined ? {} : { computerUse }),
   };
 }
 

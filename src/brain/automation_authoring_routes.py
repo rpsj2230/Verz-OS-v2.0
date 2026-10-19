@@ -15,8 +15,19 @@ draw the button and that fact is not a secret.
 
 **The options are the install's, narrowed to this agent.** The fields a condition may name are the
 projected fields of the connectors this agent is bound to and that are serving, so a field the agent
-could never read is not offered. The tools are exactly the agent's own allowed list. The templates
-are the product's. Nothing here is a count of anything the reader may not see.
+could never read is not offered. The tools are what a run of an automation of this reader's through
+this agent could be handed (`brain.console.automation_authoring.usable_tools`: the agent's own list,
+as its attached tools stand, projected over the reader's reach as an automation is admitted), and
+the skills are the ones the agent has attached and approved that such a run would be offered. The
+templates are the product's. Nothing here is a count of anything the reader may not see: a tool or
+a skill outside the reader's reach is absent from the lists, and naming one is refused in the words
+a tool that does not exist gets.
+
+**What may be named is held under either answer to needs-rupash 210.** Whether an instruction may
+be run with nobody present is the owner's question and is not decided here. The card says that
+anything the agent would write waits for a person, that skills are the agent's to change, and that
+the saved automation cannot be started yet while its task still declares what it needs, and nothing
+in this module starts a run.
 
 **Two refusals are not 404s and both write nothing.** What a person wrote may be unfit, and that
 is a 422 carrying every finding in words, because a form is edited and not debugged. A confirmation
@@ -49,6 +60,7 @@ from brain.agents.model import AgentRecord, visible_agent_ids
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked, Asking
 from brain.automation_gallery_routes import CONFIRMATION, agent_records_of
+from brain.automation_skills import skills_of
 from brain.console.automation_authoring import (
     A_REHEARSAL_WRITES_AND_SENDS_NOTHING,
     AUTHORED_TASK,
@@ -59,6 +71,8 @@ from brain.console.automation_authoring import (
     MAXIMUM_INSTRUCTION,
     MAXIMUM_TOOLS,
     NOTHING_FIRES_THIS_YET,
+    SKILLS_ARE_THE_AGENTS_TO_CHANGE,
+    WHAT_IT_MAY_USE_IS_THE_AGENTS_FOR_THIS_PERSON,
     WRITES_WAIT_FOR_A_PERSON,
     Authored,
     Authoring,
@@ -68,13 +82,16 @@ from brain.console.automation_authoring import (
     ConditionField,
     ConditionOp,
     TriggerChoice,
+    admitted_reach,
     authoring_of,
     compose,
     default_cadence,
     may_author,
     preview,
     rehearse,
+    run_reach,
     template_for,
+    usable_tools,
 )
 from brain.console.automation_gallery import (
     BUILT_IN,
@@ -92,6 +109,8 @@ from brain.ops.features import AUTOMATION_AUTHORING, is_on
 from brain.ops.features_declared.automation_events import AUTOMATION_EVENTS
 from brain.orchestration.unattended import TriggerKind
 from brain.routing_routes import sessions_of
+from brain.tools.registry import ToolRegistry
+from brain.tools.skills import SkillCard
 
 log = structlog.get_logger()
 
@@ -216,6 +235,16 @@ class FieldOption(BaseModel):
     ops: list[OpOption]
 
 
+class SkillOption(BaseModel):
+    """One skill a run through this agent would be offered. A card, never a body."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    version: str
+    description: str
+
+
 class AuthoringOptions(BaseModel):
     """Everything a form needs, and whether to draw it at all."""
 
@@ -225,12 +254,19 @@ class AuthoringOptions(BaseModel):
     templates: list[TemplateOption] = []
     triggers: list[TriggerOption] = []
     fields: list[FieldOption] = []
-    #: The tools this agent's own ceiling allows, and so the only ones an automation may name.
+    #: The tools an automation of this reader's through this agent could be handed, and so the only
+    #: ones it may name: the agent's own, projected at the reader's reach as an automation is
+    #: admitted.
     tools: list[str] = []
+    #: The skills the agent has attached and approved that such a run would be offered. Named for
+    #: the reader and never chosen: a run carries them as the agent has them that day.
+    skills: list[SkillOption] = []
     #: The connectors an event trigger may listen to: those this agent is bound to that serve.
     connectors: list[str] = []
     starts_paused: str = IT_STARTS_PAUSED
     writes_wait: str = WRITES_WAIT_FOR_A_PERSON
+    may_use: str = WHAT_IT_MAY_USE_IS_THE_AGENTS_FOR_THIS_PERSON
+    skills_rule: str = SKILLS_ARE_THE_AGENTS_TO_CHANGE
 
 
 class AuthoringRehearsalView(BaseModel):
@@ -259,11 +295,17 @@ class AuthoringPreviewView(BaseModel):
     nothing_fires: str | None
     condition: str | None
     tools: list[str]
+    #: The skills a run would be offered, by name, as the agent has them now.
+    skills: list[str]
     runs_as: str
     runs_as_name: str
     reach: list[str]
     starts_paused: str = IT_STARTS_PAUSED
     writes_wait: str = WRITES_WAIT_FOR_A_PERSON
+    skills_rule: str = SKILLS_ARE_THE_AGENTS_TO_CHANGE
+    #: Why it cannot be started on this install, in words, or null. Said here so the person does not
+    #: confirm a card that reads as live.
+    cannot_run: str | None
     rehearsal: list[AuthoringRehearsalView]
     rehearsal_rule: str = A_REHEARSAL_WRITES_AND_SENDS_NOTHING
     confirmation: str
@@ -325,6 +367,26 @@ class AutomationAuthors(Protocol):
     """What these routes need of `agent.automation`. `StoredAgentAutomations` implements it."""
 
     async def author(self, authoring: Authoring, *, ent_hash: str, trace_id: str) -> str: ...
+
+
+def _registry_of(request: Request) -> ToolRegistry | None:
+    """The tool registry `brain.app.lifespan` built, or None on a process with none."""
+    found = getattr(request.app.state, "tools", None)
+    return found if isinstance(found, ToolRegistry) else None
+
+
+def _usable_for(request: Request, agent: AgentRecord, asked: Asking) -> frozenset[str] | None:
+    """The tools a run of this reader's automation on this agent could be handed, or None when
+    there is no registry to ask, and then a tool is held to the agent's own list alone."""
+    registry = _registry_of(request)
+    if registry is None:
+        return None
+    return usable_tools(agent, registry, run_reach(asked.reach, agent), now=asked.now)
+
+
+async def _skills_for(request: Request, agent: AgentRecord, asked: Asking) -> tuple[SkillCard, ...]:
+    """The skills a run of this reader's automation on this agent would be offered."""
+    return await skills_of(request).offered(agent, reach=admitted_reach(asked.reach), now=asked.now)
 
 
 def _sessions(request: Request) -> async_sessionmaker[AsyncSession]:
@@ -430,6 +492,7 @@ def _authored_from(
     agent: AgentRecord,
     fields: Mapping[str, ConditionField],
     listenable: Collection[str],
+    usable: Collection[str] | None,
 ) -> Authored:
     """What was written, or `AuthoringRefusedError` carrying every reason."""
     template = template_for(body.template_id)
@@ -462,6 +525,7 @@ def _authored_from(
         fields=fields,
         template=template,
         listenable=listenable,
+        usable=usable,
     )
 
 
@@ -518,6 +582,7 @@ def preview_view(
         reach_words=shown.capabilities,
         now=asked.now,
         fields=fields,
+        skills=shown.skills,
     )
     return AuthoringPreviewView(
         agent_id=shown.agent_id,
@@ -535,6 +600,8 @@ def preview_view(
         ),
         condition=None if one.condition is None else one.condition.words(),
         tools=list(one.tools),
+        skills=list(shown.skills),
+        cannot_run=shown.cannot_run,
         runs_as=shown.runs_as.id,
         runs_as_name=shown.runs_as.display_name,
         reach=list(shown.capabilities),
@@ -567,6 +634,8 @@ async def authoring_options(request: Request, agent_id: str, asked: Asked) -> Au
     fields = await _fields_of(request, agent)
     serving = set((await connectors_of(request)).serving())
     events_on = await events_are_on(request)
+    usable = _usable_for(request, agent, asked)
+    skills = await _skills_for(request, agent, asked)
     return AuthoringOptions(
         enabled=True,
         templates=[
@@ -602,7 +671,11 @@ async def authoring_options(request: Request, agent_id: str, asked: Asked) -> Au
             )
             for one in sorted(fields.values(), key=lambda f: f.key)
         ],
-        tools=sorted(agent.authority.allowed_tools),
+        tools=sorted(agent.authority.allowed_tools if usable is None else usable),
+        skills=[
+            SkillOption(name=one.name, version=one.version, description=one.description)
+            for one in skills
+        ],
         connectors=_serving_connectors(agent, serving),
     )
 
@@ -620,10 +693,19 @@ async def authoring_preview(
     fields = await _fields_of(request, agent)
     listenable = _serving_connectors(agent, set((await connectors_of(request)).serving()))
     try:
-        authored = _authored_from(body, agent, fields, listenable)
+        authored = _authored_from(
+            body, agent, fields, listenable, _usable_for(request, agent, asked)
+        )
     except AuthoringRefusedError as exc:
         return _refused(exc.findings)
-    shown = preview(authored, agent, author=asked.caller.principal, author_reach=asked.reach)
+    shown = preview(
+        authored,
+        agent,
+        author=asked.caller.principal,
+        author_reach=asked.reach,
+        skills=[one.name for one in await _skills_for(request, agent, asked)],
+        now=asked.now,
+    )
     return JSONResponse(
         status_code=200,
         content=preview_view(
@@ -650,10 +732,19 @@ async def author_automation(
     fields = await _fields_of(request, agent)
     listenable = _serving_connectors(agent, set((await connectors_of(request)).serving()))
     try:
-        authored = _authored_from(body, agent, fields, listenable)
+        authored = _authored_from(
+            body, agent, fields, listenable, _usable_for(request, agent, asked)
+        )
     except AuthoringRefusedError as exc:
         return _refused(exc.findings)
-    shown = preview(authored, agent, author=asked.caller.principal, author_reach=asked.reach)
+    shown = preview(
+        authored,
+        agent,
+        author=asked.caller.principal,
+        author_reach=asked.reach,
+        skills=[one.name for one in await _skills_for(request, agent, asked)],
+        now=asked.now,
+    )
     try:
         written = authoring_of(
             shown,

@@ -496,7 +496,9 @@ describe("what an entry becomes", () => {
     }
     // The positive sibling: the pattern shape does match the paths it is written for.
     expect(UNAVAILABLE.browser.retiredBy.test("/api/v1/agents/{agent_id}/browser")).toBe(true);
-    expect(UNAVAILABLE.level.retiredBy.test("/api/v1/agents/{agent_id}/audience")).toBe(true);
+    // The act that used to be listed here, who can find an agent, has its route and its control.
+    expect(Object.keys(UNAVAILABLE)).not.toContain("level");
+    expect(paths).toContain("/api/v1/agents/{agent_id}/audience");
   });
 });
 

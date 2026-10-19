@@ -87,7 +87,7 @@ caller named, never by a scan of who owns what, which is the rule
 a function that took the estate and reported every owner would be an org chart with agent
 counts on it.
 
-Task ids: M13.1.4, M13.1.5
+Task ids: M13.1.4, M13.1.5, M20.5.1
 """
 
 from __future__ import annotations
@@ -99,7 +99,12 @@ from typing import Final
 from brain.agents.model import AgentAudience, AgentError, AgentRecord, AgentState
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.principal import Principal
-from brain.knowledge.visibility import Visibility, is_wider
+from brain.knowledge.visibility import (
+    PUBLISHING_TO_THE_COMPANY_NEEDS_AUTHORITY_OVER_THE_COMPANY,
+    Visibility,
+    holds_for_level,
+    is_wider,
+)
 
 #: Why archive has no inverse, stated where a reader meets it.
 ARCHIVE_IS_TERMINAL: Final = (
@@ -295,11 +300,12 @@ def publish(record: AgentRecord, *, publisher: EntitlementSet, now: datetime) ->
             f"it. {A_GATE_ONE_PERSON_PASSES_ALONE_IS_NOT_A_GATE}"
         )
         raise AgentError(msg)
-    if not publisher.holds(AGENT_PUBLICATION_CAPABILITY, now):
+    if not holds_for_level(publisher, AGENT_PUBLICATION_CAPABILITY, PUBLICATION_LEVEL, now):
         msg = (
             f"{publisher.principal_id!r} does not hold "
-            f"{AGENT_PUBLICATION_CAPABILITY.value} and cannot publish {record.agent_id!r}; "
-            "nobody has granted them the path that tells the whole company an agent exists"
+            f"{AGENT_PUBLICATION_CAPABILITY.value} over the whole company and cannot publish "
+            f"{record.agent_id!r}; nobody has granted them the path that tells every department an "
+            f"agent exists. {PUBLISHING_TO_THE_COMPANY_NEEDS_AUTHORITY_OVER_THE_COMPANY}"
         )
         raise AgentError(msg)
     if not is_wider(PUBLICATION_LEVEL, record.audience.level):
