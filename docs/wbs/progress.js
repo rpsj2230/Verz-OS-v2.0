@@ -1919,6 +1919,16 @@ const PROGRESS = {
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_builder_routes, builder.agent_drafts, builder.publish); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
+  "M20.5.1": {
+    status: "READY FOR TESTING",
+    why: "Built: a department's administrator can no longer publish an agent to the whole company or approve a knowledge item to it alone; that needs the authority held over everything, and for a department it needs the authority held in that department. The skill library is one company-wide object, so only the authority over everything decides about a skill. The publications queue offers each administrator only the requests they could decide. To prove it on the install: after the release, open Install, Acceptance, run the checks and read the row 'a department admin decides only for their department', which should pass in the two newest runs.",
+    updated: "2026-10-15",
+  },
+  "M20.5.2": {
+    status: "IN PROGRESS",
+    why: "Built: behind the switch 'Hold an agent that costs more than its department allows' (ships off), publishing an agent to a department whose per-run ceiling is below what one run costs waits for that department's administrator, tells the author both figures in the install's currency, and the publish record carries the cost of each version. Not what the leaf says in two ways: the figure is the run's price from the product's own estimator (the same one the pre-flight uses) and not the median of rehearsed runs, because rehearsals record no cost yet (needs-you question); and no screen writes a department's per-run ceiling yet (M21.1.2), so on an install the hold fires only for a ceiling written some other way. The check 'a costly publish waits for a colleague in the department' proves the hold over a ceiling it writes itself.",
+    updated: "2026-10-15",
+  },
   "M21.1.1": {
     status: "IN PROGRESS",
     why: "TRIAGE 2026-10-13 class 2 (partly built): Ceiling stored and versioned: PUT company budget (company_routes.set_company_budget, ops.budgets.BudgetRow, test_company_routes). Hard stop is ops.budget_stop_store.budget_refusal_for in api_routes, flag budget_enforcement off (needs 169 A). alert_fractions stored, nothing fires them. NEXT: Wire alert_fractions to a notice when spend crosses one (spend.alerts_for exists but is only called by unwired preflight); then write a check naming M21.1.1 that sets a ceiling with alerts and reads the stop record.",
@@ -2015,9 +2025,9 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M22.3.3": {
-    status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in ops.admission; NOT wired: ops.scaling",
-    updated: "2026-10-06",
+    status: "READY FOR TESTING",
+    why: "Built to the capacity model's stated peak (python -m brain.ops.load_peak --profile full, which reads each profile's arrival rate and Little's-law concurrency from ops.admission.seed_profiles) and behind the load_test switch, which ships off. It refuses before sending anything unless the switch is on, every token belongs to a person in the load_test department, the operator repeats the request count, and the install has a database to keep the result in; it stops if the install sheds most of what it is sent; it keeps each run as one row in the install's own settings with no person, token or question. The install's own check a_short_peak_run_is_driven_judged_and_kept_and_leaves_nothing proves the machinery in a rolled-back transaction with no model called, and closes the leaf when the install's two newest runs both pass it. The peak run itself is the owner's decision (needs-rupash 194; item 103 says CI, not the install). Install proof, steps: (1) open the Install page's list of checks after a deploy and see that check pass; (2) only if you choose to run the peak: turn on the Features page switch for the load test, make a department called load_test with two people and a small document only it can read, then follow docs/install/scaling.md, The peak load test.",
+    updated: "2026-10-14",
   },
   "M25.1.1": {
     status: "READY FOR TESTING",
@@ -2184,6 +2194,21 @@ const PROGRESS = {
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_agent_console); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
+  "M27.11.12": {
+    status: "READY FOR TESTING",
+    why: "built (M27/agent-profile-and-personal-agents): an agent's Profile lists its sources, its skills and its channels each with its state. A channel is drawn as on or as off in words and a dashed edge (AgentChannels, from the lifecycle read), a source is attached or requested with the Connectors page's health, and a skill is drawn with its review and its runs. A skill no run of the agent could use says so in a sentence from the API (brain.console.agent_behaviour.skill_standing: not in the library, waiting for review, rejected, changed since it was approved, or naming a tool the agent may not call), checked against the run path's own skills_offered; the old sentence that an assignment changes no answer was false since M27.12.1 and is gone. Skills and channels hold the same overflow list as sources, the first five and the rest behind N more. Add and remove: a skill is attached and taken off through a confirmation, a source through a draft of the agent, a channel through the Change where it answers confirmation. Install check a_pinned_skill_no_run_could_use_is_said_so_on_the_profile. To prove on the install: sign in as an administrator, open an agent's Profile; the Capabilities card lists its skills, and under them a line for any skill no run uses, for example a skill still waiting for review; the card Where it answers shows each channel as on or as off",
+    updated: "2026-10-15",
+  },
+  "M27.11.13": {
+    status: "READY FOR TESTING",
+    why: "built (M27/agent-profile-and-personal-agents), behind the agent_audience_extras switch which ships off: the Availability card shows who can find the agent (level, department, steward, whether you are included) and, to its steward and to the holder of the lifecycle authority over it, the further departments and named people it is offered to, each with a Withdraw control and, for the holder, an Offer control (a department chosen from the install's own list, a person typed by user id), each confirmed first. GET /agents/{id}/audience, POST /audience/additions and /audience/removals (brain.agent_audience_routes). A reader who answers for the agent in no way is sent no name and no sentence saying names exist, so an agent offered to nobody and to many read the same; a personal agent takes no offer; the row stays on withdrawal with who and when. Install check an_agent_is_offered_to_more_than_its_level_from_its_profile. Needs-rupash 201 question 1 (one choice or several) is still unanswered, which is why the controls are behind a switch. NOT BUILT: a ledger entry per offer (the table has no ledger trigger; its own rows say who and when). To prove on the install: Features, switch on Offer an agent to more departments and to named people; sign in as the department administrator of an agent, open its Profile, Availability: choose a department and press Offer then confirm, the agent appears for that department's members; Withdraw it and it stops appearing",
+    updated: "2026-10-15",
+  },
+  "M27.11.14": {
+    status: "READY FOR TESTING",
+    why: "built (M27/agent-profile-and-personal-agents) to the owner's recommendation on needs-rupash 201 question 2, which is not yet answered: the Learning card on the Profile carries a switch Let this agent learn from its conversations, which pauses and resumes what the agent's runs teach it (GET and POST /agents/{id}/learning, the lifecycle authority, a reason required and written to the row), each direction confirmed. Resuming lets each tier go on doing what it already checks, so it cannot let anything be learnt unchecked. The browsing switch is on the Profile as a switch that is off and cannot be pressed, with its reason, and computer use as a sentence: nothing is offered for browsing until the sealed browser has run on an install (question 2 option A). Install check an_agents_learning_is_paused_and_resumed_from_its_profile; what a pause does to what forms is acceptance_checks_signals. To prove on the install: sign in as the administrator of an agent, open its Profile, Learning from conversations: press the switch, give a reason, confirm; the card reads Paused; press it again, give a reason, confirm; it reads On",
+    updated: "2026-10-15",
+  },
   "M27.11.15": {
     status: "READY FOR TESTING",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (agent_routes, console.agent_profile); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-agent-api",
@@ -2323,6 +2348,11 @@ const PROGRESS = {
     status: "OPEN",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in agent_builder_routes, builder.agent_drafts, ops.acceptance_skill_console +5 more; NOT wired: pages/Approvals.tsx",
     updated: "2026-10-06",
+  },
+  "M27.15.32": {
+    status: "READY FOR TESTING",
+    why: "built (M27/agent-profile-and-personal-agents): the Profile's computer use card is the sentence the API sends (GET /agents/{id}/capabilities, computer_use, from brain.console.agent_behaviour), which says computer use is not offered because the product has no isolated desktop runner, and nothing is drawn to switch. Whether a runner exists is asked of the import machinery for the module brain.browsing.desktop and not of a constant, so the day it is added the sentence changes and the install check says not run until a person looks again; even then offered stays false until a per-agent switch is built. A reader sent no detail is drawn no card. Install check computer_use_is_not_offered_until_a_desktop_runner_exists. To prove on the install: open any agent's Profile; the card Computer use reads Not offered, with the reason, and holds no button or switch",
+    updated: "2026-10-15",
   },
   "M27.15.33": {
     status: "READY FOR TESTING",
@@ -2980,19 +3010,19 @@ const PROGRESS = {
     updated: "2026-10-14",
   },
   "M32.6.1.1": {
-    status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.automation); open for proof on the install or a decision, not for code",
-    updated: "2026-10-06",
+    status: "READY FOR TESTING",
+    why: "The canvas was already built and wired (docker-compose.automation.yml, the automation overlay, ops.automation). What was missing was proof on the install, and it is merged: the install check the_canvas_runs_as_three_services_each_held_to_its_budget reads what the deploy step saw and closes the leaf when the install's two newest runs both pass it. Install proof, steps: (1) put automation in the install's optional services setting (needs-rupash 124 decided yes; it takes 896 MiB, and the deploy says in words if the server has no room); (2) deploy, and read the deploy's journal for the line saying the canvas's facts are kept for this release; (3) open the Install page's list of checks after the next run and see the check pass.",
+    updated: "2026-10-14",
   },
   "M32.6.1.2": {
-    status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.automation); open for proof on the install or a decision, not for code",
-    updated: "2026-10-06",
+    status: "READY FOR TESTING",
+    why: "Built and wired already; the proof was missing and is merged. The deploy step now asks docker what is running (ops/deploy/overlays/automation.observe.sh: networks, the names and never the values of the canvas's variables, routes, the proxy's hosts and its answer for a host on no list) and the install check the_canvas_has_no_way_out_but_its_proxy_and_no_foreign_secret judges it, closing the leaf when the install's two newest runs both pass it. Install proof, steps: the same three as M32.6.1.1; the second check on the Install page is the one for this task. A failure names the kind of fault in a sentence and the worker's log names the variables.",
+    updated: "2026-10-14",
   },
   "M32.6.1.4": {
-    status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.automation); open for proof on the install or a decision, not for code",
-    updated: "2026-10-06",
+    status: "READY FOR TESTING",
+    why: "Built and wired already: the canvas is the automation overlay and the one setting INSTALL_SERVICES switches it, a fresh install ships with none. The proof was missing and is merged: the install check the_canvas_runs_where_the_setting_names_it_and_nowhere_else is judged both ways (running where the setting names it, absent from the deploy's report where it does not) and closes the leaf when the install's two newest runs both pass it. Install proof, steps: with automation in the setting, as for M32.6.1.1, the third check passes; the other direction is what an install that has not named it shows once any other optional service reports.",
+    updated: "2026-10-14",
   },
   "M33.1.1.1": {
     status: "OPEN",
@@ -4350,9 +4380,9 @@ const PROGRESS = {
     updated: "2026-10-12",
   },
   "M39.9.2.3": {
-    status: "OPEN",
-    why: "P2. DEPENDS on M39.9.2.1. REUSE: the agent's ceiling and leash (gate/leash, runtime side effects held for a person, #466) and the automation principal rule (M39.6.2.1). REMAINING: name the skills and tools an automation may use on its card and refuse an instruction that exceeds the agent's ceiling.",
-    updated: "2026-10-12",
+    status: "READY FOR TESTING",
+    why: "built (M39/automation-instruction-within-ceiling): what an automation may use is the agent's own, read for the person writing it, and is never a list somebody typed. The tools are the agent's attached tools projected through gate/catalogue.project at the writer's reach as an automation is admitted, so a tool above the ceiling, one the writer does not reach, one detached since the manifest or one that does not exist is refused in one sentence that names only the tool they wrote; the skills are the ones the agent has attached and approved that a run would be offered (skills_offered). The form, its review, the agent's Automations card and the Automations page name them, say that anything it would write waits for a person, and say that an instruction automation cannot be started yet. The install check an_automation_names_only_what_the_agents_ceiling_lets_a_run_use names it and closes it when the install's two newest runs both pass it. To see it by hand: (1) switch New automation on and open an agent's Automations tab; (2) press New automation: What it may use lists only tools a run of an automation of yours could be handed, and Skills it would be offered lists the agent's approved skills; (3) press Review and rehearse: the review names the tools and skills, says a write waits for a person and says it cannot be started yet; (4) detach a tool on the agent's Tools tab and open New automation again: that tool is gone from the list. NOT BUILT: skills are not chosen one at a time (a run carries the agent's skills on the day it starts, which the card says), and whether an instruction may be run with nobody present is needs-rupash 210, undecided, so nothing here starts a run. Note for 210: an automation is admitted at read only (M39.6.2.1), so every tool it may name is a read tool; option A needs that admission to change first. PRIOR WORK: tool_gaps checked the name against the manifest's list only; the card already named tools and the write rule.",
+    updated: "2026-10-14",
   },
   "M39.9.2.4": {
     status: "READY FOR TESTING",
@@ -4902,6 +4932,11 @@ const PROGRESS = {
   "M12.3.5": {
     status: "READY FOR TESTING",
     why: "built for Word only, behind a switch that ships off (brain.tools.document_generation, tool documents.generate_document); decks and spreadsheets wait on needs-rupash 193 and are not offered. NO PRIOR WORK existed (no note, no branch, no code). Proved on the install when: 1. Install, Features: switch on 'Let an agent produce a Word document from an approved template'. 2. Knowledge: add a document of kind Template holding a line such as 'Prepared for {{client_name}}.' and have its steward verify it. 3. Give a person, and an agent whose tools include documents.generate_document, the capabilities invoke:generated_document and read:generated_document. 4. As that person ask the agent to produce a document from the template with a value for client_name: its answer names a file, which is listed under that person's artifacts and opens in Word with the value in it. 5. Ask the same as a person in another department, and with a draft or unverified document as the template: nothing is produced and the refusal is the same sentence. Limit: the layout is rebuilt from the template's text, so the original file's styles and logo are not carried; that needs a link from each library item to its original file, which is a migration.",
+    updated: "2026-10-14",
+  },
+  "M12.3.7": {
+    status: "IN PROGRESS",
+    why: "PARTLY BUILT, 2026-10-14; NO PRIOR WORK existed (no note, no branch, no code). BUILT: an outside AI service (image generation, speech to text) an install declares is registered as a tool behind a switch that ships off (brain.tools.external_ai, brain.ops.external_ai_store); its permission is its own (invoke:external_ai.<service>), it counts as sending something out and is capped at Assisted, and an agent whose ceiling does not name it is offered nothing; an install check proves that. NOT BUILT, WAITING ON THE OWNER (needs-rupash 184, open): the call itself, which needs the first service, its provider account and its key in the vault, and whether speech to text counts as a read and image generation as a draft (a loosening, not built). NEXT: when 184 is answered, build the held call and the worker's run of the approved one for that service, then flip this to READY FOR TESTING.",
     updated: "2026-10-14",
   },
 };
