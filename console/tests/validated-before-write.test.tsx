@@ -43,6 +43,13 @@ interface FormCase {
 
 /** Every form in a file that also holds a write, by file. The count is checked against the source. */
 const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
+  // The reason a version is withdrawn for, the first form on a template's page (the install is a
+  // wizard of steps with no form of its own since M27.15.68); and the document an import reads, the
+  // second on the catalogue after the list's own search.
+  "src/pages/agent-templates/TemplateTransfer.tsx": [
+    { pattern: "/agent-templates/:templateId", index: 0, writes: true },
+    { pattern: "/agent-templates", index: 1, writes: true },
+  ],
   // An API's specification and mapping, the one form on Add an API, above its review list.
   "src/pages/connectors/CustomConnectorsPage.tsx": [{ pattern: "/connectors/new-api", index: 0, writes: true }],
   "src/components/DataStewardCard.tsx": [{ pattern: "/people", index: 1, writes: true }],

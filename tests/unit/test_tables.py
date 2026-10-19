@@ -183,6 +183,7 @@ MIGRATION_PERSONAL_PROJECT = VERSIONS / "0233_personal_project.py"
 MIGRATION_FANOUT_GATE = VERSIONS / "0240_fanout_gate.py"
 MIGRATION_MODEL_SERVER = VERSIONS / "0250_model_server.py"
 MIGRATION_MIGRATION_RECORD = VERSIONS / "0241_migration_record.py"
+MIGRATION_TEMPLATE_WITHDRAWAL = VERSIONS / "0261_template_withdrawal.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -536,6 +537,8 @@ PERSONAL_PROJECT_TABLES: tuple[str, ...] = ("agent.project", "agent.project_item
 FANOUT_GATE_TABLES: tuple[str, ...] = ("ops.fanout_gate",)
 #: And the one 0241 adds: the documents a migration from another system is run on.
 MIGRATION_RECORD_TABLES: tuple[str, ...] = ("ops.migration_record",)
+#: And the one 0261 adds: a template version withdrawn from new installs, or the withdrawal undone.
+TEMPLATE_WITHDRAWAL_TABLES: tuple[str, ...] = ("agent.template_withdrawal",)
 
 #: And the one 0250 adds: the model server's measured peaks. Its two column additions on `know` are
 #: not tables and are held by the model-versus-migration comparison below.
@@ -646,6 +649,7 @@ ALL_TABLES = (
     + FANOUT_GATE_TABLES
     + MODEL_SERVER_TABLES
     + MIGRATION_RECORD_TABLES
+    + TEMPLATE_WITHDRAWAL_TABLES
 )
 
 
@@ -1542,6 +1546,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert model_server.TABLES == MODEL_SERVER_TABLES
     migration_record = migration_module(MIGRATION_MIGRATION_RECORD)
     assert migration_record.TABLES == MIGRATION_RECORD_TABLES
+    template_withdrawal = migration_module(MIGRATION_TEMPLATE_WITHDRAWAL)
+    assert template_withdrawal.TABLES == TEMPLATE_WITHDRAWAL_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1670,6 +1676,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(fanout_gate.TABLES)
         + tuple(model_server.TABLES)
         + tuple(migration_record.TABLES)
+        + tuple(template_withdrawal.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1779,6 +1786,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(fanout_gate.TABLES),
         set(model_server.TABLES),
         set(migration_record.TABLES),
+        set(template_withdrawal.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

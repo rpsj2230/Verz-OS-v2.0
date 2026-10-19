@@ -542,6 +542,10 @@ from brain.storage_routes import router as storage_router
 # `brain.system_health_routes`.
 from brain.system_health_routes import router as system_health_router
 
+# Withdrawing a published template version from new installs and undoing it as inserted rows,
+# and a template as a signed document to export and import. See `brain.template_withdrawal_routes`.
+from brain.template_withdrawal_routes import router as template_withdrawal_router
+
 # A person's own threads, listed, searched and reopened at the reach held now. See
 # `brain.thread_routes`.
 from brain.thread_routes import router as thread_router

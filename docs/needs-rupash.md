@@ -6,6 +6,34 @@ Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
 # Open
 
+## 236. When one install exports a template and another imports it, how does the second know the first made it?
+
+**In plain terms:** task M27.15.35 says a template exports as a signed document that another install
+imports. A template is signed with its own install's key, and nothing else holds that key. So the install
+that receives a document cannot check the signature on it, and the only thing it can check is that the text
+has not been damaged on the way, which anybody changing the text could also put right.
+
+**What is built:** the exporting install writes the template as it is stored, with its signature. The
+importing install reads it, shows what it asks for, refuses it if it holds an address, a link, an amount or a
+code, and, when you confirm, signs it again with its own key as version one under your name. The signature
+that came with the document is shown as "not made by this install" and nothing relies on it. It switches on
+behind `template_withdrawal`, which ships off.
+
+**Option A: keep it as built.** An importer trusts the person who handed them the document, as with any file.
+Nothing to set up. A document cannot be proved to come from a particular install.
+
+**Option B: each install signs with a key pair.** An install keeps a private key in its vault and shows a
+public one, and an install that imports holds a short list of installs it trusts and refuses a document whose
+signature does not match one of them. This proves where a document came from. It needs a one-off step on each
+install to publish its public key and a list to maintain, and the signing key already in use stays as it is
+for the agents.
+
+**My recommendation:** A. Nobody outside your own company is exchanging templates yet, and proving origin
+between two installs of the same company is a smaller problem than the list of whom to trust. Choose B the
+first time a template is meant to travel between two companies.
+
+**What I need from you:** reply "236: A" or "236: B".
+
 ## 237. Please copy the reference screenshots into the repository, and say what the thirteenth is for
 
 **What I need from you:** copy the thirteen image files from the `_research/anygen-screenshots` folder in your
@@ -54,6 +82,7 @@ tool the console cannot be built without, and none of them reaches an install.
 condition (credit for caniuse-lite) applies to redistributing the table, which nothing does.
 
 **What I need from you:** reply "238: A", "238: B" or "238: C".
+
 ## 235. What may start a backup drill from the console, now that nothing the product runs can?
 
 **In plain terms:** task M27.13.5 asks for a "start a drill" button on the Backup and recovery screen

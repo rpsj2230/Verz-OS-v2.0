@@ -139,6 +139,7 @@ from brain.agents.model import (
 )
 from brain.agents.model import visible_agent_ids as _visible_agent_ids
 from brain.agents.template import SignedManifest, TemplateError, TemplateInstance
+from brain.agents.template_withdrawal import withdrawn_keys
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked, Asking, base_schema_of
 from brain.audit.ledger import DIGEST
@@ -166,6 +167,7 @@ from brain.ops.connectable import NotConnectableError, manifest_for
 from brain.ops.connector_store import Connection, StoredConnections
 from brain.ops.lark_base_index import switched_on
 from brain.ops.learning_signal_store import StoredLearningPauses
+from brain.ops.template_withdrawal_store import newest_in
 from brain.prompt_routes import agent_scope_row, every_agent_with_install, installed, signed_of
 from brain.role_refusals import (
     CHANGING_CHANNELS_NEEDS_THE_DEPARTMENT_ADMINISTRATOR,
@@ -574,6 +576,12 @@ class StoredAgentLifecycles:
         )
 
     async def version(self, template_id: str, version: int) -> SignedManifest | None:
+        """The version a new install may be made from: published and not withdrawn (M27.15.35).
+
+        A withdrawn version is answered as one nobody published, so the install route's refusal
+        does not say which of the two it was. An agent already installed from it does not come
+        through here: its pin is its own instance row.
+        """
         async with self._sessions() as session:
             row = (
                 await session.execute(
@@ -583,7 +591,10 @@ class StoredAgentLifecycles:
                     )
                 )
             ).scalar_one_or_none()
-        if row is None:
+            gone = (
+                withdrawn_keys(await newest_in(session, template_id)) if row is not None else None
+            )
+        if row is None or (template_id, version) in (gone or ()):
             return None
         try:
             return signed_of(row)
