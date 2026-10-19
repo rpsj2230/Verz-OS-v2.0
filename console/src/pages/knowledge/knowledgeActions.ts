@@ -17,21 +17,12 @@
  *   Exports screen exists to watch.
  *
  * **When a route lands, its sentence goes and a live control takes its place, in the same commit.**
- * `tests/knowledge-page.test.tsx` reads every `retiredBy` pattern against the API document, so this
- * table cannot go on saying "coming soon" about something that has arrived.
+ * `tests/unit/test_console_explanations.py` reads every expiry against the routes the application
+ * mounts (`knowledge.export_inventory`), so nothing can go on saying "coming soon" about
+ * something that has arrived.
  *
  * Task ids: M27.15.40, M27.16.1
  */
-
-/** Why each act with no route cannot be pressed, and the shape of the path whose arrival retires it. */
-export const UNAVAILABLE = Object.freeze({
-  exportInventory: {
-    reason: "Coming soon: exporting the inventory, recorded on the Exports screen with who took it and why.",
-    retiredBy: /^\/api\/v1\/knowledge\/(inventory|documents\/exports?)\b/,
-  },
-});
-
-export type UnavailableAct = keyof typeof UNAVAILABLE;
 
 /** Where the acts that happen elsewhere are done, as console addresses. */
 export const WORKS_AT = Object.freeze({

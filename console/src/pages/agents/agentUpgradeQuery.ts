@@ -294,4 +294,4 @@ export const DONE_UPGRADED = "Upgraded";
 export const DONE_SWITCHED_OFF = "Upgraded, and switched off until it has what it needs";
 export const DONE_DECLINED = "Declined";
 export const NOT_CHANGED = "Nothing was changed";
-export const SOMETHING_DID_NOT_WORK = "Something did not work";
+export { SOMETHING_DID_NOT_WORK } from "../../ui/FailureNotice";

@@ -40,6 +40,7 @@ import {
   ConfirmDialog,
   DetailHeader,
   DetailPage,
+  Explanation,
   Fact,
   FactList,
   FailureState,
@@ -179,7 +180,7 @@ function InstallCard({ template }: { readonly template: TemplateDetail }) {
   if (found.unavailable !== null && found.unavailable !== undefined) {
     return (
       <SectionCard title={INSTALL_HEADING}>
-        <Note kind="not-yet">{found.unavailable}</Note>
+        <Explanation form="note" lead="not-yet" told={found.unavailable} />
       </SectionCard>
     );
   }

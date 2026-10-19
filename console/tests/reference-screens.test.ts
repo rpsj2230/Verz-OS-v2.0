@@ -381,7 +381,7 @@ describe("no browser operator riding the person's own session", () => {
     const drawn = elementsIn(computer, source);
     expect(drawn.filter(controlsOf)).toEqual([]);
     expect(drawn.map((one) => one.tag).filter((tag) => tag === "Button" || tag === "button")).toEqual([]);
-    expect(drawn.map((one) => one.tag)).toContain("NotOffered");
+    expect(drawn.map((one) => one.tag)).toContain("Explanation");
 
     const browser = functionNamed(source, "BrowserUse");
     const card = elementsIn(browser, source).find((one) => one.tag === "SectionCard");

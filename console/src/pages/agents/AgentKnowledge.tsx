@@ -36,8 +36,9 @@ import { FileText, Link2, Plug, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { request } from "../../api/client";
+import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
-import { Chip, EmptyState, FailureState, LoadingState, Note, SectionCard } from "../../components/kit";
+import { Chip, EmptyList, FailureState, LoadingState, Note, SectionCard } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { dayWords } from "../access/formParts";
 import { documentAddress, verifiedWords } from "../knowledge/knowledgeDocuments";
@@ -242,7 +243,7 @@ export function AgentKnowledge({
   const [later, setLater] = useState<readonly KnowledgeItem[]>([]);
   const [more, setMore] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
-  const [said, setSaid] = useState<string | null>(null);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [way, setWay] = useState<Way | null>(null);
   const [added, setAdded] = useState<KnowledgeAdded | null>(null);
   const knowledge = first.busy || first.data === null ? null : readAgentKnowledge(first.data);
@@ -291,11 +292,11 @@ export function AgentKnowledge({
     const result = await request<unknown>(agentKnowledgeApiPath(agentId, items.length));
     setBusy(false);
     if (!result.ok) {
-      setSaid(result.failure.message);
+      setFailure(result.failure);
       return;
     }
     const next = readAgentKnowledge(result.data);
-    setSaid(null);
+    setFailure(null);
     if (next !== null) {
       setLater((were) => [...were, ...next.items.filter((one) => ![...knowledge.items, ...were].some((had) => had.itemId === one.itemId))]);
       setMore(next.more);
@@ -308,7 +309,13 @@ export function AgentKnowledge({
     ) : items.length === 0 ? (
       knowledge.canAdd ? (
         <div data-slot="knowledge-empty">
-          <EmptyState title={EMPTY_TITLE} description={EMPTY_BODY} action={ways} />
+          <EmptyList
+            title={EMPTY_TITLE}
+            description={EMPTY_BODY}
+            adds="Add a file or a web page here, or let the agent's rule reach documents already in the library."
+            by={["super_admin", "department_admin", "member"]}
+            action={ways}
+          />
         </div>
       ) : (
         <Note>{NOTHING_YOURS_TO_SEE}</Note>
@@ -333,11 +340,7 @@ export function AgentKnowledge({
 
   return (
     <div data-slot="agent-knowledge" className="flex min-w-0 flex-col gap-4">
-      {said === null ? null : (
-        <p role="alert" className="m-0 text-[12.5px] text-crit">
-          {said}
-        </p>
-      )}
+      {failure === null ? null : <FailureState failure={failure} />}
       <SectionCard title={KNOWLEDGE_HEADING} lede={KNOWLEDGE_LEDE}>
         <div className="flex min-w-0 flex-col gap-3">
           {knowledge.unread === undefined ? <Rule knowledge={knowledge} /> : null}

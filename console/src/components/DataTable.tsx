@@ -53,6 +53,7 @@
 
 import type { RowData } from "@tanstack/react-table";
 import type { ApiFailure } from "../api/errors";
+import { EmptyList, type EmptyBy } from "./kit/states";
 import { FailureNotice, THAT_DID_NOT_WORK } from "../ui/FailureNotice";
 import { GridTable } from "./kit/GridTable";
 import type { GridColumn } from "./gridFeatures";
@@ -94,6 +95,10 @@ interface DataTableProps<T extends RowData> {
   readonly busy?: boolean;
   /** False over a route that never issues a cursor, so no pager is drawn that cannot be pressed. */
   readonly pages?: boolean;
+  /** The act that puts a row on the table, as one sentence. Required: see `kit/states.tsx` `EmptyList`. */
+  readonly emptyAdds: string;
+  /** Who does it. Required: see `EmptyList`. */
+  readonly emptyBy: EmptyBy;
   readonly hasNext?: boolean;
   readonly canGoBack?: boolean;
   readonly onNext?: () => void;
@@ -122,6 +127,8 @@ export function DataTable<T extends RowData>({
   onPrevious,
   filters = NO_FILTERS,
   onFilterChange,
+  emptyAdds,
+  emptyBy,
 }: DataTableProps<T>) {
   return (
     <div className="grid">
@@ -156,7 +163,7 @@ export function DataTable<T extends RowData>({
        * something for it to exclude.
        */}
       {!failure && !busy && rows.length === 0 ? (
-        <p className="grid__empty">{NOTHING_TO_SHOW}</p>
+        <EmptyList compact className="grid__empty" title={NOTHING_TO_SHOW} adds={emptyAdds} by={emptyBy} />
       ) : null}
 
       {busy ? (

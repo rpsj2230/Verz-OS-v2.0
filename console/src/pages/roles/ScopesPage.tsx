@@ -146,6 +146,8 @@ export function ScopesPage() {
         loading="Loading scopes."
         emptyTitle={NO_SCOPES}
         emptyDescription={NO_SCOPES_DESCRIPTION}
+        emptyAdds="Create a department to get its own scope, or create a named scope on this screen."
+        emptyBy={["super_admin", "department_admin"]}
         emptyIcon={<ShieldCheck aria-hidden />}
       />
       <NewScopeDrawer open={creating} onOpenChange={setCreating} onWritten={written} />

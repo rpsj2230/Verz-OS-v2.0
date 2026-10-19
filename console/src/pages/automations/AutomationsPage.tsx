@@ -155,6 +155,8 @@ export function AutomationsPage() {
       loading={LOADING_AUTOMATIONS}
       emptyTitle={NO_AUTOMATIONS}
       emptyDescription={NO_AUTOMATIONS_DESCRIPTION}
+      emptyAdds="Install one from an agent's automation gallery."
+      emptyBy={["super_admin", "department_admin"]}
       emptyIcon={<Workflow aria-hidden />}
     />
   );

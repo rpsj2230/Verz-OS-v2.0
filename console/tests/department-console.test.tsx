@@ -37,7 +37,6 @@ import {
   NO_CEILING,
   NOT_A_DEPARTMENT_CONSOLE,
   PACE_HEADING,
-  PROFILE_ELSEWHERE,
   USAGE_HEADING,
 } from "../src/pages/department/DepartmentHomePage";
 import { DEPARTMENT_COVERAGE_API_PATH, DEPARTMENT_PACE_API_PATH } from "../src/pages/department/departmentFigures";
@@ -54,6 +53,7 @@ import {
 import { OWN_WORK } from "../src/routes/registry";
 import { backendModelFields } from "./support/python";
 import { readRepoFile } from "./support/repo";
+import { sentenceFor } from "./support/explanations";
 
 /** A value that appears nowhere else, so a dropped one cannot be covered by another. */
 function sentinel(name: string): string {
@@ -417,7 +417,9 @@ describe("the Department page", () => {
       everything({ "/api/v1/govern/departments": json({ message: "I could not find that.", trace_id: "t-3" }, 404) }),
     );
     expect(container.querySelector("main h1")?.textContent).toBe(sentinel("directory name"));
-    expect(container.querySelector("main")?.textContent).toContain(PROFILE_ELSEWHERE);
+    await waitFor(() => {
+      expect(container.querySelector("main")?.textContent).toContain(sentenceFor("department.profile_elsewhere"));
+    });
     const advanced = container.querySelector('main [data-slot="advanced"]')?.textContent ?? "";
     expect(advanced).toContain("maintenance");
     const outside = (container.querySelector("main")?.textContent ?? "").replace(advanced, "");

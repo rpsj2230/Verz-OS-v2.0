@@ -15,7 +15,7 @@
  */
 
 import { useResource } from "../../api/useResource";
-import { Fact, FactList, Note, NOT_RECORDED, SectionCard, type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, Fact, FactList, Note, NOT_RECORDED, SectionCard, type EntityColumn } from "../../components/kit";
 import { heldNow, keptFor, readStorage, STORAGE_API_PATH, type BucketRow } from "../storageQuery";
 import { Line, OpsPage, PLATFORM, WholeList } from "./parts";
 import { Pill, PublicPill } from "./pills";
@@ -118,6 +118,8 @@ export function StoragePage() {
             exportName="buckets"
             empty={NO_BUCKETS}
             emptyDescription={NO_BUCKETS_MORE}
+            emptyAdds="A bucket is listed for each store the install is set up with, and none is added by hand."
+            emptyBy={BY_THE_INSTALL}
             footer={
               <>
                 <Line>{page.usage}</Line>

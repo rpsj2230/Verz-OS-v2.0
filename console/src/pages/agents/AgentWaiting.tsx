@@ -48,7 +48,7 @@ export function AgentWaiting({ agentId }: { readonly agentId: string }) {
           </li>
         ))}
       </ul>
-      {queue.truncated ? <p className="m-0 mt-2 text-[12px] text-ink-3">{MORE_WAITING}</p> : null}
+      {queue.truncated ? <p className="m-0 mt-2 text-[12px] text-dim">{MORE_WAITING}</p> : null}
     </SectionCard>
   );
 }

@@ -15,6 +15,14 @@ vault), and then each person connects their own account from My workspace (their
 is a server step, and neither alone makes a question answerable, so the walk does both through the
 routes' own functions in the routes' order and asks only afterwards.
 
+**The agent bound to Workspace is the person's own personal agent**, since the owner's direction on
+needs item 173 (2026-10-12): a person's own mail belongs to an agent only they can ask. Until
+2026-10-14 this check bound a department's agent and watched it read one person's mailbox, which
+passed because the read named an entity no connector provided and so was in every ceiling that
+listed it (`brain.connectors.google_workspace.READER_ENTITY`). A department's agent naming Workspace
+and holding the read is asked the same question and is handed nothing, which is the half of the
+property that was missing.
+
 **Bound is shown against unbound, because an agent that answers is only half of it.** A second
 agent of the same department, naming no source and holding no read of Workspace, is asked the same
 question by the same person and is handed what a person with nothing connected is handed. Without
@@ -66,24 +74,24 @@ WORKSPACE_IS_CONNECTED_HERE_ALREADY: Final = (
 READY_FOR_WORKSPACE_MEANS_BOTH_HALVES_AND_NO_SERVER_STEP: Final = (
     "Google Workspace is ready when an administrator's connection on the Connectors screen and a "
     "person's own consent from My workspace are the only steps taken: the very next question is "
-    "answered from that person's account and the very next agent naming Workspace is handed the "
-    "same, with nothing set at the server and nothing restarted."
+    "answered from that person's account and the very next personal agent of theirs naming "
+    "Workspace is handed the same, with nothing set at the server and nothing restarted."
 )
 
 
 @check(
     leaves=("M11.9.12",),
     sentence=(
-        "A Google Workspace made up for the check is offered on the Connectors screen, connected "
-        "from its form and consented to by a person from My workspace, nothing else set: that "
-        "person's question is handed their own mail and calendar, an agent naming Workspace "
-        "installs ready and is handed the same, and an agent not bound to it is handed what a "
-        "person with nothing connected is handed."
+        "A Google Workspace made up for the check is connected from its form and consented to by a "
+        "person from My workspace, nothing else set: their question and their own personal agent "
+        "are handed their own mail and calendar, and an agent not bound to it, or a department's "
+        "agent naming it, is handed what a person with nothing connected is handed."
     ),
 )
 async def workspace_is_ready_for_a_person_and_an_agent_once_connected(
     h: Harness,
 ) -> None:
+    from brain.agents.model import AgentAudience
     from brain.connector_routes import (
         ConsentExchange,
         finish_consent,
@@ -95,11 +103,8 @@ async def workspace_is_ready_for_a_person_and_an_agent_once_connected(
     from brain.connectors.manifest import manifest_digest
     from brain.identity.principal_store import StoredPrincipals
     from brain.knowledge.row_store import SessionRowSource
-    from brain.ops.acceptance_checks_connectable import (
-        _run_reaches,
-        _served,
-        _two_agents,
-    )
+    from brain.knowledge.visibility import Visibility
+    from brain.ops.acceptance_checks_connectable import _run_reaches, _served
     from brain.ops.acceptance_checks_connector_framework import _credential
     from brain.ops.acceptance_checks_connectors import _Resolver, _search
     from brain.ops.acceptance_checks_google_workspace import (
@@ -107,6 +112,7 @@ async def workspace_is_ready_for_a_person_and_an_agent_once_connected(
         _Google,
     )
     from brain.ops.acceptance_checks_oauth import _RoleVault
+    from brain.ops.acceptance_checks_skills import _an_agent
     from brain.ops.acceptance_checks_tables import _console
     from brain.ops.connectable import CONNECTABLE, given, manifest_for
     from brain.ops.connector_admin import connection_problems, people_problems
@@ -247,10 +253,32 @@ async def workspace_is_ready_for_a_person_and_an_agent_once_connected(
         return " ".join(one.document for one in found.records)
 
     tools = build_registry(source=h.settings.tool_source, records=SessionRowSource(h.sessions))
-    bound, unbound = await _two_agents(
-        h, source, reads, scope, served=await _served(h), tools=tools
+    served = await _served(h)
+    builder = h.principal(A, "builder")
+    await h.person(builder, department=A)
+    # The agent bound to Workspace is Ada's own personal agent, since 2026-10-14: a person's own
+    # account belongs to an agent only they can ask. A department's agent naming it is beside it.
+    bound = await _an_agent(
+        h,
+        ada,
+        capabilities=reads,
+        named="_bound",
+        scope=scope,
+        connectors=(source,),
+        settled=(served, tools),
+        audience=AgentAudience(level=Visibility.PERSONAL, owner_id=ada),
     )
-    own, through, beside = await _run_reaches(h, ada, bound, unbound)
+    unbound = await _an_agent(h, builder, named="_unbound", scope=scope, settled=(served, tools))
+    shared = await _an_agent(
+        h,
+        builder,
+        capabilities=reads,
+        named="_team",
+        scope=scope,
+        connectors=(source,),
+        settled=(served, tools),
+    )
+    own, through, beside, team = await _run_reaches(h, ada, bound, unbound, shared)
 
     told = await handed(own)
     if canary["ada-mail"] not in told or canary["ada-event"] not in told:
@@ -261,6 +289,8 @@ async def workspace_is_ready_for_a_person_and_an_agent_once_connected(
     refused = await handed(beside)
     if canary["ada-mail"] in refused or canary["ada-event"] in refused:
         raise CheckFailedError("an agent not bound to Workspace was answered from it")
+    if await handed(team):
+        raise CheckFailedError("a department's agent naming Workspace was handed a person's mail")
     if await handed(reaches[bea]):
         raise CheckFailedError("a person who has not connected their account was read something")
 

@@ -4,9 +4,10 @@
  *
  * **Measured against the routes on this branch.** Registering, issuing a key, revoking one and
  * retiring the account are served (`brain.service_account_routes`), and each is a live control.
- * Changing when an account stops working has no route, so it is an `UNAVAILABLE` sentence drawn as
- * `kit/UnavailableAction`; `tests/service-accounts-page.test.tsx` reads its `retiredBy` pattern
- * against the API document, so the sentence cannot outlive the route's arrival.
+ * Changing when an account stops working has no route, so it is a `kit/Explanation` of the
+ * `action` form (`service_account.change_end`); `tests/unit/test_console_explanations.py` reads its
+ * expiry against the routes the application mounts, so the sentence cannot outlive the route's
+ * arrival.
  *
  * **Two acts are not offered at all, and say so as a sentence rather than a disabled control.**
  * An account is always its registrant's, because it acts at its owner's reach, so there is no
@@ -16,21 +17,6 @@
  *
  * Task ids: M27.11.5, M27.16.1
  */
-
-/** Why each act that has no route cannot be pressed, and the API path whose arrival retires it. */
-export const UNAVAILABLE = Object.freeze({
-  changeEnd: {
-    reason: "Coming soon: changing when an account stops working. Register a new account to extend one today.",
-    retiredBy: /^\/api\/v1\/govern\/service-accounts\/\{[^}]+\}\/(end|lapse|expiry|not-after)\b/,
-  },
-});
-
-/** Acts this product does not offer, each as the sentence drawn in its place. */
-export const NOT_OFFERED = Object.freeze({
-  changeOwner:
-    "An account always belongs to the person who registered it, because it acts at their reach. To hand an integration on, the new owner registers their own account.",
-  rotate: "To rotate a key without a gap, issue a new one, move the integration to it, then revoke the old one.",
-});
 
 /** The acts' labels, shared by the list's row menu and the account's page. */
 export const ACT_LABELS = Object.freeze({

@@ -25,7 +25,7 @@ import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
 import {
   ConfirmDialog,
-  EmptyState,
+  EmptyList,
   EntityTable,
   FailureState,
   LoadingState,
@@ -121,7 +121,15 @@ export function ReferralsPage() {
   } else if (answer.data === null) {
     body = <LoadingState label={READING_REFERRALS} rows={2} />;
   } else if (referrals.length === 0) {
-    body = <EmptyState title={NOTHING_REFERRED} description={NOTHING_REFERRED_MORE} icon={<HeartHandshake aria-hidden />} />;
+    body = (
+      <EmptyList
+        title={NOTHING_REFERRED}
+        description={NOTHING_REFERRED_MORE}
+        adds="Somebody asks about a topic you are named for on the Compliance page, and the question is referred to you."
+        by={["member"]}
+        icon={<HeartHandshake aria-hidden />}
+      />
+    );
   } else {
     body = (
       <EntityTable

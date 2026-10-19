@@ -24,7 +24,7 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import type { FilterChoice, SortChoice } from "../../components/listing";
 import { useListing } from "../../components/useListing";
-import { ListPage, NOT_RECORDED, type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, ListPage, NOT_RECORDED, type EntityColumn } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import {
   DropdownMenu,
@@ -181,6 +181,8 @@ export function CredentialsPage() {
       loading={LOADING_CREDENTIALS}
       emptyTitle={NO_CREDENTIALS}
       emptyDescription={NO_CREDENTIALS_DESCRIPTION}
+      emptyAdds="A slot is listed for every provider, source and channel a release declares, and none is added by hand."
+      emptyBy={BY_THE_INSTALL}
       emptyIcon={<KeyRound aria-hidden />}
     />
   );

@@ -283,6 +283,8 @@ export function ServiceAccountsPage() {
       loading={READING_ACCOUNTS}
       emptyTitle={NO_ACCOUNTS}
       emptyDescription={NO_ACCOUNTS_DESCRIPTION}
+      emptyAdds="Register an integration with Register an account."
+      emptyBy={["member"]}
       emptyIcon={<KeyRound aria-hidden />}
       emptyAction={register}
     />

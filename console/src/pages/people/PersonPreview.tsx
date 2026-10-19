@@ -13,7 +13,9 @@
 
 import { useId, useState, type FormEvent } from "react";
 import { request } from "../../api/client";
+import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
+import { FailureState } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Label } from "../../components/ui/label";
 import { ROSTER_API_PATH, readRoster } from "../agentsQuery";
@@ -29,6 +31,7 @@ export function PersonPreview({ principalId }: { readonly principalId: string })
   const entries = roster.data === null ? [] : (readRoster(roster.data)?.entries ?? []);
   const [agent, setAgent] = useState("");
   const [said, setSaid] = useState<string | null>(null);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [busy, setBusy] = useState(false);
   const [shown, setShown] = useState<Preview | null>(null);
 
@@ -43,10 +46,12 @@ export function PersonPreview({ principalId }: { readonly principalId: string })
     setBusy(false);
     if (!result.ok) {
       setShown(null);
-      setSaid(result.failure.message);
+      setSaid(null);
+      setFailure(result.failure);
       return;
     }
     setSaid(null);
+    setFailure(null);
     setShown(readPreview(result.data));
   };
 
@@ -82,6 +87,7 @@ export function PersonPreview({ principalId }: { readonly principalId: string })
           {said}
         </p>
       )}
+      {failure === null ? null : <FailureState failure={failure} />}
       {shown === null ? null : (
         <div data-slot="preview-result" className="rounded-md border border-line p-3 text-[13px]">
           {shown.tools.length === 0 ? (

@@ -35,7 +35,7 @@ export const NO_VALUE_IS_KEPT =
   "A field shows its value only when it is one of the product's own words or numbers, and an exception shows its type.";
 
 export const READING_THE_LOG = "Loading the log.";
-export const THE_BRAIN_COULD_NOT_BE_REACHED = "The Brain could not be reached";
+export { THE_BRAIN_COULD_NOT_BE_REACHED } from "../ui/FailureNotice";
 export const UNREADABLE_ANSWER =
   "The API answered in a shape this console does not read, so no row is listed. The console and " +
   "the API are probably from different releases.";
@@ -62,7 +62,6 @@ export function keptFor(days: number): string {
 /** The export's button, and what it says it holds. */
 export const EXPORT_LOG = "Export";
 export const EXPORT_LOG_TITLE = "Exports every row this search finds in this period, as a CSV file.";
-export const EXPORT_CUT_OFF = "The period held more rows than one export carries; choose a shorter period for the rest.";
 export const EXPORT_SAVED = "The export was saved as a file.";
 export const EXPORT_NOT_SAVED = "This browser could not save the export as a file.";
 

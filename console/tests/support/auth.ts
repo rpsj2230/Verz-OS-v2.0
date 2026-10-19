@@ -22,6 +22,7 @@
 import { vi } from "vitest";
 
 import { CONFIG_GLOBAL } from "../../src/config";
+import { EXPLANATIONS_ADDRESS, servedBody } from "./explanations";
 
 export const ISSUER = "https://idp.test/realms/brain";
 export const AUTHORIZATION_ENDPOINT = `${ISSUER}/protocol/openid-connect/auth`;
@@ -141,6 +142,14 @@ export function fakeIdentityProvider(options: FakeIdpOptions = {}): FakeIdp {
     const answered = options.api?.(url, init) ?? null;
     if (answered) {
       return answered;
+    }
+    // An explanation is asked for by every page that draws one, and no test is about the request.
+    // It is answered from the server's own registry (`support/explanations.ts`) unless the test
+    // answered it above, which is how a test about a failed read says so.
+    const at = new URL(url, CONSOLE_ORIGIN).pathname;
+    if (at.startsWith(EXPLANATIONS_ADDRESS) && (init?.method ?? "GET").toUpperCase() === "GET") {
+      const body = servedBody(decodeURIComponent(at.slice(EXPLANATIONS_ADDRESS.length)));
+      return body === null ? json({ message: "Nothing here." }, 404) : json(body, 200);
     }
     return json({ message: "Nothing here." }, 404);
   });

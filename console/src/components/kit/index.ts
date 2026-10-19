@@ -27,6 +27,7 @@ export {
 export { copied } from "./copyText";
 export { DetailHeader, DetailPage, ViewSwitch, type DetailView } from "./DetailPage";
 export { Drawer } from "./Drawer";
+export { EXPLANATION_LEADS, Explanation, UNAVAILABLE_MARK, type ExplanationProps } from "./explanation";
 export { EntityTable, saveCsv, selectedWords, toCsv, type EntityColumn } from "./EntityTable";
 export { FIGURES_FAILED, FIGURES_LOADING, KpiStrip, NOT_RECORDED, StatCard, StatsStrip } from "./KpiStrip";
 export { ListPage, type ListPageProps } from "./ListPage";
@@ -40,13 +41,20 @@ export {
   initialsOf,
   Note,
   NOTE_LEADS,
-  NotOffered,
   SectionCard,
-  UNAVAILABLE_MARK,
-  UnavailableAction,
   type NoteKind,
 } from "./parts";
-export { EmptyState, FailureState, LoadingState } from "./states";
+export { PLATFORM_ROLES, ROLE_WORDS, roleWords, type PlatformRole } from "./roles";
+export {
+  BY_THE_INSTALL,
+  EmptyList,
+  EmptyState,
+  FailureState,
+  LoadingState,
+  THE_INSTALL_RECORDS_THESE,
+  whoAdds,
+  type EmptyBy,
+} from "./states";
 export { forgetAllFlows, forgetFlow, recallFlow, rememberFlow } from "./flowMemory";
 export { useFlowDraft } from "./useFlowDraft";
 export { WizardSteps, type WizardStep } from "./WizardSteps";

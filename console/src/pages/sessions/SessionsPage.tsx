@@ -21,7 +21,7 @@ import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import type { FilterChoice } from "../../components/listing";
 import { useListing } from "../../components/useListing";
-import { Chip, ConfirmDialog, ListPage, Note, type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, Chip, ConfirmDialog, ListPage, Note, type EntityColumn } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { FailureNotice } from "../../ui/FailureNotice";
 import {
@@ -281,6 +281,8 @@ export function SessionsPage() {
         loading={LOADING_SESSIONS}
         emptyTitle={NO_SESSIONS}
         emptyDescription={page.appears === "" ? APPEARS_FALLBACK : page.appears}
+        emptyAdds="A session is opened by somebody signing in, and none is added by hand."
+        emptyBy={BY_THE_INSTALL}
         emptyIcon={<MonitorSmartphone aria-hidden />}
         footer={page.truncated ? <Note>{MORE_SESSIONS}</Note> : null}
       />

@@ -29,6 +29,7 @@ import {
 } from "../pages/channelsQuery";
 import { FailureNotice } from "../ui/FailureNotice";
 import { ConfirmAction } from "./ConfirmAction";
+import { EmptyList } from "./kit/states";
 
 export const MY_CHANNELS_CAPTION = "Channels";
 export const READING_MY_CHANNELS = "Reading your chat channels.";
@@ -116,7 +117,12 @@ export function MyChannels() {
           {READING_MY_CHANNELS}
         </p>
       ) : answer.data.channels.length === 0 ? (
-        <p className="note">{NO_MY_CHANNELS}</p>
+        <EmptyList
+          compact
+          title={NO_MY_CHANNELS}
+          adds="A channel is listed once a release declares it and an administrator switches it on."
+          by={["super_admin", "department_admin"]}
+        />
       ) : (
         <>
           <ul aria-label="Your chat channels">
@@ -153,7 +159,7 @@ export function MyChannels() {
               </li>
             ))}
           </ul>
-          <p className="hint note">{answer.data.told}</p>
+          <p className="note">{answer.data.told}</p>
         </>
       )}
     </section>

@@ -88,7 +88,7 @@ Scope: domain logic. Nothing here renders, opens a connection or reads a clock. 
 parameter, the environment arrives as a mapping and is read only through `brain.install.value_of`,
 and the one call that reaches a server is `roster_from`'s call to the source handed in.
 
-Task ids: M1.6.11, M1.8.9
+Task ids: M1.6.11, M1.8.9, M39.10.3
 """
 
 from __future__ import annotations
@@ -119,6 +119,7 @@ from brain.identity.staff_source import (
 )
 from brain.identity.staff_sync import DryRun, dry_run
 from brain.install import BY_NAME, value_of
+from brain.knowledge.visibility import Visibility
 from brain.ops.jobs import hidden_count_fields
 
 # ------------------------------------------------------------------ written-down reasons
@@ -707,7 +708,13 @@ def transfers_for(
     may become the steward of each, which is the question a publication asks: a ceiling entering
     the world with a new name against it. An agent this reader may not take is left out with no
     count of it. See `A_LEAVERS_AGENT_RUNS_AT_THE_REACH_IT_HAD_UNTIL_SOMEBODY_TAKES_IT`.
+
+    **A leaver's personal agent is never listed, and so is never taken.** It was found by its owner
+    and by nobody else, so a list that named it to whoever may adopt agents would show a reader
+    another person's agent and, by taking it, hand them what its owner connected to it. It stays
+    stopped, as the nightly run left it, until the install's own retention decides what becomes of
+    it (M39.10.3).
     """
-    by_id = {one.agent_id: one for one in records}
+    by_id = {one.agent_id: one for one in records if one.audience.level is not Visibility.PERSONAL}
     listed = agents_needing_transfer(by_id.values(), departing=leavers)
     return tuple(by_id[one] for one in listed if may_adopt(by_id[one], reader, now))

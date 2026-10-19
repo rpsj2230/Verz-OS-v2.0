@@ -45,7 +45,7 @@ export const NO_GROUPS =
 export const INSTALL_HERE = "Install in this chat";
 export const CHOOSE_A_CHAT = "Choose a group chat";
 export const INSTALL_QUESTION = (chat: string): string => `Install this agent in ${chat}?`;
-export const REMOVE_QUESTION = (chat: string): string => `Take this agent out of ${chat}?`;
+export const REMOVE_QUESTION = (chat: string): string => `Detach this agent from ${chat}?`;
 export const WHAT_AN_INSTALL_DOES =
   "Messages in the chat that name no agent are answered by this one. What it may say there is still decided by who is in the chat.";
 export const WHAT_A_REMOVAL_DOES = "Messages in the chat that name no agent are no longer answered by this one.";
@@ -128,14 +128,14 @@ export function AgentGroups({ agentId }: { readonly agentId: string }) {
                   size="sm"
                   variant="outline"
                   className="ml-auto min-h-11 sm:min-h-8"
-                  aria-label={`Take this agent out of ${chatName(one)}`}
+                  aria-label={`Detach this agent from ${chatName(one)}`}
                   disabled={sending}
                   onClick={() => {
                     setRefused(null);
                     setPending({ kind: "remove", install: one });
                   }}
                 >
-                  Take out
+                  Detach
                 </Button>
               </li>
             ))}
@@ -178,7 +178,7 @@ export function AgentGroups({ agentId }: { readonly agentId: string }) {
           pending === null ? "" : pending.kind === "install" ? INSTALL_QUESTION(chatName(pending.room)) : REMOVE_QUESTION(chatName(pending.install))
         }
         consequence={pending?.kind === "remove" ? WHAT_A_REMOVAL_DOES : WHAT_AN_INSTALL_DOES}
-        confirmLabel={pending?.kind === "remove" ? "Take it out" : "Install it"}
+        confirmLabel={pending?.kind === "remove" ? "Detach it" : "Install it"}
         cancelLabel="Not now"
         busy={sending}
         onConfirm={confirm}

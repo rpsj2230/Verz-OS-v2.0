@@ -26,7 +26,7 @@ import { MoreHorizontal, Plus } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
-import { Advanced, EmptyState, Fact, FactList, Note, SectionCard, type EntityColumn } from "../../components/kit";
+import { Advanced, EmptyState, type EntityColumn, Explanation, Fact, FactList, Note, SectionCard } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import {
   DropdownMenu,
@@ -159,7 +159,7 @@ function Body({ page, onAct }: { readonly page: WebhooksBody; readonly onAct: (a
   const dispatcher = page.dispatcher;
   return (
     <>
-      {page.vault === "ready" ? null : <Note kind="not-yet">{page.vault_told}</Note>}
+      {page.vault === "ready" ? null : <Explanation form="note" lead="not-yet" told={page.vault_told} />}
       <WholeList
         title={SUBSCRIBERS_HEADING}
         caption={SUBSCRIBERS_HEADING}
@@ -171,6 +171,8 @@ function Body({ page, onAct }: { readonly page: WebhooksBody; readonly onAct: (a
         exportName="webhook-subscribers"
         empty={NO_SUBSCRIBERS}
         emptyDescription={NO_SUBSCRIBERS_DESCRIPTION}
+        emptyAdds="Register a subscriber with Register a subscriber, and it is listed here."
+        emptyBy={["super_admin"]}
       />
       {page.findings.length === 0 ? null : (
         <div className="flex flex-col gap-1">

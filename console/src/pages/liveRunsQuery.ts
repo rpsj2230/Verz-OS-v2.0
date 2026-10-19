@@ -148,8 +148,7 @@ export const ACTING = "Acting";
 export const FIRST_RUN = "Never run before";
 
 /** The two failure headings, which are different sentences on purpose. */
-export const THE_BRAIN_COULD_NOT_BE_REACHED = "The Brain could not be reached";
-export const SOMETHING_DID_NOT_WORK = "That did not work";
+export { THAT_DID_NOT_WORK as SOMETHING_DID_NOT_WORK, THE_BRAIN_COULD_NOT_BE_REACHED } from "../ui/FailureNotice";
 
 /** What is said when the API answered in a shape this console does not read. */
 export const UNREADABLE_ANSWER =

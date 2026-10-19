@@ -112,7 +112,7 @@ export function usePeriod(): readonly [string, (period: string) => void] {
 
 function RecentRuns({ runs, busy }: { readonly runs: readonly RecentRun[]; readonly busy: boolean }) {
   if (runs.length === 0) {
-    return <p className="m-0 text-[13px] text-ink-3">{busy ? "Loading." : NO_RECENT_RUNS}</p>;
+    return <p className="m-0 text-[13px] text-dim">{busy ? "Loading." : NO_RECENT_RUNS}</p>;
   }
   return (
     <ul data-slot="recent-runs" className="m-0 flex list-none flex-col gap-1.5 p-0">
@@ -122,7 +122,7 @@ function RecentRuns({ runs, busy }: { readonly runs: readonly RecentRun[]; reado
             {run.who}
             {run.byAPerson ? "" : ` (${BY_AN_AUTOMATION})`}
           </span>
-          <span className="text-ink-3">
+          <span className="text-dim">
             {RUN_STATUS_WORDS[run.status] ?? run.status} · {latencyWords(run.durationMs)} · {whenWords(run.at)}
           </span>
         </li>

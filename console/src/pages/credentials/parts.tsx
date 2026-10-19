@@ -17,7 +17,7 @@
  */
 
 import { Link } from "react-router-dom";
-import { Fact, FactList, Note, SectionCard } from "../../components/kit";
+import { Explanation, Fact, FactList, SectionCard } from "../../components/kit";
 import { cn } from "../../lib/utils";
 import { WORKS_AT } from "./credentialActions";
 import { sealWords, stateWords, type VaultOverview } from "./credentialRows";
@@ -82,8 +82,8 @@ export function VaultCard({ vault }: { readonly vault: VaultOverview }) {
         footer={
           vault.liveReads === "waiting" || vault.slotsUnread !== "" ? (
             <>
-              {vault.slotsUnread === "" ? null : <Note kind="not-yet">{vault.slotsUnread}</Note>}
-              {vault.liveReads === "waiting" ? <Note kind="not-yet">{vault.liveReadsTold}</Note> : null}
+              {vault.slotsUnread === "" ? null : <Explanation form="note" lead="not-yet" told={vault.slotsUnread} />}
+              {vault.liveReads === "waiting" ? <Explanation form="note" lead="not-yet" told={vault.liveReadsTold} /> : null}
             </>
           ) : undefined
         }

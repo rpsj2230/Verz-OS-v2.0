@@ -9,7 +9,7 @@
  *
  * **One primary action, then the rest.** The design of record puts one solid button at the right of
  * a page's heading ("New agent") and everything else quieter. `primary` is that button, or an
- * `UnavailableAction` saying why it cannot be pressed yet; `actions` is the rest.
+ * `Explanation` of the `action` form saying why it cannot be pressed yet; `actions` is the rest.
  *
  * Task ids: M27.10.2
  */

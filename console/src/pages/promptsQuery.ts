@@ -33,7 +33,7 @@ export const PROMPTS_LEDE =
 
 export const READING_PROMPTS = "Reading the instructions.";
 export const NO_AGENTS = "There is no agent whose instructions this screen can show you.";
-export const THE_BRAIN_COULD_NOT_BE_REACHED = "The Brain could not be reached";
+export { THE_BRAIN_COULD_NOT_BE_REACHED } from "../ui/FailureNotice";
 export const UNREADABLE_ANSWER =
   "The API answered in a shape this console does not read, so no instructions are listed. The " +
   "console and the API are probably from different releases.";
@@ -48,9 +48,6 @@ export const NO_MODEL_IS_CALLED_YET =
   "given from the next request, and no answer anybody has received.";
 export const EVERY_CHANGE_IS_IN_THE_AUDIT_TRAIL =
   "Every edit and give-back, and who made it, is kept in the audit trail, without the words.";
-export const EDITING_SWITCHED_OFF =
-  "Editing instructions is switched off on this install. An administrator switches it on under " +
-  "Install, Features. Instructions already changed can still be given back to their template.";
 export const NOT_INSTALLED =
   "This agent has no install record, so its instructions have no template to be recorded against " +
   "and cannot be edited here.";

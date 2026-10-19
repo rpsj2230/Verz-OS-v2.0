@@ -24,9 +24,9 @@ import { ROSTER_ADDRESS } from "../src/components/agentWorkspaceState";
 import { NOT_RECORDED, UNAVAILABLE_MARK } from "../src/components/kit";
 import { agentAddress, NO_AGENTS, ROSTER_HEADING } from "../src/pages/Agents";
 import { readRoster } from "../src/pages/agentsQuery";
-import { UNAVAILABLE } from "../src/pages/agents/agentActions";
 import { ACT_DONE, MAY_NOT_CHANGE, TYPED_MISSING } from "../src/pages/agentLifecycleQuery";
 import { DRAFTS_LINK, NOT_AVAILABLE, readAgentRows } from "../src/pages/agents/AgentsPage";
+import { OVERSIGHT_API_PATH } from "../src/pages/agents/AgentOversight";
 import { DRAFTS_ADDRESS, NEW_AGENT_ADDRESS } from "../src/pages/agents/agentDraftsQuery";
 import { NEW_AGENT_HEADING } from "../src/pages/agents/NewAgentPage";
 import { agentStatsApiPath } from "../src/pages/agents/agentStats";
@@ -37,6 +37,7 @@ import { apiDocument, declaredProperty, declaredPropertyNames, declaredResponseS
 import { backendPublicMessages } from "./support/python";
 import { installRadixStubs } from "./support/radix";
 import { parseConsoleSource } from "./support/typescript";
+import { noRouteRetires, retiringPattern } from "./support/explanations";
 
 const CONSOLE_ORIGIN = "https://console.test";
 const ROSTER_API = "/api/v1/agents";
@@ -253,7 +254,11 @@ describe("the list", () => {
     });
     const asked = idp.urls.map((url) => new URL(url, CONSOLE_ORIGIN)).filter((url) => url.pathname.startsWith("/api/v1/"));
     const paths = asked.map((url) => url.pathname).filter((path) => path !== NAVIGATION_ADDRESS && path !== "/api/v1/me");
-    expect(paths.sort()).toEqual([ROSTER_API, `/api/v1${agentStatsApiPath("quote_helper")}`].sort());
+    // The oversight section is the one other read (M39.10.3): one request, and absent from the page
+    // for a reader the API tells of no personal agent.
+    expect(paths.sort()).toEqual(
+      [ROSTER_API, `/api/v1${agentStatsApiPath("quote_helper")}`, `/api/v1${OVERSIGHT_API_PATH}`].sort(),
+    );
   });
 
   test("New agent opens the guided start, and Drafts the drafts list", async () => {
@@ -485,14 +490,11 @@ describe("what an entry becomes", () => {
     // What breaks if this is deleted: a sentence saying "coming soon" about an act that has arrived,
     // so a person is told they cannot do what they can. When a lifecycle route lands, this fails
     // until its control is made live and its sentence removed.
-    const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
-    for (const [act, { retiredBy }] of Object.entries(UNAVAILABLE)) {
-      expect(paths.filter((path) => retiredBy.test(path)), act).toEqual([]);
-    }
+    noRouteRetires(["agent.browser"]);
     // The positive sibling: the pattern shape does match the paths it is written for.
-    expect(UNAVAILABLE.browser.retiredBy.test("/api/v1/agents/{agent_id}/browser")).toBe(true);
+    expect(retiringPattern("agent.browser").test("/api/v1/agents/{agent_id}/browser")).toBe(true);
     // The act that used to be listed here, who can find an agent, has its route and its control.
-    expect(Object.keys(UNAVAILABLE)).not.toContain("level");
+    const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
     expect(paths).toContain("/api/v1/agents/{agent_id}/audience");
   });
 });

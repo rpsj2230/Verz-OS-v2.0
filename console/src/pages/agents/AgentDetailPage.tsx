@@ -62,14 +62,14 @@ import { ROSTER_ADDRESS } from "../../components/agentWorkspaceState";
 import {
   DetailHeader,
   DetailPage,
+  type DetailView,
+  Explanation,
   FailureState,
   KpiStrip,
   LoadingState,
-  Note,
   SectionCard,
   StatCard,
   ViewSwitch,
-  type DetailView,
 } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import {
@@ -121,7 +121,6 @@ export const FIGURES_LABEL = "This agent at a glance";
 export const SPEND_LABEL = "Spend, 30 days";
 export const SKILLS_LABEL = "Skills";
 export const DAYS_LABEL = "Days since created";
-export const SPEND_NOT_RECORDED = "spend is not recorded, so the figure is left out rather than drawn as nought.";
 export const AUTOMATIONS_SECTION = "Automations";
 export const CONVERSATIONS_SECTION = "Conversations";
 
@@ -426,7 +425,7 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
           />
         </KpiStrip>
       }
-      footnote={recorded ? undefined : <Note kind="not-yet">{SPEND_NOT_RECORDED}</Note>}
+      footnote={recorded ? undefined : <Explanation form="note" act="agent.spend_not_recorded" />}
     />
   );
 

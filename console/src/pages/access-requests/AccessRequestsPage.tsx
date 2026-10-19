@@ -344,6 +344,8 @@ export function AccessRequestsPage() {
         loading={READING_REQUESTS}
         emptyTitle={NOTHING_SENT}
         emptyDescription={NOTHING_SENT_MORE}
+        emptyAdds="Anybody who needs access they do not hold asks for it from their own Access requests page."
+        emptyBy={["member"]}
         emptyIcon={<Inbox aria-hidden />}
         footer={
           <>

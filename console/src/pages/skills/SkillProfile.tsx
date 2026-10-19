@@ -40,11 +40,11 @@ import {
   Advanced,
   Chip,
   ConfirmDialog,
+  Explanation,
   Fact,
   FactList,
   Note,
   SectionCard,
-  UnavailableAction,
 } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { FailureNotice } from "../../ui/FailureNotice";
@@ -80,7 +80,6 @@ import {
 } from "../skillsQuery";
 import { AssignForm, CategoriesForm, EditVersionForm, RehearseForm, type Tell } from "./SkillForms";
 import { ReviewPill, RetiredPill } from "./pills";
-import { UNAVAILABLE } from "./skillActions";
 import { dayWords, named, type SkillDetail } from "./skillDetailQuery";
 
 export const VERSIONS_HEADING = "Versions";
@@ -494,7 +493,7 @@ function Version({
           {one.retirable === true ? <Retirement one={one} onTold={onTold} /> : null}
           {one.exportable === true ? <Export one={one} onTold={onTold} /> : null}
           {one.review === "approved" && one.retired !== true ? (
-            <UnavailableAction label={TRY_OUT} text={TRY_OUT} icon={<FlaskConical aria-hidden />} reason={UNAVAILABLE.tryOut.reason} />
+            <Explanation form="action" act="skill.try_out" label={TRY_OUT} text={TRY_OUT} icon={<FlaskConical aria-hidden />} />
           ) : null}
         </div>
       ) : null}

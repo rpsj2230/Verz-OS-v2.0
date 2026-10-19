@@ -27,7 +27,7 @@ import { useResource } from "../../api/useResource";
 import {
   ConfirmDialog,
   Drawer,
-  EmptyState,
+  EmptyList,
   EntityTable,
   FailureState,
   LoadingState,
@@ -262,7 +262,12 @@ export function EscalationQueuesView({ onDone, version }: { readonly onDone: (to
       }
     >
       {found.routes.length === 0 ? (
-        <EmptyState title={NO_QUEUES} description={NO_QUEUES_MORE} />
+        <EmptyList
+          title={NO_QUEUES}
+          description={NO_QUEUES_MORE}
+          adds="Name who answers for a queue with the form on this screen."
+          by={["super_admin"]}
+        />
       ) : (
         <EntityTable
           exportName="escalation-queues"

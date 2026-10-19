@@ -18,7 +18,6 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import { NOT_RECORDED } from "../src/components/kit";
-import { UNAVAILABLE } from "../src/pages/models/modelsActions";
 import { ABOUT_THE_MATRIX, FAILOVER_MATRIX, MATRIX_EXPLAINED } from "../src/pages/models/FailoverMatrixCard";
 import { GOLDEN_QUESTION_FIELD } from "../src/pages/models/GoldenQuestions";
 import { PROVIDERS_LEDE, readProviderRows } from "../src/pages/models/ProvidersPage";
@@ -31,6 +30,7 @@ import type { RungRow } from "../src/pages/matrixQuery";
 import { fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
 import { apiDocument } from "./support/openapi";
 import { installRadixStubs } from "./support/radix";
+import { registered } from "./support/explanations";
 
 const ORIGIN = "https://console.test";
 const PROVIDERS = "/api/v1/models/providers";
@@ -292,13 +292,12 @@ describe("the providers", () => {
     expect(readProviderRows({ ...plan([provider("openai"), provider("moonshot")]), items: [provider("moonshot")] }).map((one) => one.provider)).toEqual(["moonshot"]);
   });
 
-  test("the one act not built yet says so, and its route has not arrived", () => {
-    // What breaks if this is deleted: a "coming soon" that outlives the route that makes it work.
-    const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
-    for (const [act, { retiredBy }] of Object.entries(UNAVAILABLE)) {
-      expect(paths.filter((path) => retiredBy.test(path)), act).toEqual([]);
-    }
-    expect(UNAVAILABLE.rename.retiredBy.test("/api/v1/models/providers/{provider}/rename")).toBe(true);
+  test("no model act is waiting on a route, so every model sentence is a deliberate refusal", () => {
+    // What breaks if this is deleted: a model act registered as "coming soon" with nothing drawing it
+    // (renaming a provider was, until 2026-10-15), which is a sentence that can go stale unseen.
+    const models = registered().filter((one) => one.act.startsWith("model."));
+    expect(models.map((one) => one.act).sort()).toEqual(["model.built_in_retire", "model.step_restore"]);
+    expect(models.filter((one) => one.retired_by !== "")).toEqual([]);
   });
 });
 

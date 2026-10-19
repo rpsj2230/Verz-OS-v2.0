@@ -126,7 +126,7 @@ export function AskAttach({
 
   return (
     <form className="ask__attach" aria-label={ATTACH_HEADING} onSubmit={onSubmit} noValidate>
-      <h2 className="ask__attach-heading">{ATTACH_HEADING}</h2>
+      <h2>{ATTACH_HEADING}</h2>
       {failure === null ? null : <FailureNotice failure={failure} fields={["file", "kind"]} />}
       {busy ? (
         <p className="note" role="status">
@@ -151,7 +151,7 @@ export function AskAttach({
         }}
       />
       {problem === "" ? null : (
-        <p id={`${FILE_FIELD_ID}-problem`} className="field-problem">
+        <p id={`${FILE_FIELD_ID}-problem`}>
           {problem}
         </p>
       )}
@@ -186,8 +186,8 @@ export function AttachedFiles({ titles }: { readonly titles: readonly string[] }
     return null;
   }
   return (
-    <section className="ask__attached" aria-label={ATTACHED_LABEL}>
-      <h2 className="ask__attach-heading">{ATTACHED_LABEL}</h2>
+    <section aria-label={ATTACHED_LABEL}>
+      <h2>{ATTACHED_LABEL}</h2>
       <ul>
         {titles.map((title, index) => (
           <li key={`${String(index)}-${title}`}>{title}</li>

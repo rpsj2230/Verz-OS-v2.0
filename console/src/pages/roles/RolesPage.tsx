@@ -6,7 +6,7 @@
  * says what this screen has to make visible: a role governs the platform and never implies a
  * capability. So the catalogue is a role, what it exists to do, how many usually hold it and whether
  * it needs a scope, and there is no column that could grow a capability. Editing what a role grants is
- * not offered, because there is nothing to edit (`NotOffered`).
+ * not offered, because there is nothing to edit (an `Explanation` of the `line` form).
  *
  * **Holders, named, and no count of anybody hidden.** `GET /govern/roles/holders` answers only the
  * appointments the Roles screen's read admits over where each holder sits, and each carries the
@@ -31,14 +31,15 @@ import { Plus, UserCog } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useResource } from "../../api/useResource";
 import {
-  EmptyState,
+  BY_THE_INSTALL,
+  EmptyList,
+  type EntityColumn,
   EntityTable,
+  Explanation,
   FailureState,
   LoadingState,
-  NotOffered,
   PageHeader,
   SectionCard,
-  type EntityColumn,
 } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import {
@@ -82,9 +83,6 @@ export function nominationState(row: NominationRow): string {
 }
 export const MISCONFIGURED_HEADING = "Approver role and approve permission";
 export const SYNCED_HEADING = "Roles the sync wrote from a group";
-export const A_ROLE_IS_NOT_EDITED =
-  "What a role grants is not edited here, because a role grants nothing: what somebody may see is only what their grants say.";
-
 /** One holder, as the holders route sends one. */
 export interface HolderLine {
   readonly id: string;
@@ -142,7 +140,12 @@ function Catalogue() {
     },
   ];
   return roles.length === 0 ? (
-    <p className="m-0 text-[13px] text-dim">There are no roles to show.</p>
+    <EmptyList
+      compact
+      title="There are no roles to show."
+      adds="The platform's six roles are compiled in with the release, and none is added by hand."
+      by={BY_THE_INSTALL}
+    />
   ) : (
     <EntityTable exportName="platform-roles" caption="The platform roles" columns={columns} rows={roles} rowId={(row) => row.role} rowLabel={(row) => roleWords(row.role)} />
   );
@@ -189,7 +192,15 @@ function Holders({ version, onWritten }: { readonly version: number; readonly on
   } else if (answer.data === null) {
     body = <LoadingState label="Loading who holds a role." rows={3} />;
   } else if (page.items.length === 0) {
-    body = <EmptyState title={NO_HOLDERS} description="A person holds a role once somebody appoints them here or a directory group mapped below confers it." icon={<UserCog aria-hidden />} />;
+    body = (
+      <EmptyList
+        title={NO_HOLDERS}
+        description="A person holds a role once somebody appoints them here or a directory group mapped below confers it."
+        adds="Appoint somebody to a role on this screen, or map a directory group to a role."
+        by={["super_admin", "department_admin"]}
+        icon={<UserCog aria-hidden />}
+      />
+    );
   } else {
     body = (
       <EntityTable
@@ -205,12 +216,12 @@ function Holders({ version, onWritten }: { readonly version: number; readonly on
                 <Button
                   size="sm"
                   variant="outline"
-                  aria-label={`Remove ${roleWords(row.role)} from ${nameOf(row)}`}
+                  aria-label={`Withdraw ${roleWords(row.role)} from ${nameOf(row)}`}
                   onClick={() => {
-                    setEnding({ kind: "role", grantId: row.id, question: `Remove ${roleWords(row.role)} from ${nameOf(row)}?` });
+                    setEnding({ kind: "role", grantId: row.id, question: `Withdraw ${roleWords(row.role)} from ${nameOf(row)}?` });
                   }}
                 >
-                  Remove
+                  Withdraw
                 </Button>
               )
             : undefined
@@ -248,7 +259,7 @@ function Holders({ version, onWritten }: { readonly version: number; readonly on
           </>
         ) : undefined
       }
-      footer={<NotOffered>{A_ROLE_IS_NOT_EDITED}</NotOffered>}
+      footer={<Explanation form="line" act="role.not_edited" />}
     >
       {body}
       <AppointDrawer open={appointing} onOpenChange={setAppointing} onWritten={onWritten} />
@@ -282,7 +293,14 @@ function GroupRules({ version, onWritten }: { readonly version: number; readonly
   } else if (answer.data === null) {
     body = <LoadingState label="Loading the directory group mappings." rows={2} />;
   } else if (page.rules.length === 0) {
-    body = <p className="m-0 text-[13px] text-dim">No directory group maps to a role yet.</p>;
+    body = (
+      <EmptyList
+        compact
+        title="No directory group maps to a role yet."
+        adds="Map a directory group to a role with the form on this screen."
+        by={["super_admin", "department_admin"]}
+      />
+    );
   } else {
     body = (
       <EntityTable
@@ -370,7 +388,14 @@ function Misconfigured() {
   } else if (answer.data === null) {
     body = <LoadingState label="Checking the Approver role against the approve permission." rows={1} />;
   } else if (rows.length === 0) {
-    body = <p className="m-0 text-[13px] text-dim">Nobody you may see holds one without the other.</p>;
+    body = (
+      <EmptyList
+        compact
+        title="Nobody you may see holds one without the other."
+        adds="A mismatch is listed when somebody holds the Approver role without the approving capability, or the reverse."
+        by={BY_THE_INSTALL}
+      />
+    );
   } else {
     body = (
       <ul className="m-0 flex list-none flex-col divide-y divide-line p-0">
@@ -420,7 +445,12 @@ function Nominations({ version, onWritten }: { readonly version: number; readonl
     body = (
       <div className="flex flex-col gap-4">
         {page.deciding.length === 0 ? (
-          <p className="m-0 text-[13px] text-dim">{NOTHING_TO_DECIDE}</p>
+          <EmptyList
+            compact
+            title={NOTHING_TO_DECIDE}
+            adds="Somebody nominates a person for a role, and the nomination waits here for a Super Admin."
+            by={["super_admin", "department_admin"]}
+          />
         ) : (
           <EntityTable
             exportName="nominations-waiting"

@@ -8,8 +8,8 @@
  * **Every change the API offers this reader works, and each is confirmed.** Pause, resume, change
  * the schedule, remove and adopt are drawn only when the API said this reader may make them
  * (`may_*`), and each sends the confirmation the page was sent (`AutomationActs.tsx`). Bringing back
- * a removed automation has no route, so on a removed automation it is `kit/UnavailableAction` with
- * `automationActions.ts`' sentence. The page decides nothing: the API decides again on arrival.
+ * a removed automation has no route, so on a removed automation it is a `kit/Explanation` of the
+ * `action` form (`automation.reinstate`). The page decides nothing: the API decides again on arrival.
  *
  * **A 404 is not explained.** An automation that does not exist, one on an agent the reader may not
  * see and one the reader may not see are one answer.
@@ -24,15 +24,15 @@ import { useResource } from "../../api/useResource";
 import {
   DetailHeader,
   DetailPage,
+  type DetailView,
+  Explanation,
   FailureState,
   LoadingState,
   Note,
-  UnavailableAction,
   ViewSwitch,
-  type DetailView,
 } from "../../components/kit";
 import { Button } from "../../components/ui/button";
-import { ACT_LABELS, UNAVAILABLE } from "./automationActions";
+import { ACT_LABELS } from "./automationActions";
 import { ChangeDialog, ScheduleDrawer } from "./AutomationActs";
 import { AutomationAbout } from "./AutomationAbout";
 import { AutomationDashboard } from "./AutomationDashboard";
@@ -132,7 +132,7 @@ function Acts({
         </Button>
       ) : null}
       {detail.row.state === "removed" ? (
-        <UnavailableAction label={ACT_LABELS.reinstate} text={ACT_LABELS.reinstate} reason={UNAVAILABLE.reinstate.reason} />
+        <Explanation form="action" act="automation.reinstate" label={ACT_LABELS.reinstate} text={ACT_LABELS.reinstate} />
       ) : null}
     </>
   );

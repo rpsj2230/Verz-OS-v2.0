@@ -21,6 +21,7 @@
 import { Download, FileText } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { request, requestFile } from "../../api/client";
+import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
 import { basisWords } from "../../components/AgentAssembly";
 import { Chip, ConfirmDialog, FailureState, KpiStrip, LoadingState, Note, SectionCard, StatCard } from "../../components/kit";
@@ -217,6 +218,7 @@ export function AgentArtifacts({ agentId }: { readonly agentId: string }) {
   const [successor, setSuccessor] = useState("");
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
   // The filter's choices outlive the request a filter makes, so the controls stay where they are
   // while the narrowed list is asked for. Each answer carries the people the reader sees whatever
   // the filter, so the latest answer's are the right ones.
@@ -245,9 +247,11 @@ export function AgentArtifacts({ agentId }: { readonly agentId: string }) {
   const fetchFile = async (item: ArtifactItem): Promise<void> => {
     const got = await requestFile(artifactFileApiPath(agentId, item.artifactId));
     if (!got.ok) {
-      setSaid(got.failure.message);
+      setSaid(null);
+      setFailure(got.failure);
       return;
     }
+    setFailure(null);
     setSaid(saveFile(fileName(item, got.type), got.body) ? null : CANNOT_SAVE_FILE);
   };
 
@@ -259,7 +263,8 @@ export function AgentArtifacts({ agentId }: { readonly agentId: string }) {
         : await request<unknown>(artifactSupersedeApiPath(agentId, one.item.artifactId), { method: "POST", body: { by: successor } });
     setBusy(false);
     setAsking(null);
-    setSaid(result.ok ? null : result.failure.message);
+    setSaid(null);
+    setFailure(result.ok ? null : result.failure);
     setVersion((count) => count + 1);
   };
 
@@ -296,6 +301,7 @@ export function AgentArtifacts({ agentId }: { readonly agentId: string }) {
           {said}
         </p>
       )}
+      {failure === null ? null : <FailureState failure={failure} />}
       {artifacts === null ? null : <Figures artifacts={artifacts} />}
       <SectionCard title={ARTIFACTS_HEADING} lede="Documents, decks, reports, exports and images this agent made for people, newest first.">
         <div className="flex min-w-0 flex-col gap-3">
@@ -326,7 +332,7 @@ export function AgentArtifacts({ agentId }: { readonly agentId: string }) {
             </div>
           ) : undefined
         }
-        confirmLabel={asking?.kind === "supersede" ? "Replace" : "Archive"}
+        confirmLabel={asking?.kind === "supersede" ? "Supersede" : "Archive"}
         cancelLabel="Keep it"
         danger={asking?.kind === "archive"}
         busy={busy}

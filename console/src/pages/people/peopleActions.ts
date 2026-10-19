@@ -15,23 +15,11 @@
  * (`PersonPreview.tsx`), which retired the one inert act this table held.
  *
  * **When a route lands, its sentence goes and a live control takes its place, in the same commit.**
- * `tests/people-access-pages.test.tsx` reads every `retiredBy` against the API document, so this
- * table cannot go on calling something "coming soon" once it has arrived.
+ * `tests/unit/test_console_explanations.py` reads every expiry against the routes the application
+ * mounts, so nothing can go on calling something "coming soon" once it has arrived.
  *
  * Task ids: M27.11.2, M27.11.3, M27.16.1
  */
-
-export const UNAVAILABLE: Readonly<Record<string, { readonly reason: string; readonly retiredBy: RegExp }>> = Object.freeze({});
-
-export type UnavailableAct = keyof typeof UNAVAILABLE;
-
-/** Said where an edit of a person's name or department would be, which this product does not offer. */
-export const EDITED_AT_THE_SOURCE =
-  "A person's name, department and employment come from the staff source or the identity provider, so they are changed there; a change made here would be overwritten by the next sync.";
-
-/** The same, on an install whose departments are managed on People (M1.6.19). */
-export const DEPARTMENT_SET_ON_PEOPLE =
-  "A person's name and employment come from the staff source or the identity provider, so they are changed there. Their department is set here: select them on People and press Move to a department.";
 
 /** A role grants nothing: said beside every role a person holds. */
 export const A_ROLE_GRANTS_NOTHING =

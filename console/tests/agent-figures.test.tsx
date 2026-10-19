@@ -423,7 +423,8 @@ describe("the month against the agent's own budget", () => {
     });
     await confirm("SGD 100.00");
     await waitFor(() => {
-      expect(form.querySelector('[role="alert"]')?.textContent).toBe(said);
+      // Drawn by the one failure component, so it carries the heading and the reference as well.
+      expect(form.querySelector('[data-slot="failure-state"]')?.textContent).toContain(said);
     });
 
     const own = await consoleAt(`/agents/${AGENT}`, answers(statsWire({ basis: "own" })));

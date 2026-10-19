@@ -19,13 +19,14 @@
 import type { ReactNode } from "react";
 import type { ApiFailure } from "../../api/errors";
 import {
-  EmptyState,
+  EmptyList,
   EntityTable,
   FailureState,
   LoadingState,
   PageHeader,
   SectionCard,
   type Crumb,
+  type EmptyBy,
   type EntityColumn,
 } from "../../components/kit";
 
@@ -161,6 +162,8 @@ export function WholeList<Row extends object>({
   withoutDetail,
   empty,
   emptyDescription,
+  emptyAdds,
+  emptyBy,
   footer,
 }: {
   readonly title: string;
@@ -182,12 +185,16 @@ export function WholeList<Row extends object>({
   /** The empty sentence, whichever reason the list is empty for. */
   readonly empty: string;
   readonly emptyDescription?: ReactNode | undefined;
+  /** The act that puts a row on the list, as one sentence. Required: see `EmptyList`. */
+  readonly emptyAdds: string;
+  /** Who does it. Required: see `EmptyList`. */
+  readonly emptyBy: EmptyBy;
   readonly footer?: ReactNode | undefined;
 }) {
   return (
     <SectionCard title={title} hideTitle={hideTitle} lede={lede} action={action} footer={footer}>
       {rows.length === 0 ? (
-        <EmptyState title={empty} description={emptyDescription ?? ""} />
+        <EmptyList title={empty} description={emptyDescription ?? ""} adds={emptyAdds} by={emptyBy} />
       ) : (
         <EntityTable
           caption={caption}

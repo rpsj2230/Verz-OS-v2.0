@@ -41,7 +41,6 @@ import {
   readSteward,
 } from "../pages/dataStewardQuery";
 import { FailureNotice } from "../ui/FailureNotice";
-import { Notice } from "../ui/Notice";
 
 type Asking = "another" | "yourself" | null;
 
@@ -53,7 +52,6 @@ export function DataStewardCard() {
   const [asking, setAsking] = useState<Asking>(null);
   const [busy, setBusy] = useState(false);
   const [problems, setProblems] = useState<Readonly<Record<string, string>>>({});
-  const [refused, setRefused] = useState<string | null>(null);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
 
   const steward = readSteward(answer.data);
@@ -66,7 +64,6 @@ export function DataStewardCard() {
     event.preventDefault();
     const blank = blankProblems(name, address);
     setProblems(blank);
-    setRefused(null);
     setFailure(null);
     if (Object.keys(blank).length === 0) {
       setAsking("another");
@@ -90,9 +87,9 @@ export function DataStewardCard() {
     const told = result.failure.status === 422 ? problemsIn(result.body) : null;
     if (told !== null) {
       setProblems(told);
-    } else if (result.failure.status === 409) {
-      setRefused(result.failure.message);
     } else {
+      // A 409's sentence says what to do and is drawn as the API worded it, under this card's own
+      // heading, by the one failure component.
       setFailure(result.failure);
     }
   }
@@ -103,12 +100,7 @@ export function DataStewardCard() {
       <p>{steward.told}</p>
       {steward.appointed ? null : (
         <>
-          {refused === null ? null : (
-            <Notice title={DATA_STEWARD_HEADING}>
-              <p>{refused}</p>
-            </Notice>
-          )}
-          {failure === null ? null : <FailureNotice failure={failure} />}
+          {failure === null ? null : <FailureNotice failure={failure} title={DATA_STEWARD_HEADING} />}
           {asking === "another" ? (
             <ConfirmAction
               question={anotherQuestion(name.trim())}
@@ -167,7 +159,6 @@ export function DataStewardCard() {
               disabled={busy || asking !== null}
               onClick={() => {
                 setProblems({});
-                setRefused(null);
                 setFailure(null);
                 setAsking("yourself");
               }}

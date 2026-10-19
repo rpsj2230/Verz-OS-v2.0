@@ -19,7 +19,7 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import { NOT_RECORDED, UNAVAILABLE_MARK } from "../src/components/kit";
-import { ACT_LABELS, UNAVAILABLE } from "../src/pages/automations/automationActions";
+import { ACT_LABELS } from "../src/pages/automations/automationActions";
 import { HOUR_LABEL, DAY_LABEL, EVERY_LABEL, REVIEW_SCHEDULE } from "../src/pages/automations/AutomationActs";
 import { AUTOMATIONS_HEADING } from "../src/pages/automations/AutomationsPage";
 import { AUTOMATIONS_ADDRESS, readAutomationRows } from "../src/pages/automations/automationsQuery";
@@ -28,6 +28,7 @@ import { declaredNavigation } from "./support/navigation";
 import { apiDocument, declaredPropertyNames, declaredRequestBodySchema } from "./support/openapi";
 import { installRadixStubs } from "./support/radix";
 import { readConsoleFile } from "./support/repo";
+import { noRouteRetires, retiringPattern } from "./support/explanations";
 
 const CONSOLE_ORIGIN = "https://console.test";
 
@@ -200,12 +201,9 @@ describe("what this module agrees with the API about", () => {
   test("no act called not available yet has a route in the API document", () => {
     // What breaks if this is deleted: a person told they cannot bring an automation back after the
     // route to do it has landed.
-    const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
-    for (const [one, { retiredBy }] of Object.entries(UNAVAILABLE)) {
-      expect(paths.filter((path) => retiredBy.test(path)), one).toEqual([]);
-    }
-    expect(UNAVAILABLE.reinstate.retiredBy.test("/api/v1/automations/{automation_id}/reinstate")).toBe(true);
-    expect(UNAVAILABLE.reinstate.retiredBy.test("/api/v1/automations/{automation_id}/remove")).toBe(false);
+    noRouteRetires(["automation.reinstate"]);
+    expect(retiringPattern("automation.reinstate").test("/api/v1/automations/{automation_id}/reinstate")).toBe(true);
+    expect(retiringPattern("automation.reinstate").test("/api/v1/automations/{automation_id}/remove")).toBe(false);
   });
 
   test("each change sends exactly the fields its route declares", () => {

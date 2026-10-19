@@ -24,6 +24,7 @@ import {
   ConfirmDialog,
   DetailHeader,
   DetailPage,
+  Explanation,
   Fact,
   FactList,
   FailureState,
@@ -43,7 +44,6 @@ import {
   EFFECT_SENTENCES,
   EFFECT_WORDS,
   KEEP_IT,
-  NO_LONGER_OFFERED,
   NOTE_LABEL,
   readChanged,
   readTools,
@@ -121,7 +121,7 @@ function ToolView({ row, body, onSwitched }: { readonly row: ToolRow; readonly b
       <div className="flex min-w-0 flex-col gap-4">
         <SectionCard title={SWITCHES_HEADING} lede={SWITCHES_LEDE}>
           {!row.registered ? (
-            <Note kind="not-yet">{NO_LONGER_OFFERED}</Note>
+            <Explanation form="note" act="tool.no_longer_offered" />
           ) : choices.length === 0 ? (
             <Note>You may read this tool and not switch it.</Note>
           ) : (
