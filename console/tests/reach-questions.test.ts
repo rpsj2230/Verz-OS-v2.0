@@ -33,6 +33,8 @@ export const REACH_PATH = /(?:\/holders\b|\/access(?:[?/]|$)|\/audience\b|\/read
 
 /** Every such path the console builds, as written, and what it is asked of. */
 export const DECLARED_REACH_PATHS: Readonly<Record<string, string>> = {
+  "/agents/${encodeURIComponent(agentId)}/audience":
+    "one agent, for the people who administer it: the departments and named people it is offered to, which is a setting they keep and not a reach computed for a person",
   "/govern/roles/holders": "a role, over the scope each grant carries; takes no subject",
   "/records/${encodeURIComponent(entity)}/access?filter=${term}":
     "one record, for a reader who can already see it; the API answers anybody else as an entity that is not there",

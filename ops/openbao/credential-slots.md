@@ -69,6 +69,17 @@ the caller is a guard somebody bypasses by calling the other thing. Reading
 nothing to revoke and no record of which run held it, and nobody would see the difference
 until an audit asked.
 
+## An outside AI service's key, which nothing reads yet
+
+A service an install declares as a tool (image generation, speech to text: a service that is not a
+chat model, `brain.tools.external_ai`) keeps its key at `connector_keys/ai_<service>`. That is one
+path segment, which the application's policy already lets it create and update, so declaring a
+service needs no change to a policy. Nothing reads the slot and nothing writes it today: the call
+waits for the owner to name the first service (needs-rupash 184), and the key goes in with the call,
+put in from the console and never carried by a declaration, which has no field a key could arrive
+in. When it does, the rule above applies to it as to every other row: ask the provider for the
+narrowest key that does the one job, and never an account-wide one.
+
 ## Letting the application keep a provider key
 
 **The installer does every step of this on a fresh install**, and of the two sections below

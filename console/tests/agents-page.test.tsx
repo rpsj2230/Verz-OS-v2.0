@@ -485,10 +485,12 @@ describe("what an entry becomes", () => {
     // What breaks if this is deleted: a sentence saying "coming soon" about an act that has arrived,
     // so a person is told they cannot do what they can. When a lifecycle route lands, this fails
     // until its control is made live and its sentence removed.
-    noRouteRetires(["agent.level", "agent.browser"]);
+    noRouteRetires(["agent.browser"]);
     // The positive sibling: the pattern shape does match the paths it is written for.
     expect(retiringPattern("agent.browser").test("/api/v1/agents/{agent_id}/browser")).toBe(true);
-    expect(retiringPattern("agent.level").test("/api/v1/agents/{agent_id}/audience")).toBe(true);
+    // The act that used to be listed here, who can find an agent, has its route and its control.
+    const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
+    expect(paths).toContain("/api/v1/agents/{agent_id}/audience");
   });
 });
 

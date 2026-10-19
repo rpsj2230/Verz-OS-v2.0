@@ -105,12 +105,6 @@ NOT_YET: Final = "Not available yet: "
 EXPLANATIONS: Final[tuple[Explanation, ...]] = (
     # Controls that cannot be pressed yet.
     Explanation(
-        "agent.level",
-        Form.ACTION,
-        f"{SOON}changing who can find this agent.",
-        retired_by=rf"^{API_PREFIX}/agents/\{{[^}}]+\}}/(audience|availability)\b",
-    ),
-    Explanation(
         "learning.promote",
         Form.ACTION,
         f"{SOON}promoting a rule once enough separate conversations agree. Nothing records that "
@@ -208,18 +202,6 @@ EXPLANATIONS: Final[tuple[Explanation, ...]] = (
         ),
     ),
     # Sentences in place of a control, for what this product does not offer at all.
-    Explanation(
-        "agent.people_not_a_list",
-        Form.LINE,
-        "Not a list of people. Who can find it is set by the level: Personal is the steward "
-        "only, Department is everyone in it, Company is everyone.",
-    ),
-    Explanation(
-        "agent.computer_use",
-        Form.LINE,
-        "Not offered. Nothing in the product controls a computer's screen, keyboard or mouse, "
-        "so there is no switch. An agent acts only through actions the product checks first.",
-    ),
     Explanation(
         "capability.vocabulary_declared",
         Form.LINE,
@@ -329,12 +311,6 @@ EXPLANATIONS: Final[tuple[Explanation, ...]] = (
         "agent.size_not_used",
         Form.NOTE,
         "the size is saved and not yet used when it answers.",
-        Lead.NOT_YET,
-    ),
-    Explanation(
-        "agent.skills_not_used",
-        Form.NOTE,
-        "using skills when the agent answers. An assignment is saved and changes no answer today.",
         Lead.NOT_YET,
     ),
     Explanation(

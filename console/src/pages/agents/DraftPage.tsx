@@ -58,6 +58,7 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { FailureNotice, SOMETHING_DID_NOT_WORK } from "../../ui/FailureNotice";
 import { Notice } from "../../ui/Notice";
+import { moneyWords } from "../spendQuery";
 import { ROSTER_HEADING, agentAddress } from "./AgentsPage";
 import { ChannelChoices, ticked } from "./ChannelChoices";
 import { CoauthorPanel } from "./CoauthorPanel";
@@ -109,6 +110,9 @@ import {
 } from "./agentDraftsQuery";
 
 export const LOADING_DRAFT = "Loading this draft.";
+/** The two figures a publish held for its cost is told, in the install's currency (M20.5.2). */
+export const COST_FIGURES = (cost: number, ceiling: number, currency: string): string =>
+  `One run costs about ${moneyWords(cost, currency)} and your department allows ${moneyWords(ceiling, currency)}.`;
 export const LOADING_FORM = "Loading the form.";
 export const SET_ELSEWHERE_HEADING = "Set on another page";
 export const SET_ELSEWHERE_LEDE =
@@ -657,6 +661,12 @@ function DraftAnswer({ draftId, step }: { readonly draftId: string; readonly ste
             <Notice title={stateWords(outcome.state)}>
               <p>
                 {outcome.sentence}
+                {outcome.held === undefined ? null : (
+                  <>
+                    {" "}
+                    {COST_FIGURES(outcome.held.costMinor, outcome.held.ceilingMinor, outcome.held.currency)}
+                  </>
+                )}
                 {outcome.state === "published" ? (
                   <>
                     {" "}

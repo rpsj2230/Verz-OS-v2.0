@@ -16,8 +16,14 @@
  * before anything is sent, and draws the tools that person's run would be handed and the strictest
  * rung it would be held to, or the one sentence every refusal shares.
  *
+ * **Where an assigned skill does not change a run, the page says so, in the API's sentence** (M27.11.12).
+ * A skill chip the API sent a `notUsedBecause` for is listed beneath the chips with that sentence, and
+ * a skill it sent none for is not described at all, which is not a claim that a run will use it: the
+ * person asking decides that. Skills and channels hold the same overflow list as connectors, a row of
+ * the first five and the rest behind "N more", so a long list does not push the card off the page.
+ *
  * Task ids: M39.2.1.1, M39.2.1.3, M39.2.1.4, M39.2.1.5, M39.2.2.1, M39.2.2.2, M39.2.2.3
- * Task ids: M39.2.2.4, M39.2.3.1, M39.2.3.2, M39.2.3.3, M39.2.3.4, M39.3.1.4
+ * Task ids: M39.2.2.4, M39.2.3.1, M39.2.3.2, M39.2.3.3, M39.2.3.4, M39.3.1.4, M27.11.12
  */
 
 import { BookOpen, Plus, Sparkles, X } from "lucide-react";
@@ -25,7 +31,7 @@ import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
-import { Chip, ConfirmDialog, FailureState, Note, SectionCard } from "../../components/kit";
+import { Chip, ConfirmDialog, Explanation, FailureState, Note, SectionCard } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
@@ -56,6 +62,20 @@ export const ADD_SKILL = "Add a skill";
 export const PREVIEW_HEADING = "Preview as a person";
 export const PREVIEW_FORMAT = "Their user id, as the People page shows it.";
 export const PREVIEW_NEEDED = "Type whose run to preview.";
+
+/** The first few of a long row, and the control that shows the rest or hides them again. */
+export function useOverflow<T>(items: readonly T[], limit: number = CONNECTORS_ON_THE_ROW): { readonly shown: readonly T[]; readonly toggle: ReactNode } {
+  const [open, setOpen] = useState(false);
+  const more = items.length - limit;
+  const shown = open ? items : items.slice(0, limit);
+  const toggle =
+    more > 0 ? (
+      <Button variant="ghost" size="xs" aria-expanded={open} onClick={() => setOpen((was) => !was)}>
+        {open ? "Show fewer" : `${String(more)} more`}
+      </Button>
+    ) : null;
+  return { shown, toggle };
+}
 
 /** A source's monogram, the icon a connector is drawn with: its own name, so no second registry. */
 export function monogram(source: string): string {
@@ -147,6 +167,7 @@ export function SkillsDetail({
   const [asking, setAsking] = useState<Asking | null>(null);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [busy, setBusy] = useState(false);
+  const { shown: chips, toggle: moreChips } = useOverflow(skills);
   // Sent only from the confirmation below, which names the skill and the agent.
   const decide = async (one: Asking): Promise<void> => {
     setBusy(true);
@@ -167,8 +188,8 @@ export function SkillsDetail({
   const whose = basis === "own" ? "your runs" : "all runs";
   return (
     <div data-slot="skill-detail" className="flex min-w-0 flex-col gap-2">
-      <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
-        {skills.map((one) => (
+      <ul className="m-0 flex list-none flex-wrap items-center gap-1.5 p-0">
+        {chips.map((one) => (
           <li key={one.digest} data-slot="skill-chip" className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-line bg-panel py-1 pr-1 pl-2.5 text-[12.5px]">
             <Sparkles aria-hidden className="size-3.5 shrink-0 text-dim" />
             <span className="min-w-0 font-mono text-[11.5px] text-ink [overflow-wrap:anywhere]">{one.name}</span>
@@ -188,7 +209,20 @@ export function SkillsDetail({
             ) : null}
           </li>
         ))}
+        {moreChips === null ? null : <li className="list-none">{moreChips}</li>}
       </ul>
+      {skills.some((one) => one.notUsedBecause !== undefined) ? (
+        <ul data-slot="skill-not-used" aria-label="Skills no run of this agent uses" className="m-0 flex list-none flex-col gap-1 p-0">
+          {skills.map((one) =>
+            one.notUsedBecause === undefined ? null : (
+              <li key={one.digest} className="flex flex-wrap items-baseline gap-x-2">
+                <span className="font-mono text-[11.5px]">{one.name}</span>
+                <Explanation form="note" lead="not-yet" told={one.notUsedBecause} />
+              </li>
+            ),
+          )}
+        </ul>
+      ) : null}
       {skills.length === 0 ? null : <Note>{`Runs are counted over 30 days of ${whose}.${unused.length === 0 ? "" : ` Not used in that time: ${unused.join(", ")}.`}`}</Note>}
       {offers.length === 0 ? null : (
         <div className="flex flex-col gap-2">

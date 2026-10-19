@@ -318,6 +318,23 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         installs: [{ id: "g-1", channel: "lark", room_ref: UNBROKEN, name: UNBROKEN, present: false, answering: false, installed_at: "2019-03-04T09:00:00Z" }],
         rooms: [{ channel: "lark", room_ref: UNBROKEN, name: UNBROKEN }],
       },
+      // Who else can find it, for its steward: the departments and people beside the level, each a
+      // token with nowhere to break, and the controls that change them.
+      "/api/v1/agents/quote-helper/audience": {
+        agent_id: "quote-helper",
+        level: "department",
+        department: UNBROKEN,
+        owner_id: UNBROKEN,
+        names_shown: true,
+        departments: [UNBROKEN],
+        people: [UNBROKEN],
+        may_change: true,
+        refusal: null,
+        department_choices: [UNBROKEN],
+        words: UNBROKEN,
+      },
+      // Whether it learns, for whoever may switch it off.
+      "/api/v1/agents/quote-helper/learning": { agent_id: "quote-helper", paused: false },
       // Where it answers, for its steward: `LifecycleView`, whose widest value is a channel's name.
       "/api/v1/agents/quote-helper/lifecycle": {
         agent_id: "quote-helper",

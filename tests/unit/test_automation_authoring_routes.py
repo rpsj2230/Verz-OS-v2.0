@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 import pytest
@@ -30,12 +31,19 @@ from brain.console.automation_authoring import (
     AUTHORED_TASK,
     EVENTS_ARE_OFF,
     IT_STARTS_PAUSED,
+    SKILLS_ARE_THE_AGENTS_TO_CHANGE,
+    WHAT_IT_MAY_USE_IS_THE_AGENTS_FOR_THIS_PERSON,
+    WRITES_WAIT_FOR_A_PERSON,
     Authoring,
 )
 from brain.console.automation_gallery import BUILT_IN
-from brain.core.entitlement import Capability
+from brain.core.entitlement import Capability, EntitlementSet
+from brain.core.envelope import Entity, IdentityMode, SideEffect, ToolDefinition, TypedResult
+from brain.gate.runtime import RUNTIME_WRITES_ALWAYS_WAIT_FOR_A_PERSON
 from brain.knowledge.visibility import Visibility
 from brain.ops.automation_event import WEBHOOK_NOT_OFFERED_ON_THE_FORM, WEBHOOKS_ARE_NOT_OFFERED
+from brain.tools.registry import ToolRegistry
+from brain.tools.skills import SkillCard
 from tests.fixtures.http_client import Response
 from tests.unit import test_freshdesk
 from tests.unit.test_automation_gallery_routes import (
@@ -59,7 +67,7 @@ WORDS: dict[str, Any] = {
     "instruction": "Look at the tickets and tell me which are overdue by more than a week.",
     "guards": "Without it an overdue ticket is found when the client chases, not by us.",
     "trigger": {"kind": "schedule", "cadence": {"every": "day", "hour_utc": 7}},
-    "tools": ["search_tickets"],
+    "tools": ["desk.search_tickets"],
 }
 
 
@@ -74,11 +82,73 @@ def an_agent(
         audience=AgentAudience(level=level, owner_id="u_steward", department=department),
         authority=AgentAuthority(
             capabilities=(Capability(value="read:client.name"),),
-            allowed_tools=frozenset({"search_tickets"}),
+            allowed_tools=frozenset(
+                {
+                    "desk.search_tickets",
+                    "desk.close_ticket",
+                    "desk.read_invoices",
+                    "desk.ghost_tool",
+                }
+            ),
             connectors=connectors,
         ),
         created_by="u_builder",
     )
+
+
+class Ticket(Entity):
+    status: str = ""
+
+
+def _a_handler() -> TypedResult[Ticket]:
+    return TypedResult[Ticket]()
+
+
+def a_tool(name: str, capability: str, effect: SideEffect = SideEffect.NONE) -> ToolDefinition:
+    return ToolDefinition(
+        name=name,
+        description=f"The {name} tool",
+        entity="ticket",
+        required_capability=capability,
+        side_effect=effect,
+        identity_mode=IdentityMode.DELEGATED,
+        source="desk",
+    )
+
+
+def a_registry() -> ToolRegistry:
+    """Three tools the agent's own list names, and a fourth it names that nothing registers.
+
+    `search_tickets` is a read within the agent's capability and is the only one a run of an
+    automation through this agent could be handed: `close_ticket` writes where the agent's ceiling
+    allows no effect and an automation is admitted at read, `read_invoices` needs a capability the
+    agent's ceiling does not hold, and `ghost_tool` is in the agent's list and in no registry.
+    """
+    made = ToolRegistry()
+    for one in (
+        a_tool("desk.search_tickets", "read:client.name"),
+        a_tool("desk.close_ticket", "write:ticket", SideEffect.WRITE),
+        a_tool("desk.read_invoices", "read:invoice.total"),
+    ):
+        made.register(one, _a_handler)
+    return made
+
+
+@dataclass
+class Skills:
+    """`routes.AutomationSkills` in memory: what an agent offers, and who it was offered at."""
+
+    cards: tuple[SkillCard, ...] = ()
+    asked: list[tuple[str, str]] = field(default_factory=list)
+    #: The capabilities of the reach each question was asked at.
+    held: list[frozenset[str]] = field(default_factory=list)
+
+    async def offered(
+        self, agent: AgentRecord, *, reach: EntitlementSet, now: datetime
+    ) -> tuple[SkillCard, ...]:
+        self.asked.append((agent.agent_id, reach.principal_id))
+        self.held.append(frozenset(one.capability.value for one in reach.grants))
+        return self.cards
 
 
 @dataclass
@@ -111,7 +181,18 @@ def authors() -> Authors:
 
 
 @pytest.fixture
-def client(authors: Authors) -> Iterator[TestClient]:
+def skills() -> Skills:
+    return Skills(
+        cards=(
+            SkillCard(
+                name="overdue_chase", description="Chase a ticket that is overdue", version="1.2.0"
+            ),
+        )
+    )
+
+
+@pytest.fixture
+def client(authors: Authors, skills: Skills) -> Iterator[TestClient]:
     app: FastAPI = create_app(Settings(env="development"))
     app.include_router(routes.router)
     with TestClient(app, raise_server_exceptions=False) as c:
@@ -123,6 +204,8 @@ def client(authors: Authors) -> Iterator[TestClient]:
             }
         )
         app.state.automation_authors = authors
+        app.state.automation_skills = skills
+        app.state.tools = a_registry()
         app.state.connector_registry = connected()
         app.state.automation_authoring_on = True
         app.state.automation_events_on = False
@@ -185,7 +268,7 @@ def test_the_options_offer_templates_triggers_this_agents_fields_and_its_own_too
     assert all(op["in_days"] for op in fields[DUE]["ops"])
     assert "freshdesk.ticket.status" in fields
     assert [op["op"] for op in fields["freshdesk.ticket.status"]["ops"]] == ["equals"]
-    assert body["tools"] == ["search_tickets"]
+    assert body["tools"] == ["desk.search_tickets"]
     assert body["connectors"] == ["freshdesk"]
     assert body["starts_paused"] == IT_STARTS_PAUSED
 
@@ -214,9 +297,12 @@ def test_a_switched_off_install_says_so_and_offers_nothing_and_refuses_the_rest(
         "triggers": [],
         "fields": [],
         "tools": [],
+        "skills": [],
         "connectors": [],
         "starts_paused": IT_STARTS_PAUSED,
         "writes_wait": off["writes_wait"],
+        "may_use": WHAT_IT_MAY_USE_IS_THE_AGENTS_FOR_THIS_PERSON,
+        "skills_rule": SKILLS_ARE_THE_AGENTS_TO_CHANGE,
     }
     missing = refusal(preview_of(client, "u_admin", agent="no_such_agent"))
     assert refusal(preview_of(client, "u_admin")) == missing
@@ -255,7 +341,7 @@ def test_the_preview_shows_the_terms_the_rehearsal_and_a_digest_and_writes_nothi
     assert body["fires"] is True
     assert body["nothing_fires"] is None
     assert body["condition"] is None
-    assert body["tools"] == ["search_tickets"]
+    assert body["tools"] == ["desk.search_tickets"]
     assert body["runs_as"] == "u_admin"
     assert "read:client.name" in body["reach"]
     assert len(body["rehearsal"]) == 3
@@ -346,6 +432,140 @@ def test_unfit_words_are_refused_with_every_finding_and_nothing_is_written(
     assert preview_of(client, "u_admin").status_code == 200
 
 
+# ------------------------------------------------------------------ what it may use (M39.9.2.3)
+
+#: Four ways a tool can be one an automation of this agent cannot be handed, each as the agent's
+#: own list may hold it: a write where the ceiling allows none and an automation reads, a read of
+#: a capability the ceiling does not hold, a name nothing registers, and a name the list never had.
+BEYOND_THE_CEILING = (
+    "desk.close_ticket",
+    "desk.read_invoices",
+    "desk.ghost_tool",
+    "desk.unheard_of",
+)
+
+
+def test_a_tool_beyond_the_agents_ceiling_is_refused_in_the_words_a_tool_that_does_not_exist_gets(
+    client: TestClient, authors: Authors
+) -> None:
+    """Each of the four ways a tool is out of reach (its effect is larger than the ceiling allows,
+    its capability is not held, nothing registers it, the agent never named it) is one status and
+    one sentence with only the tool the person wrote in it, at the preview and at the write, and
+    writes nothing; the tool inside the ceiling is accepted beside them. Delete this and a tool
+    no run could be handed is saved on a card as something the automation may use, or the words of
+    a refusal say which of the four it was."""
+    body = {"desk.search_tickets": preview_of(client, "u_admin", WORDS)}
+    assert body["desk.search_tickets"].status_code == 200
+
+    said: dict[str, str] = {}
+    for tool in BEYOND_THE_CEILING:
+        asked = {**WORDS, "tools": [tool]}
+        answer = preview_of(client, "u_admin", asked)
+        assert answer.status_code == 422, tool
+        [sentence] = answer.json()["sentences"]
+        said[tool] = sentence.replace(tool, "<the tool>")
+        written = create_as(client, "u_admin", {**asked, "confirmation": "0" * 64})
+        assert written.status_code == 422, tool
+        assert written.json()["sentences"] == answer.json()["sentences"]
+    assert len(set(said.values())) == 1
+    assert "<the tool>" in said["desk.close_ticket"]
+    assert authors.written == []
+
+
+def test_the_options_offer_what_an_automation_could_be_handed_and_the_skills_it_would_be_offered(
+    client: TestClient, skills: Skills
+) -> None:
+    """The form's tools are the agent's own list projected at the reader's reach as an automation
+    is admitted, not the list itself, and its skills are the agent's, asked at that reach. Delete
+    this and the form offers a write tool an automation is never handed, or names skills asked
+    at a reach wider than the one the automation runs at."""
+    body = options_of(client, "u_admin").json()
+
+    assert body["tools"] == ["desk.search_tickets"]
+    assert body["skills"] == [
+        {
+            "name": "overdue_chase",
+            "version": "1.2.0",
+            "description": "Chase a ticket that is overdue",
+        }
+    ]
+    assert body["may_use"] == WHAT_IT_MAY_USE_IS_THE_AGENTS_FOR_THIS_PERSON
+    assert body["skills_rule"] == SKILLS_ARE_THE_AGENTS_TO_CHANGE
+    assert body["writes_wait"] == WRITES_WAIT_FOR_A_PERSON
+    assert skills.asked == [(AGENT, "u_admin")]
+    # Asked at the reach as an automation is admitted, which carries read and nothing wider, though
+    # the reader holds a write.
+    [held] = skills.held
+    assert "read:client.name" in held
+    assert "write:ticket" not in held
+
+
+def test_an_agent_that_offers_no_skills_names_none_and_says_the_rule_all_the_same(
+    client: TestClient, skills: Skills
+) -> None:
+    """The sibling: nothing attached is an empty list and the same rule sentence, not a missing
+    field. Delete this and an agent with no skills draws a card with a gap where the sentence is."""
+    skills.cards = ()
+
+    body = options_of(client, "u_admin").json()
+
+    assert body["skills"] == []
+    assert body["skills_rule"] == SKILLS_ARE_THE_AGENTS_TO_CHANGE
+
+
+def test_the_preview_names_the_skills_and_says_a_write_waits_and_it_cannot_be_started_yet(
+    client: TestClient,
+) -> None:
+    """What the person confirms: the skills a run would be offered, the runtime's own sentence
+    that anything it would write waits for a person, and that an instruction run cannot be started
+    on this install yet. Delete this and a person saves an automation whose card reads as live, or
+    whose skills they were never shown."""
+    body = preview_of(client, "u_admin").json()
+
+    assert body["skills"] == ["overdue_chase"]
+    assert body["skills_rule"] == SKILLS_ARE_THE_AGENTS_TO_CHANGE
+    assert body["writes_wait"] == RUNTIME_WRITES_ALWAYS_WAIT_FOR_A_PERSON
+    assert body["cannot_run"] is not None
+    assert "cannot be started yet" in body["cannot_run"]
+    assert any("overdue_chase" in one["says"] for one in body["rehearsal"])
+
+
+def test_a_skill_attached_after_the_preview_is_a_confirmation_that_no_longer_matches(
+    client: TestClient, authors: Authors, skills: Skills
+) -> None:
+    """The skills are in the digest, so one added between the preview and the write is a 409 that
+    writes nothing, and the same request with the skills unchanged is written. Delete this and the
+    card a person confirmed is not the card that is saved."""
+    asked_for = confirmed(client, "u_admin")
+    skills.cards = (
+        *skills.cards,
+        SkillCard(name="refund_policy", description="Apply the refund policy", version="0.1.0"),
+    )
+
+    stale = create_as(client, "u_admin", asked_for)
+
+    assert stale.status_code == 409
+    assert stale.json()["outcome"] == "unconfirmed"
+    assert authors.written == []
+    again = confirmed(client, "u_admin")
+    assert create_as(client, "u_admin", again).status_code == 201
+
+
+def test_a_process_with_no_tool_registry_holds_a_tool_to_the_agents_own_list_alone(
+    client: TestClient,
+) -> None:
+    """With nothing to project, as a process the registry is not built in, a name the agent's list
+    holds is accepted and one it does not is refused. Delete this and a missing registry refuses
+    every tool, or accepts any name at all."""
+    client.app.state.tools = None  # type: ignore[attr-defined]
+
+    assert options_of(client, "u_admin").json()["tools"] == sorted(
+        ["desk.search_tickets", "desk.close_ticket", "desk.read_invoices", "desk.ghost_tool"]
+    )
+    assert preview_of(client, "u_admin", {**WORDS, "tools": ["desk.ghost_tool"]}).status_code == 200
+    assert preview_of(client, "u_admin", {**WORDS, "tools": ["desk.unheard_of"]}).status_code == 422
+
+
 def test_a_template_start_takes_the_templates_words_when_none_are_given(
     client: TestClient,
 ) -> None:
@@ -396,7 +616,7 @@ def test_one_confirmed_request_writes_one_paused_automation_as_the_caller(
     assert made.installation.automation.task == AUTHORED_TASK
     assert made.installation.automation.automation_id == body["automation_id"]
     assert made.installation.installed_by == "u_admin"
-    assert made.authored.tools == ("search_tickets",)
+    assert made.authored.tools == ("desk.search_tickets",)
     assert len(authors.calls[0]["ent_hash"]) == 32
 
 

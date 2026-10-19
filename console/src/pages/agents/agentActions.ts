@@ -7,12 +7,13 @@
  * with install, start and stop, the instruction override (`/govern/prompts/{agent_id}`, drawn on the
  * Prompts page) and skill assignment (`/skills/{digest}/assignments`, drawn on the Skills page). It
  * served no route that changes an agent's audience or its leash, previews it as a person, or installs
- * it into a chat group then. Each of those is a `kit/Explanation` (`agent.level`,
- * `agent.browser`), so the page shows the act exists and is coming rather than hiding it or
+ * it into a chat group then. Each of those is a `kit/Explanation` (`agent.browser`), so the page shows the act exists and is coming rather than hiding it or
  * faking it. Switching on and off, archiving, duplicating and handing on arrived with
  * `brain.agent_lifecycle_routes` on 2026-09-29 and are live acts (`LifecycleActs.tsx`); creating an
  * agent, editing one as a draft and changing its permissions through that draft arrived with
  * `brain.agent_builder_routes` the same day (`NewAgentPage.tsx`, `DraftStart.tsx`, `DraftPage.tsx`).
+ * Offering an agent to more departments and to named people arrived as `/agents/{id}/audience` on
+ * 2026-10-14 and is live on the Profile (`AgentAudience.tsx`), so the level's sentence is gone.
  * Switching the channels an agent answers on arrived as `/agents/{id}/channels` on 2026-10-06 and is
  * live on the Profile (`AgentChannels.tsx`). Installing an agent into one group chat arrived as
  * `/agents/{id}/groups` the same day and is live on the Profile too (`AgentGroups.tsx`), so its

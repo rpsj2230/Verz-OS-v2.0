@@ -16,9 +16,11 @@
  * confirmed Edit as a draft. Where the agent answers is its own card (`AgentChannels.tsx`), switched
  * by its steward or an administrator through a confirmation. A rung is changed, and supervision
  * pinned and reviewed, in the leash block (`AgentLeash.tsx`) for a holder of the leash role.
- * Changing who can find it and browser use have no route and are `Explanation`s with
- * the server's sentences (`agent.level`, `agent.browser`). Computer use is a sentence, because the product has nothing behind a
- * switch.
+ * Who else can find it (departments and named people) is offered and withdrawn in the Availability
+ * card (`AgentAudience.tsx`), and what it learns is paused and resumed beside the tiers
+ * (`AgentLearning.tsx`). Browser use has no route and is an `Explanation` with the server's
+ * sentence (`agent.browser`). Computer use is the sentence the API sends, which says the product has no
+ * isolated desktop runner to offer, because there is nothing behind a switch (M27.15.32).
  *
  * **Identifiers are in the Advanced section.** The agent's slug, the steward's and builder's
  * principal ids and the template's id are how the system names them; the cards show names and
@@ -28,7 +30,7 @@
  * tools an agent carries are the block under its reach, and a Workflows card says what a workflow is
  * and that none is stored yet, rather than leaving the part off the page until one is.
  *
- * Task ids: M27.10.2, M5.7.3, M27.11.6, M13.7.4, M39.1.1.1
+ * Task ids: M27.10.2, M5.7.3, M27.11.6, M13.7.4, M39.1.1.1, M27.11.12, M27.11.13, M27.11.14, M27.15.32
  */
 
 import { Brain, Globe, MonitorX, Plug, Radio, ShieldCheck, Sparkles } from "lucide-react";
@@ -49,10 +51,12 @@ import {
 import { Button } from "../../components/ui/button";
 import { Switch } from "../../components/ui/switch";
 import type { ModelChoice } from "../agentModelPinQuery";
-import { ConnectorsDetail, KnowledgeCard, PreviewForm, SkillsDetail } from "./AgentCapabilities";
-import type { AgentCapabilities } from "./agentCapabilitiesQuery";
+import { ConnectorsDetail, KnowledgeCard, PreviewForm, SkillsDetail, useOverflow } from "./AgentCapabilities";
+import type { AgentCapabilities, ComputerUse as ComputerUseWords } from "./agentCapabilitiesQuery";
 import type { ChannelOffer, ConnectorStrip, SkillPin } from "../agentQuery";
 import { LEVEL_WORDS, RUNGS_EXPLAINED, rungWords, TIER_WORDS, WORKS_AT } from "./agentActions";
+import { AgentAudience } from "./AgentAudience";
+import { AgentLearningSwitch } from "./AgentLearning";
 import { leashRowId, type HeaderFacts, type ProfileShown } from "./agentDetailQuery";
 import { AgentLeash } from "./AgentLeash";
 import { AgentTools } from "./AgentTools";
@@ -121,6 +125,25 @@ function CapabilityRow({
         {note}
       </div>
     </div>
+  );
+}
+
+/** The surfaces that could carry this agent's answers, with the overflow list the other rows have. */
+function ChannelsRow({ channels }: { readonly channels: readonly ChannelOffer[] }) {
+  const { shown, toggle } = useOverflow(channels);
+  return (
+    <CapabilityRow
+      icon={<Radio aria-hidden />}
+      label="Channels"
+      note={<Note>The chats and email that could carry this agent's answers to you. Which of them are switched on, and the control to change that, are under {WHERE_IT_ANSWERS}.</Note>}
+    >
+      {shown.map((one) => (
+        <Chip key={one.channel} mono>
+          {one.channel} <span className="text-dim">as {one.profile}</span>
+        </Chip>
+      ))}
+      {toggle}
+    </CapabilityRow>
   );
 }
 
@@ -222,7 +245,6 @@ function Capabilities({
               Assign a skill
             </Link>
           }
-          note={<Explanation form="note" act="agent.skills_not_used" />}
         >
           {skills.map((one) => (
             <Chip key={one.digest} mono tone="brand">
@@ -231,19 +253,7 @@ function Capabilities({
           ))}
         </CapabilityRow>
       )}
-      {channels.length === 0 ? null : (
-        <CapabilityRow
-          icon={<Radio aria-hidden />}
-          label="Channels"
-          note={<Note>The chats and email that could carry this agent's answers to you. The ones switched on are under {WHERE_IT_ANSWERS}.</Note>}
-        >
-          {channels.map((one) => (
-            <Chip key={one.channel} mono>
-              {one.channel} <span className="text-dim">as {one.profile}</span>
-            </Chip>
-          ))}
-        </CapabilityRow>
-      )}
+      {channels.length === 0 ? null : <ChannelsRow channels={channels} />}
     </SectionCard>
   );
 }
@@ -319,11 +329,13 @@ export function WorkflowsCard() {
 }
 
 function Availability({
+  agentId,
   facts,
   profile,
   details,
   onTransfer,
 }: {
+  readonly agentId: string;
   readonly facts: HeaderFacts;
   readonly profile: ProfileShown | null;
   readonly details: AgentCapabilities | null;
@@ -335,10 +347,7 @@ function Availability({
       <FactList>
         {profile?.audienceLevel === undefined ? null : (
           <Fact label="Level">
-            <span className="flex flex-wrap items-center gap-2">
-              <Chip>{LEVEL_WORDS[profile.audienceLevel] ?? profile.audienceLevel}</Chip>
-              <Explanation form="action" act="agent.level" size="xs" text="Change" label="Change who can find this agent" />
-            </span>
+            <Chip>{LEVEL_WORDS[profile.audienceLevel] ?? profile.audienceLevel}</Chip>
           </Fact>
         )}
         <Fact label="Steward">
@@ -361,9 +370,7 @@ function Availability({
             {availability.readerIsIncluded ? "You can find and start it." : "You are not among the people who can find it."}
           </Fact>
         )}
-        <Fact label="People">
-          <Explanation form="line" act="agent.people_not_a_list" />
-        </Fact>
+        <AgentAudience agentId={agentId} />
       </FactList>
     </SectionCard>
   );
@@ -450,7 +457,7 @@ function ModelAndAutonomy({
   );
 }
 
-function Learning() {
+function Learning({ agentId, name }: { readonly agentId: string; readonly name: string }) {
   const tiers: readonly (readonly [string, string, string])[] = [
     ["1", "Within a conversation", "Stays inside the conversation it came from."],
     ["2", "Automatic", "Changes how it answers, never what anybody may see."],
@@ -464,13 +471,18 @@ function Learning() {
       action={<Brain aria-hidden className="size-4 text-dim" />}
       footer={
         <>
-          <Note>There is deliberately no single on and off switch, because one switch would let anything be learnt unchecked.</Note>
+          <Note>
+            The switch only pauses and resumes. Resuming lets each tier go on doing what it already checks, so it cannot let anything be learnt unchecked.
+          </Note>
           <Link to={WORKS_AT.learning} className="w-fit text-[12px] text-acc-text underline-offset-4 hover:underline">
             Open the learning review
           </Link>
         </>
       }
     >
+      <div className="mb-3">
+        <AgentLearningSwitch agentId={agentId} name={name} />
+      </div>
       <ol className="m-0 flex list-none flex-col p-0">
         {tiers.map(([n, name, words]) => (
           <li key={n} className="[display:grid] grid-cols-[1.5rem_minmax(0,1fr)] gap-x-2 border-b border-line py-2 text-[13px] last:border-b-0 sm:grid-cols-[1.5rem_9rem_minmax(0,1fr)]">
@@ -500,10 +512,18 @@ function BrowserUse() {
   );
 }
 
-function ComputerUse() {
+/**
+ * Computer use, as the API says it (M27.15.32). The sentence is `brain.console.agent_behaviour`'s, from
+ * whether an isolated desktop runner is part of the product, so the page types none of it. A reader
+ * sent no detail is drawn no card rather than one saying nothing.
+ */
+function ComputerUse({ said }: { readonly said: ComputerUseWords | undefined }) {
+  if (said === undefined) {
+    return null;
+  }
   return (
     <SectionCard title={COMPUTER_HEADING} action={<MonitorX aria-hidden className="size-4 text-dim" />}>
-      <Explanation form="line" act="agent.computer_use" />
+      {said.offered ? <Note>{said.sentence}</Note> : <Explanation form="line" told={said.sentence} />}
     </SectionCard>
   );
 }
@@ -558,8 +578,8 @@ export function AgentProfile({
           <AgentChannels agentId={agent.agentId} />
           <AgentGroups agentId={agent.agentId} />
           {details?.knowledge === undefined ? null : <KnowledgeCard knowledge={details.knowledge} onWiden={onEditDraft} />}
-          <Availability facts={facts} profile={profile} details={details} onTransfer={onTransfer} />
-          <Learning />
+          <Availability agentId={agent.agentId} facts={facts} profile={profile} details={details} onTransfer={onTransfer} />
+          <Learning agentId={agent.agentId} name={agent.displayName} />
         </div>
         <div className="flex min-w-0 flex-col gap-4">
           {profile === null ? null : <Permissions agentId={agent.agentId} profile={profile} onEditDraft={onEditDraft} />}
@@ -583,7 +603,7 @@ export function AgentProfile({
       )}
       <div className="[display:grid] min-w-0 items-start gap-4 lg:grid-cols-2">
         <BrowserUse />
-        <ComputerUse />
+        <ComputerUse said={details?.computerUse} />
       </div>
       <Advanced>
         <FactList>

@@ -40,16 +40,16 @@ describe("an act that cannot be done is explained by the server's sentence", () 
     // What breaks if this is deleted: a control drawn live over an act that cannot be done, or one that
     // leaves the tab order so a keyboard user never hears why, or a description that is not the server's.
     const { container, sent } = await draw(() => (
-      <Explanation form="action" act="agent.level" text="Change" label="Change who can find this agent" />
+      <Explanation form="action" act="learning.promote" text="Change" label="Change who can find this agent" />
     ));
     const control = container.querySelector<HTMLButtonElement>("[data-unavailable]");
     expect(control).not.toBeNull();
     expect(control?.getAttribute("aria-disabled")).toBe("true");
     expect(control?.hasAttribute("disabled")).toBe(false);
-    expect(control?.getAttribute("data-explains")).toBe("agent.level");
+    expect(control?.getAttribute("data-explains")).toBe("learning.promote");
     await waitFor(() => {
       expect(document.getElementById(control?.getAttribute("aria-describedby") ?? "")?.textContent).toBe(
-        sentenceFor("agent.level"),
+        sentenceFor("learning.promote"),
       );
     });
     const before = sent.length;
@@ -62,8 +62,8 @@ describe("an act that cannot be done is explained by the server's sentence", () 
     // control beside it, or being drawn live for the moment between the page and the answer. The words
     // are held back in `useWords` until they arrive, and the control is not.
     const { container } = await draw(
-      () => <Explanation form="action" act="agent.level" text="Change" label="Change" />,
-      { [`${ASKED}agent.level`]: () => json({ act: "agent.level", form: "action", lead: "", sentence: "x" }) },
+      () => <Explanation form="action" act="learning.promote" text="Change" label="Change" />,
+      { [`${ASKED}learning.promote`]: () => json({ act: "learning.promote", form: "action", lead: "", sentence: "x" }) },
     );
     expect(container.querySelector("[data-unavailable]")).not.toBeNull();
   });
@@ -118,8 +118,8 @@ describe("an act that cannot be done is explained by the server's sentence", () 
   test("when the sentence cannot be read the page says so, and an explanation is never left out", async () => {
     // What breaks if this is deleted: a control that cannot be pressed and says nothing about why, which
     // is the thing this component exists to prevent, the day the route is down.
-    const failing = { [`${ASKED}agent.level`]: () => json({ message: "down" }, 500), [`${ASKED}role.not_edited`]: () => json({ message: "down" }, 500) };
-    const control = await draw(() => <Explanation form="action" act="agent.level" text="Change" label="Change" />, failing);
+    const failing = { [`${ASKED}learning.promote`]: () => json({ message: "down" }, 500), [`${ASKED}role.not_edited`]: () => json({ message: "down" }, 500) };
+    const control = await draw(() => <Explanation form="action" act="learning.promote" text="Change" label="Change" />, failing);
     await waitFor(() => {
       const mark = control.container.querySelector<HTMLButtonElement>("[data-unavailable]");
       expect(document.getElementById(mark?.getAttribute("aria-describedby") ?? "")?.textContent).toBe(EXPLANATION_NOT_READ);

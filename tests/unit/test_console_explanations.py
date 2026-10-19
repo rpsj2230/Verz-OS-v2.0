@@ -47,7 +47,6 @@ EN_DASH = chr(0x2013)
 #: from the expression, because a test that builds its example out of the pattern is satisfied by
 #: any pattern.
 A_ROUTE_THAT_WOULD_RETIRE_IT: dict[str, str] = {
-    "agent.level": f"{API_PREFIX}/agents/{{agent_id}}/audience",
     "agent.browser": f"{API_PREFIX}/agents/{{agent_id}}/browser",
     "learning.promote": f"{API_PREFIX}/govern/learning/promote",
     "learning.decide": f"{API_PREFIX}/govern/learning/decisions",
@@ -68,7 +67,6 @@ A_ROUTE_THAT_WOULD_RETIRE_IT: dict[str, str] = {
 
 #: A neighbouring route that must NOT retire it, so a pattern that matches everything is caught.
 A_ROUTE_THAT_MUST_NOT: dict[str, str] = {
-    "agent.level": f"{API_PREFIX}/agents/{{agent_id}}/skills",
     "automation.reinstate": f"{API_PREFIX}/automations/{{automation_id}}/remove",
     "operations.stop_run": f"{API_PREFIX}/jobs/{{name}}/pause",
     "learning.promote": f"{API_PREFIX}/govern/learning/undo",
@@ -91,7 +89,7 @@ def test_every_explanation_has_one_shape_of_id_and_is_written_in_the_house_regis
     a fact about the product."""
     acts = [one.act for one in EXPLANATIONS]
     assert len(acts) == len(set(acts)), "an act is registered twice"
-    assert len(EXPLANATIONS) >= 40, "the registry is not the whole set the console drew"
+    assert len(EXPLANATIONS) >= 35, "the registry is not the whole set the console drew"
     for one in EXPLANATIONS:
         assert ACT_SHAPE.match(one.act), one.act
         assert one.sentence.strip() == one.sentence and one.sentence != "", one.act
@@ -221,7 +219,7 @@ def test_the_route_does_not_serve_the_expiry_pattern(client: TestClient) -> None
     server decides a sentence is stale and is nothing a browser needs.
 
     Delete this and the registry's internals can leak onto the wire one field at a time."""
-    body = ask(client, "u_none", "agent.level").json()
+    body = ask(client, "u_none", "learning.promote").json()
     assert set(body) == {"act", "form", "lead", "sentence"}
 
 
