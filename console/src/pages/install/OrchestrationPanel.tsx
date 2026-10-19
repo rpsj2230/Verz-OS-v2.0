@@ -13,7 +13,7 @@ import { useState } from "react";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
-import { Chip, EmptyState, FailureState, LoadingState, Note, SectionCard } from "../../components/kit";
+import { Chip, EmptyList, FailureState, LoadingState, Note, SectionCard } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Textarea } from "../../components/ui/textarea";
 import { moneyWords } from "../spendQuery";
@@ -139,7 +139,14 @@ function DecisionList({
     <>
       <Note>{NOTHING_STARTS}</Note>
       {body.rehearsal_is_on ? null : <Note>{SWITCHED_OFF}</Note>}
-      {body.decisions.length === 0 ? <EmptyState title={NO_DECISIONS_TITLE} description={NO_DECISIONS} /> : null}
+      {body.decisions.length === 0 ? (
+        <EmptyList
+          title={NO_DECISIONS_TITLE}
+          description={NO_DECISIONS}
+          adds="Weigh a plan with the form on this screen, and its verdict is kept."
+          by={["super_admin"]}
+        />
+      ) : null}
       {body.decisions.map((row) => (
         <SectionCard
           key={row.run_id}

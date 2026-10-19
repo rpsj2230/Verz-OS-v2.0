@@ -182,8 +182,6 @@ export const GOLDEN_LEDE =
   "Each question is asked as the person named, the way their own questions are asked, with the change " +
   "in place. A question that must be refused is a permission check: one that gets answered is enough " +
   "to hold a change.";
-export const NO_GOLDEN =
-  "No golden questions are recorded yet, so every change to the failover matrix is held until one is.";
 export const GOLDEN_COUNTS_WHEN =
   "A golden question counts as answered only when the model writes an answer from documents the " +
   "person it is asked as can read. On an install with no documents yet, no change can pass until " +

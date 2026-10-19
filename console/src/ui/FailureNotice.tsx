@@ -54,6 +54,13 @@ import { SignInAgain } from "./SignInAgain";
 /** The heading over a failure the API answered. Its own sentence goes underneath. */
 export const THAT_DID_NOT_WORK = "That did not work";
 
+/**
+ * The heading a screen with an act that can be refused gives its failure, in place of the plain
+ * one. Written here once: seven screens each typed it out until 2026-10-14, which is how a failure
+ * heading becomes a thing every page words for itself.
+ */
+export const SOMETHING_DID_NOT_WORK = "Something did not work";
+
 /** The heading when the request never reached the API. */
 export const THE_BRAIN_COULD_NOT_BE_REACHED = "The Brain could not be reached";
 

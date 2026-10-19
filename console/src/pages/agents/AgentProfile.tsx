@@ -18,8 +18,8 @@
  * pinned and reviewed, in the leash block (`AgentLeash.tsx`) for a holder of the leash role.
  * Who else can find it (departments and named people) is offered and withdrawn in the Availability
  * card (`AgentAudience.tsx`), and what it learns is paused and resumed beside the tiers
- * (`AgentLearning.tsx`). Browser use has no route and is an `UnavailableAction` with
- * `agentActions.ts`' sentence. Computer use is the sentence the API sends, which says the product has no
+ * (`AgentLearning.tsx`). Browser use has no route and is an `Explanation` with the server's
+ * sentence (`agent.browser`). Computer use is the sentence the API sends, which says the product has no
  * isolated desktop runner to offer, because there is nothing behind a switch (M27.15.32).
  *
  * **Identifiers are in the Advanced section.** The agent's slug, the steward's and builder's
@@ -30,7 +30,10 @@
  * tools an agent carries are the block under its reach, and a Workflows card says what a workflow is
  * and that none is stored yet, rather than leaving the part off the page until one is.
  *
- * Task ids: M27.10.2, M5.7.3, M27.11.6, M13.7.4, M39.1.1.1, M27.11.12, M27.11.13, M27.11.14, M27.15.32
+ * **A personal agent's owner also sees their own Google account** (`AgentOwnWorkspace.tsx`, M39.10.4), to
+ * attach or take off with a confirmation; the card is absent for everybody else and for a team agent.
+ *
+ * Task ids: M27.10.2, M5.7.3, M27.11.6, M13.7.4, M39.1.1.1, M27.11.12, M27.11.13, M27.11.14, M27.15.32, M39.10.4
  */
 
 import { Brain, Globe, MonitorX, Plug, Radio, ShieldCheck, Sparkles } from "lucide-react";
@@ -42,10 +45,10 @@ import type { AgentIdentity, DiffRow } from "../../components/agentWorkspaceStat
 import {
   Advanced,
   Chip,
+  Explanation,
   Fact,
   FactList,
   Note,
-  NotOffered,
   SectionCard,
 } from "../../components/kit";
 import { Button } from "../../components/ui/button";
@@ -54,7 +57,7 @@ import type { ModelChoice } from "../agentModelPinQuery";
 import { ConnectorsDetail, KnowledgeCard, PreviewForm, SkillsDetail, useOverflow } from "./AgentCapabilities";
 import type { AgentCapabilities, ComputerUse as ComputerUseWords } from "./agentCapabilitiesQuery";
 import type { ChannelOffer, ConnectorStrip, SkillPin } from "../agentQuery";
-import { LEVEL_WORDS, RUNGS_EXPLAINED, rungWords, TIER_WORDS, UNAVAILABLE, WORKS_AT } from "./agentActions";
+import { LEVEL_WORDS, RUNGS_EXPLAINED, rungWords, TIER_WORDS, WORKS_AT } from "./agentActions";
 import { AgentAudience } from "./AgentAudience";
 import { AgentLearningSwitch } from "./AgentLearning";
 import { leashRowId, type HeaderFacts, type ProfileShown } from "./agentDetailQuery";
@@ -62,6 +65,7 @@ import { AgentLeash } from "./AgentLeash";
 import { AgentTools } from "./AgentTools";
 import { AgentChannels } from "./AgentChannels";
 import { AgentGroups } from "./AgentGroups";
+import { AgentOwnWorkspace } from "./AgentOwnWorkspace";
 import { WHERE_IT_ANSWERS } from "./ChannelChoices";
 import { LeashPill } from "./pills";
 
@@ -403,7 +407,7 @@ function ModelAndAutonomy({
               <span className="flex flex-wrap items-center gap-1.5">
                 <Chip tone="brand">{TIER_WORDS[profile.tier] ?? profile.tier}</Chip>
               </span>
-              <Note kind="not-yet">the size is saved and not yet used when it answers.</Note>
+              <Explanation form="note" act="agent.size_not_used" />
             </span>
           </Fact>
         )}
@@ -506,7 +510,7 @@ function BrowserUse() {
         <Switch id="agent-browser-use" disabled aria-describedby="agent-browser-use-why" />
       </div>
       <div id="agent-browser-use-why" className="mt-2">
-        <Note kind="not-yet">{UNAVAILABLE.browser.reason.replace(/^Not available yet: /, "")}</Note>
+        <Explanation form="note" act="agent.browser" />
       </div>
     </SectionCard>
   );
@@ -523,7 +527,7 @@ function ComputerUse({ said }: { readonly said: ComputerUseWords | undefined }) 
   }
   return (
     <SectionCard title={COMPUTER_HEADING} action={<MonitorX aria-hidden className="size-4 text-dim" />}>
-      {said.offered ? <Note>{said.sentence}</Note> : <NotOffered>{said.sentence}</NotOffered>}
+      {said.offered ? <Note>{said.sentence}</Note> : <Explanation form="line" told={said.sentence} />}
     </SectionCard>
   );
 }
@@ -577,6 +581,7 @@ export function AgentProfile({
           <WorkflowsCard />
           <AgentChannels agentId={agent.agentId} />
           <AgentGroups agentId={agent.agentId} />
+          <AgentOwnWorkspace agentId={agent.agentId} name={agent.displayName} />
           {details?.knowledge === undefined ? null : <KnowledgeCard knowledge={details.knowledge} onWiden={onEditDraft} />}
           <Availability agentId={agent.agentId} facts={facts} profile={profile} details={details} onTransfer={onTransfer} />
           <Learning agentId={agent.agentId} name={agent.displayName} />

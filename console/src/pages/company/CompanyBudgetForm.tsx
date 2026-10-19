@@ -14,7 +14,8 @@
 
 import { useId, useState, type FormEvent } from "react";
 import { request } from "../../api/client";
-import { ConfirmDialog, Note } from "../../components/kit";
+import type { ApiFailure } from "../../api/errors";
+import { ConfirmDialog, FailureState, Note } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
@@ -34,6 +35,7 @@ export function CompanyBudgetForm({ currency, onSaved }: { readonly currency: st
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [done, setDone] = useState(false);
   // The ceiling asked for, held while the confirmation is open.
   const [asking, setAsking] = useState<number | null>(null);
@@ -54,6 +56,7 @@ export function CompanyBudgetForm({ currency, onSaved }: { readonly currency: st
       return;
     }
     setSaid(null);
+    setFailure(null);
     setAsking(minor);
   };
 
@@ -66,10 +69,11 @@ export function CompanyBudgetForm({ currency, onSaved }: { readonly currency: st
     setBusy(false);
     setAsking(null);
     if (!result.ok) {
-      setSaid(result.failure.message);
+      setFailure(result.failure);
       return;
     }
     setSaid(null);
+    setFailure(null);
     setDone(true);
     onSaved();
   };
@@ -100,6 +104,7 @@ export function CompanyBudgetForm({ currency, onSaved }: { readonly currency: st
           {said}
         </p>
       )}
+      {failure === null ? null : <FailureState failure={failure} />}
       {done ? <Note kind="done">{COMPANY_BUDGET_SAVED}</Note> : null}
       <ConfirmDialog
         open={asking !== null}

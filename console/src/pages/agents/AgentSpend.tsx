@@ -19,7 +19,8 @@
 
 import { useId, useState, type FormEvent } from "react";
 import { request } from "../../api/client";
-import { ConfirmDialog, Note, SectionCard } from "../../components/kit";
+import type { ApiFailure } from "../../api/errors";
+import { ConfirmDialog, FailureState, Note, SectionCard } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
@@ -109,6 +110,7 @@ function BudgetForm({
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [done, setDone] = useState(false);
   // The ceiling the person asked for, held while the confirmation is open.
   const [asking, setAsking] = useState<number | null>(null);
@@ -129,6 +131,7 @@ function BudgetForm({
       return;
     }
     setSaid(null);
+    setFailure(null);
     setAsking(minor);
   };
 
@@ -141,10 +144,11 @@ function BudgetForm({
     setBusy(false);
     setAsking(null);
     if (!result.ok) {
-      setSaid(result.failure.message);
+      setFailure(result.failure);
       return;
     }
     setSaid(null);
+    setFailure(null);
     setDone(true);
     onSaved();
   };
@@ -175,6 +179,7 @@ function BudgetForm({
           {said}
         </p>
       )}
+      {failure === null ? null : <FailureState failure={failure} />}
       {done ? <Note kind="done">{BUDGET_SAVED}</Note> : null}
       <ConfirmDialog
         open={asking !== null}

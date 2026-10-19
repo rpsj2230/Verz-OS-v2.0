@@ -26,6 +26,7 @@ import { agentChannelsApiPath, agentMoveApiPath } from "../../../src/pages/agent
 import { agentOfferApiPath, agentWithdrawApiPath } from "../../../src/pages/agents/agentAudienceQuery";
 import { agentLearningApiPath } from "../../../src/pages/agents/agentLearningQuery";
 import { agentMemoryKindsApiPath } from "../../../src/pages/agents/AgentMemoryKinds";
+import { agentOwnWorkspaceApiPath } from "../../../src/pages/agents/AgentOwnWorkspace";
 import { agentUpgradeAcceptApiPath, agentUpgradeDeclineApiPath } from "../../../src/pages/agents/agentUpgradeQuery";
 import { agentGroupRemovalApiPath, agentGroupsApiPath } from "../../../src/pages/agents/agentGroupsQuery";
 import { DESCRIBE_API_PATH, suggestApiPath, takeApiPath } from "../../../src/pages/agents/agentCoauthorQuery";
@@ -37,6 +38,13 @@ import { at, type Proofs, type ReadAfterAnAction, t, type WriteRoute } from "../
 const GROUP_INSTALLED = t(
   "test_group_install",
   "test_a_steward_installs_their_agent_in_a_chat_the_bot_is_in_and_takes_it_out",
+  true,
+);
+
+/** The owner's own account attached and taken off by the install check, against PostgreSQL: the row, and one ledger entry each naming who. */
+const OWN_ACCOUNT_PRESSED = t(
+  "test_acceptance_personal_agents",
+  "test_on_a_real_database_oversight_and_the_owners_account_hold_and_nothing_is_left",
   true,
 );
 
@@ -273,6 +281,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/pages/agents/AgentMemoryKinds.tsx agentMemoryKindsApiPath(drawn.agentId)": [
     at("POST /api/v1/agents/{agent_id}/memory-kinds", "agentMemoryKindsApiPath", agentMemoryKindsApiPath("quote-helper")),
+  ],
+  "src/pages/agents/AgentOwnWorkspace.tsx agentOwnWorkspaceApiPath(agentId)": [
+    at("POST /api/v1/agents/{agent_id}/own-workspace", "agentOwnWorkspaceApiPath", agentOwnWorkspaceApiPath("quote-helper")),
   ],
 };
 
@@ -528,6 +539,11 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: MEMORY_KINDS_PRESSED,
     audit: MEMORY_KINDS_PRESSED,
     behaviour: t("test_agent_memory_kinds_routes", "test_an_agents_steward_leaves_a_kind_out_and_the_store_is_told_who_did_it"),
+  },
+  "POST /api/v1/agents/{agent_id}/own-workspace": {
+    row: OWN_ACCOUNT_PRESSED,
+    audit: OWN_ACCOUNT_PRESSED,
+    behaviour: t("test_agent_own_workspace", "test_the_owner_attaches_their_own_account_to_their_own_agent_and_takes_it_off"),
   },
   "POST /api/v1/agents/{agent_id}/upgrade/accept": {
     row: UPGRADE_PRESSED,

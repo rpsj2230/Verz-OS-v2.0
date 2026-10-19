@@ -16,7 +16,7 @@
 import { CheckCheck } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { components } from "../../api/schema";
-import { EmptyState, FailureState, ListToolbar, LoadingState, Note, PageHeader } from "../../components/kit";
+import { BY_THE_INSTALL, EmptyList, EmptyState, FailureState, ListToolbar, LoadingState, Note, PageHeader } from "../../components/kit";
 import { FETCHING_MORE, NOTHING_MATCHES, SHOW_MORE } from "../../components/ListControls";
 import { narrows, NO_QUESTION, type FilterChoice, type SortChoice } from "../../components/listing";
 import { useListing } from "../../components/useListing";
@@ -117,7 +117,13 @@ export function ApprovalsPage() {
         }
       />
     ) : (
-      <EmptyState title={NO_APPROVALS} description={NO_APPROVALS_MORE} icon={<CheckCheck aria-hidden />} />
+      <EmptyList
+        title={NO_APPROVALS}
+        description={NO_APPROVALS_MORE}
+        adds="A card is raised when an agent reaches an act it may only take once somebody approves it."
+        by={BY_THE_INSTALL}
+        icon={<CheckCheck aria-hidden />}
+      />
     );
   } else {
     body = (

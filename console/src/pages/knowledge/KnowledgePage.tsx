@@ -37,11 +37,11 @@ import { useResource } from "../../api/useResource";
 import {
   ConfirmDialog,
   Drawer,
+  type EntityColumn,
+  Explanation,
   ListPage,
   Note,
   SectionCard,
-  UnavailableAction,
-  type EntityColumn,
 } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import {
@@ -57,7 +57,6 @@ import { defaultReviewDay, instantOf, TASKS_API_PATH } from "../knowledgeLifecyc
 import { readUploadOptions, UPLOAD_OPTIONS_API_PATH, type UploadOptions } from "../knowledgeQuery";
 import { AddFileForm, AddLinkForm, AddManyForm, levelsOf } from "./addForms";
 import { REVIEW_HINT, REVIEW_LABEL, reviewProblem } from "./formParts";
-import { UNAVAILABLE } from "./knowledgeActions";
 import {
   dayWords,
   DOCUMENT_FILTERS,
@@ -388,7 +387,7 @@ export function KnowledgePage() {
             <Button asChild variant="outline" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
               <Link to={CORRECTIONS_ADDRESS}>{CORRECTIONS_LINK}</Link>
             </Button>
-            <UnavailableAction label={EXPORT_LABEL} text={EXPORT_LABEL} icon={<Download aria-hidden />} reason={UNAVAILABLE.exportInventory.reason} />
+            <Explanation form="action" act="knowledge.export_inventory" label={EXPORT_LABEL} text={EXPORT_LABEL} icon={<Download aria-hidden />} />
           </>
         }
         notice={notice}
@@ -416,6 +415,8 @@ export function KnowledgePage() {
         loading={LOADING_DOCUMENTS}
         emptyTitle={NO_DOCUMENTS}
         emptyDescription={NO_DOCUMENTS_DESCRIPTION}
+        emptyAdds="Add a document to a department you can read, or to yourself alone."
+        emptyBy={["super_admin", "department_admin", "member"]}
         emptyIcon={<BookOpen aria-hidden />}
         footer={truncated ? <Note>{MORE_DOCUMENTS}</Note> : undefined}
       />

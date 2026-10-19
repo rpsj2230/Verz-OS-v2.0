@@ -153,7 +153,7 @@ export const DROP_BUTTON = "Drop these suggestions";
 export const NOTHING_SUGGESTED = "The co-author had nothing to change for that.";
 export const KEEP_LABEL = "Not now";
 export const NOT_CHANGED = "Nothing was changed";
-export const SOMETHING_DID_NOT_WORK = "Something did not work";
+export { SOMETHING_DID_NOT_WORK } from "../../ui/FailureNotice";
 export const TAKEN = "Taken into the draft";
 
 /** `brain.agent_describe_routes.DESCRIBE_PATH`. */

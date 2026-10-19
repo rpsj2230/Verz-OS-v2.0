@@ -15,7 +15,7 @@
 
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
-import { Chip, EntityTable, FailureState, LoadingState, Note, PageHeader, SectionCard, EmptyState, type EntityColumn } from "../../components/kit";
+import { Chip, EntityTable, FailureState, LoadingState, Note, PageHeader, SectionCard, EmptyList, type EntityColumn } from "../../components/kit";
 import {
   A_SWITCH_ONLY_NARROWS,
   EFFECT_WORDS,
@@ -103,7 +103,14 @@ export function ToolsPage() {
     if (page === null) {
       body = <Note>{UNREADABLE_ANSWER}</Note>;
     } else if (page.tools.length === 0) {
-      body = <EmptyState title={NO_TOOLS} description={NO_TOOLS_DESCRIPTION} />;
+      body = (
+        <EmptyList
+          title={NO_TOOLS}
+          description={NO_TOOLS_DESCRIPTION}
+          adds="Connect a source or add a skill that registers a tool, and it is listed here."
+          by={["connector_admin", "super_admin"]}
+        />
+      );
     } else {
       body = (
         <EntityTable

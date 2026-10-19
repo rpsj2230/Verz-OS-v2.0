@@ -16,9 +16,9 @@
 
 import { useMemo } from "react";
 import { useResource } from "../../api/useResource";
-import { Advanced, Chip, Fact, FactList, FailureState, LoadingState, Note, NotOffered, SectionCard } from "../../components/kit";
+import { Advanced, Chip, Explanation, Fact, FactList, FailureState, LoadingState, Note, SectionCard } from "../../components/kit";
 import { SWITCHED_OFF, SWITCHED_ON, type ProviderStateRow, type ProvidersBody } from "../modelsQuery";
-import { NOT_OFFERED, providerHistoryApiPath } from "./modelsActions";
+import { providerHistoryApiPath } from "./modelsActions";
 import { dayWords, historyWords, isAdded, readHistory, stepsOf } from "./providerWords";
 
 export const ABOUT_HEADING = "About this provider";
@@ -52,7 +52,7 @@ export function ProviderAbout({ row, body }: { readonly row: ProviderStateRow; r
         </FactList>
         {isAdded(row) ? null : (
           <div className="mt-3">
-            <NotOffered>{NOT_OFFERED.builtInRetire}</NotOffered>
+            <Explanation form="line" act="model.built_in_retire" />
           </div>
         )}
       </SectionCard>

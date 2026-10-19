@@ -20,7 +20,7 @@
  *
  * **What was removed.** The raw `true` and `false` values beside "a rehearsal is owed" and "inside
  * the recovery point" (words now), recovery times in bare seconds (in words), and the two record
- * file suffixes (in Advanced). Starting a rehearsal has no route, so it is `kit/UnavailableAction`.
+ * file suffixes (in Advanced). Starting a rehearsal has no route, so it is a `kit/Explanation`.
  *
  * Task ids: M27.16.1, M27.16.3
  */
@@ -29,14 +29,15 @@ import { Play } from "lucide-react";
 import { useResource } from "../../api/useResource";
 import {
   Advanced,
+  BY_THE_INSTALL,
+  type EntityColumn,
+  Explanation,
   Fact,
   FactList,
   KpiStrip,
   Note,
   SectionCard,
   StatCard,
-  UnavailableAction,
-  type EntityColumn,
 } from "../../components/kit";
 import {
   isKnown,
@@ -47,9 +48,9 @@ import {
   type Recovery as RecoveryBody,
   type Rehearsal,
 } from "../installQuery";
-import { UNAVAILABLE } from "./operationsActions";
 import { durationWords, Line, OpsPage, PLATFORM, WholeList } from "./parts";
 import { Pill } from "./pills";
+import { ACT_LABELS } from "./operationsActions";
 
 export const RECOVERY_HEADING = "Backup and recovery";
 export const RECOVERY_LEDE = "What has been copied, when a restore was last verified, and whether a rehearsal is owed.";
@@ -80,11 +81,12 @@ function RehearsalCard({ rehearsal }: { readonly rehearsal: Rehearsal }) {
     <SectionCard
       title={REHEARSING_A_RESTORE}
       action={
-        <UnavailableAction
-          label={UNAVAILABLE.startRehearsal.label}
-          text={UNAVAILABLE.startRehearsal.label}
+        <Explanation
+          form="action"
+          act="operations.start_rehearsal"
+          label={ACT_LABELS.startRehearsal}
+          text={ACT_LABELS.startRehearsal}
           icon={<Play aria-hidden />}
-          reason={UNAVAILABLE.startRehearsal.reason}
         />
       }
       footer={<Line>{rehearsal.no_control_here}</Line>}
@@ -188,6 +190,8 @@ export function RecoveryPage() {
                 rowLabel={(row) => row.coverage}
                 empty={NO_COPIES}
                 emptyDescription={NO_COPIES_MORE}
+                emptyAdds="A copy is taken by the install's backup schedule, and none is added by hand."
+                emptyBy={BY_THE_INSTALL}
               />
             </>
           ) : (

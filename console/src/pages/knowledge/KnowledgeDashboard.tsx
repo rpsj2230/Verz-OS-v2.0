@@ -11,7 +11,7 @@
  */
 
 import { Link } from "react-router-dom";
-import { Fact, FactList, Note, SectionCard } from "../../components/kit";
+import { BY_THE_INSTALL, EmptyList, Fact, FactList, SectionCard } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { WORKS_AT, type DocumentAct } from "./knowledgeActions";
 import { PublicMarkingCard } from "./PublicMarkingCard";
@@ -66,7 +66,12 @@ export function KnowledgeDashboard({
       </SectionCard>
 
       <SectionCard title={TASKS_HEADING}>
-        {tasks.length === 0 ? <Note>{NO_TASKS}</Note> : <TaskList tasks={tasks} onChanged={onChanged} />}
+        {tasks.length === 0 ? <EmptyList
+            compact
+            title={NO_TASKS}
+            adds="A task is raised when a document is handed to you or a decision is waiting on it."
+            by={BY_THE_INSTALL}
+          /> : <TaskList tasks={tasks} onChanged={onChanged} />}
       </SectionCard>
 
       <SectionCard

@@ -22,7 +22,7 @@ import { FilePlus2, LayoutTemplate } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
-import { FailureState, LoadingState, Note, PageHeader, SectionCard } from "../../components/kit";
+import { EmptyList, FailureState, LoadingState, Note, PageHeader, SectionCard } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { WORKS_AT } from "./agentActions";
 import { ROSTER_HEADING } from "./AgentsPage";
@@ -105,7 +105,12 @@ export function NewAgentPage() {
           ) : gallery.busy ? (
             <LoadingState label={LOADING_TEMPLATES} rows={3} />
           ) : templates.length === 0 ? (
-            <p className="m-0 text-sm text-dim">{NO_TEMPLATES}</p>
+            <EmptyList
+              compact
+              title={NO_TEMPLATES}
+              adds="A release ships templates, or an administrator publishes one from an agent."
+              by={["super_admin", "department_admin"]}
+            />
           ) : (
             <ul className="m-0 flex list-none flex-col gap-2 p-0">
               {templates.map((one) => (

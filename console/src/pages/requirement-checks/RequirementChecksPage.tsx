@@ -29,7 +29,9 @@ import { useCallback, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useResource } from "../../api/useResource";
 import {
+  BY_THE_INSTALL,
   Chip,
+  EmptyList,
   EmptyState,
   EntityTable,
   FailureState,
@@ -224,7 +226,15 @@ function Requirements({ body, onRecord }: { readonly body: ChecksBody; readonly 
 
   let list;
   if (body.requirements.length === 0) {
-    list = <EmptyState title="Nothing to check" description={body.told} icon={<ClipboardCheck aria-hidden />} />;
+    list = (
+      <EmptyList
+        title="Nothing to check"
+        description={body.told}
+        adds="A requirement is added to the register with the release that builds it, and none is added by hand."
+        by={BY_THE_INSTALL}
+        icon={<ClipboardCheck aria-hidden />}
+      />
+    );
   } else if (rows.length === 0) {
     list = (
       <EmptyState

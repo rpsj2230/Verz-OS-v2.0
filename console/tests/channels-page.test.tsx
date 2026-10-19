@@ -17,7 +17,7 @@ import { beforeAll, describe, expect, test } from "vitest";
 import { NOT_COPIED_TEXT, NOT_RECORDED } from "../src/components/kit";
 import { DISCONNECT_LABEL, GET_CODE_LABEL, READING_MY_CHANNELS } from "../src/components/MyChannels";
 import { TENANT_FORMAT } from "../src/pages/channelsQuery";
-import { ACT_LABELS, UNAVAILABLE } from "../src/pages/channels/channelActions";
+import { ACT_LABELS } from "../src/pages/channels/channelActions";
 import { SWITCH_OFF_CONSEQUENCE } from "../src/pages/channels/ChannelDetailPage";
 import { UNBIND_CONSEQUENCE } from "../src/pages/channels/ChannelDashboard";
 import { partLabel, SECRET_FORMAT } from "../src/pages/channels/ChannelProfile";
@@ -25,6 +25,7 @@ import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./suppo
 import { apiDocument } from "./support/openapi";
 import { PAGES } from "./support/pageCases";
 import { installRadixStubs } from "./support/radix";
+import { noRouteRetires, retiringPattern } from "./support/explanations";
 
 const CONSOLE_ORIGIN = "https://console.test";
 const SECRET_TYPED = "channel-secret-typed-in-0123456789";
@@ -366,11 +367,8 @@ describe("one channel's page", () => {
   test("every act drawn as unavailable names no route the API document declares", () => {
     // What breaks if this is deleted: a verification route lands and the page goes on saying "coming
     // soon" about it.
-    const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
-    for (const [act, { retiredBy }] of Object.entries(UNAVAILABLE)) {
-      expect(paths.filter((path) => retiredBy.test(path)), act).toEqual([]);
-    }
-    expect(UNAVAILABLE.verify.retiredBy.test("/api/v1/channels/{name}/verify")).toBe(true);
+    noRouteRetires(["channel.verify"]);
+    expect(retiringPattern("channel.verify").test("/api/v1/channels/{name}/verify")).toBe(true);
   });
 });
 

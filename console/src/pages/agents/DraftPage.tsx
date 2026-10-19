@@ -43,20 +43,20 @@ import {
   ConfirmDialog,
   DetailHeader,
   DetailPage,
+  type DetailView,
+  Explanation,
   Fact,
   FactList,
   FailureState,
   LoadingState,
   Note,
   SectionCard,
-  UnavailableAction,
   ViewSwitch,
-  type DetailView,
 } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
-import { FailureNotice } from "../../ui/FailureNotice";
+import { FailureNotice, SOMETHING_DID_NOT_WORK } from "../../ui/FailureNotice";
 import { Notice } from "../../ui/Notice";
 import { moneyWords } from "../spendQuery";
 import { ROSTER_HEADING, agentAddress } from "./AgentsPage";
@@ -165,7 +165,7 @@ export const QUESTIONS_IT_ASKS = "Test questions it would ask";
 export const NOT_YOURS = "Only its author can change this draft.";
 export const PUBLISHED_ALREADY = "This draft is published. Start a new draft from the agent to change it again.";
 export const OPEN_THE_AGENT = "Open the agent";
-export const SOMETHING_DID_NOT_WORK = "Something did not work";
+export { SOMETHING_DID_NOT_WORK };
 export const NOTHING_CHANGED = "Nothing was changed";
 export const SAVE_LABEL = "Save";
 
@@ -345,7 +345,7 @@ function RehearsalResult({ rehearsal }: { readonly rehearsal: DraftRehearsal }) 
           <Words items={rehearsal.questions} />
         </div>
       )}
-      <Note kind="not-yet">{rehearsal.notDone}</Note>
+      <Explanation form="note" lead="not-yet" told={rehearsal.notDone} />
     </div>
   );
 }
@@ -709,7 +709,7 @@ function DraftAnswer({ draftId, step }: { readonly draftId: string; readonly ste
           ) : !draft.yours ? (
             <Note>{draft.state === "published" ? PUBLISHED_ALREADY : NOT_YOURS}</Note>
           ) : draft.publishUnavailable !== undefined ? (
-            <UnavailableAction text={PUBLISH_LABEL} label={PUBLISH_LABEL} reason={draft.publishUnavailable} />
+            <Explanation form="action" told={draft.publishUnavailable} text={PUBLISH_LABEL} label={PUBLISH_LABEL} />
           ) : (
             <>
               <p className="m-0 text-sm text-body">{PUBLISH_CONSEQUENCE}</p>

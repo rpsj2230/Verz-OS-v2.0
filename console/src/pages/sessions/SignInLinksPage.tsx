@@ -377,6 +377,8 @@ export function SignInLinksPage() {
         loading={LOADING_LINKS}
         emptyTitle={NO_LINKS}
         emptyDescription={NO_LINKS_DESCRIPTION}
+        emptyAdds="Link an identity provider account to a person with Link a sign-in."
+        emptyBy={["super_admin"]}
         emptyIcon={<KeyRound aria-hidden />}
         footer={
           page.truncated || lastAdministratorShown ? (

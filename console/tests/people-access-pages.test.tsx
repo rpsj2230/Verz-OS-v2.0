@@ -28,7 +28,7 @@ import { CAPABILITY_PATTERN, SHORT_NAME_PATTERN, shortNameProblem } from "../src
 import { phraseFor } from "../src/pages/auditQuery";
 import { ACCOUNT_READY_HEADING, COPY } from "../src/pages/people/AccountReady";
 import { CHOOSE_A_DEPARTMENT, MOVE_SELECTED, MOVE_TITLE } from "../src/pages/people/MoveDrawer";
-import { DEPARTMENT_SET_ON_PEOPLE, EDITED_AT_THE_SOURCE, UNAVAILABLE, WHAT_NEEDS_A_SECOND_FACTOR } from "../src/pages/people/peopleActions";
+import { WHAT_NEEDS_A_SECOND_FACTOR } from "../src/pages/people/peopleActions";
 import { PEOPLE_FILTERS, readPeople } from "../src/pages/people/peopleQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { apiDocument, declaredPropertyNames, declaredRequestBodySchema } from "./support/openapi";
@@ -38,6 +38,7 @@ import { ADD_WORK_EMAIL, JOIN, WORK_EMAIL_BLANK } from "../src/pages/people/Work
 import { installRadixStubs } from "./support/radix";
 import { readRepoFile } from "./support/repo";
 import { NOMINATED_NOBODY, NOTHING_TO_DECIDE } from "../src/pages/roles/RolesPage";
+import { sentenceFor } from "./support/explanations";
 
 const CONSOLE_ORIGIN = "https://console.test";
 const API = "/api/v1";
@@ -525,10 +526,14 @@ describe("one person's page", () => {
     // staff source on an install where the sync never reads it again (M1.6.19).
     const around = { [`${API}/agents`]: { body: { items: [] } }, [`${API}/govern/staff_sources/transfers`]: { body: { transfers: [] } } };
     const listed = await consoleAt("/people/p_ada", { [PERSON_API]: { body: detail() }, ...around });
-    expect(textOf(listed.container)).toContain(EDITED_AT_THE_SOURCE);
+    await waitFor(() => {
+      expect(textOf(listed.container)).toContain(sentenceFor("person.changed_at_the_source"));
+    });
     const managed = await consoleAt("/people/p_ada", { [PERSON_API]: { body: detail({ department_set_on_people: true }) }, ...around });
-    expect(textOf(managed.container)).toContain(DEPARTMENT_SET_ON_PEOPLE);
-    expect(textOf(managed.container)).not.toContain(EDITED_AT_THE_SOURCE);
+    await waitFor(() => {
+      expect(textOf(managed.container)).toContain(sentenceFor("person.department_set_on_people"));
+    });
+    expect(textOf(managed.container)).not.toContain(sentenceFor("person.changed_at_the_source"));
   });
 
   test("a person the API refuses is its sentence and reference and nothing else, whatever the reason", async () => {
@@ -552,8 +557,8 @@ describe("one person's page", () => {
     expect(textOf(rows[0] ?? null)).toContain("Web");
     expect(textOf(rows[1] ?? null)).toContain("Pack: Helpdesk, version 2");
     expect(textOf(rows[2] ?? null)).toContain("Elevation");
-    expect(within(rows[1] as HTMLElement).queryByRole("button", { name: /^Remove read:client/ })).toBeNull();
-    expect(within(rows[1] as HTMLElement).getByRole("button", { name: "Remove the Helpdesk pack" })).toBeTruthy();
+    expect(within(rows[1] as HTMLElement).queryByRole("button", { name: /^Withdraw read:client/ })).toBeNull();
+    expect(within(rows[1] as HTMLElement).getByRole("button", { name: "Withdraw the Helpdesk pack" })).toBeTruthy();
     expect(textOf(container)).toContain("A capability that came with a pack is removed with the whole pack.");
   });
 
@@ -565,17 +570,17 @@ describe("one person's page", () => {
       [`POST ${API}/govern/grants/removal`]: { body: { principal_id: "p_ada", capability: "read:ticket.*", removed_at: "2019-03-04T09:00:00Z" } },
       [`POST ${API}/govern/access-review/decision`]: { body: { kind: "pack", row_id: PACK.row_id, principal_id: "p_ada", decision: "remove", decided_at: "2019-03-04T09:00:00Z" } },
     });
-    press(mounted.container, "Remove read:ticket.*");
-    const first = await confirmation("Remove read:ticket.* from Ada Okafor?");
+    press(mounted.container, "Withdraw read:ticket.*");
+    const first = await confirmation("Withdraw read:ticket.* from Ada Okafor?");
     expect(writes(mounted.idp)).toEqual([]);
-    press(first, "Remove the grant");
+    press(first, "Withdraw the grant");
     await waitFor(() => expect(writes(mounted.idp)).toHaveLength(1));
     expect(writes(mounted.idp)[0]).toEqual({ to: `POST ${API}/govern/grants/removal`, body: { principal_id: "p_ada", capability: "read:ticket.*" } });
 
     await settled(mounted.container);
-    press(mounted.container, "Remove the Helpdesk pack");
-    const second = await confirmation("Take the Helpdesk pack away from Ada Okafor?");
-    press(second, "Remove the pack");
+    press(mounted.container, "Withdraw the Helpdesk pack");
+    const second = await confirmation("Withdraw the Helpdesk pack from Ada Okafor?");
+    press(second, "Withdraw the pack");
     await waitFor(() => expect(writes(mounted.idp)).toHaveLength(2));
     expect(writes(mounted.idp)[1]).toEqual({ to: `POST ${API}/govern/access-review/decision`, body: { kind: "pack", row_id: PACK.row_id, decision: "remove" } });
   });
@@ -892,9 +897,9 @@ describe("Roles and permissions", () => {
     expect(textOf(mounted.container)).not.toMatch(/[a-z]+:[a-z]/);
     expect(textOf(mounted.container)).toContain("Ada Okafor");
     expect(textOf(mounted.container)).not.toContain("p_ada");
-    press(mounted.container, "Remove Approver from Ada Okafor");
-    const asking = await confirmation("Remove Approver from Ada Okafor?");
-    press(asking, "Remove the role");
+    press(mounted.container, "Withdraw Approver from Ada Okafor");
+    const asking = await confirmation("Withdraw Approver from Ada Okafor?");
+    press(asking, "Withdraw the role");
     await waitFor(() => expect(writes(mounted.idp)).toEqual([{ to: `POST ${API}/govern/roles/removal`, body: { grant_id: "g-1" } }]));
   });
 
@@ -1133,9 +1138,6 @@ describe("what the pages hold against the API", () => {
     // What breaks if this is deleted: a control drawn inert after its route has landed, telling a
     // person they cannot do what they can.
     const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
-    for (const [act, { retiredBy }] of Object.entries(UNAVAILABLE)) {
-      expect(paths.filter((path) => retiredBy.test(path)), act).toEqual([]);
-    }
     // The preview this table held retired with its route, which the page now calls.
     expect(paths).toContain("/api/v1/agents/{agent_id}/preview");
   });

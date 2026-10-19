@@ -46,6 +46,7 @@ import { DataTable } from "../../components/DataTable";
 import { SchemaForm } from "../../components/SchemaForm";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
+import { FailureNotice } from "../../ui/FailureNotice";
 import { Notice } from "../../ui/Notice";
 import {
   CLASSIFICATION_QUERY_SCHEMA,
@@ -352,7 +353,7 @@ function AppliedNotice({ applied }: { readonly applied: Applied }) {
           </ul>
         </>
       ) : null}
-      <p className="review__epochs">
+      <p>
         Policy epoch <code>{short(applied.review.epochNow)}</code> to{" "}
         <code>{short(applied.review.epochAfter)}</code>
       </p>
@@ -441,11 +442,7 @@ function UploadTable() {
   return (
     <SectionCard title={UPLOAD_HEADING} lede={UPLOAD_LEDE}>
       <div className="flex min-w-0 flex-col gap-3">
-        {failure === null ? null : (
-          <Notice title={IT_WAS_NOT_UPLOADED} traceId={failure.traceId}>
-            <p>{failure.message}</p>
-          </Notice>
-        )}
+        {failure === null ? null : <FailureNotice failure={failure} title={IT_WAS_NOT_UPLOADED} />}
         {refused === "" ? null : (
           <Notice title={IT_WAS_NOT_UPLOADED}>
             <p>{refused}</p>
@@ -549,6 +546,8 @@ function ClassifiedTable({ entity, openColumn }: { readonly entity: string; read
             columns={columns}
             rows={page.columns}
             rowId={(row) => row.column}
+            emptyAdds="A column is listed for each column of the table's uploaded file, so upload the table again."
+            emptyBy={["super_admin"]}
             failure={answer.failure}
             busy={answer.busy}
           />

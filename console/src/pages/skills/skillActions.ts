@@ -8,8 +8,9 @@
  * assigning to an agent, and, new with this page, retiring and reinstating a version and detaching a
  * skill from an agent. Every one of those is a live control. What is left is trying a skill out
  * through an agent in practice mode, which `docs/admin-console-architecture.md` 4.2 says is tested
- * through an agent that holds it and which no route runs; it is drawn as `kit/UnavailableAction`
- * with the sentence below, and `tests/skills-module.test.tsx` fails the day its route lands.
+ * through an agent that holds it and which no route runs; it is drawn as a `kit/Explanation` of the
+ * `action` form (`skill.try_out`), and `tests/unit/test_console_explanations.py` fails the day its
+ * route lands.
  *
  * **A skill is never deleted.** A version is retired, which keeps it and its history; that is the
  * product's rule (`brain.console.skill_library.A_RETIRED_VERSION_IS_KEPT_AND_ONLY_REFUSED_TO_NEW_AGENTS`),
@@ -17,17 +18,6 @@
  *
  * Task ids: M27.16.1, M27.11.8
  */
-
-/** Why each act with no route cannot be pressed, and the API path whose arrival retires it. */
-export const UNAVAILABLE = Object.freeze({
-  tryOut: {
-    reason:
-      "Coming soon: trying a skill out through an agent in practice mode, as a named person, before it is assigned for real.",
-    retiredBy: /^\/api\/v1\/(skills\/\{[^}]+\}\/(rehearsal|trial)|agents\/\{[^}]+\}\/rehearse)\b/,
-  },
-});
-
-export type UnavailableAct = keyof typeof UNAVAILABLE;
 
 /** Where related work is done, as console addresses. */
 export const WORKS_AT = Object.freeze({

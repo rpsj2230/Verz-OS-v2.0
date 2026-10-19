@@ -9,12 +9,12 @@
  * `brain.provider_registry_routes`, `brain.routing_routes`, `brain.credential_routes`). Retiring and
  * moving a step, the export and a provider's figures were built for this page.
  *
- * **One act is not built, and its sentence says so** (`UNAVAILABLE`): renaming a provider added
- * from the console. `tests/models-module.test.tsx` reads each `retiredBy` pattern against the API
- * document, so the sentence cannot outlive the route that retires it.
+ * **One act was not built and is not drawn**: renaming a provider added from the console. It had a
+ * sentence saying so until 2026-10-15, when sentences moved to `brain.console.explanations` and a
+ * sentence nothing drew was dropped rather than carried; retire the provider and add it again.
  *
  * **Three acts are not offered at all, by design, and are sentences rather than controls**
- * (`NOT_OFFERED`): retiring a built-in provider, which is the product's; bringing a retired step
+ * (`model.built_in_retire`, `model.step_restore`): retiring a built-in provider, which is the product's; bringing a retired step
  * back, which would take a position the live matrix may have given to another; and resetting a
  * provider's rest after failures, which is replayed from its calls and would be a second state.
  *
@@ -24,21 +24,6 @@
 import { listPath, NO_QUESTION } from "../../components/listing";
 import { MATRIX_API_PATH, MATRIX_PATH } from "../matrixQuery";
 import { MODELS_PATH, PROVIDERS_API_PATH } from "../modelsQuery";
-
-/** Why each act that has no route cannot be pressed, and the API path whose arrival retires it. */
-export const UNAVAILABLE = Object.freeze({
-  rename: {
-    reason: "Coming soon: renaming a provider added here. Today, retire it and add it again with its key.",
-    retiredBy: /^\/api\/v1\/models\/providers\/\{[^}]+\}\/(label|rename)$/,
-  },
-});
-
-/** What this product does not offer, said where the control would otherwise be. */
-export const NOT_OFFERED = Object.freeze({
-  builtInRetire: "A built-in provider cannot be retired. Turn it off to stop every question going to it.",
-  stepRestore: "A retired step does not come back. Add it again as a new step.",
-  restReset: "A provider resting after failures comes back by itself once a test call answers.",
-});
 
 /** Where the acts this module links to are done, as console addresses. */
 export const WORKS_AT = Object.freeze({

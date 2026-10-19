@@ -24,14 +24,14 @@
 import { useState, type FormEvent } from "react";
 import { request } from "../../api/client";
 import type { ApiFailure, FieldProblem } from "../../api/errors";
-import { Advanced, Chip, ConfirmDialog, Drawer, Fact, FactList, FailureState, NotOffered } from "../../components/kit";
+import { Advanced, Chip, ConfirmDialog, Drawer, Explanation, Fact, FactList, FailureState } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { problemAttributes } from "../../ui/FieldProblems";
 import { readChange, TIERS, type ChangeRow } from "../matrixGateQuery";
 import { MAX_SMALLINT, MAX_TIMEOUT_SECONDS, rungApiPath, scopeLines } from "../matrixQuery";
 import { levelName } from "../modelsQuery";
 import { FIELD_CONTROL, FormField } from "./FormField";
-import { moveStepApiPath, NOT_OFFERED, retireStepApiPath } from "./modelsActions";
+import { moveStepApiPath, retireStepApiPath } from "./modelsActions";
 import {
   KEEP_STEP,
   MOVE_STEP,
@@ -270,7 +270,7 @@ export function RungEditor({
               {MOVE_STEP}
             </Button>
           </div>
-          <NotOffered>{NOT_OFFERED.stepRestore}</NotOffered>
+          <Explanation form="line" act="model.step_restore" />
         </form>
 
         {failure === null || failure.problems.length > 0 ? null : <FailureState failure={failure} />}

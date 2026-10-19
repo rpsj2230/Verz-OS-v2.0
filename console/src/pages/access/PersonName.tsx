@@ -60,16 +60,5 @@ export function PersonName({
   );
 }
 
-/** A role's word as a person reads it, from `brain.identity.roles.Role`. */
-export const ROLE_WORDS: Readonly<Record<string, string>> = Object.freeze({
-  super_admin: "Super Admin",
-  department_admin: "Department admin",
-  member: "Member",
-  auditor: "Auditor",
-  connector_admin: "Connector admin",
-  approver: "Approver",
-});
-
-export function roleWords(role: string): string {
-  return ROLE_WORDS[role] ?? role;
-}
+/** A role's word as a person reads it. Kept under the names pages already import it by. */
+export { ROLE_WORDS, roleWords } from "../../components/kit/roles";

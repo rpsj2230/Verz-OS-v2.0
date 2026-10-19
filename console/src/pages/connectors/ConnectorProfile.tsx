@@ -25,7 +25,7 @@
  */
 
 import { Link } from "react-router-dom";
-import { Advanced, Chip, Fact, FactList, Note, SectionCard } from "../../components/kit";
+import { Advanced, Chip, EmptyList, Fact, FactList, Note, SectionCard } from "../../components/kit";
 import { AGENT_ADDRESS_PREFIX } from "../../components/agentWorkspaceState";
 import { keyWords, type Connected } from "../connectorsQuery";
 import { dateWords, personWords, type SourceDetail } from "./connectorSources";
@@ -123,7 +123,12 @@ export function ConnectorProfile({
         <FactList>
           <Fact label="Agents">
             {detail.agents.length === 0 ? (
-              <span className="text-dim">{NO_AGENT}</span>
+              <EmptyList
+                compact
+                title={NO_AGENT}
+                adds="Name the source in an agent's manifest, and the agent is listed here."
+                by={["super_admin", "department_admin"]}
+              />
             ) : (
               <span className="flex flex-wrap gap-2">
                 {detail.agents.map((one) => (
@@ -136,7 +141,12 @@ export function ConnectorProfile({
           </Fact>
           <Fact label="Skills">
             {detail.skills.length === 0 ? (
-              <span className="text-dim">{NO_SKILL}</span>
+              <EmptyList
+                compact
+                title={NO_SKILL}
+                adds="Add a skill whose tools come from this source, and it is listed here."
+                by={["super_admin", "department_admin"]}
+              />
             ) : (
               <span className="flex flex-wrap gap-1">
                 {detail.skills.map((one) => (

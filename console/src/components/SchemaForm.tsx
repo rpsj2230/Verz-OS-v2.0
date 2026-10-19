@@ -84,7 +84,7 @@ import { FieldErrors, KIT_TEMPLATES, KIT_WIDGETS, WithheldField } from "./kit/fo
 import { FailureNotice } from "../ui/FailureNotice";
 
 /** The one heading over any failure a form reports. The API's own sentence goes underneath. */
-export const SOMETHING_DID_NOT_WORK = "That did not work";
+export { THAT_DID_NOT_WORK as SOMETHING_DID_NOT_WORK } from "../ui/FailureNotice";
 
 /** The heading over the form's own validation messages. About this screen, never about data. */
 export const CHECK_THESE_ANSWERS = "Check these answers";

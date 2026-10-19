@@ -14,7 +14,7 @@
  *
  * **A limit is changed here, within bounds the product fixes** (M22.4.1). `LimitSettings` lists
  * every budget and request window `brain.tuning_routes` serves, and draws a control on each row only
- * for a reader the answer says may change it. Until 2026-09-29 this was `kit/UnavailableAction`
+ * for a reader the answer says may change it. Until 2026-09-29 this was a `kit/Explanation`
  * saying "coming soon"; the route landed and the act went, in the same commit.
  *
  * **What was removed.** Raw `true` and `false` cells and bare seconds (words now), and the
@@ -29,7 +29,7 @@
  */
 
 import { useResource } from "../../api/useResource";
-import { SectionCard, type EntityColumn } from "../../components/kit";
+import { BY_THE_INSTALL, SectionCard, type EntityColumn } from "../../components/kit";
 import {
   LIMITS_API_PATH,
   readDeferred,
@@ -189,6 +189,8 @@ export function LimitsPage() {
                 rowLabel={(row) => row.subject}
                 empty={NOBODY_IS_BEHIND_A_CEILING}
                 emptyDescription={NOBODY_IS_BEHIND_A_CEILING_MORE}
+                emptyAdds="A row is written when a request is held at a ceiling, and none is added by hand."
+                emptyBy={BY_THE_INSTALL}
               />
             ) : (
               <SectionCard title={REFUSING_HEADING}>
@@ -207,6 +209,8 @@ export function LimitsPage() {
                 rowLabel={(row) => row.said}
                 empty={NOTHING_IS_DEFERRED}
                 emptyDescription={NOTHING_IS_DEFERRED_MORE}
+                emptyAdds="A row is written when work is deferred to stay under a ceiling, and none is added by hand."
+                emptyBy={BY_THE_INSTALL}
               />
             ) : deferred.unread ? (
               <SectionCard title={DEFERRED_HEADING}>
@@ -223,6 +227,8 @@ export function LimitsPage() {
               rowLabel={(row) => row.applies_to}
               exportName="rate-limit-windows"
               empty={NO_WINDOWS}
+              emptyAdds="A window is listed for each ceiling a release declares, and none is added by hand."
+              emptyBy={BY_THE_INSTALL}
             />
             <WholeList
               exportName="ceilings"
@@ -234,6 +240,8 @@ export function LimitsPage() {
               rowLabel={(row) => row.name}
               empty={NO_CEILINGS}
               emptyDescription={NO_CEILINGS_MORE}
+              emptyAdds="A ceiling is declared by a release, and none is added by hand."
+              emptyBy={BY_THE_INSTALL}
             />
             {wasRead(unusual) ? (
               <WholeList
@@ -246,6 +254,8 @@ export function LimitsPage() {
                 rowLabel={(row) => row.subject}
                 empty={NOBODY_IS_UNUSUAL}
                 emptyDescription={NOBODY_IS_UNUSUAL_MORE}
+                emptyAdds="A row is written when a caller's use departs from its usual, and none is added by hand."
+                emptyBy={BY_THE_INSTALL}
               />
             ) : unusual.unread ? (
               <SectionCard title={UNUSUAL_HEADING}>

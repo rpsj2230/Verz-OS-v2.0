@@ -587,7 +587,7 @@ export function readReviewOutcomes(payload: unknown): readonly ReviewOutcome[] {
 
 /** The question the bulk confirmation asks. Names no figure: the list under it names each one. */
 export function decisionsQuestion(decision: ReviewDecisionWord): string {
-  return decision === "keep" ? "Keep each of these grants?" : "Remove each of these grants?";
+  return decision === "keep" ? "Keep each of these grants?" : "Withdraw each of these grants?";
 }
 
 /** What the bulk confirmation lists for one holding: what, whose, and what happens to it. */
@@ -604,7 +604,7 @@ export function reviewOutcomeLine(row: ReviewRow | undefined, outcome: ReviewOut
   if (!outcome.decided) {
     return `${what} was not decided.`;
   }
-  return `${what} was ${decision === "keep" ? "kept" : "removed"}.`;
+  return `${what} was ${decision === "keep" ? "kept" : "withdrawn"}.`;
 }
 
 /** What a holding is called in a sentence: its capability, or its pack by name. */
@@ -617,7 +617,7 @@ export function decisionQuestion(row: ReviewRow, decision: ReviewDecisionWord): 
   const who = row.display_name ?? row.principal_id;
   return decision === "keep"
     ? `Keep ${holdingName(row)} for ${who}?`
-    : `Remove ${holdingName(row)} from ${who}?`;
+    : `Withdraw ${holdingName(row)} from ${who}?`;
 }
 
 // ------------------------------------------------------------------ subscribers

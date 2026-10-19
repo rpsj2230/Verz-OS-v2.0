@@ -34,6 +34,31 @@ const STATUSES = ["OPEN", "IN PROGRESS", "READY FOR TESTING", "BLOCKED"];
 
 //: Leaf id to where it stands. Ordered by id.
 const PROGRESS = {
+  "M27.15.72": {
+    status: "READY FOR TESTING",
+    why: "built: console/tests/styled-classes.test.ts compiles the component layer's stylesheet and refuses any class in the markup with no selector and no emitted utility (it found bg-surface, text-ink-3 and text-danger, which nothing defined, and two dozen unstyled hooks), and console/tests/one-failure-component.test.ts refuses a failure drawn by hand, a failure heading typed anywhere but ui/FailureNotice, and a private failure component (it found twelve writes drawing failure.message with no reference). Proved in CI: the console job (Console types, boundaries, tests, build) in .github/workflows/ci.yml runs both through npm run test. On the install: make a write fail, for example set an agent's monthly budget while holding no budget role, and read the heading, the sentence and the reference under the form.",
+    updated: "2026-10-15",
+  },
+  "M27.15.70": {
+    status: "READY FOR TESTING",
+    why: "built: one component, console/src/components/kit/explanation.tsx, draws every explanation in three forms (an inert control, a sentence in place of a control, a note with its lead), and the three old drawings (UnavailableAction, NotOffered, and the soon and not-yet kinds of Note) are gone. The sentences are the server's: brain.console.explanations holds 43 of them with the route whose arrival expires each, GET /api/v1/console/explanations/{act} serves one to any signed-in reader, the same bytes for every reader, and the console types none of them (a sentence the API already sends with a row is handed in as told). console/tests/explanations.test.ts refuses a private copy of the markup, a stand-in component, a Note that leads with coming soon, a use that names an unregistered act or types its sentence, and any disabled control not on a named list of reasons (it found a disabled option on the automation form whose reason nobody could read, now drawn as a line). tests/unit/test_console_explanations.py holds every expiry against the routes the application mounts. NOT done: a few lines the console composes from data (a level that cannot answer, a run that removed nothing, a key the account does not hold) are Note kind attention, not served; and 'the reader cannot perform here' is held to the sentences the API already sends with a row, because a sentence that differed by reader would be a denial that could be told from an absence. Proved in CI: the console job and the unit job. On the install: open an agent's Profile, press the dashed Change beside Level and see nothing happen, focus it and read why; open Learning, Shadow, and read the sentence beside Promote; then ask for GET /api/v1/console/explanations/agent.level with a token and read the same sentence.",
+    updated: "2026-10-15",
+  },
+  "M27.15.69": {
+    status: "READY FOR TESTING",
+    why: "built: kit EmptyList takes the act that adds a row and who does it as required props (ListPage, WholeList and DataTable take emptyAdds and emptyBy), roles come from the platform's six (kit/roles.ts, held to brain.identity.roles.Role), and console/tests/empty-lists.test.tsx mounts every page with its lists emptied, holds each empty list to an act, a who from that vocabulary and no cause, and holds every remaining bare paragraph to console/tests/support/bareEmpties.ts, where the backlog (BARE_LISTS) is now empty and what is left is states (a fact about the install, a page that is not there, a value of None). Every list the first view of a page draws is converted (about eighty). NOT reached by the render sweep: the tabs a page does not open first, which only the static checks over every EmptyList, ListPage and WholeList use cover. Which role adds a row in each list is my reading of the page, not a decision of the owner's: see the question in the report. Proved in CI: the console job runs the test through npm run test. On the install: open Connectors, Agent templates, Webhooks, Automations and People on a fresh install and read each empty message; it says what would add a row and which role may, and never why the list is empty.",
+    updated: "2026-10-15",
+  },
+  "M27.15.62": {
+    status: "BLOCKED",
+    why: "part of the task text conflicts with the owner's 2026-09-18 record access view and waits on needs-rupash item 188. Built under either answer: console/tests/reach-questions.test.ts and tests/unit/test_reach_questions.py hold that every who-can-reach question the console and API offer is declared with what it is asked of, that only the record access view takes anything naming a record, that it is read for the reader before any candidate and refuses every reader the way an unknown entity is refused. Nothing asserts that no route answers who can see a named record.",
+    updated: "2026-10-15",
+  },
+  "M27.15.52": {
+    status: "READY FOR TESTING",
+    why: "built: console/tests/destructive-labels.test.ts refuses any label that starts Delete, Remove, Take it out and the like (thirty-four became Withdraw, Retire, Detach, Disconnect, End membership and Supersede) and holds that the console sends no DELETE, and tests/unit/test_hard_deletes.py derives from the migrations the tables the application may delete from and holds them to the six that brain.ops.hard_deletes argues (it found obs.trace_step, granted by 0226 through a constant the old text scan could not see). Proved in CI: the console job (Console types, boundaries, tests, build) and the Unit tests shards run them. On the install: open a person's Grants view and read the button beside a grant, which says Withdraw, and an agent's Memory, which says Retire.",
+    updated: "2026-10-15",
+  },
   "M39.8.1": {
     status: "READY FOR TESTING",
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
@@ -4345,19 +4370,19 @@ const PROGRESS = {
     updated: "2026-10-12",
   },
   "M39.10.3": {
-    status: "OPEN",
-    why: "P1. DEPENDS on M39.10.1. Audience scope for PERSONAL is the owner (agents/model.py scope_for); check that every list, the gallery and the oversight view follow it, with no count of hidden agents.",
-    updated: "2026-10-12",
+    status: "READY FOR TESTING",
+    why: "built (M39/personal-agent-oversight-and-workspace): a personal agent is listed, opened and used by its owner alone, and a reader who holds the audit capability for agents (read:audit.agent, in the scope their grant carries) is told on the Agents screen, under Personal agents under oversight, that another person's personal agent exists, whose it is and whether it runs, and is offered nothing: it is not on their roster and its page is refused as for an agent never made. No count anywhere, and the same empty answer for every other reader. Behind the switch Show personal agents to people who hold the audit capability (off). Every place that lists agents is held to the audience by a test that walks the source; a leaver's personal agent is no longer offered to whoever may adopt agents. To prove it on the install: switch the feature on, make a personal agent as one person, open Agents as a person who holds the audit capability for agents, and see it named there and not in the roster; the install check an_auditor_is_told_of_a_personal_agent_and_may_not_use_it does this with reserved people. Not seen by this task: the Usage and Spend breakdowns by agent, which name every agent to a reader of those screens, personal ones included (a question for the owner).",
+    updated: "2026-10-14",
   },
   "M39.10.4": {
-    status: "OPEN",
-    why: "P1. DEPENDS on M11.7.6 and needs item 173's steps done by the owner. Google Workspace is read per person with that person's own token (brain.connectors, My workspace); what is missing is attaching that connection to a personal agent and refusing anyone else.",
-    updated: "2026-10-12",
+    status: "READY FOR TESTING",
+    why: "built (M39/personal-agent-oversight-and-workspace): the owner of a personal agent attaches their own Google account to it from the agent's Profile (Your own Google account, confirmed), and takes it off the same way; the agent then reads that person's own mail, calendar and documents with their own consent and token, for them alone. A colleague, an administrator and any other agent cannot attach or ask for it (answered as for an agent never made), and a team agent never carries one however it is written: the read is now an entity the Google connector provides, so an agent that does not name the connector is not left holding it. Behind the switch Let a person attach their own Google account to their personal agent (off). The real Google sign-in is the owner's step on needs item 173: until then the install check a_persons_own_google_account_is_on_their_agent_for_them_alone passes against recorded Google answers for made-up people and the task is held. To prove it on the install after item 173: connect Google Workspace, connect your own account on My workspace, switch the feature on, attach it on your personal agent, ask it about your mail, and see a colleague get nothing of yours from any agent.",
+    updated: "2026-10-14",
   },
   "M39.10.5": {
     status: "OPEN",
-    why: "P2. DEPENDS on the owner's answer to needs item 189 (recommended C, built as A first). A team agent has no personal Google connection; a shared mailbox is a connection an administrator makes; a person's own mail in a private conversation only, never a room, memory or knowledge item.",
-    updated: "2026-10-12",
+    why: "P2. DEPENDS on the owner's answer to needs item 189 (recommended C, built as A first). PARTLY BUILT (M39/personal-agent-oversight-and-workspace), the part that holds under every answer: a team agent can never carry a person's own Google account, however it is written or attached (agents.model.bound_connectors and the read's entity), and the install check asserts a department's agent naming Workspace is handed nothing. NOT BUILT, waiting on item 189: a shared mailbox an administrator connects for a team (options A and C), and a person's own mail reaching a team agent inside that person's private conversation only, never a room, memory or knowledge item (options B and C).",
+    updated: "2026-10-14",
   },
   "M39.10.6": {
     status: "READY FOR TESTING",

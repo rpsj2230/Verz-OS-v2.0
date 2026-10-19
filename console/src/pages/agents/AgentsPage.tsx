@@ -30,7 +30,11 @@
  * Imported statically, as the roster always was, because the kit reaches nothing heavier than the
  * shell already does.
  *
- * Task ids: M39.1.2.5, M27.8.6, M27.10.2, M27.11.6
+ * **Above the list sits oversight, for a reader the API tells of personal agents** (`AgentOversight.tsx`,
+ * M39.10.3): a section that names another person's personal agent and offers nothing to do with it, and
+ * is absent for everybody else.
+ *
+ * Task ids: M39.1.2.5, M27.8.6, M27.10.2, M27.11.6, M39.10.3
  */
 
 import { Bot, MoreHorizontal, Plus } from "lucide-react";
@@ -55,6 +59,7 @@ import { actsFor, ACT_LABELS, type LifecycleAct } from "../agentLifecycleQuery";
 import { rungWords, stateWords, WORKS_AT } from "./agentActions";
 import { DRAFTS_ADDRESS, NEW_AGENT_ADDRESS } from "./agentDraftsQuery";
 import { countWords, FIRST_PERIOD, periodOf, whenWords } from "./agentStats";
+import { AgentOversight } from "./AgentOversight";
 import { useLifecycleActs } from "./LifecycleActs";
 import { LeashPill, StatePill } from "./pills";
 import { useRowStats, type RowStats } from "./useRowStats";
@@ -353,11 +358,14 @@ export function AgentsPage() {
         <>
           {lifecycle.notice}
           {lifecycle.dialog}
+          <AgentOversight />
         </>
       }
       loading={LOADING_AGENTS}
       emptyTitle={NO_AGENTS}
       emptyDescription={NO_AGENTS_DESCRIPTION}
+      emptyAdds="Build one with New agent, then publish it so it is offered."
+      emptyBy={["super_admin", "department_admin", "member"]}
       emptyIcon={<Bot aria-hidden />}
       emptyAction={
         <Button asChild variant="outline" className="text-ink no-underline">

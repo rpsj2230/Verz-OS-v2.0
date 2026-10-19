@@ -45,6 +45,7 @@ import { UNSET_CURRENCY } from "../pages/spendQuery";
 import { FailureNotice } from "../ui/FailureNotice";
 import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import { ConfirmAction } from "./ConfirmAction";
+import { EmptyList } from "./kit/states";
 import type { GridColumn } from "./gridFeatures";
 import { GridTable } from "./kit/GridTable";
 
@@ -177,7 +178,12 @@ export function ModelPrices({ editable }: { readonly editable: boolean }) {
       <p className="note">{pricesLede(body.currency)}</p>
       {unset && editable ? <p className="note">{CHOOSE_A_CURRENCY_FIRST}</p> : null}
       {body.models.length === 0 ? (
-        <p className="note">{NO_MODELS}</p>
+        <EmptyList
+          compact
+          title={NO_MODELS}
+          adds="Add a step that names a model to the failover matrix, then give the model a price."
+          by={["super_admin"]}
+        />
       ) : (
         <GridTable
           look="grid"

@@ -26,7 +26,17 @@
 import { ArrowRight } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ConnectSource } from "../../components/ConnectSource";
-import { ConnectFlow, FlowDialog, forgetFlow, indexOf, Note, recallFlow, rememberFlow, type FlowStep } from "../../components/kit";
+import {
+  ConnectFlow,
+  Explanation,
+  FlowDialog,
+  type FlowStep,
+  forgetFlow,
+  indexOf,
+  Note,
+  recallFlow,
+  rememberFlow,
+} from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { offered, type Connectable, type Connectors as ConnectorsBody, type NotConnectable } from "../connectorsQuery";
 
@@ -141,7 +151,7 @@ function Flow({ page, chosen, onConnected }: { readonly page: ConnectorsBody; re
         }
       }}
       panels={panels}
-      shared={page.vault_told === "" || chosen.kind !== "form" ? undefined : <Note kind="not-yet">{page.vault_told}</Note>}
+      shared={page.vault_told === "" || chosen.kind !== "form" ? undefined : <Explanation form="note" lead="not-yet" told={page.vault_told} />}
     />
   );
 }

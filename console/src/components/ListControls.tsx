@@ -64,7 +64,7 @@ export function ListControls<Row>({
 
   return (
     <form
-      className="form list-controls"
+      className="form"
       role="search"
       aria-label={label}
       onSubmit={(event) => {
