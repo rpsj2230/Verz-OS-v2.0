@@ -57,7 +57,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import Final, Protocol
 
@@ -77,6 +77,7 @@ from brain.ops.idempotency import (
     resume,
 )
 from brain.ops.queue import InFlight, Redrive, Verdict
+from brain.ops.redrive_control import Redriven, carry_out_asks
 from brain.tables.operation import OperationRow
 
 # ------------------------------------------------------------------ written-down reasons
@@ -171,6 +172,8 @@ class QueueSweep:
     tasks: Mapping[str, str]
     #: Why each set-aside job was set aside, a word of `brain.ops.jobs.DeadLetterReason`, by id.
     reasons: Mapping[str, str] = field(default_factory=dict)
+    #: The jobs a person asked to have run again that this sweep put back (M27.13.3).
+    asked: Redriven = field(default_factory=lambda: Redriven(put_back=(), could_not=()))
 
     def summary(self) -> str:
         """One line for the run record: counts, and the set-aside jobs by id and task."""
@@ -189,6 +192,8 @@ class QueueSweep:
             )
             more = len(self.set_aside) - NAMED_IN_A_REPORT
             said += f". Set aside: {named}" + (f" and {more} more" if more > 0 else "")
+        if self.asked.summary():
+            said += f". {self.asked.summary().capitalize()}"
         return said
 
 
@@ -461,7 +466,10 @@ def run_queue_redrive_now(
             for job_id, reason in swept.reasons.items():
                 await queue.keep_aside(job_id, reason, now)
             await queue.keep_failed(now)
-            return swept
+            # A person's ask to run a set-aside job again is carried out last, after the sweep's
+            # own decisions have been made, so the sweep never sees a job put back this minute
+            # as one it must judge. See `brain.ops.redrive_control`.
+            return replace(swept, asked=await carry_out_asks(queue, now=now))
 
     return asyncio.run(run(), loop_factory=loop_factory)
 

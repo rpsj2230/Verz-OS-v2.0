@@ -323,7 +323,7 @@ ALLOWED_HOSTS: Final[frozenset[str]] = frozenset(
         # and never one company's host.
         "huggingface.co",
         # The public Maven repository the model server fetches the text extractor's release from
-        # (`inference_server.fetch`). Not yet pinned to a digest (needs-rupash 235). A package
+        # (`inference_server.fetch`). Not yet pinned to a digest (needs-rupash 240). A package
         # source like the indexes above; the same artefact for every install.
         "repo1.maven.org",
         # This product's own provenance, and the two entries are one fact in two halves.

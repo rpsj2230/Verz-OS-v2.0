@@ -193,7 +193,7 @@ def fetch_layout_weights(target: Path) -> None:
     has installed Docling; the first install that chooses the layout part is its first run, and an
     exception is reported by type and nothing else, so the fault is the part's to fix and not a
     sentence from a library. The weights are Docling's own and carry its own revisions: this module
-    pins nothing about them, and `needs-rupash 235` says so.
+    pins nothing about them, and `needs-rupash 240` says so.
     """
     from docling.utils.model_downloader import download_models
 

@@ -186,6 +186,7 @@ Task ids: M32.4.1.1, M32.4.1.3, M32.4.2.1, M32.4.2.2, M32.4.2.3, M17.1.2
 from __future__ import annotations
 
 import enum
+import json
 import re
 from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -198,6 +199,18 @@ from brain.gate.context import TrafficClass
 from brain.ops.heartbeat import HEARTBEAT_SECONDS as HEARTBEAT_SECONDS
 from brain.ops.heartbeat import STALE_AFTER_HEARTBEATS as STALE_AFTER_HEARTBEATS
 from brain.ops.heartbeat import stale_after as stale_after
+from brain.ops.redrive_control import (
+    ANSWERED_DESCRIPTION,
+    ANSWERED_NAMESPACE,
+    ASKED_NAMESPACE,
+    WORKER,
+    PersonAsk,
+    WorkerAnswer,
+    answer_of,
+    instant_of,
+    job_id_of,
+    row_name,
+)
 from brain.ops.wiring import component
 
 if TYPE_CHECKING:  # pragma: no cover - imported for annotations only
@@ -684,7 +697,7 @@ DRIVER_MIGRATIONS_ARE_NOT_APPLIED_HERE: Final = (
 def driver_is_installed() -> bool:
     """Whether a queue driver can be imported in this process.
 
-    Asked rather than assumed. `brain.ops.worker` printed `NO_DRIVER_IS_INSTALLED` on every
+    PersonAsk rather than assumed. `brain.ops.worker` printed `NO_DRIVER_IS_INSTALLED` on every
     run, unconditionally, which was true and would have gone on being printed on the first
     day it was false. A sentence that cannot stop being said is not a report.
 
@@ -1699,6 +1712,35 @@ KEEP_FAILED_SQL: Final = (
 #: The most failed jobs one sweep copies into `ops.dead_letter`.
 MOST_KEPT_PER_SWEEP: Final = 500
 
+#: The driver's own status of one job, for a person's ask, which may move a failed job and no other.
+JOB_STATUS_SQL: Final = "SELECT status FROM procrastinate_jobs WHERE id = %(id)s"
+
+#: Every ask a person made for a set-aside job to be run again, beside the worker's answer to it
+#: when there is one. Read as the queue's own login, which sees `ops.setting` whole, and narrowed
+#: here to live rows by hand because that login is not narrowed by the table's policy. Text and
+#: jsonb come back as they are stored; `brain.ops.redrive_control` decides what each is. No
+#: placeholder, so nothing here needs a `%` doubled.
+ASKED_REDRIVES_SQL: Final = (
+    "SELECT a.key AS asked_key, a.value #>> '{}' AS asked_at, a.updated_by AS asked_by,"
+    " b.value AS answer"
+    " FROM ops.setting AS a"
+    " LEFT JOIN ops.setting AS b ON b.deleted_at IS NULL"
+    " AND b.key = 'queue.redrive_answered.' || substr(a.key, length('queue.redrive_asked.') + 1)"
+    " WHERE a.deleted_at IS NULL AND starts_with(a.key, 'queue.redrive_asked.')"
+    " AND a.value_type = 'string'"
+    " ORDER BY a.key"
+)
+
+#: Writes the worker's answer to one ask, over the last one. `0059`'s trigger puts a change of an
+#: answer in the audit ledger under the writer, which is the worker.
+ANSWER_REDRIVE_SQL: Final = (
+    "INSERT INTO ops.setting (key, value_type, value, description, updated_by)"
+    " VALUES (%(key)s, 'json', %(value)s::jsonb, %(description)s, %(by)s)"
+    " ON CONFLICT (key) WHERE deleted_at IS NULL DO UPDATE SET"
+    " value = EXCLUDED.value, description = EXCLUDED.description,"
+    " updated_by = EXCLUDED.updated_by, updated_at = now()"
+)
+
 
 class DriverQueue:
     """`brain.ops.recovery_run.QueueRows` over the driver, the one module that may name it.
@@ -1772,6 +1814,47 @@ class DriverQueue:
             cap=MAX_REDRIVES,
             at=at,
             most=MOST_KEPT_PER_SWEEP,
+        )
+
+    async def asks(self) -> tuple[tuple[str, PersonAsk, WorkerAnswer | None], ...]:
+        """Every ask a person made for a set-aside job, with the worker's answer to it if any.
+
+        A row that holds no readable instant is not an ask and an answer that is not
+        `{at, put_back}` is not an answer, both by `brain.ops.redrive_control`'s own readers, so
+        a row somebody wrote by hand cannot make the worker retry a job.
+        """
+        found = await self.app.connector.execute_query_all_async(ASKED_REDRIVES_SQL)
+        every: list[tuple[str, PersonAsk, WorkerAnswer | None]] = []
+        for row in found:
+            name = str(row["asked_key"]).removeprefix(f"{ASKED_NAMESPACE}.")
+            job = job_id_of(name)
+            at = instant_of(row["asked_at"])
+            if job is None or at is None:
+                continue
+            every.append((job, PersonAsk(at=at, by=str(row["asked_by"])), answer_of(row["answer"])))
+        return tuple(every)
+
+    async def put_back(self, job_id: str, now: datetime) -> bool:
+        """Put one job back on its queue when, and only when, the driver holds it as failed.
+
+        The driver's retry would take a running or waiting job as well, which is right for the
+        sweep's orphan and wrong for a person's ask: moving a job a worker is running starts it
+        twice. So the status is read first, and anything but `failed` is the refusal the answer
+        then says in words.
+        """
+        found = await self.app.connector.execute_query_all_async(JOB_STATUS_SQL, id=int(job_id))
+        if not found or str(found[0]["status"]) != "failed":
+            return False
+        return await self.run_again(job_id, now)
+
+    async def answer(self, job_id: str, answer: WorkerAnswer) -> None:
+        """Write the worker's answer to the ask for this job, over the last one."""
+        await self.app.connector.execute_query_async(
+            ANSWER_REDRIVE_SQL,
+            key=f"{ANSWERED_NAMESPACE}.{row_name(job_id)}",
+            value=json.dumps({"at": answer.at.isoformat(), "put_back": answer.put_back}),
+            description=ANSWERED_DESCRIPTION,
+            by=WORKER,
         )
 
     async def set_aside(self, job_id: str) -> bool:
