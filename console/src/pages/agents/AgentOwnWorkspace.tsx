@@ -162,7 +162,7 @@ export function AgentOwnWorkspace({ agentId, name }: { readonly agentId: string;
         open={asking !== null}
         question={asking === true ? ATTACH_QUESTION(name) : DETACH_QUESTION(name)}
         consequence={asking === true ? ATTACH_CONSEQUENCE : DETACH_CONSEQUENCE}
-        confirmLabel={asking === true ? "Attach" : "Take off"}
+        confirmLabel={asking === true ? "Attach" : "Detach"}
         cancelLabel="Not now"
         busy={sending}
         onConfirm={confirm}
