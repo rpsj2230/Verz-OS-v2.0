@@ -38,7 +38,7 @@ layers that record into it and a future import of this module from `brain.gate` 
 produce a cycle.
 
 Task ids: M24.1.3, M24.1.4, M42.6.5, M27.7.21, M27.7.4, M27.7.8, M27.11.1, M24.2.4, M27.11.5
-Task ids: M27.15.19, M27.15.24, M24.3.4
+Task ids: M27.15.19, M27.15.24, M24.3.4, M27.15.35
 """
 
 from __future__ import annotations
@@ -310,6 +310,20 @@ class SkillChange(enum.StrEnum):
     EXPORTED = "exported"
     #: `0191`: a version's examples rehearsed, with whether every one passed (M12.3.4).
     REHEARSED = "rehearsed"
+
+
+class TemplateVersionChange(enum.StrEnum):
+    """What happened to a published template version after it arrived. The words `0261`'s trigger
+    writes.
+
+    Two, and an undo is its own word rather than the first with a flag, because the audit screen
+    finds an entry by what its details say and a word is what a search matches (M12.4.6). The
+    version's arrival is the `publish` entry `0104` writes with no change at all, so these two are
+    the only entries about a version that say anything beyond "it was published".
+    """
+
+    WITHDRAWN = "withdrawn"
+    WITHDRAWAL_UNDONE = "withdrawal_undone"
 
 
 class CredentialChange(enum.StrEnum):
@@ -926,16 +940,32 @@ class AuditRecorder:
         )
         return kept, restored
 
-    def publish(self, *, artifact_id: str, fields: Sequence[str] = ()) -> AuditEntry:
-        """Record that an artefact was published.
+    def publish(
+        self,
+        *,
+        artifact_id: str,
+        fields: Sequence[str] = (),
+        change: TemplateVersionChange | None = None,
+    ) -> AuditEntry:
+        """Record that an artefact was published, or that a published template version was
+        withdrawn from new installs or the withdrawal undone.
 
         `fields` names what the artefact carried, by name. Names rather than a rendered
         artefact, or a digest of one, for the reason `changed_fields` gives: the ledger
         proves that something was published and what it was about, and the artefact's own
         store says what was in it. Two records, two retentions, two access controls.
+
+        `change` is what became of a template version after its arrival entry (M27.15.35),
+        which is a `publish` entry with no change at all and is what `0104` writes. A version
+        withdrawn or put back is the other end of that entry, so it is this action and not a
+        member of its own, and the subject is the same: `<template>.v<version>`. Written in a
+        deployed database by `0261`'s trigger on `agent.template_withdrawal`. The reason a
+        person gave is not in the entry: it is a sentence, and the ledger redacts prose.
         """
         details: dict[str, object] = {}
         _with_names(details, "fields", fields)
+        if change is not None:
+            details["change"] = change.value
         return self._write(AuditAction.PUBLISH, subject("artifact", artifact_id), details)
 
     def break_glass(

@@ -39,6 +39,11 @@ import { CONTROL_DIRECTORIES, everyConfirmation, everyWrite } from "./support/wr
  * why each one is not destructive.
  */
 const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
+  "src/pages/agent-templates/TemplateTransfer.tsx IMPORT_API_PATH":
+    "Reading a template document writes nothing: brain.template_withdrawal_routes.import_template, asked " +
+    "without a digest, parses the document and names what it holds and keeps no row, which " +
+    "tests/unit/test_template_withdrawal.py holds. Adding it is the same address with the digest that was " +
+    "shown, and is sent only from a confirmation.",
   "src/pages/install/PluginsPanel.tsx PLUGINS_API_PATH":
     "Recording a plugin writes a switched-off record and loads or runs nothing: brain.plugin_routes.install_plugin " +
     "arrives installed and is behind the plugin_registry switch, and enabling it is a separate act.",
