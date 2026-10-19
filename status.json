@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-19T08:37:46.360833+00:00",
-  "commit": "903a1733",
-  "commit_subject": "A job set aside for a person can be run again from the console, behind a switch that ships off, and Runs and queue lists the actions waiting for a person (#625)",
+  "generated_at": "2026-10-19T10:10:52.523378+00:00",
+  "commit": "78838d7e",
+  "commit_subject": "Buttons carry primary, quiet and danger; every list has five tools; installing a template is a wizard; the console loses what an administrator does not need (#628)",
   "total": 1626,
   "done": 1141,
   "percent": 70.2,
-  "built": 1294,
-  "built_percent": 79.6,
-  "built_unproven": 153,
+  "built": 1298,
+  "built_percent": 79.8,
+  "built_unproven": 157,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -88,6 +88,10 @@
     "M27.15.32",
     "M27.15.50",
     "M27.15.57",
+    "M27.15.68",
+    "M27.15.71",
+    "M27.16.2",
+    "M27.16.3",
     "M27.7.23",
     "M27.7.26",
     "M28.5.2",
@@ -219,13 +223,13 @@
       "done": 460,
       "percent": 76.8,
       "in_progress": 4,
-      "ready_for_testing": 48,
+      "ready_for_testing": 52,
       "blocked": 2,
-      "open": 85,
+      "open": 81,
       "acts": 1,
       "decided": 56,
-      "built": 507,
-      "built_percent": 84.6
+      "built": 511,
+      "built_percent": 85.3
     },
     {
       "wave": 4,
@@ -552,7 +556,7 @@
       "done": 156,
       "acts": 0,
       "decided": 22,
-      "built": 166
+      "built": 170
     },
     {
       "module": "M28",
@@ -2987,10 +2991,30 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_skills); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
     },
+    "M27.15.68": {
+      "status": "READY FOR TESTING",
+      "why": "Built on branch M27/console-lists-wizards-buttons. Prove it on the install. (1) Sign in as an administrator, open Agent templates and a published template. The Install card is now a short wizard, Step 1 of 3 or 4: its name, who can find it, where it answers (only when the version offers channels), then Check and install. Type a new name, tick For my department, press Next. (2) Go to another page, such as Agents, then come back to the same template: you are on the same step with the same answers, and a line says you are back where you left. (3) On the last step press Install: a confirmation names what will be installed, and nothing is sent until you confirm; the new agent opens disabled. Back on the template the install is blank again. (4) Press Start again part way through and it empties; sign out and sign in as somebody else and nothing the first person typed is there. (5) First run on a fresh install: enter the setup code, finish the company screen, close the tab, reopen the first-run address, enter the same code and you land on the next screen with the company answers still in the boxes. A provider key typed on its screen is not kept.",
+      "updated": "2026-10-14"
+    },
+    "M27.15.71": {
+      "status": "READY FOR TESTING",
+      "why": "Built on branch M27/console-lists-wizards-buttons. Prove it on the install. (1) On any page with both a Cancel and an act that removes or stops something (Stop, a retention hold, a review decision), the main act is the filled accent button, Cancel is the quiet button with no border, and the removing act is the red-washed danger button, each visibly different. (2) Open the console home: the figures are tiles, Needs you and Recent activity are each a card with its own heading, as on the first screen of the key screens design. The Overview already drew these; this task names the three button variants, moves every page onto them and holds that with a check.",
+      "updated": "2026-10-14"
+    },
     "M27.16.1": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in access_request_routes, audit_routes, automations_routes +255 more; NOT wired: pages/AccessReview.route.tsx, pages/AgentTemplate.route.tsx, pages/AgentTemplate.tsx +36 more. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; branch M16/w3-learning-tables, no PR; branch M27/webhook-switch-on-and-replay, no PR; +28 more",
       "updated": "2026-10-06"
+    },
+    "M27.16.2": {
+      "status": "READY FOR TESTING",
+      "why": "Built on branch M27/console-lists-wizards-buttons. Prove it on the install. (1) Open any page of the console and read it as an administrator would: no long unique codes, no table names, no snake_case names and no words such as API, JSON or endpoint outside the collapsed Advanced section, except on the few pages that exist to show one (tool names, the address to paste into a chat vendor, adding an API connector). (2) Stop and Rules say when something was stopped or added and not an id; a channel's set-up fields read as words such as Reply address; a list's card no longer repeats the page title under it. (3) docs/console-cleanup.md lists each removal with its reason and each page that is excused with why.",
+      "updated": "2026-10-14"
+    },
+    "M27.16.3": {
+      "status": "READY FOR TESTING",
+      "why": "Built on branch M27/console-lists-wizards-buttons. Prove it on the install. (1) Open Agents (or People, Skills, Connectors): the toolbar ends in Saved filters. Type a search, choose a filter, open Saved filters, give it a name and Save. Clear the search, reopen Saved filters and press the name: the list narrows to the same question. Reload the page and it is still there; sign in as somebody else and it is not. Audit and Logs have the same control beside their filters. (2) Every list table has Columns (hide one and it goes), Export (downloads a file of the rows shown, in the columns shown), a tick box on every row (Export selected appears), and a small panel button on each row that opens a drawer showing every column, including hidden ones. People, Sessions, Access review and the Library also offer an act on the ticked rows. (3) No list shows a total, a page count or an of N anywhere.",
+      "updated": "2026-10-14"
     },
     "M28.5.2": {
       "status": "READY FOR TESTING",
