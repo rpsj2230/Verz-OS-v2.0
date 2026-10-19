@@ -13,7 +13,7 @@ The present is the wall clock, because the route reads it through `brain.api_rou
 artifact's retention is measured from it. So an artifact here is produced an hour or ten years
 before the test runs, never on a date.
 
-Task ids: none
+Task ids: M27.15.34
 """
 
 from __future__ import annotations
@@ -484,6 +484,89 @@ def test_a_search_for_what_the_reader_may_not_see_answers_as_a_search_for_nothin
 
     assert withheld == nothing
     assert withheld["items"] == []
+
+
+# ------------------------------------------------------- one agent's slice (M27.15.34)
+def test_the_artifacts_read_cut_to_one_agent_holds_that_agents_artifacts_and_no_others() -> None:
+    """**M27.15.34.** Whole, the estate the reader may see; cut to `hiring`, that agent's rows
+    alone, in the same shape. The sibling is the filter left off, which still lists both.
+
+    Delete this and the filter can be accepted and ignored, which leaves an agent's Artifacts
+    section the whole estate's output."""
+    rows = [produced("art_quote", agent_id="quoting"), produced("art_hr", agent_id="hiring")]
+    agents = [agent_row("quoting"), agent_row("hiring")]
+    for c in attached(*rows, agents=agents):
+        whole = get(c, "u_admin").json()
+        cut = c.get(
+            ARTIFACTS,
+            params={"agent": "hiring"},
+            headers={"authorization": f"Bearer {token_for('u_admin')}"},
+        ).json()
+
+    assert sorted(one["artifact_id"] for one in whole["items"]) == ["art_hr", "art_quote"]
+    assert [one["artifact_id"] for one in cut["items"]] == ["art_hr"]
+    assert set(cut) == set(ArtifactsView.model_fields)
+
+
+def test_an_agent_the_reader_may_not_see_cuts_the_artifacts_to_what_a_missing_agent_does() -> None:
+    """**The filter runs after the audience.** A personal agent of somebody else produced an
+    artifact; naming it answers the bytes naming an agent that does not exist answers, for a
+    company-wide reader and for a reader scoped to another agent, and the visible agent's own cut
+    is not empty, so the identity is not an empty answer to everything.
+
+    Delete this and the filter is applied to the entries before the audience, and a hidden
+    agent's output is one guessed id away."""
+    rows = [
+        produced("art_private", agent_id="private", caller_id="u_someone"),
+        produced("art_quote", agent_id="quoting"),
+    ]
+    agents = [
+        agent_row("private", level=Visibility.PERSONAL, owner_id="u_someone"),
+        agent_row("quoting"),
+    ]
+    headers = {"authorization": f"Bearer {token_for('u_admin')}"}
+    narrow = {"authorization": f"Bearer {token_for('u_narrow')}"}
+    for c in attached(*rows, agents=agents):
+        hidden = c.get(ARTIFACTS, params={"agent": "private"}, headers=headers)
+        missing = c.get(ARTIFACTS, params={"agent": "no_such_agent"}, headers=headers)
+        elsewhere = c.get(ARTIFACTS, params={"agent": "hiring"}, headers=narrow)
+        shown = c.get(ARTIFACTS, params={"agent": "quoting"}, headers=headers)
+
+    assert hidden.status_code == missing.status_code == elsewhere.status_code == 200
+    assert hidden.content == missing.content == elsewhere.content
+    assert [one["artifact_id"] for one in shown.json()["items"]] == ["art_quote"]
+
+
+def test_a_readers_own_artifact_of_an_agent_they_cannot_see_is_found_by_naming_that_agent() -> None:
+    """**An artifact of an agent you cannot see is still yours** (`may_see` admits its caller),
+    and the row already carries the agent id, so naming that agent returns it and discloses
+    nothing the reader did not hold.
+
+    Delete this and the filter hides a person's own output exactly when the agent's audience
+    narrows, which is the case the first branch of `may_see` exists for."""
+    rows = [produced("art_mine", agent_id="private", caller_id="u_admin")]
+    agents = [agent_row("private", level=Visibility.PERSONAL, owner_id="u_someone")]
+    headers = {"authorization": f"Bearer {token_for('u_admin')}"}
+    for c in attached(*rows, agents=agents):
+        found = c.get(ARTIFACTS, params={"agent": "private"}, headers=headers)
+
+    assert [one["artifact_id"] for one in found.json()["items"]] == ["art_mine"]
+
+
+def test_an_artifacts_agent_filter_refuses_a_blank_value_and_is_never_a_count() -> None:
+    """**The parameter's shape.** A blank agent is a 422 naming it, and a refused or empty answer
+    never grows a field that counts what the cut left out.
+
+    Delete this and a blank value is read as an agent that produced nothing."""
+    headers = {"authorization": f"Bearer {token_for('u_admin')}"}
+    for c in attached(produced("art_quote"), agents=[agent_row("quoting")]):
+        blank = c.get(ARTIFACTS, params={"agent": ""}, headers=headers)
+        spaced = c.get(ARTIFACTS, params={"agent": "a b"}, headers=headers)
+        cut = c.get(ARTIFACTS, params={"agent": "quoting"}, headers=headers)
+
+    assert blank.status_code == spaced.status_code == 422
+    assert cut.status_code == 200
+    assert {"total", "count", "hidden", "withheld"}.isdisjoint(cut.json())
 
 
 # ------------------------------------------------------------------------ the refusals

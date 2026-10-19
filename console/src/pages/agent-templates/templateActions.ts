@@ -4,13 +4,14 @@
  *
  * **Measured against the routes on this branch.** Reading the catalogue and one template, and
  * installing a published version as a new agent (`brain.agent_lifecycle_routes`), are served and
- * live. Authoring a template from an agent through the leak scan and withdrawing a published
- * version have no route: `brain.agents.authoring` holds the scan and nothing calls it over HTTP,
- * and `agent.template_version` is insert-only, so a withdrawal needs somewhere to be recorded
- * first. Each is an `UNAVAILABLE` sentence, and `tests/agent-templates.test.tsx` reads every
- * `retiredBy` against the API document so the sentence goes when the route arrives.
+ * live. Withdrawing a published version, putting it back, saving it as a document and bringing
+ * one in are live since `brain.template_withdrawal_routes` (M27.15.35), drawn by
+ * `TemplateTransfer.tsx`, and their "coming soon" sentence went with the route. Authoring a template
+ * from an agent through the leak scan has no route: `brain.agents.authoring` holds the scan and
+ * nothing calls it over HTTP. It is an `UNAVAILABLE` sentence, and `tests/agent-templates.test.tsx`
+ * reads every `retiredBy` against the API document so the sentence goes when the route arrives.
  *
- * Task ids: M27.11.7, M27.16.1
+ * Task ids: M27.11.7, M27.16.1, M27.15.35
  */
 
 export const UNAVAILABLE = Object.freeze({
@@ -18,10 +19,6 @@ export const UNAVAILABLE = Object.freeze({
     reason:
       "Coming soon: publishing a template from one of your agents. It will be checked for company details before anyone can install it.",
     retiredBy: /^\/api\/v1\/(agent-templates\/(author|drafts?|publish)|agents\/\{[^}]+\}\/(template|publish-template))\b/,
-  },
-  withdraw: {
-    reason: "Coming soon: withdrawing a published version so it can no longer be installed. Agents already installed keep running.",
-    retiredBy: /^\/api\/v1\/agent-templates\/\{[^}]+\}\/versions\/\{[^}]+\}\/(withdraw|withdrawal|retire)\b/,
   },
 });
 

@@ -134,13 +134,15 @@ function outsideAdvanced(container: HTMLElement): string {
 
 describe("what this module agrees with the API about", () => {
   test("no act called coming soon has a route, and the gallery sends no install count", () => {
-    // What breaks if this is deleted: "coming soon" said about withdrawing after its route lands,
-    // or a count of installs added to the gallery, which counts agents the reader may not see.
+    // What breaks if this is deleted: "coming soon" said about a route that has arrived, or a
+    // count of installs added to the gallery, which counts agents the reader may not see.
     const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
     for (const [one, { retiredBy }] of Object.entries(UNAVAILABLE)) {
       expect(paths.filter((path) => retiredBy.test(path)), one).toEqual([]);
     }
-    expect(UNAVAILABLE.withdraw.retiredBy.test("/api/v1/agent-templates/{template_id}/versions/{version}/withdraw")).toBe(true);
+    // Withdrawing is not among them: its route is served, and its card is `TemplateTransfer.tsx`'s.
+    expect(Object.keys(UNAVAILABLE)).toEqual(["author"]);
+    expect(paths).toContain("/api/v1/agent-templates/{template_id}/versions/{version}/withdrawal");
     expect(paths).toContain("/api/v1/agent-templates/{template_id}");
     const gallery = declaredPropertyNames(declaredResponseSchema("/api/v1/agent-templates", "get"));
     expect(gallery.filter((name) => /count|installed/.test(name))).toEqual([]);
@@ -191,7 +193,10 @@ describe("one template's page", () => {
     }
     expect(text).not.toContain(PUBLISHER);
     expect(container.querySelector('[data-slot="advanced"]')?.textContent).toContain(PUBLISHER);
-    expect(container.querySelector("[data-unavailable]")?.textContent).toContain(ACT_LABELS.withdraw);
+    // Withdrawing is drawn for a reader the API lets withdraw and for nobody else, so a page whose
+    // withdrawal read was refused draws neither a Withdraw button nor a sentence about one.
+    expect(container.querySelector("[data-unavailable]")).toBeNull();
+    expect(screen.queryByRole("button", { name: ACT_LABELS.withdraw })).toBeNull();
   });
 
   test("installing sends the digest the page read, only from its confirmation, and opens the new agent", async () => {

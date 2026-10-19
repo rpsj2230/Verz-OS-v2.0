@@ -4964,6 +4964,16 @@ const PROGRESS = {
     why: "TRIAGE 2026-10-13 class 2 (partly built): docs/install/network.md and threat-model.md describe public ports, TLS and the allowlist, and ops/security exists; no probe from outside the allowlist and no alert on the install's own certificate within fourteen days exists (ops/website_probe.py reads other sites' certificates only). NEXT: Build an external probe job and a certificate-expiry alert to a named person, then a check that reads the alert configuration; the outside-address probe itself is a person step.",
     updated: "2026-10-13",
   },
+  "M27.15.34": {
+    status: "READY FOR TESTING",
+    why: "built (M27/agent-reads-and-template-withdrawal): the Learning, Memory and Artifacts reads take an optional agent, cut after the reader's audience, so an agent the reader may not see answers as one that does not exist; an agent's own Memory tab no longer lists the learnings formed in plain conversations. Proved on the install with the check 'An estate read cut to an agent is its slice and hides the rest', which passes when the install's two newest runs both pass it; by hand: on Learning, Artifacts and a person's Memory page ask for one agent and see only what it formed or produced, then ask for a personal agent of somebody else and see the same answer as for one that was never made",
+    updated: "2026-10-15",
+  },
+  "M27.15.35": {
+    status: "READY FOR TESTING",
+    why: "built (M27/agent-reads-and-template-withdrawal, migration 0261): an administrator withdraws a published template version with a reason and puts it back, each an inserted row and a ledger entry; a withdrawn version leaves the gallery, its install page and agents' upgrade offers while agents installed from it stay as they were; a version is saved as a signed document and a document from another install is read, then added once, signed again by this install; all behind the template_withdrawal switch, which ships off (needs-rupash 236 asks whether installs should prove origin to each other). Proved on the install with the check 'A withdrawn version is not offered and agents stay pinned'; by hand: turn the switch on in Features, open a template, withdraw its newest version with a reason, see the version before it offered and an agent made from it unchanged, then put it back from Agent templates",
+    updated: "2026-10-15",
+  },
   "M27.15.75": {
     status: "READY FOR TESTING",
     why: "To test it on the install: open the Install page and find the check 'the console names no font host and serves every font it ships' passing; open any console page with the browser's network tab open and see every font file come from the install's own address and none from a font service; open /font-licences.txt on the install to read the fonts' licence notices. In CI the 'Console types, boundaries, tests, build' job audits the built bundle (python -m brain.ops.bundle_audit console/dist) and the nightly Browser workflow records every font request of every page.",
