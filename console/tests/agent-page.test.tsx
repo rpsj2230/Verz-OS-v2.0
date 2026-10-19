@@ -568,8 +568,10 @@ describe("the Profile", () => {
     // now, and a preview as a person is asked of its own route, so none of the three is among these.
     // Since 2026-10-06 choosing where the agent answers is the live card `where the agent answers`
     // below holds, a rung is changed in the leash block, and installing it into a group chat is the
-    // Group chats card (M39.2.4.4), so changing who can find it is what is left.
-    expect(inert.length).toBeGreaterThanOrEqual(1);
+    // Group chats card (M39.2.4.4). Since 2026-10-14 who else can find it is the live audience rows
+    // (M27.11.13), so no `UnavailableAction` is left on the Profile: browser use is a disabled switch
+    // with its sentence, held by the next test, which is what `UNAVAILABLE.browser` retires.
+    expect(inert.length).toBe(0);
     const permissions = [...mounted.container.querySelectorAll<HTMLButtonElement>("button")].find(
       (one) => one.textContent === "Change permissions",
     );
@@ -587,6 +589,20 @@ describe("the Profile", () => {
     expect(mounted.idp.urls.length).toBe(before);
   });
 
+  test("browser use is a switch that is off and cannot be pressed, with the reason beside it", async () => {
+    // What breaks if this is deleted: M27.11.14's browsing switch. A browser switch drawn live over a
+    // route that does not exist, or the card dropped so nobody is told browsing is not offered yet.
+    // The owner's recommendation on needs-rupash 201 (question 2) is to show it as not offered, as
+    // computer use is, until the sealed browser has run on an install.
+    const mounted = await consoleAt("/agents/quote-helper/profile", agentAnswers("quote-helper", body()));
+    const browser = mounted.container.querySelector<HTMLButtonElement>("#agent-browser-use");
+    expect(browser?.getAttribute("role")).toBe("switch");
+    expect(browser?.disabled).toBe(true);
+    expect(browser?.getAttribute("aria-checked")).toBe("false");
+    const reason = mounted.container.querySelector("#agent-browser-use-why")?.textContent ?? "";
+    expect(reason).toContain(UNAVAILABLE.browser.reason.replace(/^Not available yet: /, ""));
+  });
+
   test("the cards the Settings read is sent are absent for a reader sent no profile, with no heading left over", async () => {
     // What breaks if this is deleted: a Permissions card reading "unknown" to a member of the
     // audience, which is a statement that the agent has a ceiling they may not see.
@@ -601,20 +617,43 @@ describe("the Profile", () => {
     expect(admin.container.querySelector(`#${leashRowId("ticket.draft_reply")}`)?.textContent).toContain("Draft a reply");
   });
 
-  test("computer use is a sentence saying it is not offered, with no control, to every reader", async () => {
+  test("computer use is the API's sentence saying it is not offered, with no control, to every reader sent it", async () => {
     // What breaks if this is deleted: M27.15.32. A switch for computer use drawn before any isolated
     // desktop runner exists, or the card dropped so nobody is told why it is missing. The card is
-    // the same for a reader sent no profile, because it describes the product and not the agent.
+    // the same for a reader sent no profile, because it describes the product and not the agent, and
+    // the sentence is the API's (`brain.console.agent_behaviour`), so the page cannot go on saying it
+    // after a runner is added.
+    const sentence = "Not offered. This product has no isolated desktop runner, so an agent cannot control a computer.";
+    const capabilities = {
+      [`/api/v1/agents/quote-helper/capabilities`]: {
+        body: { agent_id: "quote-helper", computer_use: { offered: false, sentence } },
+      },
+    };
     for (const answer of [body(), without(body(), "profile")]) {
-      const mounted = await consoleAt("/agents/quote-helper/profile", agentAnswers("quote-helper", answer));
-      const cards = [...mounted.container.querySelectorAll<HTMLElement>('[data-slot="section-card"]')].filter((card) =>
-        [...card.querySelectorAll("h1, h2, h3, h4")].some((heading) => heading.textContent === COMPUTER_HEADING),
-      );
+      const mounted = await consoleAt("/agents/quote-helper/profile", agentAnswers("quote-helper", answer, capabilities));
+      const cards = await waitFor(() => {
+        const found = [...mounted.container.querySelectorAll<HTMLElement>('[data-slot="section-card"]')].filter((card) =>
+          [...card.querySelectorAll("h1, h2, h3, h4")].some((heading) => heading.textContent === COMPUTER_HEADING),
+        );
+        if (found.length === 0) {
+          throw new Error("the card has not arrived");
+        }
+        return found;
+      });
       expect(cards).toHaveLength(1);
       const [card] = cards;
-      expect(card?.querySelector('[data-slot="not-offered"]')?.textContent).toMatch(/^Not offered\./);
+      expect(card?.querySelector('[data-slot="not-offered"]')?.textContent).toBe(sentence);
       expect(card?.querySelectorAll("button, input, select, a, [role='switch']")).toHaveLength(0);
     }
+  });
+
+  test("a reader the capability detail is not sent to is drawn no computer use card, rather than one typed here", async () => {
+    // What breaks if this is deleted: the sibling of the test above, and the proof the sentence is
+    // not a constant in the page. With nothing sent there is no card and no heading left over.
+    const mounted = await consoleAt("/agents/quote-helper/profile", agentAnswers("quote-helper", body()));
+    await settled(mounted.container);
+    const headings = [...mounted.container.querySelectorAll("h1, h2, h3, h4")].map((heading) => heading.textContent);
+    expect(headings).not.toContain(COMPUTER_HEADING);
   });
 
   test("a profile sent malformed is read as no profile, and a sound one is carried whole", () => {
@@ -1116,9 +1155,12 @@ describe("where the agent answers", () => {
       }
       return found;
     });
+    // Each channel with its state (M27.11.12): the two it answers on, and the one it could answer on
+    // and does not, in the words and the dashed edge.
     expect([...card.querySelectorAll('[data-slot="agent-channels"] > :not(svg)')].map((chip) => chip.textContent)).toEqual([
       "Web console",
       "Lark",
+      "WhatsApp · off",
     ]);
 
     fireEvent.click(within(card as HTMLElement).getByRole("button", { name: CHANGE_CHANNELS }));

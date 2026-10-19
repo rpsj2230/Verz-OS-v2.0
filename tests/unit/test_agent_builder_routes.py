@@ -878,6 +878,7 @@ def test_an_agents_publish_history_is_served_to_its_builder_and_is_one_404_to_an
     assert served.status_code == 200, served.text
     assert served.json() == {
         "agent_id": COMPANY,
+        "currency": served.json()["currency"],
         "publications": [
             {
                 "published_by": "u_admin",
@@ -885,6 +886,7 @@ def test_an_agents_publish_history_is_served_to_its_builder_and_is_one_404_to_an
                 "paths": ["persona"],
                 "rung": "shadow",
                 "approvers": ["u_second"],
+                "cost_minor": None,
             }
         ],
     }

@@ -13,6 +13,8 @@
  * `brain.agent_lifecycle_routes` on 2026-09-29 and are live acts (`LifecycleActs.tsx`); creating an
  * agent, editing one as a draft and changing its permissions through that draft arrived with
  * `brain.agent_builder_routes` the same day (`NewAgentPage.tsx`, `DraftStart.tsx`, `DraftPage.tsx`).
+ * Offering an agent to more departments and to named people arrived as `/agents/{id}/audience` on
+ * 2026-10-14 and is live on the Profile (`AgentAudience.tsx`), so the level's sentence is gone.
  * Switching the channels an agent answers on arrived as `/agents/{id}/channels` on 2026-10-06 and is
  * live on the Profile (`AgentChannels.tsx`). Installing an agent into one group chat arrived as
  * `/agents/{id}/groups` the same day and is live on the Profile too (`AgentGroups.tsx`), so its
@@ -31,10 +33,6 @@
 
 /** Why each act that has no route cannot be pressed, and the shape of the API path whose arrival retires it. */
 export const UNAVAILABLE = Object.freeze({
-  level: {
-    reason: "Coming soon: changing who can find this agent.",
-    retiredBy: /^\/api\/v1\/agents\/\{[^}]+\}\/(audience|availability)\b/,
-  },
   browser: {
     reason: "Not available yet: browser use. It is built and tested, and has never been switched on for any agent.",
     retiredBy: /^\/api\/v1\/agents\/\{[^}]+\}\/browser\b/,
