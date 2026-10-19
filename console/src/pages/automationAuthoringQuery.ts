@@ -61,16 +61,28 @@ export interface FieldOption {
   readonly ops: readonly OpOption[];
 }
 
+/** One skill a run through this agent would be offered. A name and a card's words, never a body. */
+export interface SkillOption {
+  readonly name: string;
+  readonly version: string;
+  readonly description: string;
+}
+
 /** Everything the form is drawn from, or `enabled: false` and nothing else. */
 export interface AuthoringOptions {
   readonly enabled: boolean;
   readonly templates: readonly TemplateOption[];
   readonly triggers: readonly TriggerOption[];
   readonly fields: readonly FieldOption[];
+  /** What an automation of this reader's through this agent could be handed: the only tools it may name. */
   readonly tools: readonly string[];
+  /** The skills a run would be offered. Named and never chosen: the agent's to change. */
+  readonly skills: readonly SkillOption[];
   readonly connectors: readonly string[];
   readonly startsPaused: string;
   readonly writesWait: string;
+  readonly mayUse: string;
+  readonly skillsRule: string;
 }
 
 /** What a person has chosen and written, as the form holds it before it is sent. */
@@ -106,11 +118,15 @@ export interface AuthoringPreview {
   readonly nothingFires?: string;
   readonly condition?: string;
   readonly tools: readonly string[];
+  readonly skills: readonly string[];
   readonly runsAs: string;
   readonly runsAsName: string;
   readonly reach: readonly string[];
   readonly startsPaused: string;
   readonly writesWait: string;
+  readonly skillsRule: string;
+  /** Why it cannot be started on this install, in the API's words. Absent when nothing stops it. */
+  readonly cannotRun?: string;
   readonly rehearsal: readonly RehearsalLine[];
   readonly rehearsalRule: string;
   readonly confirmation: string;
@@ -169,7 +185,9 @@ export function readAuthoringOptions(payload: unknown): AuthoringOptions | null 
   }
   const startsPaused = said(fields["starts_paused"]);
   const writesWait = said(fields["writes_wait"]);
-  if (startsPaused === undefined || writesWait === undefined) {
+  const mayUse = said(fields["may_use"]);
+  const skillsRule = said(fields["skills_rule"]);
+  if (startsPaused === undefined || writesWait === undefined || mayUse === undefined || skillsRule === undefined) {
     return null;
   }
   const templates: TemplateOption[] = [];
@@ -218,15 +236,28 @@ export function readAuthoringOptions(payload: unknown): AuthoringOptions | null 
       options.push({ key, label, shape, ops });
     }
   }
+  const skills: SkillOption[] = [];
+  for (const item of Array.isArray(fields["skills"]) ? (fields["skills"] as readonly unknown[]) : []) {
+    const entry = fieldsOf(item);
+    const name = said(entry?.["name"]);
+    const version = said(entry?.["version"]);
+    const description = said(entry?.["description"]);
+    if (name !== undefined && version !== undefined && description !== undefined) {
+      skills.push({ name, version, description });
+    }
+  }
   return {
     enabled: fields["enabled"],
     templates,
     triggers,
     fields: options,
     tools: words(fields["tools"]) ?? [],
+    skills,
     connectors: words(fields["connectors"]) ?? [],
     startsPaused,
     writesWait,
+    mayUse,
+    skillsRule,
   };
 }
 
@@ -271,9 +302,11 @@ export function readAuthoringPreview(payload: unknown): AuthoringPreview | null 
   const runsAsName = said(fields["runs_as_name"]);
   const startsPaused = said(fields["starts_paused"]);
   const writesWait = said(fields["writes_wait"]);
+  const skillsRule = said(fields["skills_rule"]);
   const rehearsalRule = said(fields["rehearsal_rule"]);
   const confirmation = said(fields["confirmation"]);
   const tools = words(fields["tools"]);
+  const skills = words(fields["skills"]);
   const reach = words(fields["reach"]);
   if (
     name === undefined ||
@@ -284,10 +317,12 @@ export function readAuthoringPreview(payload: unknown): AuthoringPreview | null 
     runsAsName === undefined ||
     startsPaused === undefined ||
     writesWait === undefined ||
+    skillsRule === undefined ||
     rehearsalRule === undefined ||
     confirmation === undefined ||
     !DIGEST.test(confirmation) ||
     tools === null ||
+    skills === null ||
     reach === null ||
     typeof fields["fires"] !== "boolean" ||
     !Array.isArray(fields["rehearsal"])
@@ -307,6 +342,7 @@ export function readAuthoringPreview(payload: unknown): AuthoringPreview | null 
   }
   const nothingFires = said(fields["nothing_fires"]);
   const condition = said(fields["condition"]);
+  const cannotRun = said(fields["cannot_run"]);
   return {
     name,
     instruction,
@@ -314,14 +350,17 @@ export function readAuthoringPreview(payload: unknown): AuthoringPreview | null 
     trigger,
     fires: fields["fires"],
     tools,
+    skills,
     runsAs,
     runsAsName,
     reach,
     startsPaused,
     writesWait,
+    skillsRule,
     rehearsal,
     rehearsalRule,
     confirmation,
+    ...(cannotRun === undefined ? {} : { cannotRun }),
     ...(nothingFires === undefined ? {} : { nothingFires }),
     ...(condition === undefined ? {} : { condition }),
   };
