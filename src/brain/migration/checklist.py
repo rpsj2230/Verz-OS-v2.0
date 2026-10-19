@@ -72,6 +72,7 @@ from types import MappingProxyType
 from typing import Any, Final
 
 from brain.migration.inventory import MigrationError
+from brain.ops.wbs_generate import missing_message
 
 
 class ChecklistError(MigrationError):
@@ -369,7 +370,7 @@ def main(repo: Path | None = None) -> int:
     repo = Path(__file__).resolve().parents[3] if repo is None else repo
     wbs_path = _wbs_path(repo)
     if not wbs_path.exists():
-        print(f"no WBS at {wbs_path}")
+        print(missing_message(wbs_path))
         return 1
     out = repo / "docs" / "delivery-checklist.md"
     out.write_text(checklist_markdown(wbs_path), encoding="utf-8", newline="\n")

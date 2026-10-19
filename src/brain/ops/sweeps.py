@@ -23,7 +23,7 @@ from pathlib import Path
 
 from brain.core.envelope import TOOL_NAME_PATTERN
 from brain.db import libpq_conninfo
-from brain.ops import console_design, console_screens
+from brain.ops import console_design, console_screens, wbs_generate
 from brain.ops.independence import NOT_OF_THIS_REPOSITORY
 
 REPO = Path(__file__).resolve().parents[3]
@@ -537,6 +537,22 @@ def _malformed_task_lines() -> list[str]:
     return findings
 
 
+def _wbs_leaf_ids() -> set[str]:
+    """Every leaf id in the work breakdown, generated from `docs/wbs/*.js` first.
+
+    **Outside the `try` of every caller, on purpose.** `docs/wbs.json` is generated and no longer
+    committed (`brain.ops.wbs_generate`), and these readers answer an unreadable plan with an
+    empty result, which for `_commit_claims_without_tests` is a gate that passes. A checkout where
+    nobody had generated anything would have switched the "closed with no test" gate off without a
+    word. A plan that cannot be made raises `GeneratedFilesError`, which `main` prints as one
+    sentence. See `GENERATED_FILES_ARE_NEVER_COMMITTED`.
+    """
+    from brain.status import load_wbs
+
+    wbs_generate.ensure(REPO)
+    return {leaf for m in load_wbs(REPO / "docs" / "wbs.json")["modules"] for leaf in m["leaf_ids"]}
+
+
 def _claims_that_name_no_leaf() -> tuple[str, ...]:
     """Ids claimed by a commit, a source docstring or a test docstring that are not leaves.
 
@@ -565,16 +581,15 @@ def _claims_that_name_no_leaf() -> tuple[str, ...]:
     `Closes: M12` case is refused by `brain.ops.conventions` at commit time, which is the
     right place for it: there the id can be rejected before it is written down.
 
-    Empty when git or the WBS is unavailable, matching the two helpers below: an advisory
-    line must not fail a sweep for want of a repository.
+    Empty when git is unavailable, matching the two helpers below: an advisory line must not
+    fail a sweep for want of a repository. A plan that cannot be generated is not that case and
+    raises (`_wbs_leaf_ids`).
     """
+    leaves = _wbs_leaf_ids()
     try:
-        from brain.status import closed_task_ids, load_wbs
+        from brain.status import closed_task_ids
 
         closed, _ = closed_task_ids(REPO)
-        leaves = {
-            leaf for m in load_wbs(REPO / "docs" / "wbs.json")["modules"] for leaf in m["leaf_ids"]
-        }
         claimed: set[str] = set(closed)
         for path in [*SRC.rglob("*.py"), *_test_sources()]:
             for line in TASK_LINE_RE.findall(path.read_text(encoding="utf-8")):
@@ -587,20 +602,18 @@ def _claims_that_name_no_leaf() -> tuple[str, ...]:
 def _source_claims_never_closed_by_a_commit() -> int:
     """Leaves a source docstring claims that no commit has ever closed.
 
-    Zero when git or the WBS is unavailable, matching `_commit_claims_without_tests`: an
-    advisory line must not fail a sweep for want of a repository.
+    Zero when git is unavailable, matching `_commit_claims_without_tests`: an advisory line
+    must not fail a sweep for want of a repository.
 
     Counted against the WBS leaves rather than against every id mentioned, because a
     docstring legitimately names a parent (`M24.1`) while claiming its children, and a
     parent is not a leaf the tracker counts.
     """
+    leaves = _wbs_leaf_ids()
     try:
-        from brain.status import closed_task_ids, load_wbs
+        from brain.status import closed_task_ids
 
         closed, _ = closed_task_ids(REPO)
-        leaves = {
-            leaf for m in load_wbs(REPO / "docs" / "wbs.json")["modules"] for leaf in m["leaf_ids"]
-        }
         claimed: set[str] = set()
         for path in SRC.rglob("*.py"):
             for line in TASK_LINE_RE.findall(path.read_text(encoding="utf-8")):
@@ -622,17 +635,16 @@ def untested_closures(closed: set[str], leaves: set[str], named: set[str]) -> tu
 def _commit_claims_without_tests() -> tuple[str, ...]:
     """The leaves a commit has closed that no test names, read from git and the test suite.
 
-    Empty when git or the WBS is unavailable. That is a gap in the gate on a checkout with no
-    history, accepted because CI and the pre-push hook both run with full history (ci.yml sets
-    `fetch-depth: 0` for exactly this) and a laptop tarball failing on it would be noise.
+    Empty when git is unavailable (a plan that cannot be generated raises, `_wbs_leaf_ids`). That
+    is a gap in the gate on a checkout with no history, accepted because CI and the pre-push hook
+    both run with full history (ci.yml sets `fetch-depth: 0` for exactly this) and a laptop
+    tarball failing on it would be noise.
     """
+    leaves = _wbs_leaf_ids()
     try:
-        from brain.status import closed_task_ids, load_wbs
+        from brain.status import closed_task_ids
 
         closed, _ = closed_task_ids(REPO)
-        leaves = {
-            leaf for m in load_wbs(REPO / "docs" / "wbs.json")["modules"] for leaf in m["leaf_ids"]
-        }
         named: set[str] = set()
         for path in _test_sources():
             named.update(TASK_ID_RE.findall(path.read_text(encoding="utf-8")))
@@ -1263,6 +1275,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         SWEEPS[args[0]]()
+    except wbs_generate.GeneratedFilesError as exc:
+        print(f"FAIL {args[0]}: {exc}", file=sys.stderr)
+        return 1
     except SweepFailure as exc:
         print(f"FAIL {args[0]}:", file=sys.stderr)
         for f in exc.findings:

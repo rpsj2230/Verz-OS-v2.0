@@ -74,6 +74,7 @@ from typing import Any, Final
 from pydantic import BaseModel
 
 from brain.ops.conventions import proofs_in
+from brain.ops.wbs_generate import missing_message, require
 
 TASK_ID_RE = re.compile(r"\bM\d+(?:\.\d+){1,4}\b")
 
@@ -821,7 +822,10 @@ def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
 
 
 def load_wbs(path: Path) -> dict[str, Any]:
-    data: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    """The compiled work breakdown. A missing `wbs.json` raises `GeneratedFileMissing`, a sentence
+    naming the command, because the file is generated and no longer committed
+    (`brain.ops.wbs_generate`): an absent plan must never read as an empty one."""
+    data: dict[str, Any] = json.loads(require(path).read_text(encoding="utf-8"))
     for m in data.get("modules", []):
         if "leaf_ids" not in m:
             ids: list[str] = []
@@ -886,7 +890,7 @@ def main(repo: Path | None = None) -> int:
     repo = Path(__file__).resolve().parents[2] if repo is None else repo
     wbs_path = repo / "docs" / "wbs.json"
     if not wbs_path.exists():
-        print(f"no WBS at {wbs_path}")
+        print(missing_message(wbs_path))
         return 1
     status = build_status(repo, load_wbs(wbs_path))
     out = repo / "docs" / "status.json"

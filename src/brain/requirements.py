@@ -64,6 +64,7 @@ from typing import Any, Final
 
 from pydantic import BaseModel, ConfigDict
 
+from brain.ops.wbs_generate import GeneratedFileMissing
 from brain.status import closed_task_ids, decided_of, load_wbs
 
 #: Where the register lives, relative to the repository and to the `docs` directory.
@@ -292,7 +293,11 @@ def main(repo: Path | None = None) -> int:
     if not (repo / "docs" / REGISTER_IN_DOCS).exists():
         print(f"no register at {repo / 'docs' / REGISTER_IN_DOCS}")
         return 1
-    assessment = assess_repository(repo)
+    try:
+        assessment = assess_repository(repo)
+    except GeneratedFileMissing as error:
+        print(error)
+        return 1
     for finding in assessment.findings:
         print(finding)
     print(
