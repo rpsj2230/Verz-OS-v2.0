@@ -424,7 +424,7 @@ def test_an_owner_allowed_component_under_a_new_licence_is_refused_again() -> No
 
 def test_the_only_components_awaiting_the_owner_are_the_three_build_only_ones() -> None:
     """Item 70 decided every shipped component, and three packages that only the build and the
-    test runner use wait on item 236. Delete this and a fourth wait, or one of these three
+    test runner use wait on item 238. Delete this and a fourth wait, or one of these three
     shipping, goes unnoticed."""
     assert policy.AWAITING_THE_OWNER == {}
     waiting = offline_findings(locked(REPO)).awaiting

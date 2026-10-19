@@ -4946,7 +4946,7 @@ const PROGRESS = {
   },
   "M27.15.79": {
     status: "READY FOR TESTING",
-    why: "Proved by the CI job 'Dependency audit' (python -m brain.ops.dependency_policy offline): it reads every package in the console's lock, build-time ones included, and refuses one whose licence is not on the allowed list or is not recorded. To see it refuse, open a pull request adding a console dependency under a licence the list does not name and read the job's output. Three build-time packages wait on you in needs-rupash item 236; the job prints them on every run.",
+    why: "Proved by the CI job 'Dependency audit' (python -m brain.ops.dependency_policy offline): it reads every package in the console's lock, build-time ones included, and refuses one whose licence is not on the allowed list or is not recorded. To see it refuse, open a pull request adding a console dependency under a licence the list does not name and read the job's output. Three build-time packages wait on you in needs-rupash item 238; the job prints them on every run.",
     updated: "2026-10-14",
   },
   "M27.15.83": {

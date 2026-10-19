@@ -25,7 +25,7 @@ of them as the source of a requirement. The thirteenth, `image-1788498461996`, h
 register skips ANY-046). If it shows something you wanted built, tell me what and it gets a requirement and a
 record; if it was pasted by mistake, say so and I will take it off the list.
 
-## 236. May three packages that only the console's build and tests use stay under licences the allowed list does not name?
+## 238. May three packages that only the console's build and tests use stay under licences the allowed list does not name?
 
 **In plain terms:** task M27.15.79 says every console dependency's licence is on the allowed list, checked in
 CI. Until now the check read only what ships and skipped the 240 packages that are used to build and test the
@@ -53,7 +53,7 @@ tool the console cannot be built without, and none of them reaches an install.
 **My recommendation:** A. None is copyleft, none is part of what an install runs, and the only one with a
 condition (credit for caniuse-lite) applies to redistributing the table, which nothing does.
 
-**What I need from you:** reply "236: A", "236: B" or "236: C".
+**What I need from you:** reply "238: A", "238: B" or "238: C".
 ## 235. What may start a backup drill from the console, now that nothing the product runs can?
 
 **In plain terms:** task M27.13.5 asks for a "start a drill" button on the Backup and recovery screen
