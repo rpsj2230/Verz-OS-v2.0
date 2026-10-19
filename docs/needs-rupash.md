@@ -6,6 +6,319 @@ Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
 # Open
 
+## 241. When an agent is published, do we price one run with the product's estimator now, or wait until rehearsals record a measured cost?
+
+**In plain terms:** task M20.5.2 says an agent whose median rehearsed run costs more than its department's
+per-run ceiling waits for the department's administrator before it is published, and that the publish record
+shows the cost. A rehearsal on your install does not call a model yet, so none of them records a cost and
+there is no median to compare. What is built instead: the product's own spend estimator prices the largest run the agent's settings
+allow, which is one question answered at the agent's model tier that calls every tool the agent may use
+once. That is an upper bound on what a run could cost, not a median. It depends only on the agent, so the same figure can be read back for any
+published version later, and every screen that shows it calls it an estimate. It is behind a switch that
+ships off.
+
+**Option A: price it with the estimator now.** A publish is held when that upper bound is above the
+department's per-run ceiling. When rehearsals start to record a measured cost, the figure becomes the
+median of those and nothing about the hold changes. Some agents are held that a measured median would have
+let through, and a second person looks at them.
+
+**Option B: wait for a measured cost.** Nothing is held for its cost until rehearsals run a model and record
+what they spent, which is what the task says word for word. Until then no agent is held for what it costs.
+
+**My recommendation:** A. A hold that cannot fire is not a control, and an estimate that errs high only
+costs a second person a look, where a measured cost that never arrives costs nothing and protects nothing.
+
+**What I need from you:** reply "241: A" or "241: B".
+
+## 242. No screen sets a department's per-run ceiling yet, so the cost hold fires only for a ceiling set another way: acceptable for now?
+
+**In plain terms:** the hold in item 241 compares an agent's cost with its department's per-run ceiling. The
+ceiling is a row in the budgets, and the functions that share a budget between departments are built and
+tested, but nothing in the console calls them (task M21.1.2, the department budget as a share). So on your
+install a department has a per-run ceiling only if someone writes one some other way. A department with no
+ceiling holds nothing, on purpose: guessing a default would hold every publish on an install nobody had
+configured, and people learn to wave through a gate like that.
+
+**Option A: accept this until M21.1.2.** The cost hold does nothing by itself until a department budget
+screen exists, and that screen is built as part of M21.1.2 together with the transfer between departments.
+
+**Option B: build a small "per-run ceiling" field for a department now,** ahead of the rest of M21.1.2.
+The hold then works on its own, but it is a screen that will be rebuilt when the whole budget screen
+arrives.
+
+**My recommendation:** A. The budget screen is one piece of work and writing half of it twice costs more than
+the weeks the hold sits quiet; the hold ships switched off anyway.
+
+**What I need from you:** reply "242: A" or "242: B".
+
+## 243. Should saving a draft refuse a tool or connector that the author's department does not hold?
+
+**In plain terms:** task M13.9.2 says a department's administrator can choose only the tools, connectors,
+skills and knowledge their department holds. The form is built that way: it lists only what that
+administrator's own reach admits. What it does not do is refuse a name typed past the form, for example
+straight to the API. Such a draft is saved, and when it is published the server works out what the agent can
+reach itself, and anything wider than the author holds waits for a second person who does hold it (that
+rule is already decided and stays). So nothing reaches further than it should. The author simply finds out
+at publish, not at save.
+
+**Option A: refuse at save for a department's administrator.** The draft is not saved, with one sentence
+that reads the same whether the name is a real tool their department does not hold or a name that does not
+exist, so the refusal does not tell them which tools exist. A person whose authority is held over everything
+is not refused, because they may deliberately write a draft naming a department's tools for a colleague who
+holds them to approve.
+
+**Option B: as built.** The form offers only what is held, a typed name is saved, and it waits for a second
+person at publish.
+
+**My recommendation:** A. It tells the author at the moment they can fix it, and the publish gate stays as
+the real control either way.
+
+**What I need from you:** reply "243: A" or "243: B".
+
+## 244. Should the agent builder cut skills by what each skill's tools need, and what does "knowledge a department holds" mean there?
+
+**In plain terms:** the same task, M13.9.2, also names skills and knowledge. The builder form is cut for
+tools and connectors and not for the other two, for two reasons. The skill library is one object for the
+whole company, so no skill belongs to a department; a skill does name the tools it expects to use. And an
+agent's knowledge is not a part of the builder form at all: it is set on the agent's own page, behind that
+page's own reach.
+
+**Option A: cut skills, leave knowledge on the agent's own page.** The form offers a department only the
+skills whose every tool its reach admits (the same reading the skill assignment screen already shows,
+item 183). Knowledge stays where it is, where it is already cut by the reader's
+reach, and the task is narrowed to say so.
+
+**Option B: cut both, and bring knowledge into the form.** As A for skills, and the form gains a choice of
+knowledge, offered from the departments whose knowledge the author reads (the only thing a knowledge scope
+tests, item 182). That makes two places that choose knowledge, which have to agree.
+
+**My recommendation:** A. Cutting skills by tools is a small change that does what the task means. A second
+place choosing knowledge is a second opinion about who may read what, and the agent's own page already has
+the right one.
+
+**What I need from you:** reply "244: A" or "244: B".
+
+## 245. May describing an agent put the model's suggestions straight into the draft, or must a person take each one?
+
+**In plain terms:** task M20.5.3 lets a person describe an agent in their own words and be handed a draft.
+As built, the draft is saved first with what the person wrote, and the model's suggestions for its name,
+summary, instructions, skills and connectors appear beside the draft, none chosen. Taking each one is a
+separate act, by name, as it is for the co-author on the Write step. The question is whether describing
+should itself count as taking.
+
+**Option A: keep the separate take.** One extra click per suggestion. The person described what they wanted
+and has not yet read what came back.
+
+**Option B: describing takes them all.** The suggestions become the draft's next version at once, and the
+person edits or reverts afterwards. Quicker, and an agent's words are then partly a model's that nobody
+read.
+
+**My recommendation:** A. That rule exists so that a model's words become an agent's only after a person has
+read them. The click is small and it is the one place the rule is kept.
+
+**What I need from you:** reply "245: A" or "245: B".
+
+## 246. May the co-author propose tools and knowledge, within what the person already holds?
+
+**In plain terms:** task M20.5.3 says the system drafts the persona, knowledge, skills, connectors, channels
+and workflows within the person's ceiling. The co-author writes words today, and picks skills and connectors,
+and never proposes what an agent may reach: its tools, what it may read, its knowledge and how closely it is
+watched are left for the person to name, and channels are chosen at publish. The reason is that a model's
+reply is built from text nobody reviewed, and what an agent may reach is the thing to be most careful with.
+
+**Option A: keep it as built.** The co-author never proposes reach. The person chooses tools and knowledge
+themselves, as now.
+
+**Option B: it may propose tools and knowledge, only from the list the person's own ceiling offers.** It is
+the same list the form shows. A name outside it is dropped, not shown. Each proposal is shown and taken by
+the person by name, as any suggestion is, and the publish gate still holds anything wider than the author to
+a second person. It stays behind the switch that already guards describing, which ships off.
+
+**My recommendation:** B. It is what the task asks, and every step that decides reach is still a person's:
+the list is the person's own, each item is taken by them, and the gate does not move.
+
+**What I need from you:** reply "246: A" or "246: B".
+
+## 247. What should be the first thing that teaches an agent a change to its instructions?
+
+**In plain terms:** task M16.7.1 asks that every change learning makes to an agent is marked as the agent's
+own learning, so a person can list it and revert exactly that. The marking, the listing, the giving back and
+the ledger entry naming the approver are built. What is missing is anything that actually learns an
+instruction change: today learning proposes knowledge and quick-answer rules and nothing else, so on an
+install the mark is proved only by a check that applies one change itself. A learned change is applied only
+after a named person approves it and never replaces words an administrator set. These are the candidates I
+found in what the product learns from today:
+
+- **A department lead flagging an answer as stale or incomplete.** The flag uses a short fixed list of
+  reasons and has no free text. When the same quality reason is raised against one agent enough times, the
+  product proposes one sentence for that reason chosen from a list the product holds (for stale, "say when
+  the figure was last updated"). The words come from the list, never from a conversation. The two reasons
+  about who may see what are left out, since an instruction cannot fix those.
+- **An approval refused, with the reason a person wrote.** The reason is free text written about one
+  request, and learning deliberately does not copy it, so there are no words to learn from without building
+  something new to read it safely.
+- **A person's own preference for how an answer is shaped.** It is one person's taste. Making it the
+  agent's instruction would give it to everyone who asks the agent.
+
+The signals that something went badly (asked again, contradicted, handed to a person) record that it
+happened and carry no words, so on their own they cannot say what to change.
+
+**Option A: the lead's flags, as above.**
+
+**Option B: refused approvals,** with a new, safe way to read the written reason.
+
+**Option C: preferences,** shared across an agent's askers once enough of them agree.
+
+**My recommendation:** A. It is the only one where the proposed words come from a list the product holds, so
+no unreviewed text becomes an instruction, and the flags already exist and already stop at the departments
+the lead reaches.
+
+**What I need from you:** reply "247: A", "247: B" or "247: C".
+
+## 248. Should the Usage and Spend tables name another person's personal agent?
+
+**In plain terms:** the Usage and Spend screens can break spending down by agent. A reader who may see the
+Agents screen is shown that table with every agent by name, and that includes a personal agent, which
+belongs to one person. A personal agent is its owner's alone (item 189 sets out the rest), and everywhere else it
+is hidden from everybody but the owner, and the one oversight view tells a reader with the audit grant for
+agents that it exists, whose it is and whether it runs, and offers nothing else. The usage tables were not
+changed with it. The person table on the same screens already shows what each person spent, and that does
+not change here.
+
+**Option A: as built.** Every agent is named in the agent table, personal ones included.
+
+**Option B: a personal agent appears only as "a personal agent".** Every personal agent is shown together
+as one line with that name and the sum of their figures, so the table still adds up, no line belongs to one
+person, and nothing counts how many there are.
+
+**My recommendation:** B. How much one person uses their own assistant is that person's business, and the
+screen's job is what each department and model costs.
+
+**What I need from you:** reply "248: A" or "248: B".
+
+## 249. Should an agent whose template version was withdrawn still be allowed to be duplicated?
+
+**In plain terms:** withdrawing a template version takes it out of the gallery, its install page and the
+upgrade offers. Agents already made from it stay pinned to what they were made from. Today duplicating such
+an agent is still allowed: the copy is made from the agent's own pinned version, not from anything offered
+in the gallery. A related thing worth knowing: exporting a template version is a read that writes to the
+application log and not to the audit ledger.
+
+**Option A: allow it.** The copy keeps its own pin and nothing withdrawn is offered to anybody new. Export
+stays as it is.
+
+**Option B: refuse it.** A withdrawn version could then not be copied at all. An agent that people rely on
+could not be cloned from for as long as the withdrawal stands.
+
+**Option C: allow it, and also write each export to the audit ledger.**
+
+**My recommendation:** A. Withdrawing means stop offering it, not stop using it, and the copy carries its
+own record of where it came from.
+
+**What I need from you:** reply "249: A", "249: B" or "249: C".
+
+## 250. May a person's saved list filters live only in their own browser?
+
+**In plain terms:** every list in the console has "Saved filters" (task M27.16.3): a name, the search words
+typed and the dropdown values chosen, kept so the same question can be asked again. They are stored in the
+person's own browser under their own identity and never reach the server, so they do not follow the person to
+another computer and they are gone if the browser's data is cleared. Applying one asks the list again, so a
+value the person can no longer see simply matches nothing.
+
+**Option A: browser only.** No new table, no write to the server, nothing to leak. The control says it does
+not follow the person.
+
+**Option B: keep them on the server for each person.** A new table, a route to write it and a row per person
+per list. They follow the person everywhere. A shared view for a whole team stays rejected, because it would
+show one person's questions to another.
+
+**My recommendation:** A for now. The filters hold nothing a person cannot retype, and a table of every
+person's questions is a record to protect for little benefit. Choose B if people say they miss them on a
+second computer.
+
+**What I need from you:** reply "250: A" or "250: B".
+
+## 251. Is deleting old trace steps a designed hard delete?
+
+**In plain terms:** almost everything in the product is retired and never deleted, because a delete destroys
+the record of what somebody did. The product keeps a short list of tables its application may delete from,
+each with the reason. A trace step, the stored record of one step of one question's answer in masked form,
+is on it: migration 0226 allows the application to delete a trace step, and an older check missed that
+because the grant was written in a form it did not read. The check now reads the migrations themselves and the
+reason is written down. What it deletes and when: a trace step older than thirty days by the database's own
+clock, and only then, since the database refuses to delete a younger one whoever asks. The daily retention
+sweep asks, and that sweep is released only by a person. An erasure of a person's data removes their older
+steps in the same way and leaves the younger ones for the sweep. The audit ledger is a different chain and
+nothing here touches it.
+
+**Option A: yes, it is designed.** It stays on the list, with that reason.
+
+**Option B: no, steps are kept for ever.** The thirty-day expiry in M25.1.3 and M25.1.4 could not be kept,
+and every masked question and answer would be held with no end.
+
+**My recommendation:** A. Thirty days is the promise made for traces, and the delete is bounded by the
+database itself, not only by the application.
+
+**What I need from you:** reply "251: A" or "251: B".
+
+## 252. Should the Stop screen and the Quick answers screen name the person who acted?
+
+**In plain terms:** the Stop screen lists what is stopped, when and why. The API also sends who pressed the
+stop, but the screen shows no name. The Quick answers screen shows when a rule was added but not by whom,
+though the record holds it. Where names appear, they are drawn the way the Access pages draw them: only for a
+person the reader may be shown, and "another account" otherwise.
+
+**Option A: name the person on Stop, not on Quick answers.** A stop halts other people's work, and who
+stopped what is audit. A rule belongs to its department and a name on every rule makes a person the answer
+to "why did it say that", when who added it is already in the record.
+
+**Option B: name them on both.**
+
+**Option C: name neither,** as built.
+
+**My recommendation:** A.
+
+**What I need from you:** reply "252: A", "252: B" or "252: C".
+
+## 253. Are the two release-tag leaves decided for an install that follows every release?
+
+**In plain terms:** tasks M42.1.3 and M42.1.4 say the product is one published image, deployed by a named
+release tag and never rebuilt, and that a client can hold a release back. The install check for them asks
+whether the image your install runs is at a named release. On an install set to follow every release, which
+is how your staging server is meant to run, the check answers "not run", with the reason, and never a tick,
+so the two leaves cannot be proved there however often the check runs.
+
+**Option A: decide them as not applicable to an install that follows every release,** and record that
+beside the leaves. The check stays as it is. It is the proof for each client install that runs on a release
+tag, so the leaves are shown as proved when a client install passes it.
+
+**Option B: keep them open** until some install of ours runs in release mode and passes the check.
+
+**My recommendation:** A. It states the truth about the staging server without weakening the check that
+matters, which is a client's.
+
+**What I need from you:** reply "253: A" or "253: B".
+
+## 254. Should a generated Word file carry the original template's styles and logo?
+
+**In plain terms:** task M12.3.5 fills an approved company template and keeps the Word file. It is built from
+the template's text, so headings, paragraphs and tables are rebuilt and the page looks plain: the original
+file's styles, headers and logo are not in it. The library keeps the original file under its digest but
+nothing links a library item to its original. Carrying the styling needs that link, one column on the item
+and one database migration. A Word file can also hold text outside its body, such as comments, tracked
+changes and the author's name in its properties, so only the styles, page set-up and images should be taken
+from the original, and the words must still come from the passages the person may read.
+
+**Option A: yes, later, behind the existing switch for document generation.**
+
+**Option B: no.** The rebuilt layout is the product, and a company that wants its look puts it into the
+template's text.
+
+**My recommendation:** A, once Word documents are proved on your install. A document that does not look like
+the company's own is not one people send.
+
+**What I need from you:** reply "254: A" or "254: B".
+
 ## 236. When one install exports a template and another imports it, how does the second know the first made it?
 
 **In plain terms:** task M27.15.35 says a template exports as a signed document that another install
