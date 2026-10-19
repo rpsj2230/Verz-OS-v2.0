@@ -797,8 +797,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
         because: "The route says no_run_can_be_stopped: a control runs to its end inside the worker's tick and there is nothing to signal.",
       },
       {
-        what: "The interrupted actions a stopped worker left unconfirmed are served and no screen draws them or resolves one yet.",
-        leaf: "M27.15.46",
+        what: "A person cannot mark an interrupted action resolved by their word, and nothing sends one again.",
+        because:
+          "An action whose result is unknown leaves that state only by being checked against the system it went to (brain.ops.idempotency.UNKNOWN_IS_NOT_FAILED). Whether a person's word may stand in for that check is the owner's question (needs-rupash 188, item 5), and it is not decided here.",
       },
     ],
   },
