@@ -6840,7 +6840,7 @@
     },
     "M32.2.1.2": {
      "status": "IN PROGRESS",
-     "why": "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14): the model server is an optional service that holds one part at a time, and the entity finder is one of its parts (1,408 MiB by arithmetic, not measured). Built: the server frame (supervisor, budget, switch, settings, measured peaks). Not built: the entity part's own backend and the call from ops.pii to it. PRIOR WORK: ops.inference, ops.pii",
+     "why": "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14): the model server is an optional service that holds one part at a time, and the entity finder is one of its parts (1,408 MiB by arithmetic, not measured). Built: the server frame; the entity part's backend (GLiNER, written from its published interface and never run against it, reading long text in overlapping windows and returning only the labels asked for); the egress leg that asks it, added beside the analyser's and only ever adding to the rules' scrub, with a longer budget of its own and the rules' scrub standing whenever the part is down, loading or unreadable; and an install check that sends the part a sentence with a three-word name. Not built: GLiNER run for real (the image is unbuilt and the checkpoint is not fetched or pinned, needs-rupash 235). The first call after the part has been idle waits on a model load longer than the leg's budget and is scrubbed by the rules alone, so a longer idle time keeps the part loaded. PRIOR WORK: ops.inference, ops.pii (the wire contract and the merge), ops.egress",
      "updated": "2026-10-14"
     },
     "M32.2.1.4": {

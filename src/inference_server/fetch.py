@@ -36,6 +36,7 @@ import json
 import os
 import sys
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
@@ -99,7 +100,12 @@ SOURCES: Final[tuple[Source, ...]] = (
 #: Parts whose weights are a directory of many files that one library knows how to fetch, by the
 #: directory's name under the model directory. Not in `SOURCES` because there is no one URL, and not
 #: pinned because there is no one digest: the library records its own revisions.
-DIRECTORIES: Final[dict[str, str]] = {"layout": "docling"}
+DIRECTORIES: Final[dict[str, str]] = {"layout": "docling", "entities": "gliner"}
+
+#: The checkpoint the entity part loads: GLiNER's 209-million-parameter model, which is what the
+#: budget's 801 MiB was worked out for. Fetched at whatever revision the hub serves, and not pinned
+#: here, for the reason `fetch_layout_weights` gives.
+ENTITY_CHECKPOINT: Final = "urchade/gliner_medium-v2.1"
 
 
 class FetchError(Exception):
@@ -201,6 +207,24 @@ def fetch_layout_weights(target: Path) -> None:
     )
 
 
+def fetch_entity_weights(target: Path) -> None:
+    """GLiNER's checkpoint, fetched by the hub's own client into `target`.
+
+    **Never run**, for the reason `fetch_layout_weights` gives: nothing here has installed
+    `huggingface_hub`, and the first install that chooses the entity part is its first run.
+    """
+    from huggingface_hub import snapshot_download
+
+    snapshot_download(repo_id=ENTITY_CHECKPOINT, local_dir=str(target))
+
+
+#: Which function fills which directory, by the directory's name under the model directory.
+DOWNLOADERS: Final[dict[str, Callable[[Path], None]]] = {
+    "docling": fetch_layout_weights,
+    "gliner": fetch_entity_weights,
+}
+
+
 def fetch_directory(name: str, directory: Path, *, download: object = None) -> str:
     """Make a directory of weights present, unless it already holds something, and say which.
 
@@ -213,7 +237,7 @@ def fetch_directory(name: str, directory: Path, *, download: object = None) -> s
         return f"{name} is already here"
     target.mkdir(parents=True, exist_ok=True)
     try:
-        (download or fetch_layout_weights)(target)  # type: ignore[operator]
+        (download or DOWNLOADERS[name])(target)  # type: ignore[operator]
     except Exception as error:
         msg = f"{name} could not be fetched: {error.__class__.__name__}"
         raise FetchError(msg) from error
