@@ -21,6 +21,8 @@ import { Badge } from "../ui/Badge";
 import { FailureNotice } from "../ui/FailureNotice";
 import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import { ConfirmAction } from "./ConfirmAction";
+import type { GridColumn } from "./gridFeatures";
+import { GridTable } from "./kit/GridTable";
 import {
   agentSteps,
   blankPinProblems,
@@ -40,12 +42,40 @@ import {
   pinQuestion,
   STEPS_CAPTION,
   STEPS_EDITED_THERE,
+  type AgentStep,
   type ModelChoice,
 } from "../pages/agentModelPinQuery";
 import { chainApiPath, MATRIX_PATH, readMatrixPage } from "../pages/matrixQuery";
 import { LEVEL_NAMES } from "../pages/modelsQuery";
 
 const PIN_FORM = "model-pin";
+
+/** The order a question to this agent tries models, drawn through the console's one grid. */
+const STEP_COLUMNS: GridColumn<AgentStep>[] = [
+  {
+    id: "step",
+    header: "Step",
+    cell: ({ row }) => String(row.original.step),
+    meta: { cellClassName: "matrix__step" },
+  },
+  { id: "provider", header: "Provider", cell: ({ row }) => row.original.provider },
+  { id: "model", header: "Model", cell: ({ row }) => <code>{row.original.model}</code> },
+  {
+    id: "role",
+    header: "Role",
+    cell: ({ row }) => (
+      <>
+        <span className="note">{row.original.role}</span>
+        {row.original.note === null ? null : (
+          <>
+            {" "}
+            <Badge label={row.original.note} tone="caution" />
+          </>
+        )}
+      </>
+    ),
+  },
+];
 
 export function AgentModelPin({ agentId, choice }: { readonly agentId: string; readonly choice: ModelChoice }) {
   const ladder = useResource<unknown>(chainApiPath());
@@ -102,39 +132,13 @@ export function AgentModelPin({ agentId, choice }: { readonly agentId: string; r
       ) : (
         <>
           {steps.length === 0 ? null : (
-            <div className="grid__scroll">
-              <table className="grid__table">
-                <caption className="grid__caption">{STEPS_CAPTION}</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Step</th>
-                    <th scope="col">Provider</th>
-                    <th scope="col">Model</th>
-                    <th scope="col">Role</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {steps.map((row) => (
-                    <tr key={row.key}>
-                      <td className="matrix__step">{String(row.step)}</td>
-                      <td>{row.provider}</td>
-                      <td>
-                        <code>{row.model}</code>
-                      </td>
-                      <td>
-                        <span className="note">{row.role}</span>
-                        {row.note === null ? null : (
-                          <>
-                            {" "}
-                            <Badge label={row.note} tone="caution" />
-                          </>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <GridTable
+              look="grid"
+              caption={STEPS_CAPTION}
+              columns={STEP_COLUMNS}
+              rows={steps}
+              rowId={(row) => row.key}
+            />
           )}
           <p className="note">
             {STEPS_EDITED_THERE} <Link to={MATRIX_PATH}>{FAILOVER_MATRIX_LINK}</Link>.

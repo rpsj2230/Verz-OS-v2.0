@@ -13,7 +13,8 @@
 import { ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { FactList, Fact, Note, SectionCard } from "../../components/kit";
-import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
+import type { GridColumn } from "../../components/gridFeatures";
+import { GridTable } from "../../components/kit/GridTable";
 import {
   checkServedSentence,
   levelName,
@@ -46,6 +47,34 @@ export function ProviderDashboard({
   readonly checked: CheckBody | null;
 }) {
   const steps = stepsOf(row.provider, body.rungs);
+  const stepColumns: GridColumn<(typeof steps)[number]>[] = [
+    { id: "complexity", header: "Complexity", cell: ({ row: { original } }) => levelName(original.tier) },
+    {
+      id: "step",
+      header: "Step",
+      cell: ({ row: { original } }) => String(stepNumber(original, body.rungs)),
+      meta: { cellClassName: "tabular-nums" },
+    },
+    {
+      id: "model",
+      header: "Model",
+      cell: ({ row: { original } }) => original.model,
+      meta: { cellClassName: "font-mono text-[12px] [overflow-wrap:anywhere] whitespace-normal" },
+    },
+    {
+      id: "role",
+      header: "Role",
+      cell: ({ row: { original } }) => {
+        const marker = stepMarker(original);
+        return (
+          <span className="flex flex-wrap items-center gap-1.5">
+            <RolePill role={original.role} />
+            {marker === null ? null : <MarkerPill marker={marker} />}
+          </span>
+        );
+      },
+    },
+  ];
   return (
     <div data-slot="provider-dashboard" className="flex min-w-0 flex-col gap-4">
       <SectionCard
@@ -63,35 +92,17 @@ export function ProviderDashboard({
         {steps.length === 0 ? (
           <Note>{NO_STEPS}</Note>
         ) : (
-          <Table className="text-[13px]">
-            <TableCaption className="sr-only">{STEPS_HEADING}</TableCaption>
-            <TableHeader className="bg-sunk">
-              <TableRow className="hover:bg-transparent">
-                <TableHead scope="col">Complexity</TableHead>
-                <TableHead scope="col">Step</TableHead>
-                <TableHead scope="col">Model</TableHead>
-                <TableHead scope="col">Role</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {steps.map((step) => {
-                const marker = stepMarker(step);
-                return (
-                  <TableRow key={step.rung_id}>
-                    <TableCell>{levelName(step.tier)}</TableCell>
-                    <TableCell className="tabular-nums">{String(stepNumber(step, body.rungs))}</TableCell>
-                    <TableCell className="font-mono text-[12px] [overflow-wrap:anywhere] whitespace-normal">{step.model}</TableCell>
-                    <TableCell>
-                      <span className="flex flex-wrap items-center gap-1.5">
-                        <RolePill role={step.role} />
-                        {marker === null ? null : <MarkerPill marker={marker} />}
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+          <GridTable
+            look="kit"
+            caption={STEPS_HEADING}
+            captionHidden
+            className="text-[13px]"
+            headClassName="bg-sunk"
+            headRowClassName="hover:bg-transparent"
+            columns={stepColumns}
+            rows={steps}
+            rowId={(step) => step.rung_id}
+          />
         )}
       </SectionCard>
 

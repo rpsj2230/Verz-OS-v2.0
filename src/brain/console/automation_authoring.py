@@ -39,6 +39,28 @@ anything the agent would write waits for a person as every agent write does, whi
 `brain.gate.runtime.RUNTIME_WRITES_ALWAYS_WAIT_FOR_A_PERSON` and is imported here only to be said on
 the card. See `AN_INSTRUCTION_IS_THE_AGENTS_AND_NEVER_A_GRANT`.
 
+**The card names what it may use, and it is the agent's own list read for this person.** A tool or
+a skill an automation may use is not a list somebody typed: it is what this agent, as it stands
+(its attached tools, folded over its manifest's), could be handed in a run **at this person's
+reach**, which is `brain.gate.catalogue.project` over the reach the preview already holds and the
+agent's ceiling, and `brain.gate.model_lane.skills_offered` for the skills. A tool the agent names
+but whose side effect is larger than the ceiling allows, or whose capability the person does not
+hold, is not on it, so it is refused in the same sentence as a tool that does not exist: the
+sentence names the tool the person wrote and nothing else. Skills are not chosen one by one
+(there is no column for it and no run yet to read one): a run carries the skills the agent has
+attached and approved on the day it starts, so the preview names them as they stand and the card
+says that they are the agent's to change. See `WHAT_IT_MAY_USE_IS_THE_AGENTS_FOR_THIS_PERSON`.
+Rejected: checking the name against the manifest's list alone, which accepted a tool no run of the
+agent could ever call and a tool a detached press had already taken away.
+
+**Whether an instruction may be run with nobody present is not decided here.** The owner has not
+answered needs-rupash 210 (option A: a model call inside the agent's limits with every write held;
+option B: reports only). Everything in this module holds under both answers: what may be named is
+inside the ceiling, a write waits for a person (`WRITES_WAIT_FOR_A_PERSON`), and an instruction run
+is saved and shown and **says it cannot be started**, because
+`brain.ops.automation_run.INSTRUCTION_TASK` still declares what it needs. The preview says so
+before the person saves, so nobody confirms a card that reads as live. Nothing here starts a run.
+
 **A person who writes it runs it, and starts paused.** Both rules are the gallery's, for its
 reasons: the installer is the principal (`AN_INSTALLED_AUTOMATION_RUNS_AS_WHOEVER_INSTALLED_IT`) and
 going from nothing to an automation at a cadence is a schedule change somebody else approves
@@ -84,12 +106,12 @@ import hashlib
 import json
 import re
 import secrets
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Final, Protocol
 
-from brain.agents.model import AgentRecord
+from brain.agents.model import AgentRecord, tool_ceiling
 from brain.connectors.manifest import FieldShape
 from brain.console.agent_automations import (
     MINIMUM_GUARDS,
@@ -111,9 +133,12 @@ from brain.console.automation_gallery import (
     may_open_gallery,
     template_by_id,
 )
+from brain.console.automation_schedule import cannot_start_because
 from brain.core.entitlement import EntitlementSet
+from brain.core.envelope import ToolDefinition
 from brain.core.principal import Principal
 from brain.gate.admission import admit
+from brain.gate.catalogue import EmptyCatalogueError, project
 from brain.gate.runtime import RUNTIME_WRITES_ALWAYS_WAIT_FOR_A_PERSON
 from brain.ops.automation_event import STARTABLE_KINDS, WEBHOOKS_ARE_NOT_OFFERED
 from brain.ops.automation_owner import AUTOMATION_ASSURANCE, AUTOMATION_CHANNEL
@@ -156,6 +181,29 @@ A_TRIGGER_NOTHING_FIRES_IS_SAID_TO_BE_ONE: Final = (
     "A trigger that nothing on this install fires is said to be one and its automation cannot be "
     "started, so no control looks live and reaches nothing. A change fires only while the install "
     "has switched it on, and a webhook is never fired."
+)
+
+#: Why the card names what an automation may use, for this person, and why that is no grant.
+WHAT_IT_MAY_USE_IS_THE_AGENTS_FOR_THIS_PERSON: Final = (
+    "The tools and skills an automation may use are the agent's own, read at the reach of the "
+    "person it runs as. A tool the agent's ceiling does not admit, or that an automation of that "
+    "person could not reach, is not on the list and cannot be named. Naming one grants nothing, "
+    "and every run reads the list again, so something taken off the agent is gone from its next "
+    "run."
+)
+
+#: What the card says about skills. They are not chosen one by one: see the module docstring.
+SKILLS_ARE_THE_AGENTS_TO_CHANGE: Final = (
+    "It may use the skills this agent has attached and approved on the day each run starts, and "
+    "only those whose tools its owner may reach. They are the agent's to change, so a skill added "
+    "or taken away later changes what a run may use without changing this automation."
+)
+
+#: What the refusal of a tool says. The tool named is the one the person wrote, and the sentence
+#: is the same whether the tool does not exist, the agent's ceiling does not admit it, the person
+#: could not reach it, or an automation reads and the tool writes.
+A_TOOL_IS_NOT_THIS_AUTOMATIONS: Final = (
+    "{tool} is not one an automation of yours can use through this agent, so it cannot be named."
 )
 
 # ------------------------------------------------------------------ the figures
@@ -525,18 +573,63 @@ class Authored:
         return self.instruction.strip()
 
 
-def tool_gaps(tools: Sequence[str], agent: AgentRecord) -> tuple[str, ...]:
-    """Every tool named that this agent's ceiling does not allow. See
-    `AN_INSTRUCTION_IS_THE_AGENTS_AND_NEVER_A_GRANT`.
+def admitted_reach(author_reach: EntitlementSet) -> EntitlementSet:
+    """The author's reach as an automation is admitted: the same channel and assurance every
+    automation's reach is read at, which carries `read` and nothing wider."""
+    return admit(author_reach, AUTOMATION_CHANNEL, AUTOMATION_ASSURANCE)
 
-    A tool is named, not described, and the refusal names the tool the person themselves wrote, so
-    it discloses nothing they did not already have.
+
+def run_reach(author_reach: EntitlementSet, agent: AgentRecord) -> EntitlementSet:
+    """What a run of an automation of this author's on this agent may touch.
+
+    `automation_reach` over the admitted reach, which is `brain.ops.automation.flow_reach`, so the
+    intersection is the one every run is made through and nothing is computed here. Asked before an
+    automation is composed, because what it may name depends on it.
+    """
+    return automation_reach(admitted_reach(author_reach), agent)
+
+
+def usable_tools(
+    agent: AgentRecord,
+    registry: Iterable[ToolDefinition],
+    reach: EntitlementSet,
+    *,
+    now: datetime,
+) -> frozenset[str]:
+    """The tools a run of an automation through this agent could be handed, by name.
+
+    `brain.gate.catalogue.project` over `reach` (a run's reach, `run_reach`) and the agent's own
+    tool ceiling: the capability it needs held, and a side effect no larger than the agent's. The
+    projection a model is shown at a run, asked ahead, so a name the form offers and a name the
+    run would be handed are one list. A required tool that does not resolve means the agent could
+    not run for this person at all, so nothing is usable, which is what `project` refuses with.
+    """
+    try:
+        return frozenset(project(registry, reach, tool_ceiling(agent), now=now).names)
+    except EmptyCatalogueError:
+        return frozenset()
+
+
+def tool_gaps(
+    tools: Sequence[str], agent: AgentRecord, usable: Collection[str] | None = None
+) -> tuple[str, ...]:
+    """Every tool named that an automation of this agent could not be handed. See
+    `AN_INSTRUCTION_IS_THE_AGENTS_AND_NEVER_A_GRANT` and
+    `WHAT_IT_MAY_USE_IS_THE_AGENTS_FOR_THIS_PERSON`.
+
+    A name the agent's own list does not hold is a gap, and so is one `usable` leaves out when the
+    caller could work that out (`usable_tools`), which catches what a list of names cannot: a tool
+    larger than the ceiling allows, one the author does not reach, and one that writes where an
+    automation only reads. `usable` of None is a caller with no registry to ask, as the install
+    check is, and then only the agent's list is asked. A tool is named, not described, and the
+    refusal names the tool the person themselves wrote, so it discloses nothing they did not
+    already have.
     """
     allowed = agent.authority.allowed_tools
     return tuple(
-        f"This agent may not use {tool}, so an automation of it cannot name that."
+        A_TOOL_IS_NOT_THIS_AUTOMATIONS.format(tool=tool)
         for tool in sorted(set(tools))
-        if tool not in allowed
+        if tool not in allowed or (usable is not None and tool not in usable)
     )
 
 
@@ -552,6 +645,7 @@ def compose(
     fields: Mapping[str, ConditionField],
     template: AutomationTemplate | None = None,
     listenable: Collection[str] | None = None,
+    usable: Collection[str] | None = None,
 ) -> Authored:
     """What a person wrote, checked against this agent and this install, or every reason it is not.
 
@@ -565,6 +659,10 @@ def compose(
     connector list**, because `tests/unit/test_agent_binding.py` holds that access is decided in the
     ceiling alone and a form that draws the list is the one place beside it that may read it. None
     means the caller did not ask, as the install check does not.
+
+    `usable` is the tools a run of this automation could be handed (`usable_tools`), which the
+    caller works out from the tool registry and the author's reach. None means the caller has no
+    registry to ask, and then a tool is held only to the agent's own list.
     """
     findings: list[str] = []
     if trigger.kind is TriggerKind.WEBHOOK:
@@ -578,7 +676,7 @@ def compose(
             "This agent is not bound to that source, so a change in it could never be read by a "
             "run of this automation."
         )
-    findings.extend(tool_gaps(tools, agent))
+    findings.extend(tool_gaps(tools, agent, usable))
     if condition is not None:
         findings.extend(condition_gaps(condition, fields))
     try:
@@ -620,13 +718,15 @@ def rehearse(
     now: datetime,
     facts: Mapping[str, object] | None = None,
     fields: Mapping[str, ConditionField] | None = None,
+    skills: Sequence[str] = (),
 ) -> tuple[RehearsedTrigger, ...]:
     """What this automation would have done at its last few triggers, writing and sending nothing.
 
     See `A_REHEARSAL_WRITES_AND_SENDS_NOTHING`. `reach_words` is the capability list the preview
-    already shows the person, so the rehearsal names nothing the confirmation does not. `facts`
-    is what a caller already holds about the condition's field, keyed by field key; a rehearsal
-    never fetches any, so without one the condition cannot be told, and says that.
+    already shows the person, so the rehearsal names nothing the confirmation does not, and
+    `skills` is the skills the preview names for the same reason. `facts` is what a caller already
+    holds about the condition's field, keyed by field key; a rehearsal never fetches any, so
+    without one the condition cannot be told, and says that.
     """
     told = f"It would have been told: {authored.instruction_text}"
     tools = (
@@ -634,6 +734,8 @@ def rehearse(
         if authored.tools
         else "It could have used no tools, only what it already knows."
     )
+    if skills:
+        tools = f"{tools} It could have drawn on the skills {', '.join(sorted(skills))}."
     reach = (
         f"It would have read at your reach through this agent: {', '.join(reach_words)}."
         if reach_words
@@ -700,6 +802,14 @@ class AuthoringPreview:
     reach: EntitlementSet
     #: Always None: it starts paused. See `IT_STARTS_PAUSED`.
     next_run_at: datetime | None = None
+    #: The skills a run would be offered at this reach, by name, as the agent has them now. In the
+    #: digest, so a skill attached or taken away between the preview and the write is a confirmation
+    #: that no longer matches, as a changed grant is. See `SKILLS_ARE_THE_AGENTS_TO_CHANGE`.
+    skills: tuple[str, ...] = ()
+    #: Why it cannot be started on this install, in words, or None when nothing stops it. Not in the
+    #: digest: it is a fact about the install that the reach already covers, said so the person does
+    #: not confirm a card that reads as live. See `brain.console.automation_schedule`.
+    cannot_run: str | None = None
 
     @property
     def capabilities(self) -> tuple[str, ...]:
@@ -723,6 +833,7 @@ class AuthoringPreview:
             if one.condition is None
             else [one.condition.field, one.condition.op.value, one.condition.value.strip()],
             "tools": sorted(one.tools),
+            "skills": sorted(self.skills),
             "runs_as": self.runs_as.id,
             "next_run_at": None if self.next_run_at is None else self.next_run_at.isoformat(),
             "reach": self.reach.ent_hash(),
@@ -737,23 +848,39 @@ def preview(
     *,
     author: Principal,
     author_reach: EntitlementSet,
+    skills: Sequence[str] = (),
+    now: datetime | None = None,
 ) -> AuthoringPreview:
     """What writing this automation onto this agent would store, as this author.
 
     The reach is the author's as an automation is admitted, narrowed by the agent's ceiling through
-    `automation_reach`, which is `brain.ops.automation.flow_reach`. There is no arithmetic here:
+    `run_reach`, which is `brain.ops.automation.flow_reach`. There is no arithmetic here:
     `brain.console.workspace.intersections_in` is run over this module's source by its test. A
     reach resolved for somebody other than the author is a wiring fault and raises.
+
+    `skills` is the skills the caller found the agent offers at this reach, named on the card. `now`
+    is the instant the install's ability to start it is asked at, and the process clock when the
+    caller has none.
     """
     if author_reach.principal_id != author.id:
         msg = f"a preview for {author.id!r} was handed the reach of {author_reach.principal_id!r}"
         raise GalleryError(msg)
-    admitted = admit(author_reach, AUTOMATION_CHANNEL, AUTOMATION_ASSURANCE)
+    asked_at = datetime.now(UTC) if now is None else now
+    stand_in = Automation(
+        automation_id="preview",
+        agent_id=agent.agent_id,
+        name=authored.name,
+        runs_as=author,
+        task=authored.task,
+        next_run_at=None,
+    )
     return AuthoringPreview(
         agent_id=agent.agent_id,
         authored=authored,
         runs_as=author,
-        reach=automation_reach(admitted, agent),
+        reach=run_reach(author_reach, agent),
+        skills=tuple(sorted(set(skills))),
+        cannot_run=cannot_start_because(stand_in, agent, asked_at),
     )
 
 

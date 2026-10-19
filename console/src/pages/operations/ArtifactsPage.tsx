@@ -8,9 +8,12 @@
  * under this heading reads as an estate that produced nothing, so the unread answer is a sentence
  * and never an empty list.
  *
- * **The list is answered whole, so the search, kind and order act on the rows this page holds**, and
- * the toolbar says so. The answer is the whole estate this reader may see, never a page of it, so a
- * narrowing here narrows everything they were sent and nothing else.
+ * **The list pages on the server, and the search, kind and order are the route's** (M32.5.2.1). Each
+ * is a parameter of the request and the rows drawn are the answer to it, so a search finds artifacts
+ * the first page did not hold, and "Show more" asks for the page after the last one drawn. They acted
+ * on the rows the page held, over one whole answer, until 2026-10-14, which narrows only what arrived
+ * and says nothing about the rest. There is no total and no "page 3 of 9": the pager says only
+ * whether there is more.
  *
  * **Identifiers are columns a reader turns on.** The artifact, the run, the agent and the person it
  * was made for are identifiers the API sends without names; they are hidden until chosen, which is
@@ -22,26 +25,22 @@
  * Task ids: M27.7.23, M27.16.1
  */
 
-import { useId, useState } from "react";
-import { useResource } from "../../api/useResource";
-import { EmptyState, EntityTable, SectionCard, type EntityColumn } from "../../components/kit";
-import { Input } from "../../components/ui/input";
+import { FETCHING_MORE, NOTHING_MATCHES, SHOW_MORE } from "../../components/ListControls";
+import { EmptyState, EntityTable, FailureState, ListToolbar, LoadingState, PageHeader, RESET_LABEL, SectionCard, type EntityColumn } from "../../components/kit";
+import { narrows, NO_QUESTION } from "../../components/listing";
+import { Button } from "../../components/ui/button";
+import { useListing } from "../../components/useListing";
 import {
+  ARTIFACT_FILTERS,
+  ARTIFACT_SORTS,
   ARTIFACTS_API_PATH,
   keptUntil,
-  narrowed,
-  NO_ARTIFACT_FILTERS,
-  offeredKinds,
-  ORDER_LABELS,
-  ORDERS,
   readArtifacts,
   wasRead,
-  type ArtifactFilters,
   type ArtifactRow,
   type ArtifactsView,
-  type Order,
 } from "../artifactsQuery";
-import { at, jobName, KNOWLEDGE, Line, OpsPage } from "./parts";
+import { at, jobName, KNOWLEDGE, Line } from "./parts";
 import { Pill } from "./pills";
 
 export const ARTIFACTS_HEADING = "Artifacts";
@@ -51,16 +50,11 @@ export const NOTHING_RECORDED = "Nothing on this install records what was produc
 export const NO_ARTIFACTS = "No artifacts yet";
 export const NO_ARTIFACTS_MORE = "An artifact appears here once an agent produces one for somebody you may see.";
 export const NONE_MATCH = "No artifact matches";
-export const NARROWS_THIS_PAGE = "Search, kind and order work on the artifacts listed here.";
 export const CARRIES_ITS_RUN =
   "An artifact carries the access of the run that made it, so it cannot be shared wider than its contents allow. Downloads are not offered here.";
 export const ARTIFACTS_CAPTION = "Artifacts";
 export const FILTERS_LABEL = "Narrow the artifacts";
-export const EVERY_KIND = "Every kind";
 export const KEPT_RULE_HEADING = "How long an artifact is kept";
-
-const SELECT =
-  "h-11 min-w-0 max-w-full rounded-md border border-input bg-panel px-2.5 text-sm text-ink shadow-xs outline-hidden focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring sm:h-8";
 
 const COLUMNS: readonly EntityColumn<ArtifactRow>[] = [
   {
@@ -84,132 +78,97 @@ const COLUMNS: readonly EntityColumn<ArtifactRow>[] = [
   { id: "run", header: "Run", hidden: true, cell: (row) => row.run_id, text: (row) => row.run_id },
 ];
 
-function Toolbar({ rows, filters, onChange }: { readonly rows: readonly ArtifactRow[]; readonly filters: ArtifactFilters; readonly onChange: (next: ArtifactFilters) => void }) {
-  const searchId = useId();
-  const kindId = useId();
-  const orderId = useId();
+function MoreRows({ listing }: { readonly listing: ReturnType<typeof useListing<ArtifactRow>> }) {
   return (
-    <form
-      aria-label={FILTERS_LABEL}
-      className="flex min-w-0 flex-wrap items-center gap-2"
-      onSubmit={(event) => {
-        event.preventDefault();
-      }}
-    >
-      <label htmlFor={searchId} className="sr-only">
-        Search
-      </label>
-      <Input
-        id={searchId}
-        type="search"
-        placeholder="Search artifacts"
-        className="h-11 w-full min-w-0 sm:h-8 sm:w-56"
-        value={filters.search}
-        onChange={(event) => {
-          onChange({ ...filters, search: event.target.value });
-        }}
-      />
-      <span className="flex items-center gap-1.5">
-        <label htmlFor={kindId} className="text-[12.5px] text-dim">
-          Kind
-        </label>
-        <select
-          id={kindId}
-          className={SELECT}
-          value={filters.kind}
-          onChange={(event) => {
-            onChange({ ...filters, kind: event.target.value });
+    <div className="flex flex-wrap items-center gap-2 empty:hidden">
+      {listing.moreFailure === null ? null : <FailureState failure={listing.moreFailure} />}
+      {listing.fetchingMore ? (
+        <p role="status" className="m-0 text-[12.5px] text-dim">
+          {FETCHING_MORE}
+        </p>
+      ) : null}
+      {listing.more ? (
+        <Button
+          variant="outline"
+          className="min-h-11 sm:min-h-9"
+          disabled={listing.fetchingMore}
+          onClick={() => {
+            listing.showMore();
           }}
         >
-          <option value="">{EVERY_KIND}</option>
-          {offeredKinds(rows).map((one) => (
-            <option key={one} value={one}>
-              {jobName(one)}
-            </option>
-          ))}
-        </select>
-      </span>
-      <span className="flex items-center gap-1.5">
-        <label htmlFor={orderId} className="text-[12.5px] text-dim">
-          Order
-        </label>
-        <select
-          id={orderId}
-          className={SELECT}
-          value={filters.order}
-          onChange={(event) => {
-            onChange({ ...filters, order: event.target.value as Order });
-          }}
-        >
-          {ORDERS.map((one) => (
-            <option key={one} value={one}>
-              {ORDER_LABELS[one]}
-            </option>
-          ))}
-        </select>
-      </span>
-    </form>
-  );
-}
-
-function Listed({ rows }: { readonly rows: readonly ArtifactRow[] }) {
-  const [filters, setFilters] = useState<ArtifactFilters>(NO_ARTIFACT_FILTERS);
-  const shown = narrowed(rows, filters);
-  if (rows.length === 0) {
-    return <EmptyState title={NO_ARTIFACTS} description={NO_ARTIFACTS_MORE} />;
-  }
-  return (
-    <div className="flex min-w-0 flex-col gap-3">
-      <Toolbar rows={rows} filters={filters} onChange={setFilters} />
-      <Line>{NARROWS_THIS_PAGE}</Line>
-      {shown.length === 0 ? (
-        <EmptyState title={NONE_MATCH} description="Change the search or the kind." />
-      ) : (
-        <EntityTable
-          caption={ARTIFACTS_CAPTION}
-          columns={COLUMNS}
-          rows={shown}
-          rowId={(row) => row.artifact_id}
-          rowLabel={(row) => jobName(row.kind)}
-          exportName="artifacts"
-        />
-      )}
+          {SHOW_MORE}
+        </Button>
+      ) : null}
     </div>
   );
 }
 
 export function ArtifactsPage() {
-  const answer = useResource<ArtifactsView>(ARTIFACTS_API_PATH);
+  const listing = useListing<ArtifactRow>(ARTIFACTS_API_PATH, { choices: ARTIFACT_FILTERS });
+  const page = listing.body as ArtifactsView | null;
+  const read = readArtifacts(page);
+  // The answer to the first question is in, and it says nothing records an artifact.
+  const nothingRecords = listing.failure === null && !listing.busy && page !== null && !wasRead(read);
+
+  let list;
+  if (listing.failure !== null) {
+    list = <FailureState failure={listing.failure} />;
+  } else if (listing.busy) {
+    list = <LoadingState label={READING_ARTIFACTS} />;
+  } else if (listing.rows.length === 0) {
+    list = narrows(listing.question) ? (
+      <EmptyState
+        title={NOTHING_MATCHES}
+        description="Change the search or clear a filter."
+        action={
+          <Button
+            variant="outline"
+            onClick={() => {
+              listing.ask({ ...NO_QUESTION, sort: listing.question.sort });
+            }}
+          >
+            {RESET_LABEL}
+          </Button>
+        }
+      />
+    ) : (
+      <EmptyState title={NO_ARTIFACTS} description={NO_ARTIFACTS_MORE} />
+    );
+  } else {
+    list = (
+      <EntityTable
+        caption={ARTIFACTS_CAPTION}
+        columns={COLUMNS}
+        rows={listing.rows}
+        rowId={(row) => row.artifact_id}
+        rowLabel={(row) => jobName(row.kind)}
+        exportName="artifacts"
+      />
+    );
+  }
+
   return (
-    <OpsPage
-      crumbs={[{ label: KNOWLEDGE }, { label: ARTIFACTS_HEADING }]}
-      title={ARTIFACTS_HEADING}
-      lede={ARTIFACTS_LEDE}
-      loading={READING_ARTIFACTS}
-      busy={answer.busy}
-      failure={answer.failure}
-      body={answer.data}
-    >
-      {(page) => {
-        const read = readArtifacts(page);
-        return (
-          <>
-            <SectionCard title={ARTIFACTS_HEADING} footer={<Line>{CARRIES_ITS_RUN}</Line>}>
-              {wasRead(read) ? (
-                <Listed rows={read.panel} />
-              ) : (
-                <div className="flex flex-col gap-1">
-                  <p className="m-0 text-sm font-medium text-ink">{NOTHING_RECORDED}</p>
-                  <Line>{read.unread}</Line>
-                </div>
-              )}
-            </SectionCard>
-            <SectionCard title={KEPT_RULE_HEADING}>
-              <p className="m-0 text-sm text-ink">{page.kept_rule}</p>
-            </SectionCard>
-          </>
-        );
-      }}
-    </OpsPage>
+    <div data-slot="ops-page" className="flex min-w-0 flex-col gap-4">
+      <PageHeader crumbs={[{ label: KNOWLEDGE }, { label: ARTIFACTS_HEADING }]} title={ARTIFACTS_HEADING} lede={ARTIFACTS_LEDE} />
+      <SectionCard title={ARTIFACTS_HEADING} footer={<Line>{CARRIES_ITS_RUN}</Line>}>
+        {nothingRecords ? (
+          <div className="flex flex-col gap-1">
+            <p className="m-0 text-sm font-medium text-ink">{NOTHING_RECORDED}</p>
+            <Line>{read.unread}</Line>
+          </div>
+        ) : (
+          <div className="flex min-w-0 flex-col gap-3">
+            <ListToolbar label={FILTERS_LABEL} listing={listing} choices={ARTIFACT_FILTERS} sorts={ARTIFACT_SORTS} searchHint="Search artifacts" />
+            {list}
+            <MoreRows listing={listing} />
+          </div>
+        )}
+      </SectionCard>
+      {page === null || listing.failure !== null ? null : (
+        <SectionCard title={KEPT_RULE_HEADING}>
+          <p className="m-0 text-sm text-ink">{page.kept_rule}</p>
+        </SectionCard>
+      )}
+    </div>
   );
 }

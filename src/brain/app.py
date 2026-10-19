@@ -131,6 +131,7 @@ from brain.ops.credential_write_store import credential_writes_for
 from brain.ops.credentials import credentials_at_start, keep_refreshing
 from brain.ops.custom_connector_store import refresh as refresh_catalogue
 from brain.ops.default_ladder_store import SessionLadderWriter
+from brain.ops.external_ai_store import declared_if_on
 from brain.ops.install_settings import keep_holding
 from brain.ops.install_settings import refresh as refresh_install_settings
 from brain.ops.join_key_pepper import pepper_at_start
@@ -638,10 +639,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # (`brain.reviewed_connectors.current`).
     await refresh_catalogue(app.state.db_sessions or None)
 
+    # The outside AI services this install declared, read once with the switch they sit behind and
+    # registered with the rest (M12.3.7); a change to either applies at the next start.
+    outside_ai = await declared_if_on(app.state.db_sessions or None)
+
     def tools() -> ToolRegistry:
         return build_registry(
             source=settings.tool_source,
             records=records,
+            external_ai=outside_ai,
             figures=live if records else None,
             website=website,
             caches=knowledge_caches,
