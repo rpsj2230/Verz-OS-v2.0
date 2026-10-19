@@ -35,6 +35,7 @@ import { NO_DRAFTS, WAITING_HEADING } from "../src/pages/agents/DraftsPage";
 import {
   APPROVE_LABEL,
   CHECK_LABEL,
+  COST_FIGURES,
   DRAW_LABEL,
   ENTER_SKILL_NAME,
   ENTER_WHEN_TO_USE,
@@ -547,6 +548,35 @@ describe("one draft", () => {
     await waitFor(() => {
       expect(document.body.textContent).toContain("It waits for a second person.");
     });
+  });
+
+  test("a publish held for its cost says what a run costs and what the department allows, in the install's currency", async () => {
+    // What breaks if this is deleted: an agent that waits because of its cost tells its author only
+    // that it waits, with neither figure and no unit (M20.5.2).
+    await consoleAt(draftAddress(DRAFT_ID, "publish"), {
+      [`GET ${DRAFT_API}`]: { body: aDraft({ state: "checked" }) },
+      [`POST ${DRAFT_API}/publish`]: {
+        status: 202,
+        body: {
+          state: "waiting",
+          agent_id: "invoice_helper_ab12cd",
+          sentence: "It waits for a department administrator.",
+          widened: [],
+          held_for_cost: true,
+          cost_minor: 1234,
+          ceiling_minor: 500,
+          currency: "SGD",
+        },
+      },
+    });
+    fireEvent.click(screen.getByRole("radio", { name: "Team agent: my department" }));
+    fireEvent.click(button(PUBLISH_LABEL));
+    await confirmIn(PUBLISH_QUESTION("Invoice helper"), PUBLISH_LABEL);
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain(COST_FIGURES(1234, 500, "SGD"));
+    });
+    expect(COST_FIGURES(1234, 500, "SGD")).toBe("One run costs about SGD 12.34 and your department allows SGD 5.00.");
   });
 
   test("a person who may only make their own agent is offered the personal choice alone", async () => {

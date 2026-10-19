@@ -23,6 +23,8 @@ import { agentAttachmentsApiPath } from "../../../src/pages/agents/AgentTools";
 import { UNDO_API_PATH } from "../../../src/pages/learningQuery";
 import { agentPreviewApiPath, skillAssignApiPath, skillDetachApiPath } from "../../../src/pages/agents/agentCapabilitiesQuery";
 import { agentChannelsApiPath, agentMoveApiPath } from "../../../src/pages/agentLifecycleQuery";
+import { agentOfferApiPath, agentWithdrawApiPath } from "../../../src/pages/agents/agentAudienceQuery";
+import { agentLearningApiPath } from "../../../src/pages/agents/agentLearningQuery";
 import { agentMemoryKindsApiPath } from "../../../src/pages/agents/AgentMemoryKinds";
 import { agentUpgradeAcceptApiPath, agentUpgradeDeclineApiPath } from "../../../src/pages/agents/agentUpgradeQuery";
 import { agentGroupRemovalApiPath, agentGroupsApiPath } from "../../../src/pages/agents/agentGroupsQuery";
@@ -43,6 +45,26 @@ const MEMORY_KINDS_PRESSED = t(
   "test_leaving_a_kind_out_reaches_the_row_and_the_ledger_and_a_stale_page_writes_neither",
   true,
 );
+
+/** The Profile's offers and learning switch, pressed through the install checks against PostgreSQL. */
+const PROFILE_SWITCHES_PRESSED = t(
+  "test_acceptance_checks_agent_profile",
+  "test_the_checks_pass_on_an_install_and_leave_nothing",
+  true,
+);
+
+const AN_OFFER_IS_ITS_OWN_RECORD: Proof = {
+  none:
+    "An offer is the agent.audience_extra row: it names who offered, when, and who withdrew it and when, " +
+    "under row level policies that refuse a row in another person's name, and the table has no ledger " +
+    "trigger, so no ledger entry follows the write and no test could assert one.",
+};
+
+const A_PAUSE_IS_ITS_OWN_RECORD: Proof = {
+  none:
+    "A pause is the agent.learning_pause row: it names the agent, whether it is paused, why and who, and no " +
+    "ledger trigger follows it, so no test follows the write to a ledger entry.",
+};
 
 const CHANNELS_PRESSED = t(
   "test_agent_lifecycle_store",
@@ -238,6 +260,13 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/pages/agents/AgentGroups.tsx agentGroupRemovalApiPath(agentId)": [
     at("POST /api/v1/agents/{agent_id}/groups/removal", "agentGroupRemovalApiPath", agentGroupRemovalApiPath("quote-helper")),
+  ],
+  "src/pages/agents/AgentAudience.tsx path": [
+    at("POST /api/v1/agents/{agent_id}/audience/additions", "agentOfferApiPath", agentOfferApiPath("quote-helper")),
+    at("POST /api/v1/agents/{agent_id}/audience/removals", "agentWithdrawApiPath", agentWithdrawApiPath("quote-helper")),
+  ],
+  "src/pages/agents/AgentLearning.tsx agentLearningApiPath(agentId)": [
+    at("POST /api/v1/agents/{agent_id}/learning", "agentLearningApiPath", agentLearningApiPath("quote-helper")),
   ],
   "src/pages/agents/AgentChannels.tsx agentChannelsApiPath(drawn.agentId)": [
     at("POST /api/v1/agents/{agent_id}/channels", "agentChannelsApiPath", agentChannelsApiPath("quote-helper")),
@@ -465,6 +494,30 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: GROUP_INSTALLED,
     audit: GROUP_INSTALLED,
     behaviour: GROUP_INSTALLED,
+  },
+  "POST /api/v1/agents/{agent_id}/audience/additions": {
+    row: PROFILE_SWITCHES_PRESSED,
+    audit: AN_OFFER_IS_ITS_OWN_RECORD,
+    behaviour: t(
+      "test_agent_audience_routes",
+      "test_an_offer_is_added_and_withdrawn_in_the_callers_name_when_the_switch_is_on",
+    ),
+  },
+  "POST /api/v1/agents/{agent_id}/audience/removals": {
+    row: PROFILE_SWITCHES_PRESSED,
+    audit: AN_OFFER_IS_ITS_OWN_RECORD,
+    behaviour: t(
+      "test_agent_audience_routes",
+      "test_withdrawing_what_was_never_offered_says_so_and_writes_nothing",
+    ),
+  },
+  "POST /api/v1/agents/{agent_id}/learning": {
+    row: PROFILE_SWITCHES_PRESSED,
+    audit: A_PAUSE_IS_ITS_OWN_RECORD,
+    behaviour: t(
+      "test_agent_lifecycle_routes",
+      "test_an_agents_learning_is_paused_and_resumed_by_who_may_switch_it_off",
+    ),
   },
   "POST /api/v1/agents/{agent_id}/channels": {
     row: CHANNELS_PRESSED,

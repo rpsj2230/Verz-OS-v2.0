@@ -316,6 +316,8 @@ export interface DraftPublished {
   readonly agentId: string;
   readonly sentence: string;
   readonly widened: readonly string[];
+  /** Set when the publish waits for its cost (M20.5.2): both figures, in minor units, and their unit. */
+  readonly held?: { readonly costMinor: number; readonly ceilingMinor: number; readonly currency: string };
 }
 
 export function readPublished(payload: unknown): DraftPublished | null {
@@ -326,7 +328,14 @@ export function readPublished(payload: unknown): DraftPublished | null {
   if (!fields || state === undefined || agentId === undefined || sentence === undefined) {
     return null;
   }
-  return { state, agentId, sentence, widened: words(fields["widened"]) };
+  const cost = fields["cost_minor"];
+  const ceiling = fields["ceiling_minor"];
+  const currency = said(fields["currency"]);
+  const held =
+    fields["held_for_cost"] === true && typeof cost === "number" && typeof ceiling === "number" && currency !== undefined
+      ? { held: { costMinor: cost, ceilingMinor: ceiling, currency } }
+      : {};
+  return { state, agentId, sentence, widened: words(fields["widened"]), ...held };
 }
 
 /** The draft an answer started or opened, by id, or null. */
