@@ -124,6 +124,11 @@ function measure(): Measured {
 
 /** Every leaf id the work breakdown holds. */
 function leaves(): Set<string> {
+  if (!existsSync(join(REPO_ROOT, "docs", "wbs.json"))) {
+    throw new Error(
+      "docs/wbs.json is generated from docs/wbs/*.js and is not committed, so run `uv run python -m brain.ops.wbs_generate` (or `node docs/wbs/export.js`) first.",
+    );
+  }
   const wbs = JSON.parse(readRepoFile("docs/wbs.json")) as { modules: { leaf_ids: string[] }[] };
   return new Set(wbs.modules.flatMap((one) => one.leaf_ids));
 }

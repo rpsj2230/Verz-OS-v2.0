@@ -30,7 +30,7 @@ jobs:
   # Which kind of change this is. A change that touches only the task list (the work breakdown,
   # its compiled JSON, the tracker page, the delivery checklist and the requirements register)
   # cannot change what the product does, so it skips the suites that test the product and runs
-  # only the checks that read those files: the tracker regenerates to what is committed, every
+  # only the checks that read those files: the plan generates from its sources, every
   # requirement names a task and a proof, and the tests that read task sentences pass. Measured on
   # 2026-09-17: a task-list change waited 15 to 20 minutes per CI run for suites it cannot affect,
   # twice per change (the pull request and main), and the owner asked for it to take minutes.
@@ -614,6 +614,10 @@ jobs:
       - name: Import boundaries
         working-directory: console
         run: npm run check:boundaries
+      - name: Generate the work breakdown's files
+        # The console audit test reads the leaf ids from `docs/wbs.json`, which is generated and
+        # not committed (brain.ops.wbs_generate).
+        run: python3 src/brain/ops/wbs_generate.py
       - name: Tests
         working-directory: console
         run: npm run test -- --run
@@ -639,13 +643,25 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Regenerate and diff
-        # The committed tracker must be reproducible from the WBS. If someone edits the
-        # generated HTML by hand, this fails rather than letting the two drift apart.
+      - name: Generate the work breakdown's files from its sources
+        # `docs/wbs.json`, `docs/tracker.html` and `docs/wave-windows.json` are not committed:
+        # every pull request that regenerated them conflicted with every other one, and a
+        # conflicted pull request gets no CI. This job used to regenerate them and diff against
+        # the committed copy; now it makes them and fails when the generator refuses the
+        # sources (an id in progress.js that names no leaf, an act whose sentence changed, a
+        # syntax error), which is the disagreement that diff was there to find. The script is
+        # standard library only, so it runs before any environment is built.
+        run: python3 src/brain/ops/wbs_generate.py
+      - name: A pull request does not carry the generated files
+        # A warning and not a failure, so a pull request branched before they stopped being
+        # committed is not blocked: merge main, then `git rm --cached docs/wbs.json
+        # docs/tracker.html docs/wave-windows.json`. Their being ignored is held by
+        # tests/unit/test_wbs_generate.py.
         run: |
-          node docs/wbs/export.js
-          node docs/wbs/render.js
-          git diff --exit-code -- docs/tracker.html docs/wbs.json docs/wave-windows.json             || { echo "::error::docs/tracker.html is out of date - run node docs/wbs/render.js"; exit 1; }
+          tracked=$(git ls-files -- docs/wbs.json docs/tracker.html docs/wave-windows.json)
+          if [ -n "$tracked" ]; then
+            echo "::warning::these are generated and must not be committed, run git rm --cached on them: $tracked"
+          fi
       - uses: astral-sh/setup-uv@v5
         if: ${{ needs.changes.outputs.tasks_only == 'true' }}
         with:
@@ -815,6 +831,11 @@ jobs:
       BRAIN_ENV: staging
     steps:
       - uses: actions/checkout@v4
+      - name: Generate the work breakdown's files the image carries
+        # The tracker and the plan are generated and not committed (brain.ops.wbs_generate);
+        # the deploy workflow makes them before its build for the same reason, and the
+        # `/build/tracker` check below asks the built image for the page.
+        run: python3 src/brain/ops/wbs_generate.py
       - name: Build the image the way production builds it
         run: docker build --build-arg COMMIT_SHA=ci-test -t brain:ci .
       - name: Bring the full stack up

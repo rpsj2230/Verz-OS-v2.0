@@ -331,6 +331,39 @@ number from one run on one runner: a test that gets slower is found by the next 
 the next shard, and a refresh that finds a file above a shard's share is the cue to speed it up or
 split it.
 
+## What is generated, and where each file gets made
+
+`docs/wbs.json`, `docs/tracker.html` and `docs/wave-windows.json` are generated from `docs/wbs/*.js`
+and are **not committed** (2026-10-19). Committing them made every pull request that touched a task
+conflict with every other one, in files nobody had edited by hand, and a conflicted pull request
+gets no CI. A pull request changes the sources only and must not `git add` the three files; they
+are in `.gitignore`. `docs/status.json` was already generated and ignored.
+
+| Where | How the files get there |
+| --- | --- |
+| The unit shards, the invariants, coverage, the nightly suite, the pre-push hook | `tests/conftest.py` makes them before collection, in 0.2 seconds, from the sources in the checkout |
+| `brain.ops.sweeps traceability` (CI sweeps job, pre-push) | makes them itself before reading the plan |
+| The `Tracker matches the WBS` job | `python3 src/brain/ops/wbs_generate.py`, which fails with the scripts' own reason when a source is refused; warns if a pull request still tracks the files |
+| The console job and the full-stack job | the same command, as a step before the console tests and before `docker build` |
+| The image Deploy builds | `deploy.yml` runs `export.js` and `render.js` before the build, as it always did |
+| A developer | `uv run python -m brain.ops.wbs_generate` |
+
+A reader that finds a file missing says so in one sentence naming that command
+(`GeneratedFileMissing`), so an absent plan never reads as an empty one. The mechanism, and the
+designs rejected (a bot committing the output to main, and keeping the diff job), are in the
+docstring of `src/brain/ops/wbs_generate.py`. The runners rely on the `node` that `ubuntu-latest`
+ships; the files need nothing newer than Node 20.
+
+A pull request branched before this change goes dirty when it merges, because main deleted files it
+modified. Merge `origin/main`, run `git rm --cached -f docs/wbs.json docs/tracker.html
+docs/wave-windows.json`, commit and push.
+
+Still committed, each for a reason: `docs/console-audit/` is rendered by the console's own
+toolchain from the live API schema and is already split one file per area; `docs/delivery-checklist.md`
+changes only with `docs/wbs/acts.js` (once in the last 600 commits) and a test holds it to the
+generator; `ops/install/install.sh`, `ops/update/*.sh`, `ops/openbao/apply-release.sh` and
+`docker-compose.full.yml` are what a client install runs, so they have to be in the repository.
+
 ## Rollback
 
 Images are tagged by commit SHA, so rolling back is redeploying an older tag - set
