@@ -38,11 +38,26 @@ const LIVE_RUNS = {
   no_run_can_be_stopped: true,
 };
 
+/** One action a stopped worker left unconfirmed, with unbreakable names so the phone check sees them. */
+const INTERRUPTED = {
+  as_of: "2019-03-04T09:00:00Z",
+  operations: [
+    {
+      key: "0".repeat(64),
+      connector: UNBROKEN,
+      tool: UNBROKEN,
+      state: "unknown",
+      since: "2019-03-04T08:00:00Z",
+      standing: UNBROKEN,
+    },
+  ],
+};
+
 export const PAGES: Readonly<Record<string, PageCase>> = {
   "/runs": {
     address: "/runs",
     signedIn: true,
     drawsValues: true,
-    answers: { "/api/v1/operate/runs": LIVE_RUNS },
+    answers: { "/api/v1/operate/runs": LIVE_RUNS, "/api/v1/operations/interrupted": INTERRUPTED },
   },
 };

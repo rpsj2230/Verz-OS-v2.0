@@ -14,27 +14,39 @@
  * **What was removed.** The control identifiers as the rows' names, the "What this screen cannot
  * show" card and its three paragraphs, and the "What it keeps true" column (on each job's page).
  *
- * Task ids: M27.2.2, M27.2.6, M27.16.1
+ * **A third list, below the two: the actions a stopped worker left unconfirmed (M27.15.46).** It is
+ * its own read (`brain.operation_routes`), so a failure of it draws a failure under the other two
+ * and never replaces them.
+ *
+ * Task ids: M27.2.2, M27.2.6, M27.16.1, M27.15.46
  */
 
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
-import { Note, type EntityColumn } from "../../components/kit";
+import { FailureState, Note, type EntityColumn } from "../../components/kit";
 import { jobAddress } from "../jobsQuery";
 import {
   ACTING,
   durationWords,
   FIRST_RUN,
+  INTERRUPTED_API_PATH,
+  INTERRUPTED_CAPTION,
+  INTERRUPTED_HEADING,
+  interruptedStateWords,
   LIVE_RUNS_API_PATH,
   LIVE_RUNS_LABEL,
   LIVE_RUNS_LEDE,
   LOADING_RUNS,
   NO_RUN_CAN_BE_STOPPED,
+  NOTHING_INTERRUPTED,
+  NOTHING_INTERRUPTED_MORE,
+  NOTHING_IS_SENT_AGAIN_FROM_HERE,
   NOTHING_RUNNING,
   NOTHING_RUNNING_MORE,
   NOTHING_WAITING,
   NOTHING_WAITING_MORE,
   QUEUE_IS_NOT_READABLE,
+  readInterrupted,
   readLiveRuns,
   REPORT_ONLY,
   REQUESTS_IN_FLIGHT_ARE_NOT_RECORDED,
@@ -44,6 +56,7 @@ import {
   stalledNote,
   WAITING_CAPTION,
   WAITING_HEADING,
+  type InterruptedAction,
   type OwedControl,
   type RunningControl,
 } from "../liveRunsQuery";
@@ -55,6 +68,39 @@ function JobLink({ control }: { readonly control: string }) {
     <Link to={jobAddress(control)} className="font-medium text-ink underline-offset-4 hover:text-acc-text hover:underline">
       {jobName(control)}
     </Link>
+  );
+}
+
+/** The actions a stopped worker left unconfirmed, by state, answered whole and narrowed per reader. */
+function InterruptedActions() {
+  const answer = useResource<unknown>(INTERRUPTED_API_PATH);
+  if (answer.failure !== null) {
+    return <FailureState failure={answer.failure} />;
+  }
+  const body = answer.data === null ? null : readInterrupted(answer.data);
+  if (body === null) {
+    return null;
+  }
+  const columns: readonly EntityColumn<InterruptedAction>[] = [
+    { id: "tool", header: "Action", hideable: false, cell: (row) => <span className="font-medium text-ink">{row.tool}</span>, text: (row) => row.tool },
+    { id: "connector", header: "Sent to", cell: (row) => row.connector, text: (row) => row.connector },
+    { id: "state", header: "State", cell: (row) => interruptedStateWords(row.state), text: (row) => interruptedStateWords(row.state) },
+    { id: "since", header: "Since", cell: (row) => at(row.since), text: (row) => row.since },
+    { id: "learnt", header: "What was found", cell: (row) => row.standing, text: (row) => row.standing },
+  ];
+  return (
+    <WholeList
+      title={INTERRUPTED_HEADING}
+      caption={INTERRUPTED_CAPTION}
+      columns={columns}
+      rows={body.operations}
+      rowId={(row) => row.key}
+      rowLabel={(row) => row.tool}
+      exportName="actions-waiting-for-a-person"
+      empty={NOTHING_INTERRUPTED}
+      emptyDescription={NOTHING_INTERRUPTED_MORE}
+      footer={body.operations.length === 0 ? null : <Note>{NOTHING_IS_SENT_AGAIN_FROM_HERE}</Note>}
+    />
   );
 }
 
@@ -128,6 +174,7 @@ export function LiveRunsPage() {
               empty={NOTHING_WAITING}
               emptyDescription={NOTHING_WAITING_MORE}
             />
+            <InterruptedActions />
             <div className="flex flex-col gap-1.5">
               {page.requests_in_flight_are_not_recorded === false ? null : <Note>{REQUESTS_IN_FLIGHT_ARE_NOT_RECORDED}</Note>}
               {page.queue_is_not_readable === false ? null : <Note>{QUEUE_IS_NOT_READABLE}</Note>}
