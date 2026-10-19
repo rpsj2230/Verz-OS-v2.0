@@ -53,7 +53,7 @@ function Retire({ agentId, item, onDone }: { readonly agentId: string; readonly 
     <>
       {failure === null ? null : <FailureNotice failure={failure} fields={LIFECYCLE_FIELDS} />}
       <Button
-        variant="ghost"
+        variant="quiet"
         size="xs"
         className="min-h-11 sm:min-h-6"
         onClick={() => {
@@ -143,7 +143,7 @@ export function ItemActs({ agentId, item, onChanged }: { readonly agentId: strin
       <div className="flex flex-wrap items-center gap-2">
         {item.canRefetch ? (
           <Button
-            variant="ghost"
+            variant="quiet"
             size="xs"
             className="min-h-11 sm:min-h-6"
             aria-expanded={fetching}

@@ -466,6 +466,10 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.identity.staff_source:StaffSource.roster": Repeat.READS,
         # Knowledge: parsing, embedding and reading rows.
         "brain.knowledge.embed_queue:EmbeddingService.embed": Repeat.NO_EFFECT_AT_THE_FAR_END,
+        # A document or a text sent to a part of the model server, which answers what it read and
+        # keeps nothing of it: the part writes the document to a file of its own and deletes it
+        # before it answers.
+        "brain.knowledge.model_server_parsers:Caller.ask": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.knowledge.parse_layout:LayoutService.layout": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.knowledge.parse_ocr:OcrEngine.read": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.knowledge.rows:RowSource.rows": Repeat.READS,
@@ -903,6 +907,12 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.recovery_run:QueueRows.failed": Repeat.READS,
         "brain.ops.recovery_run:QueueRows.run_again": Repeat.ENQUEUES_WORK,
         "brain.ops.recovery_run:QueueRows.set_aside": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # A person's ask to run a set-aside job again. A second put-back of a job already moved is
+        # refused by the status read before the driver is asked, and a second answer overwrites
+        # the first with the same meaning, so neither does anything twice.
+        "brain.ops.redrive_control:AskedRedrives.asks": Repeat.READS,
+        "brain.ops.redrive_control:AskedRedrives.put_back": Repeat.ENQUEUES_WORK,
+        "brain.ops.redrive_control:AskedRedrives.answer": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.recovery_run:OperationRecords.unsettled": Repeat.READS,
         "brain.ops.recovery_run:OperationRecords.settle": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         # The evening digest's destination and its send (M38.3.3): a channel's list of the

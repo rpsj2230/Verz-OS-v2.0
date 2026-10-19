@@ -311,7 +311,7 @@ def test_0261_copies_the_grammars_and_widths_the_model_holds() -> None:
     assert migration.AGENT_ID_CHARS == 60
     assert TemplateVersionChange.WITHDRAWN.value == migration.WITHDRAWN_WORD
     assert TemplateVersionChange.WITHDRAWAL_UNDONE.value == migration.UNDONE_WORD
-    assert migration.down_revision == "0241"
+    assert migration.down_revision == "0250"
 
 
 def test_0261_builds_the_table_exactly_as_the_model_declares_it() -> None:

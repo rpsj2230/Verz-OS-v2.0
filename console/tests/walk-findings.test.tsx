@@ -67,11 +67,11 @@ describe("the confirm dialog's button", () => {
     // is accepted and ignored, or every confirmation loses its danger colour.
     const props = { question: "Go?", consequence: "It goes.", cancelLabel: "Keep", onConfirm: vi.fn(), onCancel: vi.fn() };
     const { unmount } = render(<ConfirmDialog open {...props} confirmLabel="Remove" />);
-    expect(screen.getByRole("button", { name: "Remove" }).getAttribute("data-variant")).toBe("destructive");
+    expect(screen.getByRole("button", { name: "Remove" }).getAttribute("data-variant")).toBe("danger");
     unmount();
     render(<ConfirmDialog open {...props} confirmLabel="Switch on" danger={false} />);
     const plain = screen.getByRole("button", { name: "Switch on" });
-    expect(plain.getAttribute("data-variant")).toBe("default");
+    expect(plain.getAttribute("data-variant")).toBe("primary");
     fireEvent.click(plain);
     expect(props.onConfirm).toHaveBeenCalledTimes(1);
   });

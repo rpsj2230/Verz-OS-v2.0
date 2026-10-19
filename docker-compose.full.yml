@@ -16,7 +16,6 @@
 #   docker-compose.objectstore.yml
 #   docker-compose.keycloak.yml
 #   docker-compose.langfuse.yml
-#   docker-compose.inference.yml
 #   docker-compose.automation.yml
 #   docker-compose.matcher.yml
 #   docker-compose.presidio.yml
@@ -92,6 +91,10 @@ services:
       INSTALL_DIGEST_TIME: ${INSTALL_DIGEST_TIME:-}
       INSTALL_ALERT_EMAIL: ${INSTALL_ALERT_EMAIL:-}
       INSTALL_SERVICES: ${INSTALL_SERVICES:-}
+      INSTALL_MODEL_PARTS: ${INSTALL_MODEL_PARTS:-}
+      INSTALL_MODEL_IDLE_SECONDS: ${INSTALL_MODEL_IDLE_SECONDS:-}
+      INSTALL_MODEL_MEMORY_MIB: ${INSTALL_MODEL_MEMORY_MIB:-}
+      INSTALL_MODEL_UPLOAD_MB: ${INSTALL_MODEL_UPLOAD_MB:-}
       INSTALL_UPDATE_MODE: ${INSTALL_UPDATE_MODE:-}
     deploy:
       resources:
@@ -212,6 +215,10 @@ services:
       INSTALL_DIGEST_TIME: ${INSTALL_DIGEST_TIME:-}
       INSTALL_ALERT_EMAIL: ${INSTALL_ALERT_EMAIL:-}
       INSTALL_SERVICES: ${INSTALL_SERVICES:-}
+      INSTALL_MODEL_PARTS: ${INSTALL_MODEL_PARTS:-}
+      INSTALL_MODEL_IDLE_SECONDS: ${INSTALL_MODEL_IDLE_SECONDS:-}
+      INSTALL_MODEL_MEMORY_MIB: ${INSTALL_MODEL_MEMORY_MIB:-}
+      INSTALL_MODEL_UPLOAD_MB: ${INSTALL_MODEL_UPLOAD_MB:-}
       INSTALL_UPDATE_MODE: ${INSTALL_UPDATE_MODE:-}
       INSTALL_TIME_ZONE: ${INSTALL_TIME_ZONE:-}
       INSTALL_OIDC_ISSUER: ${INSTALL_OIDC_ISSUER:-}
@@ -622,40 +629,6 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
-  inference-server:
-    image: ${INFERENCE_IMAGE:?set INFERENCE_IMAGE; no image is published for this service yet}
-    restart: unless-stopped
-    networks:
-    - inference
-    environment:
-      INFERENCE_MAX_REQUEST_BYTES: '67108864'
-      INFERENCE_REQUESTS_AT_ONCE: '1'
-      INFERENCE_EMBEDDING_MODEL: qwen3-embedding-0.6b
-      INFERENCE_ENTITY_MODEL: gliner
-      INFERENCE_PARSING_MODEL: docling-layout-and-tableformer
-      INFERENCE_MODEL_DIR: /models
-      HF_HUB_OFFLINE: '1'
-      OMP_NUM_THREADS: '2'
-      MALLOC_ARENA_MAX: '2'
-      PYTHONUNBUFFERED: '1'
-    volumes:
-    - inference-models:/models:ro
-    expose:
-    - '8080'
-    healthcheck:
-      test:
-      - CMD
-      - python
-      - -m
-      - inference_server.ready
-      interval: 20s
-      timeout: 10s
-      retries: 10
-      start_period: 180s
-    deploy:
-      resources:
-        limits:
-          memory: 3072M
   activepieces:
     image: activepieces/activepieces:0.39.5
     restart: unless-stopped
@@ -802,8 +775,6 @@ networks:
   proxy:
     external: true
     name: coolify
-  inference:
-    internal: true
   automation:
     internal: true
   egress: null
@@ -817,7 +788,6 @@ volumes:
   realm-import: null
   keycloak-vault: null
   langfuse-clickhouse: null
-  inference-models: null
   automation-db: null
   matcher-exports: null
   matcher-suggestions: null

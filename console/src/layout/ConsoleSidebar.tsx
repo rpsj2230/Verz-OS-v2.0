@@ -117,7 +117,7 @@ export function MenuButton() {
   return (
     <Button
       type="button"
-      variant="ghost"
+      variant="quiet"
       size="sm"
       data-sidebar="trigger"
       aria-expanded={isMobile ? openMobile : open}

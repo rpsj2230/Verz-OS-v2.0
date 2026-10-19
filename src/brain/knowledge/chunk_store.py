@@ -248,6 +248,10 @@ def chunk_row(chunk: Chunk, *, item: KnowledgeItem) -> dict[str, object]:
         "kind": chunk.kind.value,
         "title": item.title,
         "section": chunk.section,
+        # How the passage was read (M7.7.9): NULL for one written before reading was recorded and
+        # for one whose reader recorded nothing, which is what every earlier row holds.
+        "parse_path": chunk.path or None,
+        "parse_engine": chunk.engine or None,
         "page": chunk.page,
         "span_start": chunk.start,
         "span_end": chunk.end,

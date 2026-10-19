@@ -37,7 +37,7 @@ may delete one: `0056`'s reason.
 Task ids: M27.15.35
 
 Revision ID: 0261
-Revises: 0241
+Revises: 0250
 """
 
 from __future__ import annotations
@@ -46,9 +46,9 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0261"
-# Written over 0241, the newest on origin/main when it was written. The coordinator re-points it
+# Written over 0250, the newest on origin/main when it was re-pointed. The coordinator re-points it
 # when the migration train is built, as every migration landed in a train is.
-down_revision = "0241"
+down_revision = "0250"
 branch_labels = None
 depends_on = None
 

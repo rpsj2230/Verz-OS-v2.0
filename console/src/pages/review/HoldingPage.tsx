@@ -114,7 +114,7 @@ export function HoldingPage({ kind, rowId }: { readonly kind: string; readonly r
                   <Button
                     key={decision}
                     size="sm"
-                    variant={decision === "remove" ? "destructive" : "default"}
+                    variant={decision === "remove" ? "danger" : "primary"}
                     className="min-h-11 sm:min-h-8"
                     disabled={acts.busy}
                     onClick={() => {

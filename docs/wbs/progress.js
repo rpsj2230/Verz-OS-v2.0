@@ -109,6 +109,16 @@ const PROGRESS = {
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
     updated: "2026-10-13",
   },
+  "M27.15.46": {
+    status: "IN PROGRESS",
+    why: "BUILT AND TESTED: Runs and queue lists what is running and what is owed, and now a third list, Actions waiting for a person, by state in words with what was found and the line that nothing there is sent again. NOT BUILT: resolving an unknown side effect with a confirmation naming the operation, because whether a person may resolve one at all is needs-rupash item 188 (point 5). Install proof: open Runs and queue and read the list; with nothing interrupted it says so.",
+    updated: "2026-10-14",
+  },
+  "M27.15.49": {
+    status: "BLOCKED",
+    why: "Part built: saving a setting needs the settings authority over everything and is refused before the database without it (tested). The rest, an identity provider change that re-derives its redirect addresses and an embedding size that refuses a change once anything is embedded, waits on needs-rupash item 188 (point 2): both values are read-only on Settings because changing either from a browser can lock every person out, and the owner has not said whether to build the change or move it to the installer.",
+    updated: "2026-10-14",
+  },
   "M27.15.42": {
     status: "READY FOR TESTING",
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
@@ -153,6 +163,16 @@ const PROGRESS = {
     status: "READY FOR TESTING",
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
     updated: "2026-10-13",
+  },
+  "M27.13.3": {
+    status: "IN PROGRESS",
+    why: "BUILT AND TESTED, behind the job_redrive switch that ships off: on Background jobs, under Jobs set aside for a person, an administrator holding the schedule's authority presses Run again, confirms a dialog that names the job, and the worker puts that one failed job back on its queue with the arguments it already had within a minute; the row then says when it did, or that the job was no longer waiting. Runs and queue also lists the actions a stopped worker left unconfirmed, by state. NOT BUILT: a person marking an unknown side effect resolved by their word, which waits on needs-rupash item 188 (point 5), because it would replace the check against the other system. Install proof once the switch is on under Features: set a test job aside, press Run again, wait a minute, read the row's answer and the audit log entry naming you.",
+    updated: "2026-10-14",
+  },
+  "M27.13.5": {
+    status: "BLOCKED",
+    why: "Waits on needs-rupash item 235: nothing the product runs can start the container a backup drill needs, so a Start button would reach nothing, which item 44 and docs/admin-console.md refuse. The item names three ways to make it real and recommends one.",
+    updated: "2026-10-14",
   },
   "M27.12.8": {
     status: "READY FOR TESTING",
@@ -750,9 +770,9 @@ const PROGRESS = {
     updated: "2026-10-14",
   },
   "M32.2.1.2": {
-    status: "BLOCKED",
-    why: "waits on memory for the model server that serves GLiNER: 3,840 MB wanted with its worker and file store, 248 MB unclaimed, measured 2026-09-30 (needs-rupash 120, row 2). PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.inference, ops.pii); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-g4",
-    updated: "2026-09-30",
+    status: "IN PROGRESS",
+    why: "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14): the model server is an optional service that holds one part at a time, and the entity finder is one of its parts (1,408 MiB by arithmetic, not measured). Built: the server frame; the entity part's backend (GLiNER, written from its published interface and never run against it, reading long text in overlapping windows and returning only the labels asked for); the egress leg that asks it, added beside the analyser's and only ever adding to the rules' scrub, with a longer budget of its own and the rules' scrub standing whenever the part is down, loading or unreadable; and an install check that sends the part a sentence with a three-word name. Not built: GLiNER run for real (the image is unbuilt and the checkpoint is not fetched or pinned, needs-rupash 235). The first call after the part has been idle waits on a model load longer than the leg's budget and is scrubbed by the rules alone, so a longer idle time keeps the part loaded. PRIOR WORK: ops.inference, ops.pii (the wire contract and the merge), ops.egress",
+    updated: "2026-10-14",
   },
   "M38.2.1.1": {
     status: "READY FOR TESTING",
@@ -805,9 +825,9 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M7.2.1": {
-    status: "BLOCKED",
-    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120). PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in ops.inference; NOT wired: knowledge.parse_layout. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928",
-    updated: "2026-09-29",
+    status: "IN PROGRESS",
+    why: "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14): the model server is an optional service that holds one part at a time, and the layout part is one of them (1,344 MiB by arithmetic with documents up to 25 MB, not measured). Built: the server frame (supervisor, budget, switch, settings, measured peaks); the layout part's backend, written from Docling's published interface and never run against it; and the route that sends a queued upload to it before the reader in this process, with an outage left waiting in the queue and the path the read took returned with it. An install check sends the part a one-page PDF. Not built: Docling run for real (the image is unbuilt and unpublished, needs-rupash 235); the path stored beside each passage and shown in a citation (the columns exist, nothing writes them). PRIOR WORK: knowledge.parse_layout (the contract), ops.inference",
+    updated: "2026-10-14",
   },
   "M7.2.2": {
     status: "READY FOR TESTING",
@@ -815,14 +835,14 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M7.2.3": {
-    status: "BLOCKED",
-    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120). PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (knowledge.parse_paths); open for proof on the install or a decision, not for code",
-    updated: "2026-09-29",
+    status: "IN PROGRESS",
+    why: "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14): the general reader is one part of the optional model server (a JVM, 832 MiB by arithmetic, not measured). Built: the server frame; the fallback route's rule and its use in the ingest job (a presentation goes layout then this reader, and an outage waits in the queue instead of ending the file); the part's backend, which starts Tika's server and asks it for plain text only, never metadata, written from Tika's documentation and never run against it. An install check sends it a one-page PDF. Not built: Tika run for real (the image is unbuilt, needs-rupash 235), and a check that sends it a format the layout part cannot open, which is what the leaf is for. PRIOR WORK: knowledge.parse_paths",
+    updated: "2026-10-14",
   },
   "M7.2.4": {
-    status: "BLOCKED",
-    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120). PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: knowledge.parse_ocr name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
-    updated: "2026-09-29",
+    status: "IN PROGRESS",
+    why: "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14): the scanned-page reader is one part of the optional model server (Tesseract, 576 MiB by arithmetic, not measured). Built: the server frame; the part's backend (a PDF page rendered and recognised one at a time, with a confidence for every page, written from the libraries' published interfaces and never run against them); the route that sends a scan to it last, after the layout part and the reader in this process; and the door that now accepts a photograph when this part is chosen, after the structural check judges its header (a header claiming more pixels than any page has is refused). An install check renders and recognises a one-page PDF. Not built: the libraries run for real (the image is unbuilt, needs-rupash 235), and a check of a real scan. PRIOR WORK: knowledge.parse_ocr (the contract, now wired)",
+    updated: "2026-10-14",
   },
   "M7.2.5": {
     status: "READY FOR TESTING",
@@ -845,19 +865,19 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M7.3.3": {
-    status: "BLOCKED",
-    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120). PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (knowledge.embed, knowledge.embed_policy, knowledge.embed_queue +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928",
-    updated: "2026-09-29",
+    status: "IN PROGRESS",
+    why: "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14): the embedding part is the default and the smallest of the model server's parts (Qwen3-Embedding-0.6B at 8 bits, 1,088 MiB by arithmetic, not measured). Built: the server frame (supervisor, budget, switch, settings, measured peaks, two install checks of the frame); the embedding part's backend (written from llama.cpp's published interface and never run against it, stating the weights' own revision); the worker passing what its clients were told of the server's memory to the table, and writing it even when the job failed; the model server screen showing the revision the server holds beside the one the install declares; and an install check that the two are the same. Not built: the part run for real (the image is unbuilt and the weights are not fetched, needs-rupash 235), and so no passage embedded by it on an install. PRIOR WORK: knowledge.embed, embed_policy, embed_queue, ops.inference_client",
+    updated: "2026-10-14",
   },
   "M7.3.4": {
-    status: "BLOCKED",
-    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120). PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (knowledge.embed_queue); open for proof on the install or a decision, not for code",
-    updated: "2026-09-29",
+    status: "IN PROGRESS",
+    why: "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14). The queue exists and tolerates a server that is down by design: a part not loaded, a host without room and a busy server all answer as an outage, so the work waits and nothing is lost, and the product's client and the real gateway and supervisor are exercised against each other over a loopback socket in tests with the library stood in. Not yet: a batch sent to a real embedding part on an install (needs-rupash 235). PRIOR WORK: knowledge.embed_queue",
+    updated: "2026-10-14",
   },
   "M7.3.5": {
-    status: "BLOCKED",
-    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120). PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (knowledge.embedding); open for proof on the install or a decision, not for code",
-    updated: "2026-09-29",
+    status: "IN PROGRESS",
+    why: "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14). The rebuild command and the plan are built (knowledge.reembed), and the embedding part it sends to now exists; a rebuild run on an install whose server answers is what proves it, and that waits on the image (needs-rupash 235). PRIOR WORK: knowledge.embedding, knowledge.reembed",
+    updated: "2026-10-14",
   },
   "M7.4.1": {
     status: "READY FOR TESTING",
@@ -930,14 +950,14 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M7.7.10": {
-    status: "BLOCKED",
-    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
-    updated: "2026-09-29",
+    status: "IN PROGRESS",
+    why: "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14). Built: a scanned page under the confidence floor is left out of the index, page by page, with every later offset laid out again for what stayed; the parser hands the pages it left out to the knowledge layer (`ReadWithGaps`, `ParsedDocument.left_out_pages`) with the uploader's wording for them (`left_out_notice`), a page with no recognised word is not named; the pages are kept on the item (`know.item.parse_notice`) and said on the ticket (\"was added. Page 2 was not clear enough...\"); the blank pages of a PDF the layout part read are read by the scanned-page part and the same floor applies to them. Proved against a real PostgreSQL over answers made up for the test. Not built: the notice shown on a screen, and the scanned-page part run for real (needs-rupash 235). PRIOR WORK: knowledge.parse_ocr",
+    updated: "2026-10-14",
   },
   "M7.7.11": {
-    status: "BLOCKED",
-    why: "waits on the owner's choice of upload limit, which sizes the model server; the model server reads 64 MB a document as sized (needs-rupash 119). PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (knowledge.app_parse_budget); open for proof on the install or a decision, not for code",
-    updated: "2026-09-29",
+    status: "IN PROGRESS",
+    why: "The owner's choice is made (needs-rupash 119, 25 MB for every document type) and is the model server's default upload setting; the server's memory follows it, and a larger document makes a larger server. Built: the setting and its sizing; the worker's start-up finding that the door admits more than the server is sized for, against the ceiling the install's own parts and upload size give and said only for an install whose server reads documents; and an install check that holds the memory peaks the server has recorded against its limit. Not built: a check that sends the largest upload the install admits through a part, which would cost minutes on every update; peaks are only recorded for documents once the worker keeps them (the next piece). PRIOR WORK: knowledge.app_parse_budget",
+    updated: "2026-10-14",
   },
   "M7.7.2": {
     status: "READY FOR TESTING",
@@ -950,14 +970,14 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M7.7.8": {
-    status: "BLOCKED",
-    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
-    updated: "2026-09-29",
+    status: "IN PROGRESS",
+    why: "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14). Not blocked on memory. Every vector already records its model (know.chunk.embedding_model, migration 0010) and a search never compares two models; while a rebuild runs, answers come from word search alone, which is what is built. The owner's sentence says the previous vectors keep serving, which the product decided against and put to him as needs-rupash 186 (still open; Option B builds it with a second column and one migration). PRIOR WORK: knowledge.embedding, knowledge.reembed",
+    updated: "2026-10-14",
   },
   "M7.7.9": {
-    status: "BLOCKED",
-    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
-    updated: "2026-09-29",
+    status: "IN PROGRESS",
+    why: "The memory wait is over by design (needs-rupash 120, redrawn 2026-10-14). Built: every block, passage and chunk row carries the path and engine that read it, set by the route and never by the reader's answer and closed to three words and a bounded name; a PDF read two ways (text pages by layout, a photographed page by the scanned-page part) is stored passage by passage saying which read each, written to know.chunk.parse_path and parse_engine (migration 0250) and checked against a real PostgreSQL and by an install check. Not built: **no citation or screen says how a passage was read yet**, which means carrying the column through retrieval, the field policy that decides what a reader is shown, DocumentCitation and its rendering, a change to the surface that decides what a reader may be told and wanting its own review. PRIOR WORK: knowledge.parse_paths, knowledge.parse_ocr",
+    updated: "2026-10-14",
   },
   "M8.1.1": {
     status: "IN PROGRESS",
@@ -4928,6 +4948,26 @@ const PROGRESS = {
     status: "READY FOR TESTING",
     why: "built (M27/agent-reads-and-template-withdrawal, migration 0261): an administrator withdraws a published template version with a reason and puts it back, each an inserted row and a ledger entry; a withdrawn version leaves the gallery, its install page and agents' upgrade offers while agents installed from it stay as they were; a version is saved as a signed document and a document from another install is read, then added once, signed again by this install; all behind the template_withdrawal switch, which ships off (needs-rupash 236 asks whether installs should prove origin to each other). Proved on the install with the check 'A withdrawn version is not offered and agents stay pinned'; by hand: turn the switch on in Features, open a template, withdraw its newest version with a reason, see the version before it offered and an agent made from it unchanged, then put it back from Agent templates",
     updated: "2026-10-15",
+  },
+  "M27.15.68": {
+    status: "READY FOR TESTING",
+    why: "Built on branch M27/console-lists-wizards-buttons. Prove it on the install. (1) Sign in as an administrator, open Agent templates and a published template. The Install card is now a short wizard, Step 1 of 3 or 4: its name, who can find it, where it answers (only when the version offers channels), then Check and install. Type a new name, tick For my department, press Next. (2) Go to another page, such as Agents, then come back to the same template: you are on the same step with the same answers, and a line says you are back where you left. (3) On the last step press Install: a confirmation names what will be installed, and nothing is sent until you confirm; the new agent opens disabled. Back on the template the install is blank again. (4) Press Start again part way through and it empties; sign out and sign in as somebody else and nothing the first person typed is there. (5) First run on a fresh install: enter the setup code, finish the company screen, close the tab, reopen the first-run address, enter the same code and you land on the next screen with the company answers still in the boxes. A provider key typed on its screen is not kept.",
+    updated: "2026-10-14",
+  },
+  "M27.15.71": {
+    status: "READY FOR TESTING",
+    why: "Built on branch M27/console-lists-wizards-buttons. Prove it on the install. (1) On any page with both a Cancel and an act that removes or stops something (Stop, a retention hold, a review decision), the main act is the filled accent button, Cancel is the quiet button with no border, and the removing act is the red-washed danger button, each visibly different. (2) Open the console home: the figures are tiles, Needs you and Recent activity are each a card with its own heading, as on the first screen of the key screens design. The Overview already drew these; this task names the three button variants, moves every page onto them and holds that with a check.",
+    updated: "2026-10-14",
+  },
+  "M27.16.2": {
+    status: "READY FOR TESTING",
+    why: "Built on branch M27/console-lists-wizards-buttons. Prove it on the install. (1) Open any page of the console and read it as an administrator would: no long unique codes, no table names, no snake_case names and no words such as API, JSON or endpoint outside the collapsed Advanced section, except on the few pages that exist to show one (tool names, the address to paste into a chat vendor, adding an API connector). (2) Stop and Rules say when something was stopped or added and not an id; a channel's set-up fields read as words such as Reply address; a list's card no longer repeats the page title under it. (3) docs/console-cleanup.md lists each removal with its reason and each page that is excused with why.",
+    updated: "2026-10-14",
+  },
+  "M27.16.3": {
+    status: "READY FOR TESTING",
+    why: "Built on branch M27/console-lists-wizards-buttons. Prove it on the install. (1) Open Agents (or People, Skills, Connectors): the toolbar ends in Saved filters. Type a search, choose a filter, open Saved filters, give it a name and Save. Clear the search, reopen Saved filters and press the name: the list narrows to the same question. Reload the page and it is still there; sign in as somebody else and it is not. Audit and Logs have the same control beside their filters. (2) Every list table has Columns (hide one and it goes), Export (downloads a file of the rows shown, in the columns shown), a tick box on every row (Export selected appears), and a small panel button on each row that opens a drawer showing every column, including hidden ones. People, Sessions, Access review and the Library also offer an act on the ticked rows. (3) No list shows a total, a page count or an of N anywhere.",
+    updated: "2026-10-14",
   },
   "M12.3.5": {
     status: "READY FOR TESTING",

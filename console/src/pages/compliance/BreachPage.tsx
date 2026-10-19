@@ -121,7 +121,7 @@ function Case({ caseId, onDone, told, version }: { readonly caseId: string; read
                 </Button>
                 {open ? (
                   one.closable ? (
-                    <Button size="sm" variant="destructive" className="min-h-11 sm:min-h-8" disabled={closing.busy} onClick={closing.ask}>
+                    <Button size="sm" variant="danger" className="min-h-11 sm:min-h-8" disabled={closing.busy} onClick={closing.ask}>
                       {CLOSE_LABEL}
                     </Button>
                   ) : (

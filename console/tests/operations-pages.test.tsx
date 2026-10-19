@@ -201,15 +201,20 @@ function deadLetter(overrides: Record<string, unknown> = {}): Record<string, unk
     attempts: 1,
     set_aside_at: "2019-03-06T08:30:00Z",
     actionable: true,
+    run_again_asked_at: null,
+    run_again_standing: null,
     ...overrides,
   };
 }
 
-function deadLettersPage(items: Record<string, unknown>[]): Record<string, unknown> {
+function deadLettersPage(items: Record<string, unknown>[], overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     as_of: "2019-03-06T09:00:00Z",
     items,
     reasons: ["attempts_exhausted", "quarantined_after_a_stop"],
+    run_again_switched_on: false,
+    may_run_again: false,
+    ...overrides,
   };
 }
 
@@ -350,6 +355,90 @@ describe("Background jobs", () => {
     expect(mainText(failed.container)).not.toContain("Jobs set aside for a person");
   });
 
+  test("Run again on a job set aside is offered only when it is switched on, the reader holds the authority and the job can still be investigated", async () => {
+    // What breaks if this is deleted: a button for a reader who may not press it, one on an
+    // install that never switched it on, or one on a job whose references are gone.
+    const offered = async (page: Record<string, unknown>): Promise<boolean> => {
+      const { container } = await open("/jobs", {
+        "GET /api/v1/jobs": () => ({ body: jobsPage() }),
+        "GET /api/v1/jobs/dead": () => ({ body: page }),
+      });
+      return container.querySelector('button[aria-label="Run again: brain.controls.run"]') !== null;
+    };
+    expect(await offered(deadLettersPage([deadLetter()], { run_again_switched_on: true, may_run_again: true }))).toBe(true);
+    expect(await offered(deadLettersPage([deadLetter()], { run_again_switched_on: true, may_run_again: false }))).toBe(false);
+    expect(await offered(deadLettersPage([deadLetter()], { run_again_switched_on: false, may_run_again: true }))).toBe(false);
+    expect(
+      await offered(deadLettersPage([deadLetter({ actionable: false })], { run_again_switched_on: true, may_run_again: true })),
+    ).toBe(false);
+  });
+
+  test("a holder of the authority is told by name that Run again is switched off, and nobody else is", async () => {
+    // What breaks if this is deleted: a control that is simply missing, or a sentence about a
+    // switch shown to a reader who could do nothing about it.
+    const holder = await open("/jobs", {
+      "GET /api/v1/jobs": () => ({ body: jobsPage() }),
+      "GET /api/v1/jobs/dead": () => ({ body: deadLettersPage([deadLetter()], { may_run_again: true }) }),
+    });
+    expect(mainText(holder.container)).toContain("Running a job that was set aside again is switched off");
+    const other = await open("/jobs", {
+      "GET /api/v1/jobs": () => ({ body: jobsPage() }),
+      "GET /api/v1/jobs/dead": () => ({ body: deadLettersPage([deadLetter()]) }),
+    });
+    expect(mainText(other.container)).not.toContain("Running a job that was set aside again is switched off");
+  });
+
+  test("Run again names the job, says what the worker will do, sends one request from the dialog and asks the list again", async () => {
+    // What breaks if this is deleted: a press that sends without the question, for the wrong job,
+    // twice, or leaves the list saying nobody has asked.
+    let standing: string | null = null;
+    const { idp } = await open("/jobs", {
+      "GET /api/v1/jobs": () => ({ body: jobsPage() }),
+      "GET /api/v1/jobs/dead": () => ({
+        body: deadLettersPage([deadLetter({ run_again_standing: standing })], { run_again_switched_on: true, may_run_again: true }),
+      }),
+      "POST /api/v1/jobs/dead/41/redrive": () => {
+        standing = "Asked; the worker answers within a minute.";
+        return { body: { job_id: "41", asked_at: "2019-03-06T09:00:00Z", asked_by: "u_admin", standing } };
+      },
+    });
+    const listed = asked(idp).length;
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Run again: brain.controls.run" }));
+    });
+    const dialog = await screen.findByRole("alertdialog", { name: "Run brain.controls.run again?" });
+    expect(dialog.textContent).toContain("with the arguments it already had");
+    expect(dialog.textContent).toContain("look at what it had already done first");
+    expect(asked(idp, "POST")).toEqual([]);
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Run again" }));
+    });
+    await screen.findByText(/the worker puts the job back on its queue within a minute/i);
+    expect(asked(idp, "POST").map((url) => url.pathname)).toEqual(["/api/v1/jobs/dead/41/redrive"]);
+    await waitFor(() => expect(asked(idp).length).toBeGreaterThan(listed));
+    await screen.findByText("Asked; the worker answers within a minute.");
+  });
+
+  test("a refused Run again is drawn in the API's words and the dialog closes", async () => {
+    // What breaks if this is deleted: a refusal that leaves the dialog open and silent.
+    await open("/jobs", {
+      "GET /api/v1/jobs": () => ({ body: jobsPage() }),
+      "GET /api/v1/jobs/dead": () => ({
+        body: deadLettersPage([deadLetter()], { run_again_switched_on: true, may_run_again: true }),
+      }),
+      "POST /api/v1/jobs/dead/41/redrive": () => ({ status: 404, body: { message: "that job was not changed: REFUSED-IN-WORDS", trace_id: "t1" } }),
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Run again: brain.controls.run" }));
+    });
+    const dialog = await screen.findByRole("alertdialog");
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Run again" }));
+    });
+    await screen.findByText(/REFUSED-IN-WORDS/);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
   test("pausing is confirmed with what stops being kept true, sent once from the dialog, and the list is asked again", async () => {
     // What breaks if this is deleted: a pause sent without saying what the install stops doing,
     // sent for the wrong job, or a page still drawing the job as running after it was paused.
@@ -438,6 +527,18 @@ describe("one background job's page", () => {
 
 // --------------------------------------------------------------------------- runs, errors, logs
 
+function liveRuns(): Record<string, unknown> {
+  return {
+    as_of: "2019-03-06T09:00:00Z",
+    running: [{ control: "retention_sweep", keeps_true: "K", started_at: "2019-03-06T07:00:00Z", report_only: true, stalled: false }],
+    waiting: [],
+    stalled_after_seconds: 3600,
+    requests_in_flight_are_not_recorded: false,
+    queue_is_not_readable: false,
+    no_run_can_be_stopped: false,
+  };
+}
+
 describe("Runs and queue, Errors and Logs", () => {
   test("a running job, a stalled one and an owed first run are said in words, and the notes follow the API's flags", async () => {
     // What breaks if this is deleted: a stalled run drawn like a healthy one, or a sentence about
@@ -462,6 +563,55 @@ describe("Runs and queue, Errors and Logs", () => {
     expect(text).toContain("Never run before");
     expect(text).toContain("Questions and agent runs are listed on Service levels");
     expect(text).not.toContain("queue's tables are not read");
+  });
+
+  test("the actions a stopped worker left unconfirmed are listed by state in words, with what was found, and nothing offers to send one again", async () => {
+    // What breaks if this is deleted: the interrupted list the API serves goes on being drawn by
+    // no screen (the gap the console audit named), a state shown as its stored word, the action's
+    // own key put in front of a person, or a button that sends an action a second time.
+    const operation = {
+      key: "f".repeat(64),
+      connector: "billing",
+      tool: "create_invoice",
+      state: "unknown",
+      since: "2019-03-06T08:00:00Z",
+      standing: "this connector cannot be asked, so a person decides",
+    };
+    const body = { as_of: "2019-03-06T09:00:00Z", operations: [operation, { ...operation, key: "e".repeat(64), tool: "send_receipt", state: "sent" }] };
+    expect(Object.keys(operation).sort()).toEqual(backendModelFields("src/brain/operation_routes.py", "InterruptedView").sort());
+    expect(Object.keys(body).sort()).toEqual(backendModelFields("src/brain/operation_routes.py", "InterruptedPage").sort());
+    const { container } = await open("/runs", {
+      "GET /api/v1/operate/runs": () => ({ body: liveRuns() }),
+      "GET /api/v1/operations/interrupted": () => ({ body }),
+    });
+    const text = mainText(container);
+    expect(text).toContain("Actions waiting for a person");
+    expect(text).toContain("create_invoice");
+    expect(text).toContain("Not known whether it happened");
+    expect(text).toContain("Sent; the answer was never recorded");
+    expect(text).toContain("this connector cannot be asked, so a person decides");
+    expect(text).toContain("Nothing here is sent again.");
+    expect(text).not.toContain("f".repeat(64));
+    const cells = [...container.querySelectorAll("td")].map((one) => one.textContent);
+    expect(cells.filter((one) => one === "unknown" || one === "sent" || one === "verifying")).toEqual([]);
+    expect(within(container).queryAllByRole("button", { name: /^(send|resolve|retry|run again|mark)/i })).toEqual([]);
+  });
+
+  test("with nothing waiting for a person the list says so, and a failed read draws a failure under the other two lists", async () => {
+    // What breaks if this is deleted: an empty answer drawn as a broken page, or the failure of
+    // the third read replacing the lists of what is running and owed above it.
+    const empty = await open("/runs", {
+      "GET /api/v1/operate/runs": () => ({ body: liveRuns() }),
+      "GET /api/v1/operations/interrupted": () => ({ body: { as_of: "2019-03-06T09:00:00Z", operations: [] } }),
+    });
+    expect(mainText(empty.container)).toContain("No action is waiting for a person");
+    expect(mainText(empty.container)).not.toContain("Nothing here is sent again.");
+    const failed = await open("/runs", {
+      "GET /api/v1/operate/runs": () => ({ body: liveRuns() }),
+      "GET /api/v1/operations/interrupted": () => ({ status: 500, body: { message: "boom", trace_id: "t1" } }),
+    });
+    expect(mainText(failed.container)).toContain("Retention sweep");
+    expect(failed.container.querySelector('[data-slot="failure-state"], [role="alert"]')).not.toBeNull();
   });
 
   test("a failed job by its kind and a failed question by its reference, and choosing a window asks for it", async () => {

@@ -87,7 +87,7 @@ export function ConfirmDialog({
         <AlertDialogFooter>
           <AlertDialogCancel disabled={busy}>{cancelLabel}</AlertDialogCancel>
           <AlertDialogAction
-            variant={danger ? "destructive" : "default"}
+            variant={danger ? "danger" : "primary"}
             disabled={busy}
             onClick={(event) => {
               // The dialog stays open until the page says the act is done or refused, so a

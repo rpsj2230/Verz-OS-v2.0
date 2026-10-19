@@ -23,7 +23,7 @@
  * subject is rules; the API refuses a rule that names nothing it serves, and the Try it button says
  * so before anything is saved.
  *
- * Task ids: M6.5.1
+ * Task ids: M6.5.1, M27.16.2
  */
 
 import type { components } from "../api/schema";
@@ -75,7 +75,7 @@ export const WHOLE_COMPANY = "Whole company";
 export const ASKED_BY = "Asked by";
 export const ANSWERS_WITH = "Answers with";
 export const FROM_TABLE = "from";
-export const ADDED_BY = "Added by";
+export const ADDED_ON = "Added";
 
 export const NAME_LABEL = "Short name";
 export const NAME_HINT = "Lower-case letters, digits and underscores, such as hourly_rate.";
