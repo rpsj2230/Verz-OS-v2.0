@@ -1220,7 +1220,7 @@ Agent      enabled, SHADOW on every write until a rung is promoted with evidence
 | Create an agent | `template.install` then `install.complete`, as a draft somebody finishes (placeholders, audience) |
 | Customise, save, edit | overlay fields (`set_field`, `clear_field`); sealed paths (`guardrails.leash`, `guardrails.max_side_effect`, `identity.published_by`, `template_id`, `version`) shown locked with the reason |
 | Duplicate | `authoring.author`, scanned for company details before it can publish |
-| Enable and disable | **not a template lifecycle.** A version is an insert-only fact; the controls are visibility (`TemplateVisibility`) and withdrawing a version from the catalogue (an insert-only row, to build) |
+| Enable and disable | **not a template lifecycle.** A version is an insert-only fact; the controls are visibility (`TemplateVisibility`) and withdrawing a version from the catalogue (an insert-only row, `agent.template_withdrawal`, `0261`, M27.15.35) |
 | Version | publishing appends `version + 1`; installed agents see an upgrade offer; a decline is recorded |
 
 **Seeding the catalogue.** The built-ins must become signed rows once per install (W0.5), signed
@@ -1304,9 +1304,11 @@ what an agent without that element gets (R1, R2).
 | Instructions | the persona and its install overlay | `GET /govern/prompts` (the Settings read) | `POST /govern/prompts/{agent_id}` and `.../give-back` (`admin:agent_instructions`; editing needs the feature `prompt_editing`) | partial: the override is stored and served, and at `e3e2ec9` the answer lane uses its own `ANSWER_LANE_PERSONA`, so no run reads an agent's persona yet | as changed | Instructions tab; the Settings menu |
 | History | ledger entries about this agent: `compose_change`, `instructions`, `leash_change` (no emitter), `approval` | `GET /audit?q={agent_id}` (`read:audit`; `q` is new at `e3e2ec9` and is a text search, not a subject filter); `GET /audit/history` is fixed to permission actions | written by the acts themselves | partial: no subject filter (G1), and publish, lifecycle and leash moves have no emitter | `read:audit` | History tab; absent without the grant |
 
-Knowledge (the scope predicate, `read:document`), Memory (`GET /govern/memory` is by person, so no
-route serves an agent's memory) and Artifacts (`GET /govern/artifacts`, with no agent filter, and
-nothing keeps an artifact yet) stay tabs, as C1 lists them.
+Knowledge (the scope predicate, `read:document`), Memory and Artifacts stay tabs, as C1 lists them.
+Since M27.15.34 each is that agent's slice: `GET /agents/{agent_id}/memory` and `/artifacts` are the
+tabs' own routes, and the company-wide reads (`/govern/learning`, `/govern/memory`, `/govern/artifacts`)
+take an optional `agent`, cut after the reader's audience so that an agent they may not see answers as
+one that does not exist.
 
 **About this agent: the third tab.** Added at the owner's request on 2026-09-17, so that anybody
 opening an agent reads what it is for, how it works and what it will never do. It is its own tab,

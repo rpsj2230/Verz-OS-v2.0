@@ -13,7 +13,11 @@
  * principal id, on the template's page in Advanced), and the paragraph saying installing was not
  * offered, which is no longer true for a published version.
  *
- * Task ids: M27.8.6, M27.11.7, M27.16.1
+ * **Under the list, for a reader who holds the install authority over the company, are the versions
+ * withdrawn (which the list above no longer holds, so there is somewhere to put one back from) and a
+ * place to bring a template in.** Neither is drawn for anybody else.
+ *
+ * Task ids: M27.8.6, M27.11.7, M27.16.1, M27.15.35
  */
 
 import { LayoutTemplate, Plus } from "lucide-react";
@@ -24,6 +28,7 @@ import { useListing } from "../../components/useListing";
 import { Chip, type EntityColumn, Explanation, ListPage } from "../../components/kit";
 import { readTemplates, TEMPLATES_API_PATH, type TemplateCard } from "../agentTemplatesQuery";
 import { ACT_LABELS, originWords } from "./templateActions";
+import { ImportCard, WithdrawnCard } from "./TemplateTransfer";
 
 export const TEMPLATES_HEADING = "Agent templates";
 export const TEMPLATES_LEDE =
@@ -106,6 +111,12 @@ export function AgentTemplatesPage() {
       emptyAdds="A template is published from an agent's version on the Agents screen, or ships with a release."
       emptyBy={["super_admin", "department_admin"]}
       emptyIcon={<LayoutTemplate aria-hidden />}
+      footer={
+        <div className="flex min-w-0 flex-col gap-4">
+          <WithdrawnCard />
+          <ImportCard />
+        </div>
+      }
     />
   );
 }

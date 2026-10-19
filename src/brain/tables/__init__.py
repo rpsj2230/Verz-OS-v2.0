@@ -192,6 +192,7 @@ from brain.tables.suspension import SuspensionRow
 from brain.tables.telemetry import RequestTelemetryRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
 from brain.tables.template_draft import TemplateDraftRow
+from brain.tables.template_withdrawal import TemplateWithdrawalRow
 from brain.tables.tool_definition import ToolDefinitionRow, ToolSwitchRow
 from brain.tables.upgrade import UpgradeDeclineRow
 from brain.tables.vault_access import VaultAccessRow
@@ -574,6 +575,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0241_migration_record. Points at nothing: a person is a value, so a saved version outlives the
     # person who saved it.
     "ops.migration_record",
+    # 0261_template_withdrawal. Points at the template version it withdraws, so it follows it; the
+    # person is a value.
+    "agent.template_withdrawal",
 )
 
 __all__ = [
@@ -744,6 +748,7 @@ __all__ = [
     "TemplateDraftRow",
     "TemplateInstanceRow",
     "TemplateVersionRow",
+    "TemplateWithdrawalRow",
     "TierDecisionRow",
     "ToolAttachmentRow",
     "ToolDefinitionRow",

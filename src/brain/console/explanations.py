@@ -149,16 +149,6 @@ EXPLANATIONS: Final[tuple[Explanation, ...]] = (
         ),
     ),
     Explanation(
-        "template.withdraw",
-        Form.ACTION,
-        f"{SOON}withdrawing a published version so it can no longer be installed. Agents "
-        "already installed keep running.",
-        retired_by=(
-            rf"^{API_PREFIX}/agent-templates/\{{[^}}]+\}}/versions/\{{[^}}]+\}}"
-            r"/(withdraw|withdrawal|retire)\b"
-        ),
-    ),
-    Explanation(
         "automation.reinstate",
         Form.ACTION,
         f"{NOT_YET}bringing back a removed automation. Its runs and history stay on its page.",

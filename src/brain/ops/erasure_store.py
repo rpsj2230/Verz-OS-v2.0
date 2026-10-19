@@ -583,6 +583,10 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # cutover. The person who saved it is an actor, and what it holds is the old system's
         # catalogue, never anybody's record, and `0241` grants no way for a row to leave (M37).
         "ops.migration_record",
+        # A template version withdrawn from new installs, or the withdrawal undone: the person is an
+        # actor and the row is about a version, never about anybody, and `0261` grants no way for a
+        # row to leave (M27.15.35).
+        "agent.template_withdrawal",
         # What a lead flagged, what was read of answers, how golden questions scored and who agreed
         # to a change: each names an actor and a reference and is a fact about a moment, not
         # anybody's record, and `0222` grants no way for a row to leave.

@@ -256,8 +256,8 @@ def test_a_page_that_miscounts_the_golden_set_fails_the_schema_check(
 
     original = routes.template_detail
 
-    def miscounting(template_id: str, published: Any) -> Any:
-        found = original(template_id, published)
+    def miscounting(template_id: str, published: Any, **withdrawn: Any) -> Any:
+        found = original(template_id, published, **withdrawn)
         return None if found is None else found.model_copy(update={"golden_cases": 0})
 
     monkeypatch.setattr(routes, "template_detail", miscounting)

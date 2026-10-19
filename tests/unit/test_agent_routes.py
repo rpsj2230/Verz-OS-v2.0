@@ -20,7 +20,7 @@ function refusing everybody would satisfy every refusal here and none of the sib
 are written from the domain objects a real install produces, so the loader is tested against
 what the application writes rather than against a dictionary written to suit it.
 
-Task ids: M39.1.2.5
+Task ids: M39.1.2.5, M27.15.35
 """
 
 from __future__ import annotations
@@ -100,6 +100,7 @@ from brain.tables.identity import PrincipalRow
 from brain.tables.leash import LeashChangeRow, SupervisionPinRow
 from brain.tables.spend import SpendActualRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
+from brain.tables.template_withdrawal import TemplateWithdrawalRow
 from brain.tools.registry import ToolRegistry
 from tests.fixtures.http_client import Response
 from tests.unit.test_api_routes import (
@@ -342,6 +343,8 @@ class Stored:
         self.installs: dict[str, tuple[TemplateInstanceRow, TemplateVersionRow]] = {}
         self.spend: list[SpendActualRow] = []
         self.versions: list[TemplateVersionRow] = []
+        #: The newest withdrawal row of each version that has one, as the DISTINCT ON read returns.
+        self.withdrawals: list[TemplateWithdrawalRow] = []
         #: The display names the principal table holds, by id. A steward missing here has no
         #: row, which is the case a roster entry sends as no name at all.
         self.names: dict[str, str] = dict(STEWARD_NAMES)
@@ -401,6 +404,9 @@ class StubSession(AsyncSession):
     async def execute(self, statement: Any, *args: Any, **kwargs: Any) -> Any:
         _STORED.statements.append(statement)
         described = statement.column_descriptions
+        if described[0]["entity"] is TemplateVersionRow and len(described) == 2:
+            # Which versions are on file, by name: the gallery's read of what a withdrawal hides.
+            return StubResult([(one.template_id, one.version) for one in _STORED.versions])
         if len(described) == 2:
             many = _asked_for_many(statement)
             if many is not None:
@@ -419,6 +425,8 @@ class StubSession(AsyncSession):
             return StubResult(list(_STORED.spend))
         if entity is TemplateVersionRow:
             return StubResult(list(_STORED.versions))
+        if entity is TemplateWithdrawalRow:
+            return StubResult(list(_STORED.withdrawals))
         if entity in (LeashChangeRow, SupervisionPinRow):
             # Nothing moved and nobody pinned: the install's own leash, as the tests above expect.
             return StubResult([])
@@ -2105,8 +2113,11 @@ def test_nothing_is_read_for_a_caller_the_gallery_refuses(
     assert stored.statements == []
 
     assert get(client, "u_elsewhere", TEMPLATES).status_code == 200
+    # The published versions, and then which of them are withdrawn from new installs, which is
+    # one more read and nothing about the person asking.
     assert [one.column_descriptions[0]["entity"].__name__ for one in stored.statements] == [
-        "TemplateVersionRow"
+        "TemplateVersionRow",
+        "TemplateWithdrawalRow",
     ]
 
 
@@ -2207,3 +2218,68 @@ def test_a_template_nobody_shows_reads_exactly_as_a_refused_reader(
     assert missing.status_code == refused.status_code == 404
     assert missing.json()["message"] == refused.json()["message"]
     assert len(stored.statements) == before
+
+
+# --------------------------------------------------------------- withdrawn from new installs
+def a_withdrawal(template_id: str, version: int, *, withdrawn: bool) -> TemplateWithdrawalRow:
+    """The newest row of one version, as the store's `DISTINCT ON` read returns it."""
+    return TemplateWithdrawalRow(
+        seq=1,
+        template_id=template_id,
+        version=version,
+        withdrawn=withdrawn,
+        reason="Superseded by a safer instruction." if withdrawn else None,
+        set_by="u_publisher",
+    )
+
+
+def test_a_withdrawn_version_is_not_offered_and_the_one_before_it_is(
+    client: TestClient, stored: Stored
+) -> None:
+    """**M27.15.35.** Two versions of one template, the newer withdrawn: the gallery card and the
+    template's page are the older version, and the page of a template with nothing withdrawn is
+    still the newest. The sibling is the same two versions with the withdrawal undone, where the
+    newer is offered again.
+
+    Delete this and a withdrawal hides nothing from the people about to install."""
+    stored.versions = [
+        published_row("pricing_desk", 1, display_name="Pricing desk"),
+        published_row("pricing_desk", 2, display_name="Pricing desk"),
+    ]
+    stored.withdrawals = [a_withdrawal("pricing_desk", 2, withdrawn=True)]
+
+    card = next(
+        one
+        for one in get(client, "u_elsewhere", TEMPLATES).json()["items"]
+        if one["template_id"] == "pricing_desk"
+    )
+    page = get(client, "u_elsewhere", f"{TEMPLATES}/pricing_desk").json()
+    stored.withdrawals = [a_withdrawal("pricing_desk", 2, withdrawn=False)]
+    back = get(client, "u_elsewhere", f"{TEMPLATES}/pricing_desk").json()
+
+    assert card["version"] == page["entry"]["version"] == 1
+    assert back["entry"]["version"] == 2
+
+
+def test_a_template_with_every_version_withdrawn_is_gone_and_a_shipped_card_does_not_replace_it(
+    client: TestClient, stored: Stored
+) -> None:
+    """A published row stands in for the shipped card of its id, so withdrawing the only published
+    version would otherwise bring the shipped card back, which cannot be installed and reads as the
+    template returning. The sibling is a shipped template nothing was ever published under, which
+    stays listed.
+
+    Delete this and withdrawing a version of a shipped template swaps it for a card that does
+    nothing."""
+    shipped = CATALOGUE[0].identity.template_id
+    spare = CATALOGUE[1].identity.template_id
+    stored.versions = [published_row(shipped, 1, display_name="Shipped")]
+    stored.withdrawals = [a_withdrawal(shipped, 1, withdrawn=True)]
+
+    listed = {one["template_id"] for one in get(client, "u_elsewhere", TEMPLATES).json()["items"]}
+    page = get(client, "u_elsewhere", f"{TEMPLATES}/{shipped}")
+    other = get(client, "u_elsewhere", f"{TEMPLATES}/{spare}")
+
+    assert shipped not in listed and spare in listed
+    assert page.status_code == 404
+    assert other.status_code == 200
