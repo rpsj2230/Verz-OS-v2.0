@@ -28,10 +28,9 @@ from __future__ import annotations
 import secrets
 from typing import Any, Final
 
-from brain.agents.creation import AGENT_INSTALL_CAPABILITY
 from brain.core.scope import Scope
 from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, CheckNotRunError, check
-from brain.ops.acceptance_checks_builder import KNOWLEDGE_READ, _body, _builder
+from brain.ops.acceptance_checks_builder import KNOWLEDGE_READ, _body, _builder, _wide_builder
 from brain.ops.acceptance_checks_templates import _asking, _gallery, _request
 from brain.ops.acceptance_run import Harness
 
@@ -65,30 +64,6 @@ def _offered(form: dict[str, Any], field: str) -> list[str] | None:
                 return [str(one) for one in enum]
             return [] if found.get("maxItems") == 0 else None
     return None
-
-
-async def _wide_builder(h: Harness) -> str:
-    """A reserved builder whose install authority is held over everything, with the gallery's reads.
-
-    Not `_builder` plus a second grant: a person holds one grant of a capability, and the
-    department one `_builder` always gives would be a duplicate of it.
-    """
-    from brain.agent_routes import TEMPLATE_SCREEN
-    from brain.console.reads import plane_capability_for
-    from brain.console.screens import screen
-
-    read = screen(TEMPLATE_SCREEN).read
-    wide = h.principal(A, "everywhere")
-    await h.person(
-        wide,
-        department=A,
-        grants=(
-            (read.requires.value, Scope.unrestricted()),
-            (plane_capability_for(read, read.plane).value, Scope.unrestricted()),
-            (AGENT_INSTALL_CAPABILITY.value, Scope.unrestricted()),
-        ),
-    )
-    return wide
 
 
 @check(
