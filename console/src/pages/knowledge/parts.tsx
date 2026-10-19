@@ -79,7 +79,7 @@ export function TaskList({ tasks, onChanged }: { readonly tasks: readonly TaskRo
           <li key={one.taskId} className="flex min-w-0 flex-col gap-2 border-b border-line pb-2 last:border-b-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
             <span className="min-w-0 text-[13px] text-ink [overflow-wrap:anywhere]">{one.says}</span>
             <span className="flex shrink-0 items-center gap-2">
-              <Button asChild variant="ghost" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
+              <Button asChild variant="quiet" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
                 <Link to={taskAddress(one)}>{OPEN_TASK}</Link>
               </Button>
               {one.closable ? (

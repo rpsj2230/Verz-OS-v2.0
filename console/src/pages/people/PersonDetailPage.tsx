@@ -121,7 +121,7 @@ function StandingControl({ detail, onWritten }: { readonly detail: PersonDetail;
   return (
     <>
       <Button
-        variant={disable ? "outline" : "default"}
+        variant={disable ? "outline" : "primary"}
         size="sm"
         className="min-h-11 sm:min-h-8"
         onClick={() => {

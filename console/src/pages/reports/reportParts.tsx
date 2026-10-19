@@ -98,7 +98,7 @@ export function Switch<Value extends string | number>({
           key={String(one.value)}
           type="button"
           size="sm"
-          variant="ghost"
+          variant="quiet"
           aria-pressed={one.value === value}
           className="min-h-11 px-2.5 text-dim aria-pressed:bg-sunk aria-pressed:text-ink aria-pressed:font-semibold sm:min-h-7"
           onClick={() => {
@@ -291,7 +291,7 @@ export function BarList({
         <div>
           <Button
             type="button"
-            variant="ghost"
+            variant="quiet"
             size="sm"
             className="min-h-11 text-acc-text sm:min-h-7"
             aria-expanded={open}

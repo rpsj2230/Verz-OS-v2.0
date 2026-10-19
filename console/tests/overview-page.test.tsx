@@ -50,6 +50,7 @@ import {
 import { fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
 import { COMPANY_CONSOLE, NAVIGATION_ADDRESS, addressesOf, departmentConsole } from "./support/navigation";
 import { PAGES, UNBROKEN } from "./support/pageCases";
+import { readRepoFile } from "./support/repo";
 import { installRadixStubs } from "./support/radix";
 
 const CASE = PAGES["/"];
@@ -161,6 +162,22 @@ function textOutsideAdvanced(root: Element): string {
 }
 
 describe("what the Overview draws", () => {
+  test("it draws the three blocks the design of record draws on its first screen, under the same names", () => {
+    // What breaks if this is deleted (M27.15.71): the page and `docs/screens.html` drift apart with
+    // both still green, the design losing a block the page still draws or the page dropping one the
+    // design promises. The first screen in the design is read for its own headings, and the page's
+    // headings are held against them, so renaming one without the other is a failure here.
+    const design = readRepoFile("docs/screens.html");
+    const first = design.slice(design.indexOf("SCREEN 1"), design.indexOf("SCREEN 2"));
+    expect(first).toContain('class="kpis"');
+    const headings = [...first.matchAll(/<h3>([^<]+?)(?:\s*<a[^>]*>[^<]*<\/a>)?<\/h3>/g)].map((one) => (one[1] ?? "").trim());
+    expect(headings).toContain("Needs you");
+    expect(headings).toContain("Activity");
+    // The page's names for the same two cards: the design's own words, the feed's with "Recent" before.
+    expect(NEEDS_YOU).toBe(headings.find((one) => one === "Needs you"));
+    expect(ACTIVITY.toLowerCase()).toContain((headings.find((one) => one === "Activity") ?? "").toLowerCase());
+  });
+
   test("the figures are KPI tiles, and Needs you and Recent activity are each a headed card", async () => {
     // What breaks if this is deleted (M27.15.71): the landing screen's three blocks can be drawn as
     // loose text, a figure without its tile or a list without the heading that says what it is.
@@ -182,12 +199,12 @@ describe("what the Overview draws", () => {
     const drawn = render(
       <div>
         <Button>Save</Button>
-        <Button variant="ghost">Cancel</Button>
-        <Button variant="destructive">Remove</Button>
+        <Button variant="quiet">Cancel</Button>
+        <Button variant="danger">Remove</Button>
       </div>,
     );
     const buttons = [...drawn.container.querySelectorAll("button")];
-    expect(buttons.map((one) => one.getAttribute("data-variant"))).toEqual(["default", "ghost", "destructive"]);
+    expect(buttons.map((one) => one.getAttribute("data-variant"))).toEqual(["primary", "quiet", "danger"]);
     expect(new Set(buttons.map((one) => one.className)).size).toBe(3);
     drawn.unmount();
   });

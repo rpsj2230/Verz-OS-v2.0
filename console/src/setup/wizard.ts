@@ -23,7 +23,7 @@
  * every one of these in two languages. This console has no language selection anywhere, so
  * the English column is the one copied.
  *
- * Task ids: M42.5.14
+ * Task ids: M42.5.14, M27.15.68
  */
 
 import type { components } from "../api/schema";
@@ -331,10 +331,33 @@ export function draftBody(
   return {
     setup_code: whole.setup_code,
     answers: Object.fromEntries(
-      Object.entries(whole.answers ?? {}).filter(([key]) => seen.has(key as StepKey)),
+      Object.entries(whole.answers ?? {})
+        .filter(([key]) => seen.has(key as StepKey))
+        .map(([key, given]) => [key, withoutSecrets(key as StepKey, given)]),
     ),
     skipped: (whole.skipped ?? []).filter((key) => seen.has(key)),
   };
+}
+
+/**
+ * A screen's answers with every secret question blanked. The server never keeps one (`write_draft`
+ * drops a credential), and this keeps it from being sent to the draft route at all: a key typed on the
+ * provider screen goes where the appointment sends it, once, at the end, and not in a request whose
+ * only purpose is to remember the person's place. Blank rather than absent, because the route's model
+ * takes every question of a screen.
+ */
+function withoutSecrets(
+  step: StepKey,
+  given: Readonly<Record<string, string>>,
+): Record<string, string> {
+  const secret = new Set(
+    (SCREENS.find((screen) => screen.key === step)?.questions ?? [])
+      .filter((one) => one.secret)
+      .map((one) => one.name),
+  );
+  return Object.fromEntries(
+    Object.entries(given).map(([name, value]) => [name, secret.has(name) ? "" : value]),
+  );
 }
 
 /** The answers a draft carries and the screen to show next, or null when it kept nothing. */

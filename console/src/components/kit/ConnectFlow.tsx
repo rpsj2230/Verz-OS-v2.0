@@ -30,21 +30,17 @@ import { cn } from "../../lib/utils";
 import { Button, buttonVariants } from "../ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
 import { copied } from "./copyText";
+import { FLAGGED, StepProgress } from "./StepProgress";
 import { sketchMarks, StepSketch } from "./StepSketch";
 
 export type FlowStep = components["schemas"]["GuideStepView"];
 
 export const BACK = "Back";
 export const NEXT = "Next";
-export const STEPS_LABEL = "Steps";
-export const FLAGGED = "The test sent you back here";
+export { FLAGGED, STEPS_LABEL, stepOf } from "./StepProgress";
 export const COPIED_TEXT = "Copied. Paste it where this step says.";
 export const NOT_COPIED_TEXT = "Your browser did not allow copying. Select the text below, copy it and paste it where this step says.";
 export const SHOW_TEXT = "Show what is copied";
-
-export function stepOf(index: number, total: number): string {
-  return `Step ${index + 1} of ${total}`;
-}
 
 /** The index of the step with this key, or the first when none has it. */
 export function indexOf(steps: readonly FlowStep[], key: string): number {
@@ -161,45 +157,9 @@ export function ConnectFlow({
     return null;
   }
   const headingId = `flow-step-${step.key}`;
-  const percent = Math.round(((index + 1) / steps.length) * 100);
   return (
     <div data-slot="connect-flow" className="flex min-w-0 flex-col gap-4">
-      <div className="flex min-w-0 flex-col gap-2">
-        <div className="flex items-center justify-between gap-3">
-          <p className="m-0 text-[12.5px] font-semibold text-ink" aria-live="polite">
-            {stepOf(index, steps.length)}
-          </p>
-        </div>
-        <div aria-hidden className="h-1.5 w-full overflow-hidden rounded-full bg-sunk">
-          <div className="h-full rounded-full bg-brand" style={{ width: `${percent}%` }} />
-        </div>
-        <ol aria-label={STEPS_LABEL} className="m-0 flex list-none flex-wrap gap-1.5 p-0">
-          {steps.map((one, position) => {
-            const current = position === index;
-            const sentBack = flagged?.has(one.key) === true;
-            return (
-              <li key={one.key}>
-                <button
-                  type="button"
-                  aria-current={current ? "step" : undefined}
-                  aria-label={`${stepOf(position, steps.length)}: ${one.title}${sentBack ? `. ${FLAGGED}` : ""}`}
-                  title={one.title}
-                  className={cn(
-                    "inline-flex size-11 items-center justify-center rounded-full border text-[12px] font-semibold sm:size-7",
-                    current ? "border-brand bg-brand text-brand-ink" : "border-line bg-panel text-body hover:bg-sunk",
-                    sentBack && !current ? "border-warn bg-warn-wash text-warn" : null,
-                  )}
-                  onClick={() => {
-                    onAt(position);
-                  }}
-                >
-                  {position + 1}
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-      </div>
+      <StepProgress steps={steps} at={index} onAt={onAt} flagged={flagged} />
 
       <section aria-labelledby={headingId} className="[display:grid] min-w-0 grid-cols-[minmax(0,1fr)] items-start gap-4 md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
         <StepPicture step={step} />
