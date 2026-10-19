@@ -55,7 +55,7 @@ draft can be written, saved, checked and rehearsed meanwhile.
 **A new module rather than `brain.agent_lifecycle_routes`**, because that router moves an agent that
 exists and this one makes and changes one; they share its three questions and its 409 body.
 
-Task ids: M27.11.6, M27.15.31, M20.1.4, M20.4.6, M13.7.4, M20.4.1, M20.4.4
+Task ids: M27.11.6, M27.15.31, M20.1.4, M20.4.6, M13.7.4, M20.4.1, M20.4.4, M20.5.2
 """
 
 from __future__ import annotations
@@ -71,6 +71,7 @@ import structlog
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.agent_lifecycle_routes import (
     NO_CHANNEL_ANSWERS_NOWHERE,
@@ -163,6 +164,7 @@ from brain.builder.drafts import (
 from brain.builder.form import SET_ELSEWHERE, form_document
 from brain.builder.procedure import read_drawing, skill_markdown
 from brain.builder.publish import Check, PublishDecision, blocking_failures
+from brain.builder.run_cost import HELD_FOR_ITS_COST, CostHold, cost_hold
 from brain.console.govern import _in_reach
 from brain.console.reads import permitted
 from brain.console.screens import screen
@@ -170,6 +172,11 @@ from brain.core.errors import Absent, Failed
 from brain.gate.injection import AutonomyTier
 from brain.gate.screening import NOTHING_MATCHED
 from brain.knowledge.visibility import Visibility
+from brain.locale import currency_or_unset
+from brain.ops.budget_store import in_force
+from brain.ops.budgets import BudgetLevel, BudgetPeriod
+from brain.ops.features import is_on
+from brain.ops.features_declared.publish_cost_hold import PUBLISH_COST_HOLD
 from brain.routing_routes import sessions_of
 from brain.tools.registry import ToolRegistry
 
@@ -572,6 +579,12 @@ class DraftPublishView(BaseModel):
     widened: list[str]
     #: The rung the agent went on at, which the publish gate decided.
     rung: str = "shadow"
+    #: True when the publish waits because one run of the agent costs more than its department's
+    #: per-run ceiling (M20.5.2), with both figures and the unit they are in. Not set otherwise.
+    held_for_cost: bool = False
+    cost_minor: int | None = None
+    ceiling_minor: int | None = None
+    currency: str | None = None
 
 
 # ------------------------------------------------------------------------ the store
@@ -766,6 +779,49 @@ def _requested(draft: AgentDraft) -> Act | None:
     return draft.act_named(latest.number, DraftAct.REQUESTED)
 
 
+async def cost_hold_is_on(sessions: async_sessionmaker[AsyncSession]) -> bool:
+    """Whether a publish whose run costs more than its department allows waits for somebody. Off
+    until an administrator turns it on, and while off the record still shows the cost."""
+    async with sessions() as session:
+        return await is_on(session, PUBLISH_COST_HOLD)
+
+
+async def _department_ceiling(
+    request: Request, department: str, asked: Asking
+) -> tuple[bool, int | None]:
+    """Whether the hold is on and the department's per-run ceiling in force, in minor units.
+
+    `app.state.department_run_ceiling` when a test put one there, which stands for the switch on
+    and answers the ceiling, and the switch and the budget rows otherwise, as `canaries_red` does
+    for the canaries. No database is not a hold: there is no ceiling to read.
+    """
+    found = getattr(request.app.state, "department_run_ceiling", None)
+    if found is not None:
+        ceiling: int | None = await found(department)
+        return True, ceiling
+    sessions = sessions_of(request)
+    if sessions is None or not await cost_hold_is_on(sessions):
+        return False, None
+    async with sessions() as session:
+        row = await in_force(
+            session, (BudgetLevel.DEPARTMENT, department, BudgetPeriod.RUN), asked.now
+        )
+    return True, None if row is None else row.ceiling_minor
+
+
+async def _cost_hold(
+    request: Request, manifest: TemplateManifest, department: str | None, asked: Asking
+) -> CostHold | None:
+    """The hold this publish is under, or None: the switch on, the agent in a department, that
+    department's per-run ceiling in force, and a run costing more. See `brain.builder.run_cost`."""
+    if not department:
+        return None
+    on, ceiling = await _department_ceiling(request, department, asked)
+    if not on:
+        return None
+    return cost_hold(manifest, department=department, ceiling_minor=ceiling)
+
+
 async def _approvable(
     request: Request, store: AgentDraftStore, draft: AgentDraft, asked: Asking
 ) -> tuple[Installation, AgentAudience, FoundAgent | None, tuple[str, ...]] | None:
@@ -790,7 +846,12 @@ async def _approvable(
         settled = await _becomes(request, draft, manifest, audience, asked)
     except BuilderError:
         return None
-    if approval_refusal(
+    before = None if found is None else found.record
+    widened = widenings(before, settled.record, now=asked.now)
+    # A publish that waits only for its cost reaches no further than before, so the approver is
+    # not asked to hold everything it may reach: they are the department's administrator, which
+    # `_reaches` above has already asked.
+    if widened and approval_refusal(
         author_id=draft.owner_id,
         approver_id=asked.caller.principal.id,
         ceiling=ceiling_of(settled.record),
@@ -798,8 +859,7 @@ async def _approvable(
         now=asked.now,
     ):
         return None
-    before = None if found is None else found.record
-    return settled, audience, found, widenings(before, settled.record, now=asked.now)
+    return settled, audience, found, widened
 
 
 async def _openable(
@@ -1334,6 +1394,9 @@ class PublicationView(BaseModel):
     paths: list[str]
     rung: str
     approvers: list[str]
+    #: What one run of this version cost, priced as the publish gate priced it, in minor units of
+    #: the history's currency (M20.5.2). Null for a version that names no tier this install prices.
+    cost_minor: int | None = None
 
 
 class PublicationsView(BaseModel):
@@ -1342,6 +1405,8 @@ class PublicationsView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     agent_id: str
+    #: The unit every `cost_minor` below is in.
+    currency: str
     publications: list[PublicationView]
 
 
@@ -1368,6 +1433,7 @@ async def agent_publications(request: Request, agent_id: str, asked: Asked) -> P
     history = await StoredPublications(sessions).history(agent_id)
     return PublicationsView(
         agent_id=agent_id,
+        currency=currency_or_unset(),
         publications=[
             PublicationView(
                 published_by=one.actor_id,
@@ -1375,6 +1441,7 @@ async def agent_publications(request: Request, agent_id: str, asked: Asked) -> P
                 paths=list(one.paths),
                 rung=one.rung.name.lower(),
                 approvers=list(one.approvers),
+                cost_minor=one.cost_minor,
             )
             for one in history
         ],
@@ -1649,7 +1716,8 @@ async def publish_agent_draft(
     if not _reaches(asked, draft.agent_id, audience, personal_on=personal_on):
         return _not_changed(REFUSED, OUTSIDE_YOUR_AUTHORITY)
     me = asked.caller.principal.id
-    if second_people_needed(view.widened) > 0:
+    hold = await _cost_hold(request, settled.effective.manifest, audience.department or None, asked)
+    if second_people_needed(view.widened) > 0 or hold is not None:
         asked_for = Act(
             revision=latest.number,
             act=DraftAct.REQUESTED,
@@ -1665,8 +1733,16 @@ async def publish_agent_draft(
         waiting = DraftPublishView(
             state=DraftState.WAITING.value,
             agent_id=draft.agent_id,
-            sentence=WAITS_FOR_A_SECOND_PERSON,
+            sentence=(
+                HELD_FOR_ITS_COST
+                if hold is not None and not view.widened
+                else WAITS_FOR_A_SECOND_PERSON
+            ),
             widened=list(view.widened),
+            held_for_cost=hold is not None,
+            cost_minor=None if hold is None else hold.cost_minor,
+            ceiling_minor=None if hold is None else hold.ceiling_minor,
+            currency=None if hold is None else currency_or_unset(),
         )
         return JSONResponse(status_code=202, content=waiting.model_dump(mode="json"))
     done = Act(

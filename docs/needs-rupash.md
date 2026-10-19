@@ -653,6 +653,15 @@ hundred and sixty model calls) to see the figures, then the full run if they hol
 
 **What I need from you:** reply "194: A" or "194: B", and when.
 
+**Update 2026-10-14, nothing decided:** the command is now safe to leave on the shelf. It ships
+switched off (a switch on the Features page), it sends nothing unless every token belongs to a person
+in a department called `load_test` that you make (so it can never be sent as a real person), you type
+the number of requests twice, and it stops by itself if your install starts refusing most of what it is
+sent. Each run is kept in your install's own settings, as figures only. The install's own check proves
+the machinery in a few seconds with no model called, so the owner's choice here is only whether to run
+the peak itself. Item 103 says the peak run belongs in CI and never on your install; this item asks to
+run it on your install. They disagree, so please say which stands when you answer.
+
 ## 193. Which documents may an agent generate first, and may the product take two new libraries?
 
 **In plain terms:** your plan says an agent produces a document, a slide deck or a spreadsheet from an

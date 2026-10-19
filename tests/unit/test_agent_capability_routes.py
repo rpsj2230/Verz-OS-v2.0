@@ -7,7 +7,7 @@ acceptance checks in `brain.ops.acceptance_workspace`, which
 `tests/unit/test_acceptance_workspace.py` runs against PostgreSQL and makes fail by breaking the
 product.
 
-Task ids: M39.3.1.1, M39.3.1.3, M39.3.1.4
+Task ids: M39.3.1.1, M39.3.1.3, M39.3.1.4, M27.11.12, M27.15.32
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from brain.agent_capability_routes import AgentCapabilitiesView, router
 from brain.agents.model import AUDIENCE_IS_NOT_AUTHORITY
 from brain.agents.template import SkillRef
 from brain.api import API_PREFIX
+from brain.console.agent_behaviour import COMPUTER_USE_NOT_OFFERED, NOT_IN_THE_LIBRARY
 from brain.console.reach_view import PREVIEW_DISCLOSURE
 from brain.console.reads import Plane, plane_capability
 from brain.console.screens import screen
@@ -181,3 +182,39 @@ def test_an_agents_skills_reach_only_a_reader_of_its_settings_and_the_skills_scr
         (PINNED.name, PINNED.digest, 0)
     ]
     assert wide.unused_skills == [PINNED.name]
+
+
+def test_a_pinned_skill_nothing_in_the_library_backs_is_sent_with_why_no_run_uses_it(
+    served: tuple[TestClient, Stub],
+) -> None:
+    """M27.11.12: a chip carries the sentence saying no run of this agent uses the skill, from
+    `brain.console.agent_behaviour.skill_standing`, so the Profile no longer types one for itself.
+    Here the pin's digest names no library row, which no run ever offers.
+
+    Delete this and the page goes back to saying an assignment changes no answer, which is false
+    for every skill a run does offer."""
+    client, _ = served
+    wide = AgentCapabilitiesView.model_validate(
+        capabilities(client, "u_wide", COMPANY_AGENT).json()
+    )
+    assert [one.not_used_because for one in wide.skills] == [NOT_IN_THE_LIBRARY]
+
+
+def test_every_reader_of_an_agent_is_told_computer_use_is_not_offered_and_why(
+    served: tuple[TestClient, Stub],
+) -> None:
+    """M27.15.32: the sentence and the flag are the product's, sent to a reader who holds nothing
+    as to one who holds everything, and neither varies with the agent.
+
+    Delete this and the Profile goes back to a constant typed in the page, which says the same
+    thing the day a desktop runner is added."""
+    client, _ = served
+    narrow = AgentCapabilitiesView.model_validate(capabilities(client, "u_narrow", AGENT).json())
+    wide = AgentCapabilitiesView.model_validate(
+        capabilities(client, "u_wide", COMPANY_AGENT).json()
+    )
+    assert (narrow.computer_use.offered, narrow.computer_use.sentence) == (
+        False,
+        COMPUTER_USE_NOT_OFFERED,
+    )
+    assert narrow.computer_use == wide.computer_use
