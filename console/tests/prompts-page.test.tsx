@@ -50,6 +50,8 @@ function agent(overrides: Record<string, unknown> = {}): Record<string, unknown>
     overridden: true,
     set_by: "u_installer",
     set_at: "2019-03-05T09:00:00Z",
+    source: "instance",
+    machine_authored: false,
     effective_hash: "HASH-SHOWN",
     installed: true,
     editable: true,
