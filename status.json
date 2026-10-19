@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-19T14:33:24.516203+00:00",
-  "commit": "2441b28b",
-  "commit_subject": "Five console rules become guards: every class has a rule, one failure component, every delete names its act, who-can-reach is declared, every empty list says who adds a row, one explanation component (console tasks 15.52, 15.62, 15.69, 15.70, 15.72) (#629)",
+  "generated_at": "2026-10-19T16:08:56.168511+00:00",
+  "commit": "5957396f",
+  "commit_subject": "Accepting a template version meets the checks an install meets, and what an agent taught itself is marked and can be given back (M13.8.11, M16.7.1) (#622)",
   "total": 1626,
   "done": 1141,
   "percent": 70.2,
-  "built": 1311,
-  "built_percent": 80.6,
-  "built_unproven": 170,
+  "built": 1313,
+  "built_percent": 80.8,
+  "built_unproven": 172,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -61,9 +61,11 @@
     "M12.4.7",
     "M12.4.9",
     "M13.7.9",
+    "M13.8.11",
     "M13.8.7",
     "M13.8.8",
     "M15.3.3",
+    "M16.7.1",
     "M16.7.7",
     "M16.7.8",
     "M17.1.2",
@@ -235,14 +237,14 @@
       "total": 599,
       "done": 460,
       "percent": 76.8,
-      "in_progress": 4,
-      "ready_for_testing": 65,
+      "in_progress": 5,
+      "ready_for_testing": 66,
       "blocked": 4,
-      "open": 66,
+      "open": 64,
       "acts": 1,
       "decided": 56,
-      "built": 524,
-      "built_percent": 87.5
+      "built": 526,
+      "built_percent": 87.8
     },
     {
       "wave": 4,
@@ -429,7 +431,7 @@
       "done": 57,
       "acts": 0,
       "decided": 16,
-      "built": 60
+      "built": 61
     },
     {
       "module": "M14",
@@ -459,7 +461,7 @@
       "done": 38,
       "acts": 0,
       "decided": 1,
-      "built": 40
+      "built": 41
     },
     {
       "module": "M17",
@@ -2264,6 +2266,11 @@
       "why": "Built: the sales, finance, support and project management templates read the sources they name, bind every tool to one an install registers, and carry the starter skills of their role (finance carries none: none of the eight is about a ledger). To prove it on the install: after the release, open Install, Acceptance, run the checks, and read the row 'the role templates declare their sources and would answer', which should pass in the two newest runs. Then on Agents, New agent, choose the Support Ticket Agent template, finish the steps, and connect Freshdesk if the page says it is waiting for it.",
       "updated": "2026-10-14"
     },
+    "M13.8.11": {
+      "status": "READY FOR TESTING",
+      "why": "Built: before anybody upgrades an agent, the review lists what the new version would leave missing on this install (a tool nothing provides, a connector that is not connected, a question nobody has answered), and accepting it switches the agent off with the same list, as an install does. To prove it on the install: after the release, open Install, Acceptance, run the checks and read the row 'accepting a version runs the checks an install runs', which should pass in the two newest runs. Then on an agent's Profile, with a newer version of its template on offer, read 'What this version needs on this install'.",
+      "updated": "2026-10-15"
+    },
     "M14.4.1": {
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.sweeps, resolution.calibration, resolution.matcher +1 more); open for proof on the install or a decision, not for code",
@@ -2298,6 +2305,11 @@
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (gate.turn_context); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
+    },
+    "M16.7.1": {
+      "status": "IN PROGRESS",
+      "why": "Built: a change the agent learned is marked as the agent's own learning, naming the person who approved it, the Prompts screen shows it and gives it back, and the ledger names the approver; it never replaces instructions an administrator set, and it is written only while the switch 'Let what an agent learns change its instructions' is on (it ships off). What is not built is the first thing that learns an instruction change: nothing the product learns writes into an agent yet, so on an install this is proved by the check applying one change itself. To see it: after the release, open Install, Acceptance, run the checks and read the row 'what an agent taught itself is marked and can be given back'.",
+      "updated": "2026-10-15"
     },
     "M16.7.7": {
       "status": "READY FOR TESTING",
