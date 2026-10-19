@@ -54,9 +54,6 @@ A_ROUTE_THAT_WOULD_RETIRE_IT: dict[str, str] = {
     "operations.start_rehearsal": f"{API_PREFIX}/install/recovery/rehearsals",
     "operations.import_data": f"{API_PREFIX}/data-transfer/imports",
     "template.author": f"{API_PREFIX}/agent-templates/publish",
-    "template.withdraw": (
-        f"{API_PREFIX}/agent-templates/{{template_id}}/versions/{{version}}/withdraw"
-    ),
     "automation.reinstate": f"{API_PREFIX}/automations/{{automation_id}}/reinstate",
     "channel.verify": f"{API_PREFIX}/channels/{{name}}/verify",
     "credential.check_source": f"{API_PREFIX}/connectors/{{connector}}/test",
