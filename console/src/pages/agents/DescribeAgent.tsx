@@ -102,7 +102,7 @@ export function DescribeAgent() {
                 setMissing(false);
               }}
             />
-            {missing ? <p className="m-0 text-[12px] text-danger-text">{DESCRIBE_NEEDED}</p> : null}
+            {missing ? <p className="m-0 text-[12px] text-crit">{DESCRIBE_NEEDED}</p> : null}
           </div>
           <div>
             <Button className="min-h-11 sm:min-h-9" disabled={sending} onClick={begin}>
