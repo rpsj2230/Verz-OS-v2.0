@@ -4370,9 +4370,9 @@ const PROGRESS = {
     updated: "2026-10-12",
   },
   "M39.9.2.3": {
-    status: "OPEN",
-    why: "P2. DEPENDS on M39.9.2.1. REUSE: the agent's ceiling and leash (gate/leash, runtime side effects held for a person, #466) and the automation principal rule (M39.6.2.1). REMAINING: name the skills and tools an automation may use on its card and refuse an instruction that exceeds the agent's ceiling.",
-    updated: "2026-10-12",
+    status: "READY FOR TESTING",
+    why: "built (M39/automation-instruction-within-ceiling): what an automation may use is the agent's own, read for the person writing it, and is never a list somebody typed. The tools are the agent's attached tools projected through gate/catalogue.project at the writer's reach as an automation is admitted, so a tool above the ceiling, one the writer does not reach, one detached since the manifest or one that does not exist is refused in one sentence that names only the tool they wrote; the skills are the ones the agent has attached and approved that a run would be offered (skills_offered). The form, its review, the agent's Automations card and the Automations page name them, say that anything it would write waits for a person, and say that an instruction automation cannot be started yet. The install check an_automation_names_only_what_the_agents_ceiling_lets_a_run_use names it and closes it when the install's two newest runs both pass it. To see it by hand: (1) switch New automation on and open an agent's Automations tab; (2) press New automation: What it may use lists only tools a run of an automation of yours could be handed, and Skills it would be offered lists the agent's approved skills; (3) press Review and rehearse: the review names the tools and skills, says a write waits for a person and says it cannot be started yet; (4) detach a tool on the agent's Tools tab and open New automation again: that tool is gone from the list. NOT BUILT: skills are not chosen one at a time (a run carries the agent's skills on the day it starts, which the card says), and whether an instruction may be run with nobody present is needs-rupash 210, undecided, so nothing here starts a run. Note for 210: an automation is admitted at read only (M39.6.2.1), so every tool it may name is a read tool; option A needs that admission to change first. PRIOR WORK: tool_gaps checked the name against the manifest's list only; the card already named tools and the write rule.",
+    updated: "2026-10-14",
   },
   "M39.9.2.4": {
     status: "READY FOR TESTING",

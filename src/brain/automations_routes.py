@@ -25,6 +25,13 @@ run or another person, which the store finds by folding the row again under its 
 A_RESULT_IS_SHOWN_ONLY_TO_WHOM_IT_RAN_AS`, and a reader shown only their own runs by
 `agent_automations.schedule_basis` is shown figures over their own runs and told so.
 
+**An automation a person wrote shows what it may use, and skills only to its owner.** The card's
+instruction, the tools it names and the sentence that anything it would write waits for a person
+are the automation's own and are said to everybody who may see it; the skills a run would be
+offered are read at the owner's reach, which only the owner reading the page can supply, so they
+are named to the owner and the rule is said to everybody else. See
+`brain.automation_schedule_routes` for the same rule on the agent's tab.
+
 **The figures are never cut off.** They are counted over the runs the page reads, and
 `automation_run_store.RUNS_ON_ITS_PAGE` is more than the most frequent cadence, one run a day, can
 make in the longest period the figures cover; `EVERY_RUN_IN_THE_LONGEST_PERIOD_IS_READ` says so and
@@ -35,7 +42,7 @@ run writes `ops.spend_actual`: the one task this install performs reads a table 
 `RUN_COST_IS_NOT_RECORDED` is the reason the figures carry, for the shared stats routes' rule that a
 figure nothing records is absent and never nought.
 
-Task ids: M27.12.3, M27.15.37, M39.6.1.4, M39.6.1.5, M27.16.1, M27.15.18
+Task ids: M27.12.3, M27.15.37, M39.6.1.4, M39.6.1.5, M27.16.1, M27.15.18, M39.9.2.3
 """
 
 from __future__ import annotations
@@ -63,8 +70,15 @@ from brain.automation_schedule_routes import (
     ChangeAsked,
     NotChangedView,
 )
+from brain.automation_skills import skills_of
 from brain.console.agent_automations import automations_for, history, schedule_basis
-from brain.console.automation_authoring import NOTHING_FIRES_THIS_YET
+from brain.console.automation_authoring import (
+    NOTHING_FIRES_THIS_YET,
+    SKILLS_ARE_THE_AGENTS_TO_CHANGE,
+    WHAT_IT_MAY_USE_IS_THE_AGENTS_FOR_THIS_PERSON,
+    WRITES_WAIT_FOR_A_PERSON,
+    admitted_reach,
+)
 from brain.console.automation_gallery import WEEKDAYS, Cadence, Every, may_open_gallery
 from brain.console.automation_schedule import cannot_start_because
 from brain.console.automations import (
@@ -290,6 +304,20 @@ class AutomationDetailView(BaseModel):
     task: str
     template_id: str
     owner_id: str
+    #: What it was written to do, in the writer's words, or null for an automation installed from a
+    #: template as it comes. The instruction is the agent's, within its ceiling.
+    instruction: str | None = None
+    #: The tools it names, which the agent's ceiling admitted when it was written. Empty for a
+    #: template and for an instruction that names none.
+    tools: list[str] = Field(default_factory=list)
+    #: The skills a run would be offered at its owner's reach, by name, shown only to its owner,
+    #: who is the one reach this page can read them at. Everybody else is told the rule below.
+    skills: list[str] = Field(default_factory=list)
+    #: What it may use, said in words. Null where there is nothing written to describe.
+    may_use: str | None = None
+    skills_rule: str | None = None
+    #: What waits for a person, in the runtime's own words. Null for a template.
+    writes_wait: str | None = None
 
 
 class AutomationPeriodView(BaseModel):
@@ -534,10 +562,16 @@ def _history(detailed: Detailed) -> list[HistoryEntryView]:
     return sorted(entries, key=lambda one: one.at, reverse=True)
 
 
-def detail_view(detailed: Detailed, agent: AgentRecord, asked: Asking) -> AutomationDetailView:
+def detail_view(
+    detailed: Detailed,
+    agent: AgentRecord,
+    asked: Asking,
+    skills: Sequence[str] = (),
+) -> AutomationDetailView:
     listed = detailed.listed
     one = listed.automation
     cadence = listed.cadence
+    authored = listed.authored
     live = listed.owner_live(asked.now)
     basis, runs = _visible_runs(listed, asked)
     reach = _reach_words(runs)
@@ -603,6 +637,16 @@ def detail_view(detailed: Detailed, agent: AgentRecord, asked: Asking) -> Automa
         task=one.task,
         template_id=listed.template_id,
         owner_id=one.runs_as.id,
+        # For an automation a person wrote and nothing else: the instruction, the tools it names
+        # as they were admitted, the rule about skills, and the runtime's own sentence that
+        # anything it would write waits for a person. Said whether or not it can be started yet,
+        # which is `cannot_run`'s to say. A template installed as it comes names none of them.
+        instruction=None if authored is None else authored.instruction_text,
+        tools=[] if authored is None else list(authored.tools),
+        skills=[] if authored is None else sorted(skills),
+        may_use=None if authored is None else WHAT_IT_MAY_USE_IS_THE_AGENTS_FOR_THIS_PERSON,
+        skills_rule=None if authored is None else SKILLS_ARE_THE_AGENTS_TO_CHANGE,
+        writes_wait=None if authored is None else WRITES_WAIT_FOR_A_PERSON,
     )
 
 
@@ -672,7 +716,16 @@ async def automations(request: Request, asked: Asked, listed: AutomationsQuery) 
 async def automation(request: Request, automation_id: str, asked: Asked) -> AutomationDetailView:
     """One automation whole: its definition, schedule, runs, history and the changes offered."""
     detailed, agent = await _one_visible(request, automation_id, asked)
-    return detail_view(detailed, agent, asked)
+    listed = detailed.listed
+    skills: tuple[str, ...] = ()
+    if listed.authored is not None and listed.automation.runs_as.id == asked.caller.principal.id:
+        # The one reach this page can read the skills at is the one reading it, and only when it
+        # is the owner's: for anybody else the card gives the rule and names none.
+        offered = await skills_of(request).offered(
+            agent, reach=admitted_reach(asked.reach), now=asked.now
+        )
+        skills = tuple(one.name for one in offered)
+    return detail_view(detailed, agent, asked, skills)
 
 
 @router.get(STATS_PATH, response_model=AutomationStatsView, responses=COMMON_RESPONSES)

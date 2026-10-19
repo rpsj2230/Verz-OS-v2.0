@@ -60,6 +60,7 @@ export const LAST_RUN_LABEL = "Last run";
 export const FOUND_LABEL = "What it found";
 export const TOLD_LABEL = "Told to";
 export const MAY_USE_LABEL = "May use";
+export const SKILLS_LABEL = "Skills";
 export const WRITTEN_BY_A_PERSON_LABEL = "What was written";
 
 /** What a start is told, beside the next run it would leave. */
@@ -298,6 +299,13 @@ export function AgentAutomations({ agentId, automations, onChanged }: AgentAutom
                   <div className="fields__row">
                     <dt>{MAY_USE_LABEL}</dt>
                     <dd>{one.authored.tools.length === 0 ? "No tools." : one.authored.tools.join(", ")}</dd>
+                  </div>
+                  <div className="fields__row">
+                    <dt>{SKILLS_LABEL}</dt>
+                    <dd>
+                      {one.authored.skills.length === 0 ? "" : `${one.authored.skills.join(", ")}. `}
+                      {one.authored.skillsRule}
+                    </dd>
                   </div>
                   <div className="fields__row">
                     <dt>Writes</dt>

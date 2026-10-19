@@ -9,7 +9,7 @@
  *
  * **Identifiers are in Advanced and nowhere else.**
  *
- * Task ids: M27.12.3, M39.6.1.4, M27.16.1
+ * Task ids: M27.12.3, M39.6.1.4, M27.16.1, M39.9.2.3
  */
 
 import { Advanced, Fact, FactList, Note, SectionCard } from "../../components/kit";
@@ -22,6 +22,11 @@ export const REACH_LEDE =
   "Each run reads what the person it runs as may read through this agent when it starts. Nothing is kept between runs.";
 export const NO_REACH = "No run has been resolved yet.";
 export const NOT_SCHEDULED = "Not scheduled";
+export const INSTRUCTION_LABEL = "Told to";
+export const MAY_USE_LABEL = "May use";
+export const SKILLS_LABEL = "Skills";
+export const WRITES_LABEL = "Writes";
+export const NO_TOOLS = "No tools.";
 
 export function AutomationProfile({ detail }: { readonly detail: AutomationDetail }) {
   const { row } = detail;
@@ -34,6 +39,17 @@ export function AutomationProfile({ detail }: { readonly detail: AutomationDetai
           <Fact label="Agent">{row.agentName}</Fact>
           <Fact label="Runs as">{row.ownerName}</Fact>
           {detail.cannotRun === undefined ? null : <Fact label="Can it run here">{detail.cannotRun}</Fact>}
+          {detail.instruction === undefined ? null : <Fact label={INSTRUCTION_LABEL}>{detail.instruction}</Fact>}
+          {detail.instruction === undefined ? null : (
+            <Fact label={MAY_USE_LABEL}>{detail.tools.length === 0 ? NO_TOOLS : detail.tools.join(", ")}</Fact>
+          )}
+          {detail.skillsRule === undefined ? null : (
+            <Fact label={SKILLS_LABEL}>
+              {detail.skills.length === 0 ? "" : `${detail.skills.join(", ")}. `}
+              {detail.skillsRule}
+            </Fact>
+          )}
+          {detail.writesWait === undefined ? null : <Fact label={WRITES_LABEL}>{detail.writesWait}</Fact>}
         </FactList>
       </SectionCard>
 
