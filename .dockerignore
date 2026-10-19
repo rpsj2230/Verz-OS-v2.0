@@ -43,6 +43,7 @@ ops
 !ops/deploy/overlays/automation.observe.sh
 !ops/deploy/overlays/class-pools.yml
 !ops/deploy/overlays/class-pools.prepare.sh
+!ops/deploy/overlays/modelserver.prepare.sh
 !ops/langfuse/clickhouse-memory.xml
 !ops/seaweedfs/provision.sh
 !ops/automation/egress.conf

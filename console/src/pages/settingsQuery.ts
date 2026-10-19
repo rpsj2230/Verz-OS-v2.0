@@ -119,7 +119,15 @@ export const FORMATS: Readonly<Record<string, string>> = Object.freeze({
   INSTALL_ALERT_EMAIL:
     "One email address, such as operations@example.com, told when a safety mechanism has not run and nobody who holds the operations alert has used a chat tool in the last seven days.",
   INSTALL_SERVICES:
-    "none, or any of presidio, langfuse, sandbox, objectstore and automation separated by commas: the personal data detector, the trace ledger, the script sandbox (which needs gVisor on the server), the file store for uploaded documents and the automation canvas (896 MiB). The next update starts each one this server has the memory for.",
+    "none, or any of presidio, modelserver, langfuse, sandbox, objectstore and automation separated by commas: the personal data detector, the model server that reads documents and finds passages by meaning, the trace ledger, the script sandbox (which needs gVisor on the server), the file store for uploaded documents and the automation canvas (896 MiB). The next update starts each one this server has the memory for.",
+  INSTALL_MODEL_PARTS:
+    "One or more of embedding, layout, ocr, tika and entities separated by commas. Only one part is held in memory at a time, so the server takes the memory of the largest part chosen.",
+  INSTALL_MODEL_IDLE_SECONDS:
+    "A whole number of seconds from 30 to 86400. The part is ended and its memory given back once it has had nothing to do for this long.",
+  INSTALL_MODEL_MEMORY_MIB:
+    "auto, or a whole number of MiB. Leave it on auto unless the model server's measured figure says otherwise; a number too small for the parts chosen is refused.",
+  INSTALL_MODEL_UPLOAD_MB:
+    "A whole number of MB, 25 unless you chose otherwise. The largest document the model server is sized to read; a larger one makes the server larger.",
   INSTALL_UPDATE_MODE:
     "How this install updates: stay on a release you choose, which is what a production install wants, or follow every release as it is published, as a staging server does. Following every release is never inferred from the image's tag: it is only what you set here.",
   INSTALL_LARK_CARD_APPROVALS:

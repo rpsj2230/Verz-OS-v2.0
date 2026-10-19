@@ -118,6 +118,25 @@ def add_item_source(url: str) -> None:
         sql(url, f"ALTER TABLE know.item ADD CONSTRAINT ck_item_{name} CHECK ({check})")
 
 
+#: The migration adding how a document was read. Its constants are read, not restated.
+MODEL_SERVER_MIGRATION = ROOT / "migrations" / "versions" / "0250_model_server.py"
+
+
+def add_item_parse_notice(url: str) -> None:
+    """`know.item.parse_notice`, as `0250` adds it, on a chain that stops at `0040`.
+
+    From `0250`'s own width, for `add_item_kind`'s reason: `0250` also builds a table and two
+    columns on `know.chunk`, which a chain stopping at `0040` never reaches, and `put_item` writes
+    this column so without it every write here fails. That `0250` itself builds exactly this is
+    held by `tests/unit/test_how_a_passage_was_read_db.py`, against a database taken to head.
+    """
+    spec = importlib.util.spec_from_file_location("migration_0250_notice", MODEL_SERVER_MIGRATION)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    sql(url, f"ALTER TABLE know.item ADD COLUMN parse_notice VARCHAR({module.NOTICE_CHARS})")
+
+
 @contextmanager
 def knowledge_items(database: str) -> Iterator[str]:
     """A fresh database holding the grant tables, the outbox, the run table and `know.item`."""
@@ -136,6 +155,7 @@ def knowledge_items(database: str) -> Iterator[str]:
         add_item_kind(scratch)
         add_item_public(scratch)
         add_item_source(scratch)
+        add_item_parse_notice(scratch)
         # `ops.setting`, which `0004` builds and this chain stamps past: the sweep asks whether an
         # administrator switched the request off before it records anything.
         add_modelled(scratch, SCHEDULE_CONTROL_TABLES)

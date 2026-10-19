@@ -233,22 +233,38 @@ def test_the_advisory_check_passes_on_the_product_as_it_stands() -> None:
     run(ADVISORY)
 
 
-def test_the_worker_prints_the_finding_only_once_an_install_declares_a_model_server() -> None:
-    """The wiring the check reads, asked directly: the finding the parse layer reports is the one
-    the worker prints for a declared revision, and none for an undeclared one. Delete this and the
-    call in `advisories` can be removed with nothing red, or the finding printed on installs that
-    have no server to be told about."""
+def test_the_worker_prints_the_finding_only_for_an_install_whose_server_reads_documents() -> None:
+    """The wiring the check reads, asked directly: the finding the parse layer reports, against the
+    ceiling the install's own choice of parts gives, is the one the worker prints, and none is
+    printed for an install with no server or one that only embeds. Delete this and the call in
+    `advisories` can be removed with nothing red, or the finding printed on installs that have no
+    server, or no document sent to it, to be told about.
+
+    **M7.7.11.** The ceiling is the install's, not a fixed one: asked of the default choice (the
+    embedding part alone) the door's 50 MiB PDF is not larger than anything the server takes, so
+    there is nothing to say."""
     from brain.knowledge.embed_policy import REVISION_SETTING
     from brain.knowledge.parse_layout import layout_request_gaps
+    from brain.ops.model_server import config_from
+    from brain.ops.model_server import request_ceiling_bytes as server_ceiling
     from brain.ops.worker import advisories, model_server_advisory
 
-    assert layout_request_gaps(), "the door and the request ceiling agree; the premise has gone"
-    declared = advisories({REVISION_SETTING: "rev-1"}, worker_component="brain-parse-worker")
-    assert set(layout_request_gaps()) <= set(declared)
-    assert model_server_advisory(None) == ()
-    assert model_server_advisory("rev-1") == layout_request_gaps()
+    layout = {REVISION_SETTING: "rev-1", "INSTALL_MODEL_PARTS": "layout"}
+    expected = layout_request_gaps(ceiling_bytes=server_ceiling(config_from(parts="layout")))
+    assert expected, "the door and the request ceiling agree; the premise has gone"
+    printed = advisories(layout, worker_component="brain-parse-worker")
+    assert set(expected) <= set(printed)
+    assert model_server_advisory(None, {}, {}) == ()
+    assert model_server_advisory("rev-1", layout, {}) == expected
+    embeds = {REVISION_SETTING: "rev-1", "INSTALL_MODEL_PARTS": "embedding"}
+    assert model_server_advisory("rev-1", embeds, {}) == ()
+    run_without_a_revision = {"INSTALL_SERVICES": "modelserver", "INSTALL_MODEL_PARTS": "ocr"}
+    assert model_server_advisory(None, run_without_a_revision, {}) == expected
+    # Parts chosen and nowhere run, and no revision declared: there is no server to be told about.
+    assert model_server_advisory(None, {"INSTALL_MODEL_PARTS": "layout"}, {}) == ()
+    assert model_server_advisory("rev-1", {"INSTALL_MODEL_PARTS": "telepathy"}, {}) == ()
     undeclared = advisories({}, worker_component="brain-parse-worker")
-    assert not set(layout_request_gaps()) & set(undeclared)
+    assert not set(expected) & set(undeclared)
 
 
 def test_a_revision_the_system_cannot_record_does_not_stop_the_worker_starting() -> None:
@@ -267,7 +283,7 @@ def test_the_advisory_check_fails_where_the_worker_stops_printing_the_finding(
     can lose the one line that tells its owner the door admits a file the server will refuse."""
     from brain.ops import worker
 
-    monkeypatch.setattr(worker, "model_server_advisory", lambda _revision: ())
+    monkeypatch.setattr(worker, "advisories", lambda *_a, **_k: ())
     with pytest.raises(CheckFailedError, match="did not print"):
         run(ADVISORY)
 

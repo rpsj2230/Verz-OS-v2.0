@@ -90,6 +90,11 @@ def _compose_memory_limits(name: str) -> dict[str, int]:
         if value is None:
             continue
         text = str(value).strip().upper()
+        # `${NAME:-default}M`: a limit an install may set. The figure budgeted is the default,
+        # which is the default choice's, and `test_inference_deployment` holds it to the component.
+        interpolated = re.fullmatch(r"\$\{[A-Z_]+:-(\d+)\}(M|G)", text)
+        if interpolated is not None:
+            text = f"{interpolated.group(1)}{interpolated.group(2)}"
         if text.endswith("G"):
             limits[service] = int(float(text[:-1]) * 1024)
         else:
@@ -214,7 +219,7 @@ def test_the_lite_profile_adds_nothing_and_therefore_always_fits() -> None:
     assert budget_breaches("lite") == ()
 
 
-def test_the_standard_profile_is_over_by_the_identity_provider_and_the_inference_server() -> None:
+def test_the_standard_profile_fits_now_that_the_model_server_is_an_optional_service() -> None:
     """**This has now been wrong twice in the same direction, and both times that was the
     finding rather than a regression.**
 
@@ -275,22 +280,22 @@ def test_the_standard_profile_is_over_by_the_identity_provider_and_the_inference
     process at about 339 MB of anonymous memory (`brain-worker` in `COMPONENTS` says how that was
     read).
 
-    **And a seventh time on 2026-10-14, by the baseline, from 1288 to 1800.** The application's
-    limit went from 1024 to 1536 MiB, so the baseline this wave 2 is spent beside went from 3712
-    to 4224 and the room from 6200 to 5688; the owner's install measured the application at 705
-    MB in use, and the runtime spends a larger container on more web workers.
+    **And a seventh time on 2026-10-14, the first time in the other direction: from 1800 over to
+    1272 spare.** The application's limit had just gone from 1024 to 1536 MiB, which put the
+    overrun at 1800, and then the model server left every profile. It is an optional service now
+    (`brain.ops.overlays`, named in `INSTALL_SERVICES`), loads one part at a time, and its limit
+    is the install's own choice (`brain.ops.model_server`), so `standard` no longer carries its
+    3072 MiB and fits with room over. The name of this test says what it used to guard against
+    and what it guards now: a component put back in `standard` that does not fit.
 
-    Delete this and the overrun stops being visible anywhere, which means it is discovered by
-    deploying it."""
-    breaches = budget_breaches("standard")
-
-    assert len(breaches) == 1, breaches
-    assert "inference-server" in breaches[0]
-    assert "over by 1800 MiB" in breaches[0], (
-        "the standard overrun has moved; something has grown or shrunk and this test is the "
-        "only place that would have said so"
+    Delete this and the budget's figure for the middle profile can grow past the host with no
+    test saying so, which means it is discovered by deploying it."""
+    assert budget_breaches("standard") == ()
+    assert spendable_mib() - wave_two_mib("standard") == 1272, (
+        "the standard profile's spare has moved; something has grown or shrunk and this test is "
+        "the only place that would have said so"
     )
-    assert wave_two_mib("standard") - spendable_mib() == 1800
+    assert "inference-server" not in {c.name for c in components_for("standard")}
 
 
 def test_the_full_profile_does_not_fit_and_names_the_component_that_does_not() -> None:
@@ -305,12 +310,16 @@ def test_the_full_profile_does_not_fit_and_names_the_component_that_does_not() -
     what an operator would be pointed at first. Asserting the name rather than only the
     overrun is what makes that visible: the message exists to say where to look, and a test
     that checked only "over by" would have kept passing while pointing at the wrong
-    container."""
+    container.
+
+    **It names the personal data analyser since 2026-10-14**, which is the largest single thing
+    left in the profile once the model server became an optional service and left it: 1536 MiB,
+    against the 3072 that was named here before. The overrun is 2696 MiB."""
     breaches = budget_breaches("full")
     assert len(breaches) == 1
-    assert "inference-server" in breaches[0]
-    assert "over by" in breaches[0]
-    assert max(components_for("full"), key=lambda c: c.memory_mib).name == "inference-server"
+    assert "presidio-analyzer" in breaches[0]
+    assert "over by 2696 MiB" in breaches[0]
+    assert max(components_for("full"), key=lambda c: c.memory_mib).name == "presidio-analyzer"
 
 
 def test_the_budget_leaves_the_host_something_to_be_fixed_from() -> None:
@@ -379,15 +388,11 @@ def test_removing_the_other_project_is_what_makes_the_full_set_fit() -> None:
 
     assert without_them - with_them == NEIGHBOUR_MIB
 
-    # Standard is the profile the answer is about: it does not fit today and, until the
-    # application's limit was raised on 2026-10-14, it did fit once the neighbours went, which
-    # is what made "remove the other project" a real answer rather than a hope. Asked of the
-    # baseline of that day, it still does; asked of today's, it is over by exactly the 264 MiB
-    # that remain after the application's extra 512, and that is the finding to read.
-    assert budget_breaches("standard", headroom_mib=with_them)
-    assert not budget_breaches("standard", headroom_mib=without_them, baseline_mib=3712)
-    today = budget_breaches("standard", headroom_mib=without_them)
-    assert len(today) == 1 and "over by 264 MiB" in today[0], today
+    # Standard fits either way since the model server became optional, and the neighbours being
+    # gone leaves it more room. Asserted in both directions so a component put back into
+    # `standard` that does not fit shows here as well as in its own test.
+    assert not budget_breaches("standard", headroom_mib=with_them)
+    assert not budget_breaches("standard", headroom_mib=without_them)
 
     # Full still does not, and this is asserted rather than left out because the first draft
     # of item 25 said everything would fit and this test is what corrected it. An assertion
@@ -758,11 +763,13 @@ def test_rows_one_and_three_of_item_120_are_eight_mib_over_the_static_cap() -> N
     identity provider and its database) and the secrets vault, which no profile here budgets
     and whose limit is read from its own compose file. Beside them, row 1 (the personal data
     detector) and row 3 (the trace ledger's five services) fitted inside the 6,200 MiB wave 2
-    may spend until 2026-10-13, and row 2 (the model server and the document worker) does not
-    fit beside row 1, which is why it waits. The spare was 632 MiB until 2026-10-06, 376 after
-    the identity provider's limit went from 768 to 1024 MiB, measured, and is **minus 8 since
-    2026-10-13**, when the worker went from 384 to 768 MiB because it was being OOM-killed: rows
-    1 and 3 together were then 8 MiB over this static cap, and are **520 over since 2026-10-14**,
+    may spend until 2026-10-13, and row 2 (the model server and the document worker) did not
+    fit beside row 1, which is why it waited until the model server became an optional service
+    that holds one part at a time (see the assertions at the end). The spare was 632 MiB until
+    2026-10-06, 376 after the identity provider's limit went from 768 to 1024 MiB, measured, and
+    is **minus 8 since 2026-10-13**, when the worker went from 384 to 768 MiB because it was
+    being OOM-killed: rows 1 and 3 together were then 8 MiB over this static cap, and are **520
+    over since 2026-10-14**,
     when the application's limit went from 1024 to 1536 MiB and the static room from 6200 to
     5688. The cap is one fixed figure for a
     machine this repository measured. Whether the two still start on a given server is decided
@@ -785,7 +792,15 @@ def test_rows_one_and_three_of_item_120_are_eight_mib_over_the_static_cap() -> N
     assert spendable_mib() == 5688
     assert running + vault_mib == 2368
     assert spendable_mib() - running - vault_mib - row_one - row_three == -520
-    assert row_two > spendable_mib() - running - vault_mib - row_one
+    # **Row two fits beside row one since 2026-10-14, and that is the change.** It was 3,584 MiB
+    # and did not; the model server loads one part at a time and its default choice is the
+    # embedding part alone, 1,088 MiB, so with the document worker it is 1,600 and leaves 184 MiB.
+    # All three rows together are still over by 2,120, which is why the release's plan costs them
+    # in order against what the server really has.
+    assert row_two == 1600
+    assert row_two <= spendable_mib() - running - vault_mib - row_one
+    assert spendable_mib() - running - vault_mib - row_one - row_two == 184
+    assert spendable_mib() - running - vault_mib - row_one - row_two - row_three == -2120
 
 
 def test_the_same_service_set_would_fit_on_the_host_the_neighbours_have_left() -> None:

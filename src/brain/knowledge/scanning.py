@@ -333,6 +333,9 @@ class ParsedDocument:
 
     digest: str
     blocks: tuple[Block, ...]
+    #: Pages a reader recognised and the product would not index (`ReadWithGaps`), by their number
+    #: in the document. Page numbers are the uploader's own and quote nothing the file says.
+    left_out_pages: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.blocks:
@@ -342,6 +345,21 @@ class ParsedDocument:
                 "one"
             )
             raise IngestRefused(msg)
+
+
+@dataclass(frozen=True)
+class ReadWithGaps:
+    """Blocks a parser read from part of a document, and the pages it would not stand behind.
+
+    **A document read in part says so.** A scan whose tenth page is noise is indexed for the nine
+    that were read, and the tenth is named to the uploader rather than dropped without a word:
+    a missing page that nobody was told about is a page somebody searches for and does not find.
+    Only the scanned-page reader returns this; every other parser reads all of a document or
+    refuses it. M7.7.10.
+    """
+
+    blocks: tuple[Block, ...]
+    left_out_pages: tuple[int, ...]
 
 
 class Parser(Protocol):
@@ -357,7 +375,7 @@ class Parser(Protocol):
     return type under mypy strict cannot be ignored without the ignore being visible.
     """
 
-    def parse(self, content: ScannedContent) -> Sequence[Block] | ParseRefusal: ...
+    def parse(self, content: ScannedContent) -> Sequence[Block] | ParseRefusal | ReadWithGaps: ...
 
 
 def _failure(content: ScannedContent, *, cause: ParseCause, stage: ParseStage) -> ParseFailure:
@@ -419,7 +437,8 @@ def parse_scanned(
     outcome = parser.parse(content)
     if isinstance(outcome, ParseRefusal):
         return _failure(content, cause=outcome.cause, stage=outcome.stage)
-    blocks = tuple(outcome)
+    left_out = outcome.left_out_pages if isinstance(outcome, ReadWithGaps) else ()
+    blocks = tuple(outcome.blocks if isinstance(outcome, ReadWithGaps) else outcome)
     if not blocks:
         return _failure(content, cause=ParseCause.NO_TEXT_LAYER, stage=ParseStage.TEXT)
-    return ParsedDocument(digest=content.upload.digest, blocks=blocks)
+    return ParsedDocument(digest=content.upload.digest, blocks=blocks, left_out_pages=left_out)

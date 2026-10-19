@@ -18,6 +18,7 @@ So every directory below is one of three things, and the third column is the one
 | `docs/` | The work breakdown, the build pages the application serves, and this file. | Never |
 | `ops/` | The Keycloak realm, OpenBao policies, runbooks and git hooks. | Never |
 | `matcher/` | The record matcher's own offline image: its dependencies, lock file and Dockerfile, kept apart from the application. | Never |
+| `modelserver/` | The optional model server's own image: its Dockerfile and pinned requirements, kept apart from the application because it carries the heavy libraries the application must not. Its program is `src/inference_server/`. | Never |
 | `Dockerfile` | How the image is built. One image for every client. | Never |
 | `docker-compose*.yml` | What runs, and what each container may have. Values come from the environment. | Never |
 | `pyproject.toml`, `uv.lock` | Dependencies, pinned. | Never |

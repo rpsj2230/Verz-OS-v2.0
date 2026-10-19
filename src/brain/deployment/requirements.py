@@ -106,7 +106,6 @@ COMPOSE_FILES_FOR: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
             "docker-compose.parse-worker.yml",
             "docker-compose.objectstore.yml",
             "docker-compose.keycloak.yml",
-            "docker-compose.inference.yml",
             # The personal data analyser, budgeted in `standard` since the profiles were
             # written and given a service on 2026-09-21. See `docker-compose.presidio.yml`.
             "docker-compose.presidio.yml",
