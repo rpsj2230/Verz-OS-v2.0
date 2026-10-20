@@ -363,6 +363,8 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.browsing.launcher:Engine.remove_network": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.browsing.launcher:Engine.labelled": Repeat.READS,
         "brain.browsing.launcher:Engine.runtimes": Repeat.READS,
+        "brain.browsing.launcher:Engine.inspect_container": Repeat.READS,
+        "brain.browsing.launcher:Engine.inspect_network": Repeat.READS,
         "brain.browsing.runner:Browser.navigate": Repeat.READS,
         "brain.browsing.runner:Browser.origin": Repeat.READS,
         "brain.browsing.runner:Browser.accessibility_tree": Repeat.READS,
