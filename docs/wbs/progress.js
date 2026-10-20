@@ -2201,8 +2201,8 @@ const PROGRESS = {
   },
   "M26.2.3": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): identity.lifecycle.reevaluate_delegations (suspend, never narrow) and Reconfirmation are built and tested but no caller; no delegation table or route exists on main (grep delegation in tables and routes). Nearest live object is an automation owner (M26.3.3). NEXT: Decide what a delegation is on this install (elevation, automation owner or a new object), then call reevaluate_delegations from the sync run when a move changes reach.",
-    updated: "2026-10-13",
+    why: "TRIAGE 2026-10-13 class 3 (built, not wired): identity.lifecycle.reevaluate_delegations (suspend, never narrow) and Reconfirmation are built and tested but no caller; no delegation table or route exists on main (grep delegation in tables and routes). Nearest live object is an automation owner (M26.3.3). NEXT: Decide what a delegation is on this install (elevation, automation owner or a new object), then call reevaluate_delegations from the sync run when a move changes reach. 2026-10-20 BUILT UNDER OPTIONS A AND B OF NEEDS ITEM 216, DEPUTY APPOINTMENTS UNBUILT: brain.ops.mover_automations watches every live automation's reach before the staff sync's Starter pack step and again after, and pauses (owner_lost_reach, a schedule row by the roster, a ledger entry) each one whose reach after does not cover its reach before, asked through EntitlementSet.intersect with the instant; listed on the owner's and the authority holder's Automations page; started again only by the existing confirmed start, which needs somebody other than the owner. Behind the off switch mover_pauses_automations. The deputy appointment, which only option A names, is not built, and option C (a delegation as its own object) is not touched; identity.lifecycle.reevaluate_delegations is still not called because a deputy appointment is the only RoleGrant it takes. Install check a_mover_s_automation_is_paused_and_a_stayer_s_is_not (acceptance_checks_mover_automations.py). Owner decides item 216. Not claimed done.",
+    updated: "2026-10-20",
   },
   "M26.2.4": {
     status: "READY FOR TESTING",
@@ -4740,14 +4740,14 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M26.2.7": {
-    status: "BLOCKED",
-    why: "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Roll-up test leaf: tests/unit/test_lifecycle.py covers the pure module, but several clauses it covers (provision, delegations, welcome) are not wired, so a test of every item above has nothing end to end to run.",
-    updated: "2026-10-13",
+    status: "IN PROGRESS",
+    why: "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Roll-up test leaf: tests/unit/test_lifecycle.py covers the pure module, but several clauses it covers (provision, delegations, welcome) are not wired, so a test of every item above has nothing end to end to run. 2026-10-20 ROLL-UP BUILT, NOT YET ABLE TO PASS: acceptance_checks_jml_roll_up.every_mover_leaf_is_shown_clause_by_clause_in_this_run reads the checks for M26.2.1 to M26.2.6 and is not run while any has none (M26.2.2 is on another branch and M26.2.5 has no install check). tests/unit/test_mover_end_to_end.py drives the staff run and asks the reach, cache key, memory, automation and knowledge rules of one mover on the state it leaves. A person runs the install checks; this closes when every clause check passes in one run.",
+    updated: "2026-10-20",
   },
   "M26.4.1": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Roll-up proof (a check can be written once clauses exist) across joiner, mover and leaver; clauses depend on unwired parts (delegations M26.2.3, personal knowledge disposition M26.3.4, ended grant mid-run, external person end date). NEXT: Waits on M26.2.3 and M26.3.4, then a person runs it and the checks are recorded.",
-    updated: "2026-10-13",
+    why: "TRIAGE 2026-10-13 class 2 (partly built): Roll-up proof (a check can be written once clauses exist) across joiner, mover and leaver; clauses depend on unwired parts (delegations M26.2.3, personal knowledge disposition M26.3.4, ended grant mid-run, external person end date). NEXT: Waits on M26.2.3 and M26.3.4, then a person runs it and the checks are recorded. 2026-10-20 ROLL-UP BUILT, NOT YET ABLE TO PASS: acceptance_checks_jml_roll_up.joiner_mover_leaver_is_shown_clause_by_clause_in_this_run reads the clause checks and names any clause with none: a personal agent following its owner (M26.2.2, another branch), memories of the old reach (M26.2.5), a run stopping on a revoked grant (M13.8.2, has a check), an external person's end date (M1.8.1) and a service key stopping with its owner (M1.8.2), neither of which has a check, and an owned item a person can no longer reach leaving their workspace, which no leaf names. It stays not run, never passed, until each is shown.",
+    updated: "2026-10-20",
   },
   "M29.3.1": {
     status: "READY FOR TESTING",
