@@ -173,7 +173,12 @@ async def cited_document(
         raise _not_found(document_id)
     factory = sessions_of(request)
     department = next(
-        (str(one["department"]) for one in redacted.payload.records if one.get("department")), None
+        (
+            str(one["department"])
+            for one in redacted.payload.records
+            if one.get("department") and one.get("document_id") == document_id
+        ),
+        None,
     )
     if factory is not None and is_another_departments(
         department, asked.caller.principal.primary_department
