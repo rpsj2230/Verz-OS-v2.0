@@ -370,6 +370,11 @@ from brain.member_self_routes import router as member_self_router
 # See `brain.member_share_routes`.
 from brain.member_share_routes import router as member_share_router
 
+# A member's own skills: written, pasted or brought from a repository or an address, kept as theirs
+# alone and offered to the department's library for a person to read. Gated on the member grant
+# and the `personal_skills` switch. See `brain.member_skill_routes`.
+from brain.member_skill_routes import router as member_skill_router
+
 # Running a migration from another system, kept and checked: what the old system holds and what
 # happens to each of it, the comparison period and the cutover, behind `admin:install_setting` over
 # everything and the `migration_workspace` switch. Reaches nothing of the old system. See

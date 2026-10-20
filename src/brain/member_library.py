@@ -668,6 +668,9 @@ class PersonalSkill:
 
     owner_id: str
     imported: ImportedSkill
+    #: The key the skill is stored under, which is what a person names to offer it. Empty for a
+    #: skill that is not stored yet.
+    digest: str = ""
 
     def __post_init__(self) -> None:
         if not self.owner_id.strip():
@@ -695,6 +698,8 @@ class SkillRow:
     origin: Origin
     location: str
     review: Review
+    #: The key the skill is stored under, which an offer names. Empty for one not stored.
+    digest: str = ""
 
 
 def origin_of(source: SkillSource) -> Origin:
@@ -759,12 +764,53 @@ def my_skills(skills: Iterable[PersonalSkill], *, principal_id: str) -> tuple[Sk
             origin=origin_of(one.imported.source),
             location=one.imported.source.location,
             review=review_state(one.imported),
+            digest=one.digest,
         )
         for one in sorted(
             (one for one in skills if is_own(principal_id, one.owner_id)),
             key=lambda one: one.imported.skill.name,
         )
     )
+
+
+#: What a person is told beside each of their own skills, by whether they have offered it and what a
+#: reader has said. **Every sentence says what the skill can do now and none says what the
+#: department holds**, so the line cannot tell a person anything about a library they may not read.
+STANDING_PRIVATE: Final = (
+    "Only you can see this. Nothing runs it until you offer it to the department and a named "
+    "person has read it and approved it."
+)
+STANDING_WAITING: Final = "Offered to the department. It waits for a person to read it."
+STANDING_APPROVED: Final = "Approved by a named person. An administrator can now put it on agents."
+STANDING_REJECTED: Final = (
+    "A reader said no. Change it and add the new version, which is read again."
+)
+STANDING_CHANGED: Final = "It changed after it was approved, and nobody has read what is there now."
+
+#: Keyed by whether it was offered and the review state. An unoffered skill has no review, so every
+#: unoffered key reads the private sentence, and that is the point of listing all eight.
+STANDING: Final[Mapping[tuple[bool, Review], str]] = MappingProxyType(
+    {
+        (False, Review.PENDING): STANDING_PRIVATE,
+        (False, Review.APPROVED): STANDING_PRIVATE,
+        (False, Review.REJECTED): STANDING_PRIVATE,
+        (False, Review.CHANGED): STANDING_PRIVATE,
+        (True, Review.PENDING): STANDING_WAITING,
+        (True, Review.APPROVED): STANDING_APPROVED,
+        (True, Review.REJECTED): STANDING_REJECTED,
+        (True, Review.CHANGED): STANDING_CHANGED,
+    }
+)
+
+
+def standing_of(review: Review, *, offered: bool) -> str:
+    """What a person's own skill can do now, in a sentence (M40.3.2.1, M40.3.2.4).
+
+    An unoffered skill is private whatever its review says, because a skill nobody offered has
+    been read by nobody: `brain.ops.skill_store.library_of` leaves it out, so no reader can have
+    decided about it, and a stored decision on it could only be a row written by hand.
+    """
+    return STANDING[(offered, review)]
 
 
 @dataclass(frozen=True)

@@ -50,8 +50,21 @@ insert policy finds the skill its submitter just wrote. The library reads each s
 hashes beside it, which its digest covers, and never the bytes; `script_bytes` reads those for a
 run, which checks them against the approved hashes before anything executes.
 
+**A skill somebody added for themselves and has not offered is not in the library**
+(M40.3.2.4). `0232` keeps one row for each such skill in `agent.skill_personal` and says in its
+own docstring that the library reads leave an unoffered one out, and until this paragraph no read
+did: the skill was in `agent.skill` as every skill is, so the Skills screen, the review queue, an
+assignment and a run's pins would all have found a colleague's unfinished work. **Both statements
+that read the library, `library_of` and `one_skill`, now carry the one clause
+`not_an_unfinished_personal_skill`**, so a skill nobody offered is absent for everybody but the
+person who made it, who reads it through `brain.ops.personal_skill_store`. Adding the clause to
+the statements and not to each caller is the point: many callers read the library and the next one
+written would have been the leak. Rejected: filtering in `StoredSkills.library` after the read,
+which leaves `library_of` as a statement a caller (`brain.company_routes` imports it) can run
+unfiltered.
+
 Task ids: M42.6.4, M12.2.2, M12.2.3, M12.3.2, M12.4.6, M12.4.13, M27.15.55, M27.15.56, M12.4.11
-Task ids: M12.3.1, M12.3.4
+Task ids: M12.3.1, M12.3.4, M40.3.2.4
 """
 
 from __future__ import annotations
@@ -61,7 +74,7 @@ from typing import Any, Final
 
 import structlog
 from pydantic import ValidationError
-from sqlalchemy import Select, exists, select, text, update
+from sqlalchemy import ColumnElement, Select, exists, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.sql.dml import ReturningInsert
@@ -88,6 +101,7 @@ from brain.tables.skill import (
     SkillRow,
     SkillScriptRow,
 )
+from brain.tables.skill_personal import SkillPersonalRow
 from brain.tables.template import TemplateInstanceRow
 from brain.tools.skill_examples import ExampleOutcome, Rehearsal, RehearsalKind
 from brain.tools.skills import ImportedSkill, Skill, SkillSource, SkillState, SourceKind
@@ -105,12 +119,31 @@ def _set_config(name: str, value: str) -> Any:
 
 
 # ------------------------------------------------------------------------- the statements
+#: Said once, here, so that a test can hold it and a reader can find it.
+A_SKILL_NOBODY_OFFERED_IS_NOT_THE_LIBRARY: Final = (
+    "a skill a person added for themselves and has not offered to the department is not in the "
+    "library: it is absent from every reading of it, for every reader but the person who made it"
+)
+
+
+def not_an_unfinished_personal_skill() -> ColumnElement[bool]:
+    """True of every skill except one a person added for themselves and has not offered.
+
+    The row in `agent.skill_personal` says whose a skill is, and `submitted_at` empty says it is
+    still theirs alone. See `A_SKILL_NOBODY_OFFERED_IS_NOT_THE_LIBRARY`.
+    """
+    return ~exists().where(
+        SkillPersonalRow.digest == SkillRow.digest, SkillPersonalRow.submitted_at.is_(None)
+    )
+
+
 def library_of(limit: int) -> Select[tuple[SkillRow, SkillReviewRow]]:
     """Every skill with its decision, if it has one, newest first, bounded."""
     # The outer join's right side is None for an undecided skill, whatever the type says.
     return (
         select(SkillRow, SkillReviewRow)
         .outerjoin(SkillReviewRow, SkillReviewRow.digest == SkillRow.digest)
+        .where(not_an_unfinished_personal_skill())
         .order_by(SkillRow.created_at.desc(), SkillRow.digest)
         .limit(limit)
     )
@@ -121,7 +154,7 @@ def one_skill(digest: str) -> Select[tuple[SkillRow, SkillReviewRow]]:
     return (
         select(SkillRow, SkillReviewRow)
         .outerjoin(SkillReviewRow, SkillReviewRow.digest == SkillRow.digest)
-        .where(SkillRow.digest == digest)
+        .where(SkillRow.digest == digest, not_an_unfinished_personal_skill())
     )
 
 
