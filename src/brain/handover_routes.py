@@ -67,10 +67,12 @@ from brain.launch import (
     subprocessors,
 )
 from brain.migration.learning import learning_note
-from brain.ops import handover_store
 from brain.ops.backup_manifest import read_drills, read_manifests
 from brain.ops.features import is_on
 from brain.ops.features_declared.handover_pack import HANDOVER_PACK
+from brain.ops.handover_store import Review, recorded
+from brain.ops.handover_store import save_owners as keep_owners
+from brain.ops.handover_store import save_review as keep_review
 from brain.ops.model_service import held_providers
 from brain.ops.storage import StoreUnansweredError
 from brain.routing_routes import sessions_of
@@ -88,7 +90,7 @@ NO_STATEMENT_WITHOUT_THE_COPIES = (
 )
 
 
-class ServiceLevelView(BaseModel):
+class HandoverServiceLevelView(BaseModel):
     """The statement, as `launch.ServiceLevel` states it."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -101,14 +103,14 @@ class ServiceLevelView(BaseModel):
     because: str
 
 
-class SubprocessorView(BaseModel):
+class HandoverSubprocessorView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     provider: str
     purpose: str
 
 
-class OwnerView(BaseModel):
+class HandoverOwnerView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     responsibility: str
@@ -116,14 +118,14 @@ class OwnerView(BaseModel):
     contact: str
 
 
-class ReviewView(BaseModel):
+class HandoverReviewView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     launched_on: date
     review_booked_for: date
 
 
-class LearningView(BaseModel):
+class HandoverLearningView(BaseModel):
     """The sentence the handover must carry, and what was carried across, which is nothing."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -139,16 +141,16 @@ class HandoverView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     #: Exactly one of the statement and the sentence for why there is none.
-    service_level: ServiceLevelView | None
+    service_level: HandoverServiceLevelView | None
     service_level_refused: str
     #: Exactly one of the list and the sentence for why there is none.
-    subprocessors: list[SubprocessorView] | None
+    subprocessors: list[HandoverSubprocessorView] | None
     subprocessors_refused: str
-    owners: list[OwnerView]
+    owners: list[HandoverOwnerView]
     owner_gaps: list[str]
-    review: ReviewView | None
+    review: HandoverReviewView | None
     review_gaps: list[str]
-    learning: LearningView
+    learning: HandoverLearningView
     unreadable: list[str]
     #: True when every part is present: nothing is outstanding.
     ready: bool
@@ -156,7 +158,7 @@ class HandoverView(BaseModel):
     can_record: bool
 
 
-class OwnerAsked(BaseModel):
+class HandoverOwnerAsked(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     responsibility: Responsibility
@@ -164,15 +166,15 @@ class OwnerAsked(BaseModel):
     contact: str = Field(min_length=1, max_length=300)
 
 
-class OwnersAsked(BaseModel):
+class HandoverOwnersAsked(BaseModel):
     """The whole list, replacing the earlier one."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    owners: list[OwnerAsked] = Field(max_length=30)
+    owners: list[HandoverOwnerAsked] = Field(max_length=30)
 
 
-class ReviewAsked(BaseModel):
+class HandoverReviewAsked(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     launched_on: date
@@ -202,13 +204,13 @@ async def _page(request: Request, asked: Asked) -> HandoverView:
         raise Failed("no database on this process")
     try:
         async with factory() as session:
-            held = await handover_store.recorded(session)
+            held = await recorded(session)
             switched_on = await is_on(session, HANDOVER_PACK)
     except SQLAlchemyError as error:
         log.warning("handover not read", error=type(error).__name__)
         raise Failed("the handover could not be read") from error
 
-    level: ServiceLevelView | None = None
+    level: HandoverServiceLevelView | None = None
     level_refused = ""
     objects = backup_objects_of(request)
     if objects is None:
@@ -232,7 +234,7 @@ async def _page(request: Request, asked: Asked) -> HandoverView:
             except LaunchError as refused:
                 level_refused = str(refused)
             else:
-                level = ServiceLevelView(
+                level = HandoverServiceLevelView(
                     profile=made.profile,
                     rpo_seconds=made.rpo_seconds,
                     rto_seconds=made.rto_seconds,
@@ -241,11 +243,11 @@ async def _page(request: Request, asked: Asked) -> HandoverView:
                     because=made.because,
                 )
 
-    named: list[SubprocessorView] | None = None
+    named: list[HandoverSubprocessorView] | None = None
     named_refused = ""
     try:
         named = [
-            SubprocessorView(provider=one.slug, purpose=one.purpose)
+            HandoverSubprocessorView(provider=one.slug, purpose=one.purpose)
             for one in subprocessors(held_providers())
         ]
     except LaunchError as refused:
@@ -269,20 +271,22 @@ async def _page(request: Request, asked: Asked) -> HandoverView:
         subprocessors=named,
         subprocessors_refused=named_refused,
         owners=[
-            OwnerView(responsibility=one.responsibility.value, name=one.name, contact=one.contact)
+            HandoverOwnerView(
+                responsibility=one.responsibility.value, name=one.name, contact=one.contact
+            )
             for one in held.owners
         ],
         owner_gaps=owner_findings,
         review=(
             None
             if held.review is None
-            else ReviewView(
+            else HandoverReviewView(
                 launched_on=held.review.launched_on,
                 review_booked_for=held.review.review_booked_for,
             )
         ),
         review_gaps=review_findings,
-        learning=LearningView(
+        learning=HandoverLearningView(
             sentence=note.sentence, derived=note.derived, files_read=note.files_read
         ),
         unreadable=list(held.unreadable),
@@ -303,7 +307,7 @@ async def handover(request: Request, asked: Asked) -> HandoverView:
 
 
 @router.put("/handover/owners", response_model=HandoverView, responses=COMMON_RESPONSES)
-async def save_owners(request: Request, body: OwnersAsked, asked: Asked) -> HandoverView:
+async def save_owners(request: Request, body: HandoverOwnersAsked, asked: Asked) -> HandoverView:
     """Name who owns knowledge, grants and connectors. The list replaces the earlier one."""
     if not may_hand_over(asked.reach, asked.now):
         raise _not_answerable()
@@ -329,14 +333,14 @@ async def save_owners(request: Request, body: OwnersAsked, asked: Asked) -> Hand
             trace_id=str(structlog.contextvars.get_contextvars().get("trace_id", "")),
         ):
             await session.execute(statement)
-        await handover_store.save_owners(session, owners, by=asked.caller.principal.id)
+        await keep_owners(session, owners, by=asked.caller.principal.id)
         await session.commit()
     log.info("handover owners recorded", principal=asked.caller.principal.id)
     return await _page(request, asked)
 
 
 @router.put("/handover/review", response_model=HandoverView, responses=COMMON_RESPONSES)
-async def book_review(request: Request, body: ReviewAsked, asked: Asked) -> HandoverView:
+async def book_review(request: Request, body: HandoverReviewAsked, asked: Asked) -> HandoverView:
     """Book the review. Refused when it is the day of launch, before it, or past thirty days."""
     if not may_hand_over(asked.reach, asked.now):
         raise _not_answerable()
@@ -358,11 +362,9 @@ async def book_review(request: Request, body: ReviewAsked, asked: Asked) -> Hand
             trace_id=str(structlog.contextvars.get_contextvars().get("trace_id", "")),
         ):
             await session.execute(statement)
-        await handover_store.save_review(
+        await keep_review(
             session,
-            handover_store.Review(
-                launched_on=body.launched_on, review_booked_for=body.review_booked_for
-            ),
+            Review(launched_on=body.launched_on, review_booked_for=body.review_booked_for),
             by=asked.caller.principal.id,
         )
         await session.commit()

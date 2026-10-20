@@ -221,9 +221,9 @@ async def owners_and_the_review_are_recorded_and_checked(h: Harness) -> None:
     from datetime import date
 
     from brain.handover_routes import (
-        OwnerAsked,
-        OwnersAsked,
-        ReviewAsked,
+        HandoverOwnerAsked,
+        HandoverOwnersAsked,
+        HandoverReviewAsked,
         book_review,
         save_owners,
     )
@@ -236,12 +236,12 @@ async def owners_and_the_review_are_recorded_and_checked(h: Harness) -> None:
     console = console_for(h)
 
     def owner(which: Responsibility, name: str, contact: str = "owner@example.invalid") -> Any:
-        return OwnerAsked(responsibility=which, name=name, contact=contact)
+        return HandoverOwnerAsked(responsibility=which, name=name, contact=contact)
 
     async def write(who: str, owners: list[Any]) -> Any:
         return await save_owners(
             console.request("PUT"),
-            OwnersAsked(owners=owners),
+            HandoverOwnersAsked(owners=owners),
             await asking_as(h, who, strong=True),
         )
 
@@ -275,14 +275,14 @@ async def owners_and_the_review_are_recorded_and_checked(h: Harness) -> None:
         if not await refused(
             book_review(
                 console.request("PUT"),
-                ReviewAsked(launched_on=launched, review_booked_for=later),
+                HandoverReviewAsked(launched_on=launched, review_booked_for=later),
                 await asking_as(h, administrator, strong=True),
             )
         ):
             raise CheckFailedError(A_LATE_REVIEW_WAS_BOOKED)
     booked = await book_review(
         console.request("PUT"),
-        ReviewAsked(launched_on=launched, review_booked_for=launched + timedelta(days=30)),
+        HandoverReviewAsked(launched_on=launched, review_booked_for=launched + timedelta(days=30)),
         await asking_as(h, administrator, strong=True),
     )
     if booked.review is None or booked.review_gaps:
