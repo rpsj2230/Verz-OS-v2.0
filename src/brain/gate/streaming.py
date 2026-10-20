@@ -222,7 +222,8 @@ HEARTBEAT_SECONDS: Final = 10
 #: The most aggressive idle timeout assumed to be in the path.
 #:
 #: Unmeasured against the deployed proxy, and said so rather than presented as a finding: the
-#: streaming lane has no route yet, so there is nothing deployed to measure it against. What
+#: answer route streams (`POST /answer`), and no stream has been held open through the proxy an
+#: install runs behind to see which timeout it applies. What
 #: is enforced is that two heartbeats fit inside it, so one dropped frame does not close a
 #: live stream, and that relationship is what `stream_gaps` checks.
 SHORTEST_IDLE_TIMEOUT_SECONDS: Final = 30

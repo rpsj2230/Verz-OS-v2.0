@@ -17,7 +17,7 @@ them true**, by reading the source tree rather than trusting a constant: nothing
 attempt, nothing stores a provider's health, the queue driver's tables get no policy, and nothing
 calls a queue cancellation.
 
-Task ids: M27.2.2, M27.2.3, M27.2.6, M23.2.3
+Task ids: M27.9.8, M27.2.2, M27.2.3, M27.2.6, M23.2.3
 """
 
 from __future__ import annotations
@@ -800,3 +800,17 @@ def test_every_control_the_registry_declares_has_a_sentence_to_show() -> None:
     Delete this and a control added without a sentence renders as an identifier nobody outside
     this repository can read."""
     assert all(one.guards.strip() for one in CONTROLS)
+
+
+def test_the_sentence_on_why_no_run_can_be_stopped_does_not_say_the_stop_screen_has_no_route() -> (
+    None
+):
+    """`NO_RUN_CAN_BE_STOPPED_FROM_HERE` is served to the console, and it said `brain.ops.halt` had
+    no route once the Stop screen's routes existed. The sentence now agrees with the routes: a halt
+    is served, and what it stops is admission. Delete this and an administrator is told the Stop
+    screen they are looking at is not there."""
+    from brain import halt_routes
+
+    assert "no route serves it" not in operate_routes.NO_RUN_CAN_BE_STOPPED_FROM_HERE
+    assert "the Stop screen" in operate_routes.NO_RUN_CAN_BE_STOPPED_FROM_HERE
+    assert halt_routes.router.routes, "the Stop screen has routes for the sentence to point at"

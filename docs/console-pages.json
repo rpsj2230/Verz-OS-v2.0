@@ -1,0 +1,346 @@
+{
+  "about": "The console's primary pages, one row each: whether the page is built on the shared page kit, which screen of docs/screens.html was drawn for it, and the last walk-through of it that passed on the owner's install. A page counts as rebuilt only on all three (src/brain/console_pages.py). Read by /build/pages, by tests/unit/test_console_pages.py (menu, screens, order) and by console/tests/console-pages.test.ts (the kit claim against the source). To record a walk-through, set walked to {\"on\": \"YYYY-MM-DD\", \"release\": \"<commit>\"} after the page has been opened on the install and found as drawn.",
+  "task_ids": [
+    "M27.16.1",
+    "M27.16.4",
+    "M27.16.5"
+  ],
+  "pages": [
+    {
+      "address": "/",
+      "name": "Dashboard",
+      "module": "Home",
+      "screen": "screen-1",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/company/estate",
+      "name": "Whole company",
+      "module": "Home",
+      "screen": "screen-15",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/people",
+      "name": "People",
+      "module": "People and access",
+      "screen": "screen-10",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/departments",
+      "name": "Departments and teams",
+      "module": "People and access",
+      "screen": "screen-10",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/roles",
+      "name": "Roles and permissions",
+      "module": "People and access",
+      "screen": "screen-16",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/access_review",
+      "name": "Access reviews and elevation",
+      "module": "People and access",
+      "screen": "screen-17",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/sessions",
+      "name": "Sign-in, directory and sessions",
+      "module": "People and access",
+      "screen": "screen-18",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/service-accounts",
+      "name": "Service accounts and API keys",
+      "module": "People and access",
+      "screen": "screen-19",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/agents",
+      "name": "Agents",
+      "module": "Agents and AI",
+      "screen": "screen-4",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/agents/:agentId",
+      "name": "One agent",
+      "module": "Agents and AI",
+      "screen": "screen-14",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/agent-templates",
+      "name": "Agent templates",
+      "module": "Agents and AI",
+      "screen": "screen-5",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/skills",
+      "name": "Skills and tools",
+      "module": "Agents and AI",
+      "screen": "screen-6",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/automations",
+      "name": "Automations",
+      "module": "Agents and AI",
+      "screen": "screen-20",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/models",
+      "name": "Models and routing",
+      "module": "Agents and AI",
+      "screen": "screen-11",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/connectors",
+      "name": "Connectors",
+      "module": "Knowledge and data",
+      "screen": "screen-9",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/library",
+      "name": "Knowledge",
+      "module": "Knowledge and data",
+      "screen": "screen-7",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/learning",
+      "name": "Learning and memory",
+      "module": "Knowledge and data",
+      "screen": "screen-8",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/classification",
+      "name": "Fields and records",
+      "module": "Knowledge and data",
+      "screen": "screen-21",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/artifacts",
+      "name": "Artifacts",
+      "module": "Knowledge and data",
+      "screen": "screen-22",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/channels",
+      "name": "Channels",
+      "module": "Channels and notifications",
+      "screen": "screen-23",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/webhooks",
+      "name": "Webhooks",
+      "module": "Channels and notifications",
+      "screen": "screen-24",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/notifications",
+      "name": "Notifications and email",
+      "module": "Channels and notifications",
+      "screen": "screen-25",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/runs",
+      "name": "Runs and queue",
+      "module": "Operations",
+      "screen": "screen-26",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/jobs",
+      "name": "Background jobs",
+      "module": "Operations",
+      "screen": "screen-27",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/stop",
+      "name": "Stop",
+      "module": "Operations",
+      "screen": "screen-28",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/logs",
+      "name": "Logs and errors",
+      "module": "Operations",
+      "screen": "screen-29",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/incidents",
+      "name": "Incidents",
+      "module": "Operations",
+      "screen": "screen-30",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/audit",
+      "name": "Audit log",
+      "module": "Governance",
+      "screen": "screen-31",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/retention",
+      "name": "Retention, legal holds and erasure",
+      "module": "Governance",
+      "screen": "screen-32",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/import-export",
+      "name": "Import and export",
+      "module": "Governance",
+      "screen": "screen-33",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/compliance",
+      "name": "Compliance",
+      "module": "Governance",
+      "screen": "screen-34",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/usage",
+      "name": "Usage and cost",
+      "module": "Reports",
+      "screen": "screen-35",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/questions",
+      "name": "Questions and gaps",
+      "module": "Reports",
+      "screen": "screen-36",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/quality",
+      "name": "Quality and canaries",
+      "module": "Reports",
+      "screen": "screen-37",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/service-levels",
+      "name": "Service levels",
+      "module": "Reports",
+      "screen": "screen-38",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/settings",
+      "name": "Settings",
+      "module": "Platform",
+      "screen": "screen-39",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/features",
+      "name": "Features and plugins",
+      "module": "Platform",
+      "screen": "screen-40",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/limits",
+      "name": "Limits, budgets and capacity",
+      "module": "Platform",
+      "screen": "screen-41",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/credentials",
+      "name": "Secrets and credentials",
+      "module": "Platform",
+      "screen": "screen-42",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/storage",
+      "name": "Storage",
+      "module": "Platform",
+      "screen": "screen-43",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/recovery",
+      "name": "Backup and recovery",
+      "module": "Platform",
+      "screen": "screen-44",
+      "on_the_shared_parts": true,
+      "walked": null
+    },
+    {
+      "address": "/updates",
+      "name": "Version and updates",
+      "module": "Platform",
+      "screen": "screen-45",
+      "on_the_shared_parts": true,
+      "walked": null
+    }
+  ]
+}

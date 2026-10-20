@@ -24,8 +24,9 @@ it cannot show are fields on the response rather than empty tables. See
 transaction-scoped advisory lock inside a worker process for its whole run, and nothing in this
 repository ends one: `brain.ops.jobs` has a cancelling state and nothing persists the row it
 would move, the queue driver's cancellation is not called anywhere and its table cannot be read
-from here, and `brain.ops.halt` stops admission rather than a run and has no route. A button
-reaching none of those would be the control `docs/admin-console.md` calls worse than no control.
+from here, and `brain.ops.halt` stops admission rather than a run (its routes are the Stop screen's,
+`brain.halt_routes`). A button reaching none of those would be the control
+`docs/admin-console.md` calls worse than no control.
 See `NO_RUN_CAN_BE_STOPPED_FROM_HERE`.
 
 **Live runs has no capability check in front of it and models has one, and the difference is the
@@ -139,7 +140,8 @@ NO_RUN_CAN_BE_STOPPED_FROM_HERE: Final = (
     "this repository ends one. brain.ops.jobs moves a job through cancelling and nothing stores "
     "the row it moves; the queue driver's cancellation is called by nothing and its table cannot "
     "be read from here; brain.ops.halt stops new work being admitted rather than a run in "
-    "progress, and no route serves it. A stop button reaching none of these is refused or "
+    "progress, and that is what the Stop screen does. A stop button reaching none of these is "
+    "refused or "
     "ignored every time it is pressed, which teaches a person that stopping does not work on "
     "the day it matters."
 )
