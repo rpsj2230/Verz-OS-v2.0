@@ -281,3 +281,15 @@ def test_a_refused_opening_writes_nothing(
     Delete this and a reader turned away leaves an entry saying they read finance's text."""
     assert opened(client, LEDGER, pid="u_wide").status_code == 404
     assert written == []
+
+
+def test_a_process_with_no_database_opens_the_page_and_writes_nothing(
+    client: TestClient, written: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nowhere to write is not a reason to refuse a reader the page, and nothing is written. Delete
+    this and the route is changed to hand the writer a missing factory, which fails every opening
+    on a process built without a database."""
+    monkeypatch.setattr("brain.cited_document_routes.sessions_of", lambda _request: None)
+
+    assert opened(client, LEDGER, pid="u_narrow").status_code == 200
+    assert written == []
