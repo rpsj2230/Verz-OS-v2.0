@@ -37,7 +37,7 @@ stored answer and `brain.api_routes.answer` passes `cached=None`, so no cached a
 today. The day the cache is wired, a hit discloses the same records again and has to be written
 down here as a read, and `disclosed_payload` is the one function that has to learn it.
 
-Task ids: M24.3.2, M27.15.42
+Task ids: M24.3.2, M27.15.42, M27.15.1
 """
 
 from __future__ import annotations
@@ -214,6 +214,62 @@ async def record_artifact_download(
         record_kind=ARTIFACT_KIND,
         subject_principal=None,
         record_id=artifact_id,
+        ent_hash=ent_hash,
+        trace_id=trace_id,
+    )
+    async with sessions() as session, session.begin():
+        await session.execute(insert(SensitiveReadRow), [row_values(read)])
+
+
+#: The record kind a document's text opened in another department is filed under, and the one
+#: field it discloses: the text. The unit is the document, so two readers of one document leave
+#: the same row.
+DOCUMENT_KIND: Final = "document"
+DOCUMENT_TEXT_FIELD: Final = "text"
+
+
+def is_another_departments(document_department: str | None, reader_department: str | None) -> bool:
+    """Whether a document sits in a department the reader does not belong to (M27.15.1).
+
+    **Only a department that is named can be another's.** A company-wide document has no
+    department and a personal one is its owner's, so neither is the line the departments draw, and
+    a document whose department the reader's own policy withheld cannot be told from a
+    company-wide one and is not written down: the read log is a map of who is interested in whom
+    (`brain.audit.reads.A_READ_LOG_IS_A_MAP_OF_WHO_IS_INTERESTED_IN_WHOM`), and a rule that wrote
+    an entry for every opening of a company document would be Option B by another name. A reader
+    with no department of their own opens every department's document as another's.
+    """
+    return bool(document_department) and document_department != reader_department
+
+
+async def record_document_opening(
+    sessions: async_sessionmaker[AsyncSession],
+    *,
+    reader_id: str,
+    document_id: str,
+    ent_hash: str,
+    trace_id: str,
+) -> None:
+    """Write one opening of another department's document as a read of the declared set, or raise.
+
+    The same shape as `record_artifact_download` and for the same reasons: asked of
+    `brain.audit.reads.written_down_because` so removing the declaration makes this refuse rather
+    than write a row nobody declared, filed under the document itself (`entity:<id>`), naming the
+    reader as the entry's actor with the reach and trace of the request, and carrying nothing of
+    what was shown. A failure to write it fails the opening, so a document's text is never shown
+    to someone across the departments' line without the entry that says so
+    (`A_SENSITIVE_READ_THAT_CANNOT_BE_WRITTEN_IS_NOT_SHOWN`).
+    """
+    if not written_down_because(DOCUMENT_KIND, (DOCUMENT_TEXT_FIELD,)):
+        raise SensitiveReadError("a document opening is not in the set of reads written down")
+    if not _IDENTIFIER_RE.match(document_id):
+        raise SensitiveReadError("a document opening has no id the ledger can file it under")
+    read = SensitiveRead(
+        reader_id=reader_id,
+        agent_id=None,
+        record_kind=DOCUMENT_KIND,
+        subject_principal=None,
+        record_id=document_id,
         ent_hash=ent_hash,
         trace_id=trace_id,
     )

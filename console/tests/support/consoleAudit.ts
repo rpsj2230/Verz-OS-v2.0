@@ -966,10 +966,16 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "Version, build and deployment information": {
     screens: ["/updates", "/install"],
-    routes: ["/api/v1/install/updates"],
+    routes: ["/api/v1/install/updates", "/api/v1/handover*"],
     tables: ["ops.deployment_record"],
     installation: ["INSTALL_UPDATE_MODE"],
-    gaps: [],
+    gaps: [
+      {
+        what: "No page draws the handover pack: the service level statement, the subprocessors, the named owners and the booked review are served and nothing links to them.",
+        because:
+          "brain.handover_routes serves them to the install authority (M30.5.4, M30.6.6, M37.4.2.4, M37.4.3.3, M37.4.3.5) and the console has not been given a Handover page.",
+      },
+    ],
   },
 };
 

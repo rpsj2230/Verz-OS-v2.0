@@ -306,6 +306,11 @@ from brain.group_rule_routes import router as group_rule_router
 # a scope that matches what is stopped. See `brain.halt_routes` and `brain.ops.halt_store`.
 from brain.halt_routes import router as halt_router
 
+# The handover pack: the service level statement or why there is none, the subprocessors, who at the
+# company owns what and when the review is, behind `admin:install_setting` and the `handover_pack`
+# switch for its two writes. See `brain.handover_routes`.
+from brain.handover_routes import router as handover_router
+
 # The install's own help pages: what it can see, a runbook for each screen and alert, and the
 # incident playbook, each as open as the screen it is about. See `brain.help_routes`.
 from brain.help_routes import router as help_router
