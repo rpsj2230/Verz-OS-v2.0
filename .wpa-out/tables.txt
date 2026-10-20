@@ -1,0 +1,62 @@
+........................................................................ [ 31%]
+........................................................................ [ 63%]
+........................................................F............... [ 95%]
+...ssssssss                                                              [100%]
+=================================== FAILURES ===================================
+___ test_every_declared_reader_asks_about_its_feature_and_nothing_else_asks ____
+
+    def test_every_declared_reader_asks_about_its_feature_and_nothing_else_asks() -> None:
+        """The real tree has no gaps: each named function calls `is_on` with its own feature, and no
+        function calls it without being named.
+    
+        Delete this and a route can stop asking whether its feature is on while the Features screen
+        goes on switching a row nothing reads."""
+        assert feature_gaps() == ()
+>       assert {reader.partition(":")[0] for one in FEATURES for reader in one.read_by} == {
+            "brain.prompt_routes",
+            "brain.ops.external_ai_store",
+            "brain.jobs_routes",
+            "brain.install_routes",
+            "brain.staff_source_routes",
+            "brain.resolution.merge_store",
+            "brain.ops.budget_stop_store",
+            "brain.gate.suspension_store",
+            "brain.ops.supervision_review",
+            "brain.ops.shared_start",
+            "brain.widget_answers",
+            "brain.agents.kinds",
+            "brain.builder.describe_switch",
+            "brain.agent_builder_routes",
+            "brain.ops.agent_item_use",
+            "brain.skill_routes",
+            "brain.skill_draft_routes",
+            "brain.automation_authoring_routes",
+            "brain.automation_schedule_routes",
+            "brain.ops.automation_event_store",
+            "brain.ops.load_run_store",
+            "brain.ops.starter_skill_store",
+            "brain.orchestration_routes",
+            "brain.plugin_routes",
+            "brain.migration_routes",
+            "brain.browsing.driver",
+            "brain.tools.document_generation",
+            "brain.control_not_run_told",
+            "brain.learned_instruction_store",
+            "brain.agent_oversight_routes",
+            "brain.agent_own_workspace_routes",
+            "brain.template_withdrawal_routes",
+            "brain.ops.model_server_store",
+            "brain.settings_routes",
+            "brain.agent_audience_routes",
+        }
+E       AssertionError: assert {'brain.agent..._routes', ...} == {'brain.agent..._routes', ...}
+E         
+E         Extra items in the left set:
+E         'brain.coordination_routes'
+E         Use -v to get more diff
+
+tests/unit/test_features.py:103: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_features.py::test_every_declared_reader_asks_about_its_feature_and_nothing_else_asks
+1 failed, 218 passed, 8 skipped, 1 warning in 14.24s
+exit 1
