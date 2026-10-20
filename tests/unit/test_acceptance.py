@@ -829,6 +829,12 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     # `tests/unit/test_acceptance_checks_first_run.py` writes the values and answers for the vault.
     assert outcomes.pop("the_wizard_s_values_are_held_in_the_install_s_settings")[0] == NOT_RUN
     assert outcomes.pop("a_provider_key_the_wizard_was_given_is_held_in_the_vault")[0] == NOT_RUN
+    # No vault, so no object store: the recording check shows its first half on a bucket it holds
+    # and says it could not show the install's own.
+    assert (
+        outcomes.pop("a_browser_recording_is_kept_and_removed_when_its_time_has_passed")[0]
+        == NOT_RUN
+    )
     # No cache here either; `tests/unit/test_acceptance_cache.py` runs it with a store in its place.
     assert outcomes.pop("a_cached_answer_reaches_only_the_reach_it_was_computed_for")[0] == NOT_RUN
     # Nor the plan and freshness checks, which ask the same cache;
