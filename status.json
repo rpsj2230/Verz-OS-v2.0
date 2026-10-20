@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-20T20:53:48.716132+00:00",
-  "commit": "a5df746a",
-  "commit_subject": "Weekly restore rehearsals, copies declared off the host and encrypted, and a Start a rehearsal control (M30.3.3, M30.3.4, M30.3.6 to M30.3.9, M30.3.11) (#641)",
+  "generated_at": "2026-10-20T21:02:00.029812+00:00",
+  "commit": "a4465eaf",
+  "commit_subject": "6 more tasks are proved on the install by the newest complete acceptance run",
   "total": 1626,
-  "done": 1160,
-  "percent": 71.3,
+  "done": 1166,
+  "percent": 71.7,
   "built": 1342,
   "built_percent": 82.5,
-  "built_unproven": 182,
+  "built_unproven": 176,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -114,9 +114,7 @@
     "M30.3.7",
     "M30.3.8",
     "M30.3.9",
-    "M30.5.4",
     "M30.6.10",
-    "M30.6.6",
     "M32.1.1.1",
     "M32.1.1.2",
     "M32.1.2.4",
@@ -136,10 +134,6 @@
     "M35.2.2.4",
     "M35.3.1.1",
     "M36.2.4.1",
-    "M37.2.4.4",
-    "M37.4.2.4",
-    "M37.4.3.3",
-    "M37.4.3.5",
     "M37.5.1.2",
     "M37.5.1.3",
     "M37.5.1.4",
@@ -275,10 +269,10 @@
       "wave": 5,
       "name": "Hands, delivery, go-live",
       "total": 217,
-      "done": 81,
-      "percent": 37.3,
+      "done": 87,
+      "percent": 40.1,
       "in_progress": 69,
-      "ready_for_testing": 36,
+      "ready_for_testing": 30,
       "blocked": 19,
       "open": 12,
       "acts": 42,
@@ -608,7 +602,7 @@
       "name": "Hosting, delivery and recovery",
       "wave": 5,
       "total": 36,
-      "done": 11,
+      "done": 13,
       "acts": 1,
       "decided": 10,
       "built": 22
@@ -678,7 +672,7 @@
       "name": "Migration, launch and handover",
       "wave": 5,
       "total": 45,
-      "done": 20,
+      "done": 24,
       "acts": 41,
       "decided": 4,
       "built": 28
@@ -1446,6 +1440,8 @@
     "M30.4.7",
     "M30.5.1",
     "M30.5.2",
+    "M30.5.4",
+    "M30.6.6",
     "M30.6.9",
     "M31.1.1.1",
     "M31.1.1.2",
@@ -1596,9 +1592,13 @@
     "M37.2.3.2",
     "M37.2.3.3",
     "M37.2.4.1",
+    "M37.2.4.4",
     "M37.3.2.4",
     "M37.4.1.2",
+    "M37.4.2.4",
+    "M37.4.3.3",
     "M37.4.3.4",
+    "M37.4.3.5",
     "M37.5.1.1",
     "M37.6.1.3",
     "M37.7.5",
@@ -3185,11 +3185,6 @@
       "why": "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Overlays docker-compose.split*.yml, ops/split.py (host_services, address_refusals) and docs/install/scaling.md exist and are tested; scaling.md says the rehearsal steps have not been run. Needs-rupash lists M36.1.4.2 merged into M30.4.9.",
       "updated": "2026-10-13"
     },
-    "M30.5.4": {
-      "status": "READY FOR TESTING",
-      "why": "BUILT: GET /handover returns the service level statement for the install's profile or the one sentence for why it cannot be made. PROOF ON THE INSTALL: 1. Call GET /api/v1/handover as the first administrator, or read it from the console once a page draws it. 2. Before any rehearsal has verified a copy it says no restore has ever verified. 3. After a rehearsal verifies and every copy is inside the recovery point it carries the profile's recovery point, time and the time measured. The check the_statement_is_made_only_after_a_rehearsal_verified passes.",
-      "updated": "2026-10-20"
-    },
     "M30.6.1": {
       "status": "BLOCKED",
       "why": "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Proof leaf for backups on an install: seven consecutive nights, a missed night alerting a person, never verified until a drill, drill checking schema, RLS and permissions, erasure horizon. Needs elapsed time on a real install and the unbuilt pieces M30.3.2, 3.3, 3.4, 3.6, 3.7, 3.10.",
@@ -3209,11 +3204,6 @@
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 2 (partly built): docker-compose.replica.yml runs a hot standby Postgres; profile full has a one-hour RPO (reliability.RECOVERY_OBJECTIVES). Missing: object store replication off the host, a promote or failover procedure and recorded failover drill, and any gate stopping the profile being offered without them. NEXT: build object-store replication, a failover runbook and drill record, and make launch.service_level refuse an under-four-hour profile without them; needs a second server to rehearse",
       "updated": "2026-10-13"
-    },
-    "M30.6.6": {
-      "status": "READY FOR TESTING",
-      "why": "BUILT: the statement is produced only after a verified rehearsal and every copy inside the recovery point, and otherwise refused with the reason (launch.service_level, now served). PROOF ON THE INSTALL: the same steps as M30.5.4; the refusal names the coverage nothing has copied or the missing rehearsal.",
-      "updated": "2026-10-20"
     },
     "M30.6.7": {
       "status": "BLOCKED",
@@ -3549,26 +3539,6 @@
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 3 (built, not wired): migration/learning.py: re_derive() refuses any change in CHANGES_WHAT_ANYBODY_MAY_SEE (tested). No caller outside the package, so nothing is discarded in practice. NEXT: same wiring as M37.2.4.2; check asserts a scope-widening derivation is refused by the route",
       "updated": "2026-10-13"
-    },
-    "M37.2.4.4": {
-      "status": "READY FOR TESTING",
-      "why": "BUILT: the handover carries the sentence that the new system starts without the old one's accumulated learning and why that is the right trade, with the counts of what was carried (none until a migration re-derives something). PROOF ON THE INSTALL: GET /handover shows the learning sentence.",
-      "updated": "2026-10-20"
-    },
-    "M37.4.2.4": {
-      "status": "READY FOR TESTING",
-      "why": "BUILT: GET /handover lists the model providers whose key this process holds, each with what it is for, and says in words when it holds none. PROOF ON THE INSTALL: the list matches the providers shown with a key on the Models screen. The check the_subprocessors_are_the_providers_whose_key_is_held passes.",
-      "updated": "2026-10-20"
-    },
-    "M37.4.3.3": {
-      "status": "READY FOR TESTING",
-      "why": "BUILT: PUT /handover/owners records who owns knowledge, grants and connectors with a way to reach them, behind the handover_pack switch (ships off). PROOF ON THE INSTALL: 1. Turn Record the named owners and the review date on under Features. 2. PUT the three owners; GET /handover lists them and no gap. 3. Leave one out: the gap names it.",
-      "updated": "2026-10-20"
-    },
-    "M37.4.3.5": {
-      "status": "READY FOR TESTING",
-      "why": "BUILT: PUT /handover/review books the thirty-day review and refuses launch day or past thirty days. PROOF ON THE INSTALL: with the switch on, book a review 30 days after launch and read it back; 31 days is refused.",
-      "updated": "2026-10-20"
     },
     "M37.5.1.2": {
       "status": "READY FOR TESTING",
@@ -4073,11 +4043,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 8,
+  "closed_today": 14,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "a4465ea",
+      "at": "2026-10-20T21:00:32+00:00",
+      "subject": "6 more tasks are proved on the install by the newest complete acceptance run",
+      "closed": "M30.5.4,M30.6.6,M37.2.4.4,M37.4.2.4,M37.4.3.3,M37.4.3.5"
+    },
     {
       "sha": "9b668ad",
       "at": "2026-10-20T11:49:46+00:00",
@@ -4191,12 +4167,6 @@
       "at": "2026-10-06T02:26:38+00:00",
       "subject": "Seventy-five tasks close on the install's own acceptance runs since the morning's deploys (#422)",
       "closed": "M1.6.20,M1.6.21,M12.3.6,M13.1.1,M13.2.1,M13.2.3,M13.2.4,M13.2.6,M13.2.7,M13.4.1,M13.5.1,M13.5.10,M13.5.11,M13.5.12,M13.5.13,M13.5.14,M13.5.15,M13.5.16,M13.5.17,M13.5.19,M13.5.2,M13.5.20,M13.5.21,M13.5.22,M13.5.23,M13.5.3,M13.5.4,M13.5.5,M13.5.6,M13.5.7,M13.5.8,M13.5.9,M13.8.18,M13.9.4,M14.1.1,M14.1.2,M14.1.3,M14.1.4,M14.1.5,M14.1.6,M14.2.1,M14.2.2,M14.2.3,M14.2.4,M14.2.5,M14.3.2,M14.3.3,M14.3.4,M14.3.6,M14.3.7,M14.3.8,M14.5.1,M14.5.2,M14.5.3,M14.5.4,M14.5.5,M14.5.6,M14.6.1,M14.6.2,M14.6.3,M14.6.4,M14.7.3,M14.8.5,M16.7.2,M20.1.2,M20.1.5,M20.2.2,M20.2.3,M20.2.4,M20.4.6,M27.15.10,M27.15.15,M27.15.16,M27.15.2,M6.1.3"
-    },
-    {
-      "sha": "92bb58c",
-      "at": "2026-10-06T00:48:06+00:00",
-      "subject": "The console is walked in a real browser against a furnished install: a second-factor first run, every module's pages, a reader and two tabs (#412)",
-      "closed": "M27.10.6"
     }
   ]
 }
