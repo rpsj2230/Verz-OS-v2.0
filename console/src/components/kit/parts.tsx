@@ -22,7 +22,8 @@
  */
 
 import { CircleCheck, Info } from "lucide-react";
-import { useId, type ReactNode } from "react";
+import { useEffect, useId, type ReactNode } from "react";
+import { toast } from "sonner";
 import { cn } from "../../lib/utils";
 
 /** The Advanced section's own summary line. */
@@ -170,8 +171,23 @@ export type NoteKind = keyof typeof NOTE_LEADS;
 /**
  * A line saying what is true today, in plain words for an administrator. Never a control, and
  * never a package code, a route or an internal name: those are for whoever builds the thing.
+ *
+ * **A `done` note is also announced as a toast (M27.10.2), and the note stays.** It is the page's
+ * statement that a write took effect, so it is the one place every page already says so, and
+ * announcing from here gives all of them the toast region without an edit to each page. The sentence
+ * is the note's own, so the toast can say nothing the page does not, and only a sentence is
+ * announced: a note holding markup is not turned into text by guessing. The toast carries the
+ * sentence as its id, so a note that is drawn again does not announce again while the first shows.
+ * The page keeps its note because a toast disappears and a screen reader may be mid-sentence when it
+ * arrives (`components/ui/sonner.tsx`).
  */
 export function Note({ children, kind = "info" }: { readonly children: ReactNode; readonly kind?: NoteKind | undefined }) {
+  const sentence = kind === "done" && typeof children === "string" && children !== "" ? children : null;
+  useEffect(() => {
+    if (sentence !== null) {
+      toast.success(sentence, { id: sentence });
+    }
+  }, [sentence]);
   const Icon = kind === "works" || kind === "done" ? CircleCheck : Info;
   const lead = NOTE_LEADS[kind];
   return (
