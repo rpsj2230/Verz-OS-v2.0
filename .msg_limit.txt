@@ -1,0 +1,13 @@
+A long dictation stops at the length a question may be
+
+The field's own maxLength does not apply to a value set from code, so a dictation that arrived after
+a nearly full question would leave the field past the route's limit and Ask disabled with no reason.
+appendSpoken is already given the limit by Ask; this pins it at the page, with the route's 4000
+written out so the test does not compare the console's copy of it against itself.
+
+Written ahead of the mutation run over the dictation files and confirmed by it: removing the limit
+argument from the call in Ask.tsx fails this test and no other page-level one. The run (29
+mutations over askDictationCore.ts, AskDictation.tsx and Ask.tsx, in a throwaway worktree, the
+named tests run clean first) left no survivor; the table is in the pull request.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
