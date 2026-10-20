@@ -1,0 +1,86 @@
+The maintenance agent joins the catalogue, and the SEO, sales, finance, support and project management templates read the sources they name
+
+The owner named six agents a web agency runs, and four of the five templates that already existed for
+them read entities nothing registers (`deal`, `project`, `task`, `page`) or tools no source provides
+(`ticket.search`, `xero_invoice.search`). Each installed incomplete and disabled on every install, and
+completed by hand read nothing from the systems it names: the catalogue said a sales agent existed, and
+no install could make one answer. Version 2 of the accountant had already found this in the ledger, and
+this is the same fix applied to the rest, with the sixth template written the same way.
+
+What changed, per template, and every version raised because what is on file under a version is never
+replaced (brain.ops.builtin_templates), so version 1 of each stays on file as signed:
+
+- maintenance_agent v1 (M13.7.9, new): declares the ticket desk (freshdesk) and the maintenance records
+  source (laravel, which needs-rupash 156 A decided is the maintenance portal), the ticket analysis,
+  website health check and website troubleshooting skills, the HTTP website check and, as a capability
+  because the check opens it from inside itself, the read-only browser. Read-only, and it names no
+  department: a department a template names is one company's. Its one workflow and its approval are put on
+  the installed agent from the Automations page (needs-rupash 170 A), where a person approves the reply.
+- seo_agent v2 (M13.8.7): analytics and search console connectors, the figures each maps, an HTTP check,
+  and the SEO audit, keyword research and monthly report skills. Five top queries and five top pages
+  rather than ten, because a memory formed while running an agent carries its capabilities as tags and
+  tests/unit/test_memory_tables.py holds the column's bound; widening the column is a migration this does
+  not need.
+- pre_sales v2, support_ticket_agent v2, accountant_agent v3, project_manager v2 (M13.8.8): HubSpot deal
+  stage and never its amount, the price list's sell price and never its cost; Freshdesk's real
+  `description_text`; Xero's invoice and contact reads and nothing the ledger does not register; and the
+  project manager reads tickets and the maintenance records, which is where needs-rupash 137 decided a
+  client's work lives.
+
+**Skills are pinned by literal digests, and a test holds them equal to the starter pack.** A SkillRef
+pins a digest and the digest is part of what a template's own digest and signature cover. Computed at
+import, rewording a starter skill would silently change six templates already on file under the same
+version, and an install's own check would find "not as shipped" with nothing in the diff saying why.
+Literals make it a deliberate edit: the test goes red on the day the words change.
+
+**One owner question, not decided here.** None of the owner's eight starter skills is about a ledger, so
+the finance agent carries no skill, and a ninth would arrive on every install, which
+tests/unit/test_starter_skills.py exists to refuse. Rejected: adding one anyway.
+
+The install check (acceptance_checks_role_templates, one check for the three leaves) holds each template
+to this install's own registries: on file as shipped, connectors this release ships, skills at the digest
+the starter pack furnishes, every tool bound with the website check registered the way the application
+registers it, installed from the gallery's route as a disabled agent at Shadow naming its connectors and
+skills, and finished again over serving connectors so the real gate starts a run. It assumes nothing
+about what an install has connected. Eleven break tests make it fail with its own sentence each.
+
+Reused: brain.agents.template (SkillRef, publish), brain.agents.install (bind_tools, complete, rehearse),
+brain.ops.builtin_templates (signing the catalogue), brain.ops.acceptance_checks_templates (the install
+route helpers, imported rather than copied), brain.tools.starter_skills (the eight skills), brain.tools.
+website_check (the check and its browser), brain.connectors field rules (the classification the
+templates are held against). Replaced: the catalogue entries of four templates, by new versions, for the
+reason above; tests/unit/test_catalogue.py's ready set, its leaf count and the sales and ledger tests
+move with them.
+
+Mutation (brain.ops.mutation, named tests run clean first):
+a pinned skill digest no longer the starter pack's          | caught    | test_every_skill_digest_a_template_pins_is_the_one_the_starter_pack_furnishes
+a template pins the wrong skill's digest                    | caught    | test_every_skill_digest_a_template_pins_is_the_one_the_starter_pack_furnishes
+the maintenance agent loses a skill                         | caught    | test_a_role_template_carries_the_starter_skills_its_role_is_asked_through[maintenance_agent]
+the maintenance agent reads a client's contract value       | caught    | test_a_role_template_reads_nothing_classified_above_internal[maintenance_agent]
+the maintenance agent loses the read-only browser           | caught    | test_the_maintenance_agent_checks_a_website_over_http_and_may_open_the_read_only_browser[local]
+the maintenance agent loses the ticket desk                 | caught    | test_a_role_template_declares_the_connectors_its_leaf_names[maintenance_agent]
+the maintenance agent may write                             | caught    | test_a_role_template_reaches_no_further_than_a_read[maintenance_agent]
+the sales agent reads a deal's amount                       | caught    | test_a_role_template_reads_nothing_classified_above_internal[pre_sales]
+the finance agent reads a contact's tax number              | caught    | test_the_finance_agent_reads_the_amount_owed_and_nothing_else_above_internal
+the SEO agent loses the search console                      | caught    | test_a_role_template_declares_the_connectors_its_leaf_names[seo_agent]
+the support agent asks for a search no source registers     | caught    | test_a_role_template_installs_ready_and_a_run_through_it_starts[support_ticket_agent-local]
+a role template names a read as a write                     | caught    | test_every_capability_a_role_template_names_is_a_field_a_source_maps[maintenance_agent]
+the install check stops asking about the SEO agent          | caught    | test_the_catalogues_list_of_role_templates_is_the_six_the_leaves_name
+check: a stored template that is not the shipped one passes | caught    | test_a_stored_role_template_that_is_not_the_shipped_one_fails_the_check
+check: a template missing from the install passes           | caught    | test_a_role_template_the_release_ships_and_the_install_does_not_hold_fails_the_check
+check: a connector nobody ships passes                      | caught    | test_a_role_template_declaring_a_connector_nobody_ships_fails_the_check
+check: a skill the starter pack does not furnish passes     | caught    | test_a_role_template_pinning_a_skill_nothing_furnishes_fails_the_check
+check: a tool nothing binds passes                          | caught    | test_a_role_template_declaring_a_tool_nothing_binds_fails_the_check
+check: an agent installed enabled passes                    | caught    | test_an_install_that_leaves_the_role_agent_enabled_fails_the_check
+check: an agent starting above Shadow passes                | caught    | test_an_install_whose_agent_starts_above_shadow_fails_the_check
+check: an agent with no connectors named passes             | caught    | test_an_install_that_drops_the_connectors_a_role_template_declares_fails_the_check
+check: an agent with no skills pinned passes                | caught    | test_an_install_that_drops_the_skills_a_role_template_pins_fails_the_check
+check: an incomplete install with sources serving passes    | caught    | test_a_role_template_that_is_incomplete_with_its_sources_serving_fails_the_check
+check: a gate that starts no run passes                     | caught    | test_a_gate_that_starts_no_run_through_a_role_agent_fails_the_check
+
+Verified: the whole of tests/unit/test_acceptance.py ran over a scratch PostgreSQL on a machine with twenty other runs
+sharing it; the role template check passed in it, and the only failures were the connector checks that read a source
+live under a time limit (analytics, search console, the Laravel views, the maintenance portal), which timed out under
+that load and are not touched by this change. CI is where they are judged on an idle runner.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

@@ -1,0 +1,58 @@
+The maintenance agent joins the catalogue, and the SEO, sales, finance, support and project management templates read the sources they name
+
+The owner named six agents a web agency runs, and four of the five templates that already existed for
+them read entities nothing registers (`deal`, `project`, `task`, `page`) or tools no source provides
+(`ticket.search`, `xero_invoice.search`). Each installed incomplete and disabled on every install, and
+completed by hand read nothing from the systems it names: the catalogue said a sales agent existed, and
+no install could make one answer. Version 2 of the accountant had already found this in the ledger, and
+this is the same fix applied to the rest, with the sixth template written the same way.
+
+What changed, per template, and every version raised because what is on file under a version is never
+replaced (brain.ops.builtin_templates), so version 1 of each stays on file as signed:
+
+- maintenance_agent v1 (M13.7.9, new): declares the ticket desk (freshdesk) and the maintenance records
+  source (laravel, which needs-rupash 156 A decided is the maintenance portal), the ticket analysis,
+  website health check and website troubleshooting skills, the HTTP website check and, as a capability
+  because the check opens it from inside itself, the read-only browser. Read-only, and it names no
+  department: a department a template names is one company's. Its one workflow and its approval are put on
+  the installed agent from the Automations page (needs-rupash 170 A), where a person approves the reply.
+- seo_agent v2 (M13.8.7): analytics and search console connectors, the figures each maps, an HTTP check,
+  and the SEO audit, keyword research and monthly report skills. Five top queries and five top pages
+  rather than ten, because a memory formed while running an agent carries its capabilities as tags and
+  tests/unit/test_memory_tables.py holds the column's bound; widening the column is a migration this does
+  not need.
+- pre_sales v2, support_ticket_agent v2, accountant_agent v3, project_manager v2 (M13.8.8): HubSpot deal
+  stage and never its amount, the price list's sell price and never its cost; Freshdesk's real
+  `description_text`; Xero's invoice and contact reads and nothing the ledger does not register; and the
+  project manager reads tickets and the maintenance records, which is where needs-rupash 137 decided a
+  client's work lives.
+
+**Skills are pinned by literal digests, and a test holds them equal to the starter pack.** A SkillRef
+pins a digest and the digest is part of what a template's own digest and signature cover. Computed at
+import, rewording a starter skill would silently change six templates already on file under the same
+version, and an install's own check would find "not as shipped" with nothing in the diff saying why.
+Literals make it a deliberate edit: the test goes red on the day the words change.
+
+**One owner question, not decided here.** None of the owner's eight starter skills is about a ledger, so
+the finance agent carries no skill, and a ninth would arrive on every install, which
+tests/unit/test_starter_skills.py exists to refuse. Rejected: adding one anyway.
+
+The install check (acceptance_checks_role_templates, one check for the three leaves) holds each template
+to this install's own registries: on file as shipped, connectors this release ships, skills at the digest
+the starter pack furnishes, every tool bound with the website check registered the way the application
+registers it, installed from the gallery's route as a disabled agent at Shadow naming its connectors and
+skills, and finished again over serving connectors so the real gate starts a run. It assumes nothing
+about what an install has connected. Eleven break tests make it fail with its own sentence each.
+
+Reused: brain.agents.template (SkillRef, publish), brain.agents.install (bind_tools, complete, rehearse),
+brain.ops.builtin_templates (signing the catalogue), brain.ops.acceptance_checks_templates (the install
+route helpers, imported rather than copied), brain.tools.starter_skills (the eight skills), brain.tools.
+website_check (the check and its browser), brain.connectors field rules (the classification the
+templates are held against). Replaced: the catalogue entries of four templates, by new versions, for the
+reason above; tests/unit/test_catalogue.py's ready set, its leaf count and the sales and ledger tests
+move with them.
+
+Mutation (brain.ops.mutation, named tests run clean first):
+MUTATIONS
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
