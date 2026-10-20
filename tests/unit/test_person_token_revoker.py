@@ -80,6 +80,7 @@ def revoker(
     held: bool = True,
     principal: str = ADA,
     resolver: object | None = None,
+    poster: object | None = ...,
 ) -> tuple[VaultTokenRevoker, Vendor, Shelf, Keys]:
     vendor = vendor or Vendor()
     shelf = shelf or Shelf(vendor)
@@ -94,7 +95,7 @@ def revoker(
             consent=declared,
             keys=keys,
             remover=shelf,
-            poster=vendor,
+            poster=vendor if poster is ... else poster,  # type: ignore[arg-type]
             resolver=resolver or Resolver(),  # type: ignore[arg-type]
         ),
         vendor,
@@ -161,6 +162,38 @@ def test_a_vendor_saying_the_token_is_not_valid_is_the_revocation_already_done()
 
     assert one.revoke(ada_slot(), at=AT) is True
     assert shelf.removed == [ada_slot()]
+
+
+def test_a_process_with_nothing_to_post_with_leaves_the_slot_in_place() -> None:
+    """With no poster the vendor cannot be asked, and that is False and nothing removed. Delete this
+    and an install that cannot reach vendors reports every disconnect as done."""
+    one, _, shelf, _ = revoker(poster=None)
+
+    assert one.revoke(ada_slot(), at=AT) is False
+    assert shelf.removed == []
+
+
+def test_an_answer_flagged_as_timed_out_is_not_a_revocation_whatever_status_it_carries() -> None:
+    """A poster says a call timed out by the flag; a status beside it is not trusted. Delete this
+    and a half-read answer that happens to carry a 200 lets the slot be removed."""
+    answer = SourceAnswer(status=200, headers={}, timed_out=True)
+    one, _, shelf, _ = revoker(vendor=Vendor(answer=answer))
+
+    assert one.revoke(ada_slot(), at=AT) is False
+    assert shelf.removed == []
+
+
+def test_a_server_error_that_quotes_invalid_token_is_still_a_failure() -> None:
+    """Only a 400 can say the token is not valid: a 503 whose body happens to carry the same word
+    is the vendor failing and not the token being gone. Delete this and an outage that echoes an
+    error name lets the slot be removed with the token still live."""
+    body = json.dumps({"error": "invalid_token"}).encode()
+    one, _, shelf, _ = revoker(
+        vendor=Vendor(answer=SourceAnswer(status=503, headers={}, body=body))
+    )
+
+    assert one.revoke(ada_slot(), at=AT) is False
+    assert shelf.removed == []
 
 
 def test_any_other_refusal_from_the_vendor_is_not_taken_for_a_revocation() -> None:

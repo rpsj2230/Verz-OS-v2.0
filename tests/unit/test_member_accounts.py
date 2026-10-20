@@ -238,6 +238,22 @@ def test_a_source_each_person_does_not_consent_to_cannot_be_disconnected_from_he
     assert made.made_for == []
 
 
+def test_a_source_consented_to_once_for_everybody_cannot_be_disconnected_by_one_person(
+    app: FastAPI, client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A source with an OAuth consent that is not a person's own is refused even when the asker's
+    slot for that name is held: the kind decides, not the declaration being present. Delete this and
+    one person's page can revoke the credential every read of the source uses."""
+    from brain.ops.acceptance_checks_oauth import consented_xero
+
+    own_rig(app, monkeypatch, held={MINE})
+    app.state.connector_declarations = {"xero": consented_xero()[0]}
+    made = hand(app)
+
+    assert disconnect(client, "u_none").status_code == 404
+    assert made.made_for == []
+
+
 def test_a_person_who_has_left_the_department_can_still_take_their_own_token_back(
     app: FastAPI, client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

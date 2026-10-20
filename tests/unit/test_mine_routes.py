@@ -689,3 +689,22 @@ def test_evidence_names_kinds_of_signal_and_nothing_of_anybody_elses_conversatio
 
     assert "mem_theirs" not in response.text
     assert SIGNAL_WORDS[Signal.ESCALATED] not in response.text
+
+
+def test_a_learning_record_with_no_signal_kinds_is_said_to_have_no_record_of_why(
+    client: TestClient, rows: dict[type, list[Any]]
+) -> None:
+    """A learning whose evidence is empty is listed with the sentence that no record was kept, not
+    with the sentence that something was noticed over an empty list. Delete this and an inferred
+    line is told to have a reason it has no kinds for."""
+    memories_with_records(rows)
+    empty = learnt("mem_guess", agent_id=None)
+    empty.evidence = []
+    rows[LearningRow] = [empty]
+
+    guess = next(
+        one for one in get(client, ME).json()["learned"] if one["memory_id"] == "mem_guess"
+    )
+
+    assert guess["evidence"] == []
+    assert guess["evidence_told"] == NO_RECORD_OF_WHY
