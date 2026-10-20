@@ -1,0 +1,76 @@
+Accepting a new template version meets the checks an install meets, and what the agent taught itself is marked and can be given back
+
+M13.8.11. `accept` already finished an upgrade through `settle`, so a tool the new version declares
+was bound or reported missing and a connector that did not serve held the agent disabled. What it
+said it did not do was the third check of an install: a required question the new version asks
+that nobody has answered, which `accept` handed `settle` as "none unanswered". The answers are
+stored nowhere (`brain.agents.install` argued against a column), so an acceptance cannot know what
+was typed for a question the install already asked, and that was the gap. It can know exactly which
+required questions are new, though: a key the pinned version did not require, which nobody was
+asked. `newly_required_placeholders` names them, `accept` passes them as the unanswered keys, and
+the upgraded agent comes back incomplete and disabled naming each. A question both versions ask is
+not re-asked: calling it unanswered would disable every upgrade of every agent, and calling it
+answered would be inventing the answer. Rejected: a placeholder-answers column, for the reason the
+install already gave.
+
+The rest of the leaf is that this is shown before anybody presses. `needs_after` is `accept`'s own
+settle run over the instance with every local value kept, written once as `_moved_to` beside the
+acceptance's own construction so the two cannot differ in how they build the moved instance. The
+review route carries it as `needs` (a kind, a name and the sentence, never a count of anything
+hidden), the acceptance answer carries the same list, and the console draws it under "What this
+version needs on this install" and in the notice after an upgrade. The notice is held by the hook
+that holds the review and not by the card, because the page is redrawn from its loading state after
+an upgrade and a card's own state does not survive that: the "Upgraded" sentence had never been
+visible in the product, and this is where it lives now. A resolution that takes the version's value
+for a path this install overlaid can change the answer, so the acceptance recomputes it exactly.
+
+M16.7.1. A third `FieldSource`, `LEARNED`, is the machine-authored mark in per-field ownership. It
+is not a flavour of the second: an instance's value is an administrator's decision and a learned
+one is the product's suggestion an administrator agreed to, and a person who wants to list and give
+back exactly what the agent taught itself has to be able to tell them apart. `brain.agents.learned`
+is the one door (a test parses the source and holds `source=FieldSource.LEARNED` to this module).
+Three rules in it, each argued there. Learning never replaces a value somebody here set, because
+giving a learned change back returns the template's value, so overwriting an administrator's would
+destroy a decision and keeping the old value underneath would be a second record of the agent.
+Only the instructions are learnable, because `0059`'s trigger records a change to the persona with
+who put it in force and no other manifest path has a ledger entry, and a learning that changed a
+skill pin with nobody's name against it is the failure this repository keeps finding. And `set_by`
+is the person who approved.
+
+The write is `brain.learned_instruction_store.apply_learned_instructions`: the switch, then the
+install locked, then the hash the approver was shown, then the refusals an edit meets, then the
+door, in one transaction attributed to the approver, so the ledger entry is the one an edit leaves,
+naming them. It is behind the `agent_learned_changes` switch, which ships off, and only the writing
+is: the Prompts screen shows `source` and `machine_authored` for the instructions in force, and the
+give-back it already had gives a learned change back, switch or not, so turning it off cannot trap
+what it let in. The composition diff marks a learned row as a local difference in its own word.
+
+**Said plainly: nothing the product learns writes an instruction change yet.** The learning loop
+proposes knowledge and fast-lane rules, and `brain.memory.tiers` classifies everything else as
+needing a person. So there is a door and no caller but the install check, which makes the one change
+it tests, and the leaf's "every change learning applies" is true of an empty set today. M16.7.1 is
+IN PROGRESS in the tracker for that reason and READY FOR TESTING would have claimed a loop that does
+not exist. The first applier goes through the door and gets the list and the give-back for free.
+
+Install checks: `accepting a version runs the checks an install runs` (M13.8.11; its tests
+break the product where the check proves) and `what an agent taught itself is marked
+and can be given back` (M16.7.1). Nothing is assumed about what an install has connected: the tool
+is on an entity nothing registers and the connector is a name no connection can carry. One guard in
+the second check was deleted because it could not fire: an owner row for a value an install no
+longer holds cannot exist (`TemplateInstance` refuses it), so "the mark outlives the value" was a
+break no product state can produce.
+
+Reused: brain.agents.install.settle and its Completeness (the checks), brain.agents.upgrade.accept
+and review, brain.prompt_routes (the Prompts view, give-back, locking and write helpers, imported
+rather than copied), brain.agents.template (FieldOwner, set_field, clear_field),
+brain.ops.acceptance_agent_console (the check harness for the Prompts screen). Replaced: the
+module docstring's statement that an acceptance re-checks no placeholder, and the console card's
+own `told` state, moved into the review hook.
+
+The check for what an agent taught itself also refuses a learned change saying what the instructions already
+say, which would otherwise be written and marked as learned with nothing new in it.
+
+Mutation table: in the empty commit that follows this one, so that this one could be pushed before the run
+finished (a push is the only protection against a restart).
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
