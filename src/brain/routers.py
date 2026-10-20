@@ -409,6 +409,11 @@ from brain.operate_routes import router as operate_router
 # recovery sweep learnt about it, for a reader who may see that sweep. See `brain.operation_routes`.
 from brain.operation_routes import router as operation_router
 
+# A coordinating agent: which agents it may hand a subtask to, whether it may run them together, and
+# splitting a request between them behind the `multi_agent_coordination` switch, which ships off. See
+# `brain.coordination_routes`.
+from brain.coordination_routes import router as coordination_router
+
 # Weighing a multi-agent plan before any agent runs: the fan-out gate, the subtask contracts and the
 # merge, with the decision kept, behind `admin:agent_lifecycle` over everything and the
 # `orchestration_rehearsal` switch. Starts nothing. See `brain.orchestration_routes`.

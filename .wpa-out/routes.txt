@@ -1,0 +1,36 @@
+...............F....                                                     [100%]
+=================================== FAILURES ===================================
+_ test_a_plan_is_run_in_turn_when_fan_out_was_never_enabled_and_the_reason_is_kept _
+
+served = Served(client=<starlette.testclient.TestClient object at 0x11ac35260>, stub=<tests.fixtures.console_http.Stub object a...rant_lapse=None)), principal='u_narrow')], planner=<tests.unit.test_coordination_routes.Planner object at 0x11a17ed50>)
+
+    def test_a_plan_is_run_in_turn_when_fan_out_was_never_enabled_and_the_reason_is_kept(
+        served: Served,
+    ) -> None:
+        """Delete this and a run that was not allowed to fan out does, or loses why it did not."""
+        reply = served.run("u_narrow")
+        assert reply.status_code == 200
+        body = reply.json()
+        assert body["mode"] == "sequential"
+        assert body["why"] == ["fan_out_not_enabled"]
+>       assert [one["agent"] for one in served.answers] == [WEB_ONE, WEB_TWO]
+                ^^^^^^^^^^^^
+E       TypeError: 'Asked' object is not subscriptable
+
+tests/unit/test_coordination_routes.py:504: TypeError
+---------------------------- Captured stdout setup -----------------------------
+2026-10-20 11:16:56 [info     ] starting                       commit=unknown env=development
+2026-10-20 11:16:56 [warning  ] in-app parse budget            finding='the door admits application/pdf up to 50 MiB, a declared cost of 300 MiB, and a document read inside the application may cost 20 MiB (1536 MiB limit, 1416 MiB held before any read, 6 processes), so the largest such file it can read is 3.3 MiB and a larger one is refused as too large; give the application container more memory, or read large documents in the parse worker'
+2026-10-20 11:16:56 [info     ] no secrets vault configured
+2026-10-20 11:16:56 [info     ] template signing key not held  state=no_vault
+2026-10-20 11:16:56 [info     ] join-key pepper not held       problem=no_vault
+2026-10-20 11:16:56 [info     ] tool registry frozen           rows=False tools=2
+2026-10-20 11:16:56 [info     ] model drivers built            egress_detector=rules ladder=none providers=['anthropic', 'deepseek', 'local', 'moonshot', 'openai']
+----------------------------- Captured stdout call -----------------------------
+2026-10-20 11:16:56 [info     ] coordinated run                children=2 mode=sequential path=/api/v1/orchestration/coordinated-runs principal=u_narrow run=coordinated-4b1d1bda633641ac trace_id=40037ecded824c6b9b15ecffe48233bb trace_id_supplied=False
+--------------------------- Captured stdout teardown ---------------------------
+2026-10-20 11:16:56 [info     ] shutting down
+=========================== short test summary info ============================
+FAILED tests/unit/test_coordination_routes.py::test_a_plan_is_run_in_turn_when_fan_out_was_never_enabled_and_the_reason_is_kept
+1 failed, 19 passed, 1 warning in 10.49s
+exit 1
