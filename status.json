@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-19T16:45:13.566544+00:00",
-  "commit": "07ef91ae",
-  "commit_subject": "Fourteen questions from this week's builders' reports go to the Needs you page as items 241 to 254 (#636)",
+  "generated_at": "2026-10-20T04:33:10.892469+00:00",
+  "commit": "ff1a7d23",
+  "commit_subject": "2 more tasks are proved on the install by the newest complete acceptance run",
   "total": 1626,
-  "done": 1152,
-  "percent": 70.8,
+  "done": 1154,
+  "percent": 71.0,
   "built": 1315,
   "built_percent": 80.9,
-  "built_unproven": 163,
+  "built_unproven": 161,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -60,7 +60,6 @@
     "M12.4.5",
     "M12.4.7",
     "M12.4.9",
-    "M13.8.11",
     "M13.9.2",
     "M15.3.3",
     "M16.7.1",
@@ -131,7 +130,6 @@
     "M38.3.3.2",
     "M38.3.3.3",
     "M38.3.3.4",
-    "M39.10.3",
     "M39.10.4",
     "M39.5.1.1",
     "M39.5.1.2",
@@ -226,10 +224,10 @@
       "wave": 3,
       "name": "Agents, knowledge, console",
       "total": 599,
-      "done": 471,
-      "percent": 78.6,
+      "done": 473,
+      "percent": 79.0,
       "in_progress": 7,
-      "ready_for_testing": 55,
+      "ready_for_testing": 53,
       "blocked": 4,
       "open": 62,
       "acts": 1,
@@ -419,7 +417,7 @@
       "name": "Agents and templates",
       "wave": 3,
       "total": 69,
-      "done": 60,
+      "done": 61,
       "acts": 0,
       "decided": 16,
       "built": 62
@@ -679,7 +677,7 @@
       "name": "Agent workspace, the inside-an-agent surface",
       "wave": 3,
       "total": 105,
-      "done": 79,
+      "done": 80,
       "acts": 0,
       "decided": 2,
       "built": 95
@@ -964,6 +962,7 @@
     "M13.7.9",
     "M13.8.1",
     "M13.8.10",
+    "M13.8.11",
     "M13.8.13",
     "M13.8.15",
     "M13.8.17",
@@ -1625,6 +1624,7 @@
     "M39.1.3.4",
     "M39.10.1",
     "M39.10.2",
+    "M39.10.3",
     "M39.10.6",
     "M39.11.1",
     "M39.11.2",
@@ -2252,11 +2252,6 @@
       "status": "OPEN",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (requirement_check_routes); open for proof on the install or a decision, not for code",
       "updated": "2026-10-06"
-    },
-    "M13.8.11": {
-      "status": "READY FOR TESTING",
-      "why": "Built: before anybody upgrades an agent, the review lists what the new version would leave missing on this install (a tool nothing provides, a connector that is not connected, a question nobody has answered), and accepting it switches the agent off with the same list, as an install does. To prove it on the install: after the release, open Install, Acceptance, run the checks and read the row 'accepting a version runs the checks an install runs', which should pass in the two newest runs. Then on an agent's Profile, with a newer version of its template on offer, read 'What this version needs on this install'.",
-      "updated": "2026-10-15"
     },
     "M13.9.2": {
       "status": "IN PROGRESS",
@@ -3738,11 +3733,6 @@
       "why": "P3. WAITS ON M39.9.2.1 to M39.9.2.4 and M39.9.2.2; the browser proof of the whole of New automation.",
       "updated": "2026-10-12"
     },
-    "M39.10.3": {
-      "status": "READY FOR TESTING",
-      "why": "built (M39/personal-agent-oversight-and-workspace): a personal agent is listed, opened and used by its owner alone, and a reader who holds the audit capability for agents (read:audit.agent, in the scope their grant carries) is told on the Agents screen, under Personal agents under oversight, that another person's personal agent exists, whose it is and whether it runs, and is offered nothing: it is not on their roster and its page is refused as for an agent never made. No count anywhere, and the same empty answer for every other reader. Behind the switch Show personal agents to people who hold the audit capability (off). Every place that lists agents is held to the audience by a test that walks the source; a leaver's personal agent is no longer offered to whoever may adopt agents. To prove it on the install: switch the feature on, make a personal agent as one person, open Agents as a person who holds the audit capability for agents, and see it named there and not in the roster; the install check an_auditor_is_told_of_a_personal_agent_and_may_not_use_it does this with reserved people. Not seen by this task: the Usage and Spend breakdowns by agent, which name every agent to a reader of those screens, personal ones included (a question for the owner).",
-      "updated": "2026-10-14"
-    },
     "M39.10.4": {
       "status": "READY FOR TESTING",
       "why": "built (M39/personal-agent-oversight-and-workspace): the owner of a personal agent attaches their own Google account to it from the agent's Profile (Your own Google account, confirmed), and takes it off the same way; the agent then reads that person's own mail, calendar and documents with their own consent and token, for them alone. A colleague, an administrator and any other agent cannot attach or ask for it (answered as for an agent never made), and a team agent never carries one however it is written: the read is now an entity the Google connector provides, so an agent that does not name the connector is not left holding it. Behind the switch Let a person attach their own Google account to their personal agent (off). The real Google sign-in is the owner's step on needs item 173: until then the install check a_persons_own_google_account_is_on_their_agent_for_them_alone passes against recorded Google answers for made-up people and the task is held. To prove it on the install after item 173: connect Google Workspace, connect your own account on My workspace, switch the feature on, attach it on your personal agent, ask it about your mail, and see a colleague get nothing of yours from any agent.",
@@ -4061,11 +4051,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 16,
+  "closed_today": 2,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "ff1a7d2",
+      "at": "2026-10-20T04:24:05+00:00",
+      "subject": "2 more tasks are proved on the install by the newest complete acceptance run",
+      "closed": "M13.8.11,M39.10.3"
+    },
     {
       "sha": "0fadf6e",
       "at": "2026-10-19T16:27:06+00:00",
@@ -4179,12 +4175,6 @@
       "at": "2026-10-05T17:31:59+00:00",
       "subject": "A run's trace is read and drawn on a page under the Audit log, so the trace graph is no longer a component nothing renders (#359)",
       "closed": "M32.2.2.3"
-    },
-    {
-      "sha": "733de2d",
-      "at": "2026-10-05T15:33:34+00:00",
-      "subject": "Capacity, the trace role and Singapore's identifiers each get an install check that fails on its break, and three leaves held by CI close (#341)",
-      "closed": "M32.2.2.2,M32.5.1.4,M32.5.2.2"
     }
   ]
 }
