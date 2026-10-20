@@ -1,0 +1,57 @@
+mutation: 27 mutation(s) in /var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/brain-mutate-2fdc66f5a254; running the unmutated tests
+mutation: unmutated tests clean in 29.1s
+mutation: [1/27] handle must name the person's own slot | caught    | test_a_handle_naming_somebody_elses_slot_reads_and_removes_nothing, test_a_revoker_made_for_one_person_cannot_be_pointed_at_another (6.9s)
+mutation: [2/27] vendor failure no longer stops the removal | caught    | test_the_vendor_is_asked_with_the_token_alone_and_the_slot_is_removed_after, test_a_vendor_that_refuses_leaves_the_slot_in_place, test_a_vendor_that_cannot_be_reached_leaves_the_slot_in_place[answer0], test_a_vendor_that_cannot_be_reached_leaves_the_slot_in_place[answer1], test_a_vendor_that_cannot_be_reached_leaves_the_slot_in_place[answer2], test_any_other_refusal_from_the_vendor_is_not_taken_for_a_revocation, test_a_vault_that_will_not_remove_the_slot_reports_failure_after_the_vendor_has_revoked, test_a_token_that_cannot_be_read_asks_nobody_and_removes_nothing, test_an_address_the_rule_refuses_is_never_posted (5.4s)
+mutation: [3/27] no endpoint declared reads as not revoked | caught    | test_a_source_that_publishes_no_revocation_endpoint_is_removed_from_here_and_nothing_more (9.3s)
+mutation: [4/27] no poster reads as revoked | SURVIVED  | (11.8s)
+mutation: [5/27] a refused address reads as revoked | caught    | test_an_address_the_rule_refuses_is_never_posted (39.6s)
+mutation: [6/27] a timeout is not a failure | SURVIVED  | (41.4s)
+mutation: [7/27] any answer is a revocation | caught    | test_a_vendor_that_refuses_leaves_the_slot_in_place, test_any_other_refusal_from_the_vendor_is_not_taken_for_a_revocation (43.2s)
+mutation: [8/27] not-valid is recognised on any status | SURVIVED  | (43.8s)
+mutation: [9/27] any 400 JSON is already gone | caught    | test_any_other_refusal_from_the_vendor_is_not_taken_for_a_revocation (45.6s)
+mutation: [10/27] invalid_request counts as gone | caught    | test_any_other_refusal_from_the_vendor_is_not_taken_for_a_revocation (38.2s)
+mutation: [11/27] a vault refusal reads as removed | caught    | test_a_vault_that_will_not_remove_the_slot_reports_failure_after_the_vendor_has_revoked (40.9s)
+mutation: [12/27] an unreadable token reads as revoked | caught    | test_a_token_that_cannot_be_read_asks_nobody_and_removes_nothing (36.0s)
+mutation: [13/27] no endpoint builds a request anyway | caught    | test_a_consent_with_no_revocation_endpoint_builds_no_request (41.8s)
+mutation: [14/27] revocation address need not be https | caught    | test_a_revocation_address_must_be_https (24.3s)
+mutation: [15/27] google revocation address | caught    | test_the_google_consent_declares_the_vendors_published_revocation_endpoint (26.0s)
+mutation: [16/27] any source can be disconnected | SURVIVED  | (41.9s)
+mutation: [17/27] nothing held still disconnects | caught    | test_a_person_with_no_account_connected_and_a_colleague_are_refused_alike (17.0s)
+mutation: [18/27] no revoker still proceeds | caught    | test_a_process_with_nothing_to_revoke_with_says_it_could_not_and_removes_nothing (13.7s)
+mutation: [19/27] vendor claimed asked always | caught    | test_a_vendor_with_no_way_to_revoke_is_not_claimed_to_have_revoked (14.7s)
+mutation: [20/27] another department's connection is inherited | caught    | test_a_department_connection_is_absent_for_a_person_in_another_department (16.2s)
+mutation: [21/27] a person's own source is inherited | caught    | test_an_account_a_person_attached_is_personal_and_disconnectable_only_when_held, test_a_reader_is_listed_the_sources_they_may_connect_for_themselves_and_nobody_else_is (15.6s)
+mutation: [22/27] no records is an error not an empty list | caught    | test_a_listing_with_no_connections_to_read_lists_no_department_connection (16.7s)
+mutation: [23/27] disconnect offered when not held | caught    | test_an_account_a_person_attached_is_personal_and_disconnectable_only_when_held (16.5s)
+mutation: [24/27] a department's connection is offered a disconnect | caught    | test_a_connection_the_department_made_is_listed_as_inherited_and_offered_no_disconnect (17.1s)
+mutation: [25/27] evidence kept for lines with none | SURVIVED  | (14.7s)
+mutation: [26/27] an inferred line with no record says it was noticed | caught    | test_an_inferred_line_with_no_record_of_why_says_so_rather_than_showing_a_blank (12.2s)
+mutation: [27/27] a stated line is given evidence | caught    | test_an_inferred_line_says_what_was_noticed_and_a_stated_one_says_it_was_said (11.5s)
+handle must name the person's own slot              | caught    | test_a_handle_naming_somebody_elses_slot_reads_and_removes_nothing, test_a_revoker_made_for_one_person_cannot_be_pointed_at_another
+vendor failure no longer stops the removal          | caught    | test_the_vendor_is_asked_with_the_token_alone_and_the_slot_is_removed_after, test_a_vendor_that_refuses_leaves_the_slot_in_place, test_a_vendor_that_cannot_be_reached_leaves_the_slot_in_place[answer0], test_a_vendor_that_cannot_be_reached_leaves_the_slot_in_place[answer1], test_a_vendor_that_cannot_be_reached_leaves_the_slot_in_place[answer2], test_any_other_refusal_from_the_vendor_is_not_taken_for_a_revocation, test_a_vault_that_will_not_remove_the_slot_reports_failure_after_the_vendor_has_revoked, test_a_token_that_cannot_be_read_asks_nobody_and_removes_nothing, test_an_address_the_rule_refuses_is_never_posted
+no endpoint declared reads as not revoked           | caught    | test_a_source_that_publishes_no_revocation_endpoint_is_removed_from_here_and_nothing_more
+no poster reads as revoked                          | SURVIVED  |
+a refused address reads as revoked                  | caught    | test_an_address_the_rule_refuses_is_never_posted
+a timeout is not a failure                          | SURVIVED  |
+any answer is a revocation                          | caught    | test_a_vendor_that_refuses_leaves_the_slot_in_place, test_any_other_refusal_from_the_vendor_is_not_taken_for_a_revocation
+not-valid is recognised on any status               | SURVIVED  |
+any 400 JSON is already gone                        | caught    | test_any_other_refusal_from_the_vendor_is_not_taken_for_a_revocation
+invalid_request counts as gone                      | caught    | test_any_other_refusal_from_the_vendor_is_not_taken_for_a_revocation
+a vault refusal reads as removed                    | caught    | test_a_vault_that_will_not_remove_the_slot_reports_failure_after_the_vendor_has_revoked
+an unreadable token reads as revoked                | caught    | test_a_token_that_cannot_be_read_asks_nobody_and_removes_nothing
+no endpoint builds a request anyway                 | caught    | test_a_consent_with_no_revocation_endpoint_builds_no_request
+revocation address need not be https                | caught    | test_a_revocation_address_must_be_https
+google revocation address                           | caught    | test_the_google_consent_declares_the_vendors_published_revocation_endpoint
+any source can be disconnected                      | SURVIVED  |
+nothing held still disconnects                      | caught    | test_a_person_with_no_account_connected_and_a_colleague_are_refused_alike
+no revoker still proceeds                           | caught    | test_a_process_with_nothing_to_revoke_with_says_it_could_not_and_removes_nothing
+vendor claimed asked always                         | caught    | test_a_vendor_with_no_way_to_revoke_is_not_claimed_to_have_revoked
+another department's connection is inherited        | caught    | test_a_department_connection_is_absent_for_a_person_in_another_department
+a person's own source is inherited                  | caught    | test_an_account_a_person_attached_is_personal_and_disconnectable_only_when_held, test_a_reader_is_listed_the_sources_they_may_connect_for_themselves_and_nobody_else_is
+no records is an error not an empty list            | caught    | test_a_listing_with_no_connections_to_read_lists_no_department_connection
+disconnect offered when not held                    | caught    | test_an_account_a_person_attached_is_personal_and_disconnectable_only_when_held
+a department's connection is offered a disconnect   | caught    | test_a_connection_the_department_made_is_listed_as_inherited_and_offered_no_disconnect
+evidence kept for lines with none                   | SURVIVED  |
+an inferred line with no record says it was noticed | caught    | test_an_inferred_line_with_no_record_of_why_says_so_rather_than_showing_a_blank
+a stated line is given evidence                     | caught    | test_an_inferred_line_says_what_was_noticed_and_a_stated_one_says_it_was_said
+SURVIVORS: ['no poster reads as revoked', 'a timeout is not a failure', 'not-valid is recognised on any status', 'any source can be disconnected', 'evidence kept for lines with none']

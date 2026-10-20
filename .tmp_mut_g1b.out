@@ -1,0 +1,13 @@
+mutation: 5 mutation(s) in /var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/brain-mutate-db9f19088247; running the unmutated tests
+mutation: unmutated tests clean in 32.0s
+mutation: [1/5] no poster reads as revoked | caught    | test_a_process_with_nothing_to_post_with_leaves_the_slot_in_place (5.4s)
+mutation: [2/5] a timeout is not a failure | caught    | test_an_answer_flagged_as_timed_out_is_not_a_revocation_whatever_status_it_carries (5.5s)
+mutation: [3/5] not-valid is recognised on any status | caught    | test_a_server_error_that_quotes_invalid_token_is_still_a_failure (4.7s)
+mutation: [4/5] any source can be disconnected | caught    | test_a_source_consented_to_once_for_everybody_cannot_be_disconnected_by_one_person (15.4s)
+mutation: [5/5] evidence kept for lines with none | caught    | test_a_learning_record_with_no_signal_kinds_is_said_to_have_no_record_of_why (17.0s)
+no poster reads as revoked            | caught    | test_a_process_with_nothing_to_post_with_leaves_the_slot_in_place
+a timeout is not a failure            | caught    | test_an_answer_flagged_as_timed_out_is_not_a_revocation_whatever_status_it_carries
+not-valid is recognised on any status | caught    | test_a_server_error_that_quotes_invalid_token_is_still_a_failure
+any source can be disconnected        | caught    | test_a_source_consented_to_once_for_everybody_cannot_be_disconnected_by_one_person
+evidence kept for lines with none     | caught    | test_a_learning_record_with_no_signal_kinds_is_said_to_have_no_record_of_why
+SURVIVORS: []

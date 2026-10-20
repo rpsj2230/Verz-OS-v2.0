@@ -234,6 +234,8 @@ class UploadedView(BaseModel):
     #: How many passages the document was cut into. A count of the uploader's own document.
     passages: int
     found_by: str
+    #: When the document is next due to be checked, if the uploader set a review cycle (M40.3.1.2).
+    review_by: datetime | None = None
 
 
 UPLOAD_RESPONSES: Final[dict[int | str, dict[str, Any]]] = {
@@ -406,7 +408,21 @@ def _uploaded(item: KnowledgeItem, blocks: tuple[Block, ...], *, meaning: bool) 
         department=item.visibility.department or None,
         passages=len(blocks),
         found_by=FOUND_BY_TEXT_AND_MEANING if meaning else FOUND_BY_TEXT,
+        review_by=item.review_by,
     )
+
+
+def review_by_asked(days: int | None, *, now: datetime) -> datetime | None | JSONResponse:
+    """The review date a door was asked to set, none where it was asked for none, or the refusal.
+
+    Asked before any file is read, so a cycle that is refused costs the sender nothing (M40.3.1.2).
+    """
+    if days is None:
+        return None
+    try:
+        return review_date_for(days, now=now)
+    except LibraryError as exc:
+        return _refused("review_in_days", "review_refused", str(exc))
 
 
 # ------------------------------------------------------------------ the routes
@@ -449,8 +465,16 @@ async def upload(
     kind: Annotated[KnowledgeKind, Query()],
     level: Annotated[Visibility, Query()],
     department: Annotated[str, Query(max_length=60)] = "",
+    review_in_days: Annotated[int | None, Query(ge=1, le=MAX_REVIEW_CYCLE_DAYS)] = None,
 ) -> UploadedView | JSONResponse:
-    """Add one document, read by the text path, at the level and department asked for."""
+    """Add one document, read by the text path, at the level and department asked for.
+
+    `review_in_days` sets the review cycle at the moment of upload (M40.3.1.2): the document is
+    due to be checked that many days from now, and one sent without it is outside the sweep.
+    """
+    due = review_by_asked(review_in_days, now=asked.now)
+    if isinstance(due, JSONResponse):
+        return due
     if department and not SLUG_RE.match(department):
         return _refused("department", "not_a_department", "that is not a department's name")
     sessions = _sessions(request)
@@ -505,6 +529,7 @@ async def upload(
     if isinstance(read, ParseFailure):
         # The cause and its remedy, from `CAUSE_TEXT`, and never the parser's own words (M7.2.5).
         return _refused("file", read.cause.value, read.message())
+    read = with_review_by(read, due)
 
     try:
         job, queued = await store_upload(request, read, asked=asked)

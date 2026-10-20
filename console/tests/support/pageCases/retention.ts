@@ -108,6 +108,10 @@ const READS = {
   "/api/v1/govern/retention": REPORT,
   "/api/v1/govern/retention/controls": CONTROLS,
   "/api/v1/govern/erasures": ERASURES,
+  "/api/v1/govern/erasure-requests": {
+    requests: [{ request_id: RUNG_ID, subject_id: UNBROKEN, requested_at: "2019-03-04T09:00:00Z" }],
+    told: UNBROKEN,
+  },
 };
 
 export const PAGES: Readonly<Record<string, PageCase>> = {
