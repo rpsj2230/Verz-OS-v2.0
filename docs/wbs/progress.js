@@ -3675,9 +3675,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M37.5.1.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops/controls.py overdue() builds the alert (tested), and ops/notices.py lists CONTROL_NOT_RUN with 'No channel is chosen for it yet, so nothing sends it'. Nothing calls controls.overdue; worker and schedule_runner do not. NEXT: call controls.overdue from a scheduled runner using schedule_store last-run times and deliver via the notice sender to the operations alert holder; the channel choice may need a needs-rupash item",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT (under M17.7.2) and now claimed by its install check: brain.control_not_run_told tells whoever holds the operations alert, once per episode, when a safety mechanism has not run in its window. PROOF ON THE INSTALL: 1. Turn Tell whoever holds the alert when a safety mechanism has not run on under Features (it ships off). 2. The check a_mechanism_that_has_not_run_is_told_to_whoever_holds_the_alert passes on the next run (it says not run until the switch is on). 3. To see it live, stop the worker for longer than a control's window: the holder is told once in the chat tool they last used.",
+    updated: "2026-10-20",
   },
   "M37.5.1.4": {
     status: "READY FOR TESTING",
@@ -3685,9 +3685,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M37.5.2.1": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): ops/alerting.py Severity, Route, route_for(), routing_gaps() and controls.py use route_for for each control's runbook (tested in test_alerting.py). No delivery path: notices CONTROL_NOT_RUN and BACKUP_EXPOSURE say no channel is chosen, so no alert is routed to anyone. NEXT: wire alert delivery: resolve route_for's role to people and send via a channel (ops.notices sender); likely needs an owner decision on the channel",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT (under M17.7.2): the severity of each control's alert decides who is told, through alerting.route_for: everyone holding the operations alert, and the incident capability's holders too for an alert that wakes somebody, each only if they may open Incidents. PROOF ON THE INSTALL: the same check as M37.5.1.3 passes; a holder who cannot open Incidents is told nothing.",
+    updated: "2026-10-20",
   },
   "M37.5.2.2": {
     status: "IN PROGRESS",
