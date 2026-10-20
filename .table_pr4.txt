@@ -1,0 +1,23 @@
+Mutation (brain.ops.mutation; the named tests run clean first). 16 mutations; 12 caught on the first run, 3 survived
+and were caught on a second run once a test existed, and 1 survivor is an equivalent mutation, stated below:
+
+  a block that already says how it was read is overwritten           | caught
+  a document that is not a PDF is filled in                          | SURVIVED, then caught once a test was added
+  a page the layout read is read again                               | caught
+  a reader that is down leaves the pages out for good                | caught
+  a refused fill-in names no page                                    | caught
+  filled-in pages are not laid in by page                            | SURVIVED, then caught once a test was added
+  a layout read is not filled in                                     | caught
+  the pages the reader left out are not joined to the fill-in's      | SURVIVED: equivalent, see below
+  the item carries no notice                                         | caught
+  every page is a page without text                                  | caught
+  an empty notice is stored as a sentence                            | caught
+  the ticket says nothing of the pages left out                      | caught
+  the sentence leaves the notice out                                 | caught
+  a page numbered zero is a page                                     | caught
+  a boolean is a page                                                | caught
+  every page is recognised though some were named                    | SURVIVED, then caught once a test was added
+
+  'the pages the reader left out are not joined to the fill-in's' is EQUIVALENT while every path that can lead here
+  (the layout part) reads all of a document or refuses it, so it has no pages of its own to join: the union is kept for the
+  day a route's first reader can leave pages out, and no test is invented to fit it.

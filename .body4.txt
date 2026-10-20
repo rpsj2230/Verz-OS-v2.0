@@ -1,0 +1,53 @@
+A passage knows how it was read, page by page, and a scan that was not clear says which pages were left out
+
+Stacked on the embedding part. The owner's requirement (GAP3-04 in the register) is that a
+citation can tell the reader how the passage it cites was read, **per page when one document was
+read more than one way**. This is the stored half: every block, passage and chunk row carries the
+path and engine that read it, a PDF whose pages are partly photographed is read two ways and says so
+page by page, and the pages of a scan that were not clear enough are named on the item and to the
+uploader. The citation that SHOWS it is not here. Leaves touched and none closed: M7.7.9, M7.7.10.
+
+What it adds, and why it is shaped this way
+
+* `Block`, `Passage` and `Chunk` gain `path` and `engine`, both or neither. They are set by the
+  route that read the block and never by the reader's answer: the decoder builds a block from a
+  closed list of keys and these are not on it, and a test reads an answer carrying them and shows
+  they are dropped. They are closed to three words and the bounded engine alphabet at construction,
+  so they cannot carry a sentence into a column that is shown. A passage is cut from one block and
+  never spans two, so a passage's path is its block's and a document read two ways has passages of
+  each.
+* `know.chunk.parse_path` and `parse_engine` (migration 0250, already in the frame) are written for
+  every row, NULL together for a passage read before reading was recorded; the table's own
+  constraints (one of three words, both or neither) are exercised against a real PostgreSQL.
+* A layout read of a PDF leaves a photographed page blank, silently, in a document that reads as
+  indexed. So the pages whose text layer is empty and which the layout read produced no block on are
+  sent to the scanned-page part, which reads only those (`pages` on the request, an optional key
+  both programs spell and a test holds equal), and its blocks are laid in among the layout's by
+  page, each saying OCR. An outage there fails the whole read retryably rather than indexing
+  without the pages it could not read yet; a refusal of another kind leaves the pages out and names
+  them.
+* A page under the floor is named on the item (`know.item.parse_notice`, in the uploader's words
+  and page numbers only, within its column) and on the ticket, which then reads "was added. Page 2
+  was not clear enough to read reliably..." rather than "was added".
+* Chunk rows refresh the two columns on a re-ingest, so a document re-read without a route is
+  NULL again and never keeps a path it no longer has.
+
+What was rejected
+
+* A path per document: the requirement says per page, and a document-level path is a lie for the
+  pages that were filled in.
+* The reader reporting its own path: a server that grew the key could record a guess as a reading.
+* Reading every page of a layout-read PDF with OCR "to be safe": minutes, and it replaces text that
+  was read with text that was guessed.
+
+Not done, and the owner should know: **no screen or citation shows how a passage was read yet.**
+Doing it means carrying the column through retrieval, the field policy that decides what a reader is
+shown, `DocumentCitation` and its rendering: a change to the surface that decides what a reader may
+be told, which wants its own pull request and its own review. M7.7.9 stays open on that.
+
+Reused: knowledge.chunking (unchanged cutting; gains the two fields), chunk_store (`chunk_row`,
+`upsert_statement`), parse_paths (`ParseProvenance` and its bounded engine alphabet),
+parse_ocr (`read_by_page`, `left_out_notice`), text_path (`laid_out`, the PDF reader), item_store.
+Replaced: nothing.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

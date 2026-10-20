@@ -1,0 +1,48 @@
+Mutation (brain.ops.mutation; the named tests run clean first). 46 mutations; 41 caught on the first run and 5 survived, each a missing test and not an equivalent mutation, and each was caught on a second run once the test existed:
+
+  a block is laid out one character from where the separator puts it | caught
+  a NUL is kept in a block                                           | caught
+  a fifth cause at a valid stage may be declared                     | caught
+  a password exception is not told as encrypted                      | caught
+  every library failure is told as corrupt                           | caught
+  page furniture is indexed                                          | caught
+  a heading does not open a section                                  | caught
+  a table is read as prose                                           | caught
+  our own mistake is read as a fact about the document               | caught
+  a word with no confidence figure counts as sure                    | caught
+  a row the engine marks as not a word is a word                     | SURVIVED, then caught once a test was added
+  the page cap is one page over                                      | caught
+  a locked PDF is any pdfium error                                   | caught
+  a 422 from the general reader is an outage                         | caught
+  a server error is read as text                                     | caught
+  a dead JVM is not noticed before the request                       | caught
+  the JVM heap is not the budgeted one                               | caught
+  ending a part leaves what it started running                       | SURVIVED, then caught once a test was added
+  a part shares its parent's process group                           | caught
+  a floor at exactly the figure drops the page                       | caught
+  a blank page is named as left out                                  | caught
+  the kept blocks keep the offsets they had                          | caught
+  a page named twice is believed                                     | caught
+  a boolean figure is a confidence                                   | SURVIVED, then caught once a test was added
+  page runs are not joined                                           | caught
+  a parser that leaves pages out says nothing of them                | caught
+  the gate drops the pages a parser left out                         | caught
+  a route is built for an install with no reader                     | caught
+  a PDF is read by the scanned-page reader first                     | caught
+  a block on a page nobody scored is believed                        | caught
+  a layout read is judged as blind as a text layer                   | caught
+  a header at exactly the pixel bound is refused                     | caught
+  a header claiming no pixels is cleared                             | caught
+  a PNG with no header chunk is read for a size anyway               | SURVIVED, then caught once a test was added
+  an outage ends a document instead of waiting                       | caught
+  a process with no database sends documents to the server           | caught
+  the feature switch is not asked                                    | caught
+  the embedding part is a reader of documents                        | caught
+  an open breaker still sends                                        | caught
+  an answer that is not an object is read as empty                   | caught
+  a failing observer costs the answer                                | caught
+  a server that reads no document is told about the door             | caught
+  an install with no server and no revision is told about the door   | SURVIVED, then caught once a test was added
+  a part that reads another page's words passes the check            | caught
+  a peak one over the limit passes the check                         | caught
+  a nested weight file is written without its directory              | caught
