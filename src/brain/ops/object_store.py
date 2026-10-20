@@ -87,6 +87,7 @@ import structlog
 from brain.install import InstallError, value_of
 from brain.ops.backup_manifest import DRILL_SUFFIX, MANIFEST_SUFFIX
 from brain.ops.credentials import CredentialVault
+from brain.ops.drill_service import REQUEST_KEY
 from brain.ops.openbao import (
     DYNAMIC_MOUNTS,
     OpenBaoVault,
@@ -676,7 +677,7 @@ def key_prefix(bucket_name: str, prefix: str) -> str:
 def backup_objects(backend: StorageBackend) -> Callable[[], tuple[tuple[str, str], ...]]:
     """A reader of the backup bucket in the shape `brain.install_routes.BackupObjects` names.
 
-    Only manifests and drill records are fetched; see
+    Only manifests, drill records and the one small request for a rehearsal are fetched; see
     `A_READER_OF_THE_BACKUP_BUCKET_NEVER_FETCHES_A_COPY`. Bytes that are not UTF-8 are passed on
     with the fault replaced rather than skipped, so `read_manifests` reports the file as
     unreadable, which is `brain.ops.backup_manifest`'s rule that an unreadable manifest is the one
@@ -688,7 +689,7 @@ def backup_objects(backend: StorageBackend) -> Callable[[], tuple[tuple[str, str
         return tuple(
             (key, backend.get_object(bucket_name, key).decode("utf-8", errors="replace"))
             for key in backend.list_objects(bucket_name, BACKUP_KEY_PREFIX)
-            if key.endswith((MANIFEST_SUFFIX, DRILL_SUFFIX))
+            if key.endswith((MANIFEST_SUFFIX, DRILL_SUFFIX)) or key == REQUEST_KEY
         )
 
     return read

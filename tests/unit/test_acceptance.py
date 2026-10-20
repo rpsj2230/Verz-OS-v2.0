@@ -905,6 +905,15 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     # runs them with the hosted profile and a vault the test answers for.
     for escalation_check in registered(("brain.ops.acceptance_escalation",)):
         assert outcomes.pop(escalation_check.name)[0] == NOT_RUN, escalation_check.name
+    # The three rehearsal checks that read this install's own backup bucket say so in one sentence
+    # where the process builds no object store connection;
+    # `tests/unit/test_acceptance_checks_backup_drill.py` gives them a bucket and runs them.
+    for bucket_check in (
+        "the_newest_rehearsal_asked_all_three_questions",
+        "a_verified_rehearsal_states_its_measured_time",
+        "the_newest_copy_is_off_the_host_under_the_clients_key",
+    ):
+        assert outcomes.pop(bucket_check)[0] == NOT_RUN, bucket_check
     # The skill tools are read by an agent's run through the stand-in too, and a website by a run
     # whose model is one; `tests/unit/test_acceptance_skill_tools.py` runs them.
     for tool_check in registered(("brain.ops.acceptance_checks_skill_tools",)):

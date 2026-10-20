@@ -1360,7 +1360,8 @@ def test_the_recovery_screen_says_how_a_rehearsal_is_done_whether_or_not_anythin
 
 def test_the_recovery_screen_accepts_no_write_and_no_route_offers_a_drill() -> None:
     """A drill button that cannot run a drill must not exist, and the API half of that is that the
-    recovery address takes only a read and no address anywhere offers a rehearsal to press.
+    recovery address takes only a read and no address anywhere offers a rehearsal to press, but the
+    one that asks the server's own service and says only that it asked.
 
     Held over the application's own OpenAPI document rather than this router, so a drill route
     added by another module is caught as well. Delete this and a POST that starts nothing could
@@ -1385,11 +1386,18 @@ AGENT_DRAFT_REHEARSAL = f"{API_PREFIX}{REHEARSE_PATH}"
 SKILL_VERSION_REHEARSAL = f"{API_PREFIX}/skills/{{digest}}/rehearsals"
 
 
+#: The third: asking the server's own drill service for a rehearsal (M30.3.9). It starts nothing and
+#: says it has started nothing: it leaves a request in the backup bucket for a service the installer
+#: set up, behind a switch that ships off, and `tests/unit/test_rehearsal_routes.py` holds both. Let
+#: through by its exact path for the same reason as the two above.
+RECOVERY_REHEARSAL_REQUEST = f"{API_PREFIX}/install/recovery/rehearsal"
+
+
 def _offers_a_drill(path: str, operations: Iterable[str]) -> bool:
     """Whether an address takes a write under a word a recovery drill would be called by."""
     return (
         bool(set(operations) - {"get"})
-        and path not in (AGENT_DRAFT_REHEARSAL, SKILL_VERSION_REHEARSAL)
+        and path not in (AGENT_DRAFT_REHEARSAL, SKILL_VERSION_REHEARSAL, RECOVERY_REHEARSAL_REQUEST)
         and any(word in path for word in ("drill", "rehears", "restore"))
     )
 
@@ -1403,9 +1411,13 @@ def test_the_drill_detector_lets_the_agent_rehearsal_through_by_its_path_and_not
     test above while the detector looked as strict as it was."""
     assert "post" in _app().openapi()["paths"][AGENT_DRAFT_REHEARSAL]
     assert not _offers_a_drill(AGENT_DRAFT_REHEARSAL, {"post"})
+    assert "post" in _app().openapi()["paths"][RECOVERY_REHEARSAL_REQUEST]
+    assert not _offers_a_drill(RECOVERY_REHEARSAL_REQUEST, {"post"})
 
     for drill in (
         f"{API_PREFIX}/install/recovery/rehearse",
+        f"{API_PREFIX}/install/recovery/rehearsals",
+        f"{API_PREFIX}/install/recovery/rehearsal/start",
         f"{API_PREFIX}/agent-drafts/{{draft_id}}/restore",
         f"{API_PREFIX}/agent-drafts/{{draft_id}}/rehearse-restore",
         f"{API_PREFIX}/backups/drill",

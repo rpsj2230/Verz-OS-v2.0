@@ -21,6 +21,7 @@ from typing import Any
 
 import pytest
 
+from brain import rehearsal_routes
 from brain.console.screens import screen
 from brain.demo import DEMO_SOURCE
 from brain.ops import backup_manifest, install_docs
@@ -77,7 +78,11 @@ def pieces_today() -> dict[str, bool]:
             and "drill" in f"{one.name}{one.read_text(encoding='utf-8', errors='ignore')}".lower()
             for one in files
         ),
-        "A console control that starts a drill": any("drill" in name for name in tools),
+        "A console control that starts a drill": any("drill" in name for name in tools)
+        or any(
+            "/install/recovery/rehearsal" in getattr(route, "path", "")
+            for route in rehearsal_routes.router.routes
+        ),
         "The recovery screen can be opened": screen("recovery").read.tool in tools,
         "A reader that turns a drill record into a verdict": callable(
             getattr(backup_manifest, "read_drills", None)
@@ -190,15 +195,15 @@ def test_a_command_that_is_not_a_runnable_module_is_a_finding() -> None:
     command that prints `No module named`."""
     broken = once(
         page(),
-        "| `python -m brain.ops.schema_check <scratch database url>` |",
-        "| `python -m brain.ops.schema_checker <scratch database url>` |",
+        "`python -m brain.ops.drill_checks <scratch database url>`, which asks this and the",
+        "`python -m brain.ops.drill_checker <scratch database url>`, which asks this and the",
     )
 
     assert gaps(broken) == (
-        "schema_complete: the page says to run python -m brain.ops.schema_checker, and no module "
+        "schema_complete: the page says to run python -m brain.ops.drill_checker, and no module "
         "of that name runs as a command",
     )
-    assert "brain.ops.schema_check" in runnable()
+    assert "brain.ops.drill_checks" in runnable()
 
 
 def test_a_row_too_short_to_read_is_a_finding_in_every_table() -> None:
@@ -258,10 +263,10 @@ def test_a_piece_built_since_the_page_was_written_is_a_finding() -> None:
     """`A_PROCEDURE_THAT_DOES_NOT_SAY_WHAT_IS_MISSING_READS_AS_AUTOMATION`, and the day it fires
     is the day a drill script lands. Delete this and the page goes on telling somebody to do by
     hand what a timer already does."""
-    built = {**pieces_today(), "A script that performs a drill": True}
+    built = {**pieces_today(), "The recovery screen can be opened": True}
 
     assert gaps(page(), pieces=built) == (
-        "A script that performs a drill: the page says 'no' and the repository says 'yes'",
+        "The recovery screen can be opened: the page says 'no' and the repository says 'yes'",
     )
 
 

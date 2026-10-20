@@ -931,7 +931,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/referrals",
     ],
     routes: [
-      "/api/v1/install/recovery",
+      "/api/v1/install/recovery*",
       "/api/v1/govern/retention*",
       "/api/v1/govern/legal-holds*",
       "/api/v1/govern/erasures",
@@ -949,7 +949,13 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "gate.escalation",
     ],
     installation: [],
-    gaps: [{ what: "A recovery drill cannot be started, and a restore cannot be verified, from the console.", leaf: "M30.3.9" }],
+    gaps: [
+      {
+        what: "A recovery drill is asked for from the console and started by the server, so a press does not say it began.",
+        because:
+          "Nothing the product runs holds the access to start a container (needs-rupash item 235); the press leaves a request for the drill service, and the leaf is proved only when a person has pressed it on an install that has the service and read the record that appears.",
+      },
+    ],
   },
   "Import and export": {
     screens: ["/import-export"],

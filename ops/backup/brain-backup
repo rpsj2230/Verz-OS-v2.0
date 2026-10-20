@@ -65,6 +65,24 @@ BRAIN_BACKUP_BUCKET="${BRAIN_BACKUP_BUCKET:?set BRAIN_BACKUP_BUCKET to the bucke
 BRAIN_BACKUP_ENDPOINT="${BRAIN_BACKUP_ENDPOINT:?set BRAIN_BACKUP_ENDPOINT to the object store address}"
 BRAIN_BACKUP_WORK_DIR="${BRAIN_BACKUP_WORK_DIR:-/var/tmp/brain-backup}"
 
+# WHERE THE COPY GOES, SAID BY A PERSON AND WRITTEN ON THE MANIFEST (M30.3.3, M30.3.4). Whether an
+# endpoint is on another machine is not visible from its address once the address is a name, and
+# who holds the key is not visible from anywhere, so both are declared at setup and carried on
+# every manifest, where the Recovery screen reads them back through `brain.ops.recovery`. The
+# defaults are the honest ones for an install nobody has configured: the copy is on this host and
+# is not encrypted, and the screen says so rather than saying nothing.
+#
+# BRAIN_BACKUP_RECIPIENT is the path of the client's PUBLIC key. When it is set the copy is
+# encrypted to it before it is uploaded and the server cannot read it back; see
+# `brain-backup-crypt` for why a public key and what this does not protect against.
+BRAIN_BACKUP_RECIPIENT="${BRAIN_BACKUP_RECIPIENT:-}"
+BRAIN_BACKUP_OFF_HOST="${BRAIN_BACKUP_OFF_HOST:-no}"
+BRAIN_BACKUP_CRYPT="${BRAIN_BACKUP_CRYPT:-/usr/local/bin/brain-backup-crypt}"
+case "$BRAIN_BACKUP_OFF_HOST" in
+    yes | no) ;;
+    *) printf 'BRAIN_BACKUP_OFF_HOST is %s, and it is yes or no\n' "$BRAIN_BACKUP_OFF_HOST" >&2; exit 1 ;;
+esac
+
 # How long the counting session may take to count, and how long it holds its snapshot open for
 # the dump. The same thirty minutes as the unit's TimeoutStartSec, for the reason given there: it
 # is not a prediction, it is the point past which nothing will resolve itself.
@@ -191,6 +209,28 @@ SIZE_BYTES="$(wc -c < "$ARTEFACT" | tr -d ' ')"
 
 log "wrote $SIZE_BYTES bytes"
 
+# Encrypted after the size is measured and before anything leaves the machine. The manifest's
+# `size_bytes` stays the size of the dump, which is what a drill compares the decrypted file with,
+# and the encrypted object's own size is a second field, which is what it compares the download
+# with first. A copy that fails to encrypt is not uploaded in the clear instead: that would turn a
+# misconfigured key into a quiet decision to send the company's records unprotected.
+UPLOAD_NAME="$BACKUP_ID.dump"
+KEY_HELD_BY=nobody
+ENCRYPTION_FIELDS=
+if [ -n "$BRAIN_BACKUP_RECIPIENT" ]; then
+    [ -f "$BRAIN_BACKUP_CRYPT" ] || fail "$BRAIN_BACKUP_CRYPT is not there to encrypt the copy with, so nothing was uploaded"
+    sh "$BRAIN_BACKUP_CRYPT" encrypt --recipient "$BRAIN_BACKUP_RECIPIENT" --in "$ARTEFACT" \
+        --out "$ARTEFACT.enc" --key-out "$ARTEFACT.key" \
+        || { rm -f "$ARTEFACT" "$ARTEFACT.enc" "$ARTEFACT.key"; fail "the copy could not be encrypted to the client's key, so nothing was uploaded"; }
+    ENCRYPTED_BYTES="$(wc -c < "$ARTEFACT.enc" | tr -d ' ')"
+    [ "$ENCRYPTED_BYTES" -gt 0 ] || fail "the encrypted copy is empty, so nothing was uploaded"
+    UPLOAD_NAME="$BACKUP_ID.dump.enc"
+    KEY_HELD_BY=client
+    ENCRYPTION_FIELDS="  \"encryption\": \"openssl-rsa-oaep-aes-256-cbc\",
+  \"encrypted_size_bytes\": $ENCRYPTED_BYTES,"
+fi
+if [ "$BRAIN_BACKUP_OFF_HOST" = yes ]; then OFF_HOST_JSON=true; else OFF_HOST_JSON=false; fi
+
 # One table per line, in the layout `brain-restore-drill` reads: that script runs on a server
 # with no JSON parser, so the layout is part of the format and the drill refuses a manifest
 # that is not in it.
@@ -209,6 +249,9 @@ cat > "$MANIFEST" <<MANIFEST_JSON
   "finished_at": "$FINISHED_AT",
   "recoverable_to": "$FINISHED_AT",
   "size_bytes": $SIZE_BYTES,
+  "off_host": $OFF_HOST_JSON,
+  "key_held_by": "$KEY_HELD_BY",
+$ENCRYPTION_FIELDS
   "migration_head": $HEAD_JSON,
   "row_counts": {
 $ROW_COUNTS
@@ -221,12 +264,21 @@ MANIFEST_JSON
 # between the two uploads counts a copy nobody can read. The other way round, a failed manifest
 # upload leaves an artefact nothing describes, which is a finding rather than a false promise.
 log "uploading to s3://$BRAIN_BACKUP_BUCKET"
-aws --endpoint-url "$BRAIN_BACKUP_ENDPOINT" s3 cp "$ARTEFACT" \
-    "s3://$BRAIN_BACKUP_BUCKET/$BACKUP_ID.dump" >/dev/null \
-    || fail "the artefact did not upload; no manifest has been written, so nothing claims a copy exists"
+if [ "$KEY_HELD_BY" = client ]; then
+    aws --endpoint-url "$BRAIN_BACKUP_ENDPOINT" s3 cp "$ARTEFACT.key" \
+        "s3://$BRAIN_BACKUP_BUCKET/$BACKUP_ID.dump.key" >/dev/null \
+        || fail "the wrapped key did not upload; no manifest has been written, so nothing claims a copy exists"
+    aws --endpoint-url "$BRAIN_BACKUP_ENDPOINT" s3 cp "$ARTEFACT.enc" \
+        "s3://$BRAIN_BACKUP_BUCKET/$UPLOAD_NAME" >/dev/null \
+        || fail "the artefact did not upload; no manifest has been written, so nothing claims a copy exists"
+else
+    aws --endpoint-url "$BRAIN_BACKUP_ENDPOINT" s3 cp "$ARTEFACT" \
+        "s3://$BRAIN_BACKUP_BUCKET/$UPLOAD_NAME" >/dev/null \
+        || fail "the artefact did not upload; no manifest has been written, so nothing claims a copy exists"
+fi
 aws --endpoint-url "$BRAIN_BACKUP_ENDPOINT" s3 cp "$MANIFEST" \
     "s3://$BRAIN_BACKUP_BUCKET/$BACKUP_ID.manifest.json" >/dev/null \
     || fail "the copy uploaded and its manifest did not; the artefact is there and undescribed"
 
-rm -f "$ARTEFACT" "$MANIFEST"
+rm -f "$ARTEFACT" "$ARTEFACT.enc" "$ARTEFACT.key" "$MANIFEST"
 log "done: $BACKUP_ID"
