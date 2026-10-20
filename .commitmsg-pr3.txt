@@ -1,0 +1,54 @@
+A department's administrator decides for their department and the company waits for a Super Admin, and a publish that costs more than its department allows waits for a colleague
+
+M20.5.1. Before this a department administrator could publish an agent to every department and approve a
+knowledge item to the whole company alone, because the agent door, the promotion door and the console's
+controls each asked only that the capability be held in any scope, and a grant scoped to one department
+satisfies that. `holds_for_level` is the one question now, asked by `approve_promotion`,
+`lifecycle.publish` and the console surfaces: the company needs the capability held over everything
+(`scope_narrows(Scope.unrestricted(), held)`), a department needs it held over that department when the
+caller can name it, and a personal level needs nothing beyond holding the capability. The queue
+(`may_approve_publication`) asks the same function, so a department's administrator is offered only the
+requests they could decide, and a skill, which is one company-wide object, is decided only by the authority
+held over everything (that was already `skill_library.may_review`; the check holds it). Roles imply no
+capability here, so "Super Admin" versus "department admin" is the scope an authority is held in, which is
+how the leaf's two people differ. Rejected: a role test, because a role is not an authority in this
+product and a second source of the answer is the one that drifts.
+
+Existing tests that gave a department-scoped reader a company decision were updated to the rule: the
+queue test now uses department-level requests for a department's reader and a new test holds that a
+company request goes only to the holder over everything.
+
+M20.5.2, partly. Behind the switch `publish_cost_hold` (ships off), publishing an agent to a department
+whose per-run ceiling is below what one run costs waits for the department's administrator, tells the
+author both figures in the install's currency, makes no agent until a colleague approves, and the publish
+record carries the cost of each version. The department's ceiling is the RUN-period department budget row
+in force (`brain.ops.budget_store.in_force`), and a department with none holds nothing. A publish that
+waits only for its cost reaches no further than before, so the approver is not asked to hold everything the
+agent reaches (`_approvable` skips the reach test when nothing widens): a cost needs an administrator and
+not a reader. Both reasons at once say the widening's sentence, which names the person who can publish it.
+
+**Not what the leaf says, in two ways, and both are questions for the owner.** The leaf asks for the median
+of rehearsed runs and the measured cost; rehearsals record no cost yet, so the figure is the run's price
+from `brain.ops.spend.estimate` over the agent's tier and tool count, the estimator the pre-flight admits a
+real run by (`A_PRICED_RUN_IS_NOT_A_MEASURED_ONE`, said in the module and on the progress note). And no
+screen writes a department's per-run ceiling yet (M21.1.2), so on an install the hold fires only for a
+ceiling written some other way. M20.5.2 is therefore IN PROGRESS and M20.5.1 READY FOR TESTING.
+
+Install checks: `a department admin decides only for their department` (M20.5.1; four of its tests break
+the product at one door each and each fails with its own sentence) and `a costly publish waits for a
+colleague in the department` (M20.5.2; four breaks: never held, held with the switch off, held within the
+ceiling, no cost on the record). The second writes the ceiling and sets the switch inside its transaction
+and rolls them back.
+
+Console: the publish step says what a run costs and what the department allows when the answer says the
+publish is held for its cost.
+
+Reused: brain.agents.lifecycle.publish and brain.knowledge.visibility.approve_promotion (the two doors,
+now through one function), brain.console.global_surfaces (the queue), brain.ops.spend.estimate (the
+price), brain.ops.budget_store (the ceiling), brain.agent_builder_routes publish and approve flow (the
+second person), brain.builder.publish.record_publish (the record). Replaced: three separate "held in any
+scope" tests, and the history's assumption that a record has no cost.
+
+Mutation table: in the empty commit that follows, so this one could be pushed before the run finished.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
