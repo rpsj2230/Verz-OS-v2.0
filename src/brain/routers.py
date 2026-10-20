@@ -449,6 +449,11 @@ from brain.quality_routes import router as quality_router
 # Who can see a record, for somebody who can already see it. See `brain.record_access_routes`.
 from brain.record_access_routes import router as record_access_router
 
+# Asking the server for a restore rehearsal from the Recovery screen: a request left in the backup
+# bucket for the drill service, behind `admin:install_setting` and the `backup_drill_requests`
+# switch. Starts nothing itself. See `brain.rehearsal_routes`.
+from brain.rehearsal_routes import router as rehearsal_router
+
 # The three Report screens: service levels, spend and adoption. A router of its own because
 # the decision differs again and in the opposite direction to the matrix's: none of these
 # checks a capability at all, because the module that owns each screen narrows it row by

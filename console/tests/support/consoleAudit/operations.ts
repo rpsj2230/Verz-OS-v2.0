@@ -12,6 +12,7 @@ import { ACKNOWLEDGE_API_PATH } from "../../../src/pages/incidentsQuery";
 import { actionPath, redrivePath } from "../../../src/pages/jobsQuery";
 import { LEARNING_SETTINGS_API_PATH } from "../../../src/pages/learningQuery";
 import { HALTS_API_PATH, RESUME_API_PATH } from "../../../src/pages/stopQuery";
+import { REHEARSAL_ASK_PATH } from "../../../src/pages/installQuery";
 import { TUNING_API_PATH, knobPath } from "../../../src/pages/tuningQuery";
 import { at, type Proofs, SETTINGS_PRESSED, t, type WriteRoute } from "../auditClaims";
 
@@ -27,6 +28,7 @@ const A_STOP_AND_ITS_RESUME_ARE_ROWS_AND_ENTRIES = t(
 );
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
+  "src/pages/operations/RecoveryPage.tsx REHEARSAL_ASK_PATH": [at("POST /api/v1/install/recovery/rehearsal", "REHEARSAL_ASK_PATH", REHEARSAL_ASK_PATH)],
   "src/pages/operations/StopControl.tsx HALTS_API_PATH": [at("POST /api/v1/halts", "HALTS_API_PATH", HALTS_API_PATH)],
   "src/pages/operations/StopPage.tsx HALTS_API_PATH": [at("POST /api/v1/halts", "HALTS_API_PATH", HALTS_API_PATH)],
   "src/pages/operations/StopPage.tsx RESUME_API_PATH": [at("POST /api/v1/halts/resume", "RESUME_API_PATH", RESUME_API_PATH)],
@@ -50,6 +52,20 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
 };
 
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/install/recovery/rehearsal": {
+    row: {
+      notApplicable:
+        "The write is one small request object in the backup bucket and no table row, because a rehearsal must be askable on the day the database is the thing being rehearsed.",
+    },
+    audit: {
+      none: "Asking for a rehearsal changes nobody's access and no configuration, so it has no ledger entry; the route logs who pressed it and the request names them until the server answers it.",
+    },
+    behaviour: t(
+      "test_acceptance_checks_backup_drill",
+      "test_every_check_passes_on_an_install_that_has_done_it_and_leaves_nothing",
+      true,
+    ),
+  },
   "POST /api/v1/console/incidents/acknowledgement": {
     row: t("test_acceptance_checks_alert_ack", "test_the_check_passes_on_an_install_and_leaves_nothing", true),
     audit: {

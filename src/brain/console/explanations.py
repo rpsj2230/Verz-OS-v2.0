@@ -126,13 +126,6 @@ EXPLANATIONS: Final[tuple[Explanation, ...]] = (
         retired_by=rf"^{API_PREFIX}/(jobs|operate/runs)/\{{[^}}]+\}}/(stop|cancel)\b",
     ),
     Explanation(
-        "operations.start_rehearsal",
-        Form.ACTION,
-        f"{SOON}starting a restore rehearsal from here. Today it is run on the server, as the "
-        "rehearsal card says.",
-        retired_by=rf"^{API_PREFIX}/install/recovery/(drills?|rehearsals?)\b",
-    ),
-    Explanation(
         "operations.import_data",
         Form.ACTION,
         f"{SOON}importing data from this page. Documents are added on the Knowledge page today.",

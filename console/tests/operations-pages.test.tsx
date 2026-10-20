@@ -26,6 +26,7 @@ import { ARTIFACT_FILTERS, ARTIFACT_SORTS, keptUntil, kindWords } from "../src/p
 import { windowOf } from "../src/pages/dataTransferQuery";
 import { filtersFrom, logsApiPath, logsExportApiPath, LOGS_PAGE_SIZE } from "../src/pages/logsQuery";
 import { ACT_LABELS } from "../src/pages/operations/operationsActions";
+import { A_REQUEST_IS_WAITING, START_A_REHEARSAL, START_QUESTION } from "../src/pages/operations/RecoveryPage";
 import { jobName } from "../src/pages/operations/parts";
 import { NOTHING_LOOKED as NOTHING_LOOKED_AT_COPIES } from "../src/pages/operations/RecoveryPage";
 import {
@@ -235,12 +236,12 @@ describe("what the Operations pages agree with the API about", () => {
   });
 
   test("every act drawn as unavailable names no route the API document declares", () => {
-    // What breaks if this is deleted: a route for stopping a run, starting a rehearsal or
-    // importing lands and the page goes on saying "coming soon" about it.
-    noRouteRetires(["operations.stop_run", "operations.start_rehearsal", "operations.import_data"]);
+    // What breaks if this is deleted: a route for stopping a run or importing lands and the page
+    // goes on saying "coming soon" about it. Starting a rehearsal left this list when its route
+    // landed (M30.3.9), and the Recovery page's test below holds the control that replaced it.
+    noRouteRetires(["operations.stop_run", "operations.import_data"]);
     // The positive case: each pattern does match the path it is waiting for.
     expect(retiringPattern("operations.stop_run").test("/api/v1/jobs/{name}/stop")).toBe(true);
-    expect(retiringPattern("operations.start_rehearsal").test("/api/v1/install/recovery/rehearsals")).toBe(true);
     expect(retiringPattern("operations.import_data").test("/api/v1/data-transfer/imports")).toBe(true);
   });
 
@@ -679,11 +680,16 @@ describe("Runs and queue, Errors and Logs", () => {
 
 // --------------------------------------------------------------------------- platform screens
 
-function recovery(panel: unknown, unread = ""): Record<string, unknown> {
+function recovery(panel: unknown, unread = "", control: { can_request?: boolean; request_waiting?: boolean } = {}): Record<string, unknown> {
   return {
     panel,
     unread,
+    placement: [],
     rehearsal: {
+      can_request: false,
+      request_waiting: false,
+      requested_at: null,
+      ...control,
       every_days: 7,
       copies_kept_days: 35,
       promised_recovery_seconds: 7200,
@@ -723,7 +729,40 @@ describe("Backup and recovery, Rate limits and Capacity", () => {
     expect(strip.textContent).toContain("never verified");
     expect(mainText(read.container)).toContain("NOTHING-COPIES-FILES");
     expect(mainText(read.container)).toContain("NO-CONTROL-HERE");
-    expect(read.container.querySelector(`[${UNAVAILABLE_MARK}]`)?.textContent).toContain(ACT_LABELS.startRehearsal);
+    // The control is not drawn while the switch is off, and nothing is drawn as coming soon.
+    expect(read.container.querySelector(`[${UNAVAILABLE_MARK}]`)).toBeNull();
+    expect(screen.queryByRole("button", { name: START_A_REHEARSAL })).toBeNull();
+  });
+
+  test("with the switch on, Start a rehearsal asks once after a confirmation and says only that it asked", async () => {
+    // What breaks if this is deleted: a press that sends the request without saying what the server
+    // will do, a button that stays live while a request waits, or a sentence claiming a rehearsal began.
+    const asking = vi.fn(() => ({ body: { already_asked: false, requested_at: "2019-03-06T08:30:00Z", says: "ASKED-NOT-STARTED" } }));
+    await open("/recovery", {
+      "GET /api/v1/install/recovery": () => ({ body: recovery(null, "UNREAD", { can_request: true }) }),
+      "POST /api/v1/install/recovery/rehearsal": asking,
+    });
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: START_A_REHEARSAL }));
+    });
+    expect(asking).not.toHaveBeenCalled();
+    await screen.findByText(START_QUESTION);
+    await act(async () => {
+      fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: START_A_REHEARSAL }));
+    });
+    await screen.findByText("ASKED-NOT-STARTED");
+    expect(asking).toHaveBeenCalledTimes(1);
+  });
+
+  test("a request that is waiting disables the control and is said, and a placement finding is listed", async () => {
+    // What breaks if this is deleted: two presses queuing two scratch databases, or a copy kept
+    // beside the original shown on a screen that says nothing about where copies are.
+    const body = recovery(null, "UNREAD", { can_request: true, request_waiting: true });
+    body.placement = ["PLACEMENT-FINDING"];
+    const { container } = await open("/recovery", { "GET /api/v1/install/recovery": () => ({ body }) });
+    expect(mainText(container)).toContain(A_REQUEST_IS_WAITING);
+    expect(mainText(container)).toContain("PLACEMENT-FINDING");
+    expect((await screen.findByRole("button", { name: START_A_REHEARSAL })).hasAttribute("disabled")).toBe(true);
   });
 
   test("an absent throttling list is a sentence, the windows are listed, and nothing is drawn as coming soon", async () => {
