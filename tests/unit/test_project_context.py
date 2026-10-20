@@ -306,6 +306,71 @@ def test_without_a_document_tool_a_named_project_brings_nothing(
     assert follow is None
 
 
+def _with_thread(monkeypatch: pytest.MonkeyPatch, *, user_turn: bool) -> str:
+    """The caller's one thread: a question and its answer, or only a system note."""
+    from brain.chat import remember
+    from brain.chat.threads import Thread, ThreadMessage
+    from brain.gate.context import Channel
+    from brain.tables.chat import MessageRole
+
+    thread_id = "in-project"
+    role = MessageRole.USER if user_turn else MessageRole.SYSTEM
+    held = Thread(
+        thread_id=thread_id,
+        owner_id="p_priya",
+        title="",
+        messages=(ThreadMessage(role=role, at=THEN, channel=Channel.CONSOLE, body="a note"),),
+    )
+
+    class Store:
+        async def thread(self, principal_id: str, asked: str) -> Thread | None:
+            del principal_id
+            return held if asked == thread_id else None
+
+    monkeypatch.setattr(remember, "threads_of", lambda state: Store())
+    return thread_id
+
+
+def test_a_thread_with_nothing_to_continue_still_brings_its_projects_files(
+    projects: tuple[_Projects, list[bool]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A thread holding only a note, no question and no attachment, has nothing to continue, and
+    asking in it inside a project still brings the project's files. Delete this and such a thread
+    is answered with the project left out."""
+    thread = _with_thread(monkeypatch, user_turn=False)
+    follow = _follow(api_routes.Question(question="and the leave?", thread=thread))
+    assert follow is not None and follow.project_files == (READABLE_DOCUMENT,)
+    assert follow.earlier == ()
+
+
+def test_a_thread_follow_up_outside_a_project_carries_no_project_reader(
+    projects: tuple[_Projects, list[bool]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A question continuing a thread that no project lists brings its earlier questions and no
+    project files and no reader for them; with a project but no document tool it brings the
+    questions and still no project files. Delete this and a plain follow-up carries a reader it
+    never uses, or files nothing can read."""
+    thread = _with_thread(monkeypatch, user_turn=True)
+    outside = _follow(api_routes.Question(question="and then", thread="not-listed"))
+    assert outside is None
+    no_tool = _follow(
+        api_routes.Question(question="and then", thread=thread),
+        registry=SimpleNamespace(has=lambda _name: False),
+    )
+    assert no_tool is not None and no_tool.earlier == ("a note",)
+    assert no_tool.project_files == () and no_tool.read_project_file is None
+    monkeypatch.setattr(_Projects, "items_for_run", _none_for_run)
+    plain = _follow(api_routes.Question(question="and then", thread=thread))
+    assert plain is not None and plain.earlier == ("a note",)
+    assert plain.project_files == () and plain.read_project_file is None
+
+
+async def _none_for_run(
+    self: _Projects, owner: str, *, project_id: str | None, thread_id: str | None
+) -> tuple[ProjectItem, ...]:
+    return ()
+
+
 # ------------------------------------------------------------------------ never memory
 MEMORY = SRC / "memory"
 PROJECT_MODULES = {
