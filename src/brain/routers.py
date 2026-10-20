@@ -362,6 +362,11 @@ from brain.member_accounts_routes import router as member_accounts_router
 # `brain.member_agent_request_routes`.
 from brain.member_agent_request_routes import router as member_agent_request_router
 
+# A person asking for their data to be deleted, and the retention owner seeing who has asked.
+# Gated on the member grant and, for the list, the erasure authority. See
+# `brain.member_deletion_routes`.
+from brain.member_deletion_routes import router as member_deletion_router
+
 # A member's own settings: whether they are learnt from, where they are reached and when not.
 # Gated on the member grant. See `brain.member_preference_routes`.
 from brain.member_preference_routes import router as member_preference_router

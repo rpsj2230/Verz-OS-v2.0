@@ -75,7 +75,7 @@ from __future__ import annotations
 import hashlib
 import string
 from collections.abc import AsyncIterable, Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from pathlib import PurePosixPath
 from types import MappingProxyType
@@ -990,6 +990,18 @@ class ReadUpload:
     provenance: ParseProvenance | None = None
     #: Pages of a scan the reader would not stand behind, which the uploader is told of.
     left_out_pages: tuple[int, ...] = ()
+
+
+def with_review_by(read: ReadUpload, review_by: datetime | None) -> ReadUpload:
+    """The same upload with a review date on its item, or unchanged where none was asked for.
+
+    The item is copied, never edited: a `KnowledgeItem` is the one thing the door built and the
+    store writes, and the date is the only column an upload sets that `read_for_text_path` and
+    `read_for_link` do not. See `brain.member_library.review_date_for` for what a date may be.
+    """
+    if review_by is None:
+        return read
+    return replace(read, item=read.item.model_copy(update={"review_by": review_by}))
 
 
 def read_for_text_path(
