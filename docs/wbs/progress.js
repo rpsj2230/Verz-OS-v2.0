@@ -3030,9 +3030,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M30.5.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): launch.service_level() builds the profile's RPO and RTO statement and refuses it without a verified drill (tested in test_launch.py, register DEC-31); reliability.RECOVERY_OBJECTIVES says nothing writes it into an agreement. Nothing calls service_level; no route or document serves it. NEXT: expose launch.service_level through a route on the handover or recovery page that renders the statement or its refusal reason",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: GET /handover returns the service level statement for the install's profile or the one sentence for why it cannot be made. PROOF ON THE INSTALL: 1. Call GET /api/v1/handover as the first administrator, or read it from the console once a page draws it. 2. Before any rehearsal has verified a copy it says no restore has ever verified. 3. After a rehearsal verifies and every copy is inside the recovery point it carries the profile's recovery point, time and the time measured. The check the_statement_is_made_only_after_a_rehearsal_verified passes.",
+    updated: "2026-10-20",
   },
   "M32.1.2.3": {
     status: "OPEN",
@@ -3630,9 +3630,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M37.2.4.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): migration/learning.py: learning_note() renders THE_SYSTEM_STARTS_WITHOUT_THEIR_ACCUMULATED_LEARNING from derivations (tested). launch.assemble handover pack does not include it and nothing imports learning. NEXT: add the learning note as a section of the handover pack (launch.assemble) and serve it; then check reads it",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: the handover carries the sentence that the new system starts without the old one's accumulated learning and why that is the right trade, with the counts of what was carried (none until a migration re-derives something). PROOF ON THE INSTALL: GET /handover shows the learning sentence.",
+    updated: "2026-10-20",
   },
   "M37.3.2.4": {
     status: "READY FOR TESTING",
@@ -3640,19 +3640,19 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M37.4.2.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): launch.py subprocessors() derives the list from provider slots that hold a key (ops.provider_keys.PROVIDER_SLOTS) and refuses an undeclared slot; tested in test_launch.py. Nothing outside launch.py calls it; no route or screen serves the subprocessor list. NEXT: expose launch.subprocessors() through a route on the data or handover page and render it; then check that a provider with a key appears and one without does not",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: GET /handover lists the model providers whose key this process holds, each with what it is for, and says in words when it holds none. PROOF ON THE INSTALL: the list matches the providers shown with a key on the Models screen. The check the_subprocessors_are_the_providers_whose_key_is_held passes.",
+    updated: "2026-10-20",
   },
   "M37.4.3.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): launch.py Owner/owner_gaps() refuses a handover pack where knowledge, grants or connectors lack a named client owner (tested). No caller outside launch.py; no table, route or page records owners (data steward appointment is a separate leaf). NEXT: add a handover owners table and route feeding launch.owner_gaps, or reuse the data steward record; then check",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: PUT /handover/owners records who owns knowledge, grants and connectors with a way to reach them, behind the handover_pack switch (ships off). PROOF ON THE INSTALL: 1. Turn Record the named owners and the review date on under Features. 2. PUT the three owners; GET /handover lists them and no gap. 3. Leave one out: the gap names it.",
+    updated: "2026-10-20",
   },
   "M37.4.3.5": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): launch.py review_gaps(launched_on, review_booked_for) refuses a review not within thirty days (tested). No caller outside launch.py; nothing books the review (no calendar, task or table). NEXT: record the review date in the handover route and surface review_gaps on the handover page; then check",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: PUT /handover/review books the thirty-day review and refuses launch day or past thirty days. PROOF ON THE INSTALL: with the switch on, book a review 30 days after launch and read it back; 31 days is refused.",
+    updated: "2026-10-20",
   },
   "M37.5.1.2": {
     status: "READY FOR TESTING",
@@ -4800,9 +4800,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M30.6.6": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): launch.service_level() is produced only with a verified Drill and a newest copy inside the RPO, otherwise raises with the reason (four refusals, tested in test_launch.py, DEC-31). Nothing calls it and no route serves the statement or its refusal. NEXT: same route as M30.5.4; the check asks for the statement on an install with no verified drill and expects the stated reason",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: the statement is produced only after a verified rehearsal and every copy inside the recovery point, and otherwise refused with the reason (launch.service_level, now served). PROOF ON THE INSTALL: the same steps as M30.5.4; the refusal names the coverage nothing has copied or the missing rehearsal.",
+    updated: "2026-10-20",
   },
   "M30.6.7": {
     status: "BLOCKED",
