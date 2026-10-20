@@ -1,0 +1,42 @@
+The model server frame: the faults the full unit suite found in it, fixed
+
+The full suite, run over the frame, found these real faults and nothing else that was the frame's
+own. They are fixed here so that the pieces stacked on this one start from a tree that passes.
+
+* The guides were stale about what the frame moved. `INFERENCE_IMAGE` and the `inference-server`
+  row left the profiles' compose files when the model server became an optional service that no
+  profile composes, so the configuration and network guides carried a row for a variable and a
+  service no register declares (`test_install_docs.py`). The image is now described in the
+  `INSTALL_SERVICES` row and the port in a paragraph, not in a table that is checked against the
+  profiles. `.env.example`'s generated block is reprinted from the declaration, and the
+  repository map names the new top-level `modelserver/` directory.
+* `huggingface.co` is on the independence sweep's list of public package sources, with the reason,
+  because the part's weights are fetched from it by the server's own fetch step. A model hub
+  publishes the same checkpoint to everyone, as the two package indexes already listed do.
+* `test_scaling.py` asserted that the `standard` profile does not fit the measured machine. It did
+  not, with three models resident (3,072 MiB); it does now, because the server is in no profile.
+  The test names that cause rather than passing silently with the other number.
+
+* Migration 0250 added two columns to `know.chunk` without declaring `ADDS_COLUMNS`, which
+  `test_the_migration_builds_the_table_the_declaration_declares` reads to exempt a column a later
+  migration added from the comparison with 0009. It declares them now, and the item column the way
+  0115 does.
+
+* The guard audit's import graph (`brain.ops.guards`) read every Python file under `src`, and
+  `src/inference_server` is a second package that imports nothing from `brain`; it choked on it.
+  The graph now reads only `src/brain` when that directory exists, and a test holds it.
+* The compatibility gate (`brain.deployment.compatibility`) could not read the equality constraint
+  that said a passage's reading path and engine are both set or both absent, so it was a finding.
+  It reads a restriction beginning `<new column> IS NULL OR` as binding only rows the previous
+  release cannot write, so the equality became two one-way constraints that say exactly what it
+  said, in migration 0250 and in the model (`brain.knowledge.search`).
+* The document-read ceiling test in `test_parse_layout.py` assumed the in-application default; it
+  now takes the ceiling from the install's own configuration, as the door does.
+
+Not a finding of the frame: five backup-script tests and one rollback test fail on this machine
+because macOS `tar` has no `--wildcards`. They fail the same way on main and are not touched here.
+
+Reused: ops.guards, deployment.compatibility, the model server frame. Replaced: nothing.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+
