@@ -354,6 +354,10 @@ from brain.lark_sign_in_routes import router as lark_sign_in_router
 # paged, behind `admin:application_log` over everything. See `brain.log_routes`.
 from brain.log_routes import router as log_router
 
+# A member disconnecting their own account at a vendor, the vendor told first. Asked of the person
+# themselves. See `brain.member_accounts_routes`.
+from brain.member_accounts_routes import router as member_accounts_router
+
 # Asking for an agent you can see and cannot run. Gated on the member grant. See
 # `brain.member_agent_request_routes`.
 from brain.member_agent_request_routes import router as member_agent_request_router

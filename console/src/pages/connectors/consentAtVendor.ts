@@ -23,7 +23,11 @@
  * person may connect, and `POST /me/accounts/{connector}/consent` starts it for them, through the same
  * vendor page and the same return page, which sends them back to My workspace.
  *
- * Task ids: M11.8.6
+ * **And takes it back from there (M40.5.1.3).** `POST /me/accounts/{connector}/disconnect` asks the
+ * vendor to revoke the token and then removes this install's copy; a department's connection is listed
+ * as inherited with no such control (M40.5.1.4).
+ *
+ * Task ids: M11.8.6, M40.5.1.3, M40.5.1.4
  */
 
 import { request } from "../../api/client";
@@ -44,6 +48,14 @@ export const MY_ACCOUNTS_API_PATH = "/me/accounts";
 export function myConsentPath(name: string): string {
   return `${MY_ACCOUNTS_API_PATH}/${encodeURIComponent(name)}/consent`;
 }
+
+/** `brain.member_accounts_routes.MY_DISCONNECT_PATH` for one source (M40.5.1.3). */
+export function myDisconnectPath(name: string): string {
+  return `${MY_ACCOUNTS_API_PATH}/${encodeURIComponent(name)}/disconnect`;
+}
+
+/** What `POST /me/accounts/{connector}/disconnect` answers. */
+export type MyDisconnected = components["schemas"]["DisconnectedView"];
 
 /** The button that sends a person to the vendor for their own account. */
 export function connectMyAccountLabel(vendor: string): string {
