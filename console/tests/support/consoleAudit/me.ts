@@ -18,7 +18,18 @@ import {
 } from "../../../src/pages/myAccountQuery";
 import { EDIT_API_PATH, FORGET_ALL_API_PATH, FORGET_API_PATH } from "../../../src/pages/myWorkspaceQuery";
 import { LEARNING_API_PATH, QUIET_API_PATH, REACH_API_PATH } from "../../../src/pages/myPreferencesQuery";
+import {
+  PROJECTS_API_PATH,
+  addItemApiPath,
+  archiveApiPath,
+  removeItemApiPath,
+  renameApiPath,
+} from "../../../src/pages/myProjectsQuery";
+import { uploadPath } from "../../../src/pages/knowledgeQuery";
 import { A_BINDING_CHANGE_IS_AUDITED, at, type Proofs, t, type WriteRoute } from "../auditClaims";
+
+/** A project id to build the addresses with; the routes take a UUID. */
+const A_PROJECT = "3a0f5c2e-1b4d-4e6f-8a9b-0c1d2e3f4a5b";
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/components/MyChannels.tsx myCodeApiPath(row.channel)": [
@@ -50,6 +61,28 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/components/MyAccountCards.tsx END_MY_DEVICE_API_PATH": [
     at("POST /api/v1/me/devices/end", "END_MY_DEVICE_API_PATH", END_MY_DEVICE_API_PATH),
+  ],
+  "src/components/MyProjects.tsx PROJECTS_API_PATH": [
+    at("POST /api/v1/me/projects", "PROJECTS_API_PATH", PROJECTS_API_PATH),
+  ],
+  "src/components/MyProjects.tsx archiveApiPath(projectId)": [
+    at("POST /api/v1/me/projects/{project_id}/archive", "archiveApiPath", archiveApiPath(A_PROJECT)),
+  ],
+  "src/components/MyProjects.tsx addItemApiPath(projectId)": [
+    at("POST /api/v1/me/projects/{project_id}/items", "addItemApiPath", addItemApiPath(A_PROJECT)),
+  ],
+  "src/pages/Ask.tsx addItemApiPath(project)": [
+    at("POST /api/v1/me/projects/{project_id}/items", "addItemApiPath", addItemApiPath(A_PROJECT)),
+  ],
+  // `send` takes the address of a rename or of taking one thing out, and the card passes one of
+  // the two functions below at each call.
+  "src/components/MyProjects.tsx path": [
+    at("POST /api/v1/me/projects/{project_id}/rename", "renameApiPath", renameApiPath(A_PROJECT)),
+    at("POST /api/v1/me/projects/{project_id}/items", "addItemApiPath", addItemApiPath(A_PROJECT)),
+    at("POST /api/v1/me/projects/{project_id}/items/remove", "removeItemApiPath", removeItemApiPath(A_PROJECT)),
+  ],
+  'src/components/MyProjects.tsx uploadPath(kind, "personal", "")': [
+    at("POST /api/v1/knowledge/uploads", "uploadPath", uploadPath("sop", "personal", "").split("?")[0] ?? ""),
   ],
   "src/pages/MyWorkspace.tsx FORGET_API_PATH": [
     at("POST /api/v1/me/memory/forget", "FORGET_API_PATH", FORGET_API_PATH),
@@ -182,5 +215,33 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
       "test_mine_routes",
       "test_a_member_edits_a_memory_and_the_replacement_changes_the_words_and_nothing_else",
     ),
+  },
+  // A person's own project is a row only they may read or change, and what a question inside it
+  // reads is decided at the reach the run holds, so the install check follows each write to the
+  // row, to what a colleague is told, and to what is read.
+  "POST /api/v1/me/projects": {
+    row: t("test_acceptance_checks_member_projects", "test_the_project_check_passes_on_an_install_and_leaves_nothing", true),
+    audit: { notApplicable: "A project is a person's own list of their own conversations and documents; it changes nobody's access and is not written to the ledger." },
+    behaviour: t("test_project_routes", "test_a_person_makes_names_fills_and_puts_away_a_project_of_their_own"),
+  },
+  "POST /api/v1/me/projects/{project_id}/rename": {
+    row: t("test_acceptance_checks_member_projects", "test_the_project_check_passes_on_an_install_and_leaves_nothing", true),
+    audit: { notApplicable: "Renaming one's own project changes nobody's access and is not written to the ledger." },
+    behaviour: t("test_project_routes", "test_somebody_elses_project_is_answered_as_one_never_made_on_every_route"),
+  },
+  "POST /api/v1/me/projects/{project_id}/archive": {
+    row: t("test_acceptance_checks_member_projects", "test_the_project_check_passes_on_an_install_and_leaves_nothing", true),
+    audit: { notApplicable: "Putting one's own project away changes nobody's access and is not written to the ledger; its items stay where they are." },
+    behaviour: t("test_project_routes", "test_a_person_makes_names_fills_and_puts_away_a_project_of_their_own"),
+  },
+  "POST /api/v1/me/projects/{project_id}/items": {
+    row: t("test_acceptance_checks_member_projects", "test_the_project_check_passes_on_an_install_and_leaves_nothing", true),
+    audit: { notApplicable: "Listing one's own conversation or a document one may read in one's own project grants nothing: what a run reads is decided at its reach, every turn." },
+    behaviour: t("test_project_context", "test_a_question_naming_a_project_brings_that_projects_files_read_by_the_document_tool"),
+  },
+  "POST /api/v1/me/projects/{project_id}/items/remove": {
+    row: t("test_acceptance_checks_member_projects", "test_the_project_check_passes_on_an_install_and_leaves_nothing", true),
+    audit: { notApplicable: "Taking something out of one's own project changes nobody's access and is not written to the ledger." },
+    behaviour: t("test_project_routes", "test_with_the_switch_off_nothing_new_is_made_and_nothing_made_is_trapped"),
   },
 };

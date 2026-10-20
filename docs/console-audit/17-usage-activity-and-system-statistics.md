@@ -3,7 +3,7 @@
 - **Screens:** `/usage`, `/adoption`, `/spend`, `/questions`, `/quality`, `/service-levels`, `/me`, `/company/estate`, `/company/activity`, `/company/consumption`
 - **Tables:** `agent.artifact_share`, `agent.agent_request`, `auth.member_preference`, `ops.question_asked`, `ops.question_gap`, `ops.report_refresh`, `ops.spend_actual`, `obs.request_telemetry`, `ops.answer_flag`, `ops.regression_case`, `ops.quality_reading`, `ops.quality_annotation`, `ops.golden_score`, `ops.evaluation_candidate`, `ops.positive_example`, `ops.tier_decision`
 - **Installation values:** none
-- **Measured here:** 38 routes, 10 called by no screen; 8 write routes, 8 with all three proofs; 1 gaps.
+- **Measured here:** 45 routes, 12 called by no screen; 13 write routes, 13 with all three proofs; 1 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -15,6 +15,8 @@
 | `GET /api/v1/me/artifacts` | `/me` |
 | `GET /api/v1/me/devices` | `/me` |
 | `GET /api/v1/me/preferences` | `/me` |
+| `GET /api/v1/me/projects` | **no screen** |
+| `GET /api/v1/me/projects/{project_id}` | **no screen** |
 | `GET /api/v1/me/reads` | `/me` |
 | `GET /api/v1/me/shared` | `/me` |
 | `GET /api/v1/me/shared/{artifact_id}/download` | **no screen** |
@@ -40,6 +42,11 @@
 | `POST /api/v1/me/preferences/learning` | `/me` |
 | `POST /api/v1/me/preferences/quiet-hours` | `/me` |
 | `POST /api/v1/me/preferences/reach` | `/me` |
+| `POST /api/v1/me/projects` | `/me` |
+| `POST /api/v1/me/projects/{project_id}/archive` | `/me` |
+| `POST /api/v1/me/projects/{project_id}/items` | `/ask`, `/me` |
+| `POST /api/v1/me/projects/{project_id}/items/remove` | `/me` |
+| `POST /api/v1/me/projects/{project_id}/rename` | `/me` |
 | `POST /api/v1/quality/annotations` | **no screen** |
 | `POST /api/v1/quality/candidates/{candidate_id}/decision` | **no screen** |
 | `POST /api/v1/quality/flags` | **no screen** |
@@ -59,4 +66,9 @@
 | `POST /api/v1/me/preferences/learning` | `/me` | `test_every_member_preference_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_preferences.py` (database, in CI) | Not applicable: A person's own setting about being reached changes nobody's access and is not written to the ledger. | `test_a_person_learnt_from_after_switching_it_off_fails_the_learning_check` in `tests/unit/test_acceptance_checks_member_preferences.py` (database, in CI) |
 | `POST /api/v1/me/preferences/quiet-hours` | `/me` | `test_every_member_preference_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_preferences.py` (database, in CI) | Not applicable: A person's own setting about being reached changes nobody's access and is not written to the ledger. | `test_a_digest_sent_inside_quiet_hours_fails_the_held_digest_check` in `tests/unit/test_acceptance_checks_member_preferences.py` (database, in CI) |
 | `POST /api/v1/me/preferences/reach` | `/me` | `test_every_member_preference_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_preferences.py` (database, in CI) | Not applicable: A person's own setting about being reached changes nobody's access and is not written to the ledger. | `test_a_card_sent_to_an_approver_who_chose_the_console_fails_the_approval_check` in `tests/unit/test_acceptance_checks_member_preferences.py` (database, in CI) |
+| `POST /api/v1/me/projects` | `/me` | `test_the_project_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_projects.py` (database, in CI) | Not applicable: A project is a person's own list of their own conversations and documents; it changes nobody's access and is not written to the ledger. | `test_a_person_makes_names_fills_and_puts_away_a_project_of_their_own` in `tests/unit/test_project_routes.py` |
+| `POST /api/v1/me/projects/{project_id}/archive` | `/me` | `test_the_project_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_projects.py` (database, in CI) | Not applicable: Putting one's own project away changes nobody's access and is not written to the ledger; its items stay where they are. | `test_a_person_makes_names_fills_and_puts_away_a_project_of_their_own` in `tests/unit/test_project_routes.py` |
+| `POST /api/v1/me/projects/{project_id}/items` | `/ask`, `/me` | `test_the_project_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_projects.py` (database, in CI) | Not applicable: Listing one's own conversation or a document one may read in one's own project grants nothing: what a run reads is decided at its reach, every turn. | `test_a_question_naming_a_project_brings_that_projects_files_read_by_the_document_tool` in `tests/unit/test_project_context.py` |
+| `POST /api/v1/me/projects/{project_id}/items/remove` | `/me` | `test_the_project_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_projects.py` (database, in CI) | Not applicable: Taking something out of one's own project changes nobody's access and is not written to the ledger. | `test_with_the_switch_off_nothing_new_is_made_and_nothing_made_is_trapped` in `tests/unit/test_project_routes.py` |
+| `POST /api/v1/me/projects/{project_id}/rename` | `/me` | `test_the_project_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_projects.py` (database, in CI) | Not applicable: Renaming one's own project changes nobody's access and is not written to the ledger. | `test_somebody_elses_project_is_answered_as_one_never_made_on_every_route` in `tests/unit/test_project_routes.py` |
 | `PUT /api/v1/company/budget` | **no screen** | `test_setting_the_companys_budget_twice_writes_two_versions_and_two_ledger_entries` in `tests/unit/test_company_budget_route.py` (database, in CI) | `test_setting_the_companys_budget_twice_writes_two_versions_and_two_ledger_entries` in `tests/unit/test_company_budget_route.py` (database, in CI) | `test_setting_the_companys_budget_is_refused_in_words_naming_the_role_and_never_to_a_stranger` in `tests/unit/test_company_routes.py` |

@@ -917,6 +917,11 @@ class Question(BaseModel):
     #: (M9.1.1, M9.1.2). An id that is not this person's starts a new thread and says nothing
     #: about the id: see `brain.chat.thread_store.AN_ID_THAT_IS_NOT_YOURS_STARTS_A_NEW_THREAD`.
     thread: Annotated[str, StringConstraints(max_length=THREAD_ID_CHARS)] | None = None
+    #: The personal project this question is asked inside, as the page holds its id, or None
+    #: (M40.7.7). Its documents are read as project context at the reach the run holds; a project
+    #: that is not the asker's, is put away or does not exist brings nothing and says nothing of
+    #: which. See `brain.project_context`.
+    project: Annotated[str, StringConstraints(max_length=THREAD_ID_CHARS)] | None = None
 
 
 def row_readers(registry: ToolRegistry) -> dict[tuple[str, str], RowReader]:
@@ -1294,16 +1299,32 @@ async def follow_up_for(
     from brain.chat.threads import continuation_context
     from brain.knowledge.document_tools import KNOWLEDGE_ENTITY, recaller
     from brain.knowledge.row_store import SessionRowSource
+    from brain.project_context import project_file_handler, project_files_for
     from brain.tables.chat import MessageRole
 
     store = threads_of(state)
-    if not ask.thread or store is None:
-        return None
-    thread = await store.thread(asking.principal.id, ask.thread)
+    # The documents of the personal project this run is made in, named or by the thread it
+    # continues (M40.7.7). Empty unless the switch is on and the project is the asker's.
+    project_files = await project_files_for(
+        state,
+        owner=asking.principal.id,
+        project_id=ask.project,
+        thread_id=ask.thread or None,
+    )
+    reads_project = project_file_handler(registry) if project_files else None
+    thread = (
+        await store.thread(asking.principal.id, ask.thread)
+        if ask.thread and store is not None
+        else None
+    )
     # A retired conversation is hidden from the application's role already; asked again here
     # because session memory is read only through a follow-up, and must go with the conversation.
-    if thread is None or thread.retired:
-        return None
+    if thread is not None and thread.retired:
+        thread = None
+    if thread is None:
+        if not project_files or reads_project is None:
+            return None
+        return FollowUp(project_files=project_files, read_project_file=reads_project)
     earlier = tuple(one.body for one in thread.messages if one.role is MessageRole.USER)
     attached = tuple(
         dict.fromkeys(
@@ -1313,7 +1334,7 @@ async def follow_up_for(
             for ref in one.refs or ()
         )
     )
-    if not earlier and not attached:
+    if not earlier and not attached and not (project_files and reads_project is not None):
         return None
     cited = tuple(
         one.record_id
@@ -1328,6 +1349,8 @@ async def follow_up_for(
         recall=recall,
         attached=attached,
         read_attached=attachment_handler(registry),
+        project_files=project_files if reads_project is not None else (),
+        read_project_file=reads_project,
     )
 
 
