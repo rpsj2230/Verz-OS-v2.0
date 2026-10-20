@@ -73,7 +73,7 @@ MOST: int = 5000
 
 
 # ------------------------------------------------------------------------------- skills
-class ForeignSkillAsked(BaseModel):
+class PastedForeignSkillAsked(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: Name
@@ -81,7 +81,7 @@ class ForeignSkillAsked(BaseModel):
     last_invoked_at: datetime | None = None
 
 
-class BehaviourCheckAsked(BaseModel):
+class PastedBehaviourCheckAsked(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     skill_name: Name
@@ -90,26 +90,26 @@ class BehaviourCheckAsked(BaseModel):
     checked_by: Name
 
 
-class SkillsAsked(BaseModel):
+class PastedSkillsAsked(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    skills: list[ForeignSkillAsked] = Field(max_length=MOST)
-    checks: list[BehaviourCheckAsked] = Field(default_factory=list, max_length=MOST)
+    skills: list[PastedForeignSkillAsked] = Field(max_length=MOST)
+    checks: list[PastedBehaviourCheckAsked] = Field(default_factory=list, max_length=MOST)
     #: The instant the ninety days are counted back from. Defaults to the request's own.
     now: datetime | None = None
 
 
-class SkillConversionView(BaseModel):
+class PastedSkillConversionView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
     proposed_description: str
 
 
-class SkillsConvertedView(BaseModel):
+class PastedSkillsConvertedView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    descriptions: list[SkillConversionView]
+    descriptions: list[PastedSkillConversionView]
     #: Skills whose description is still written at a router, named in the package's words.
     still_written_at_a_router: list[str]
     #: Skills to leave behind, not invoked inside the window or never recorded as invoked.
@@ -120,7 +120,7 @@ class SkillsConvertedView(BaseModel):
 
 
 # ------------------------------------------------------------------------------- carrying
-class ExportAsked(BaseModel):
+class PastedExportAsked(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     item_id: Name
@@ -130,7 +130,7 @@ class ExportAsked(BaseModel):
     embedded_by: str = ""
 
 
-class SeedAsked(BaseModel):
+class PastedSeedAsked(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     external_id: Name
@@ -138,7 +138,7 @@ class SeedAsked(BaseModel):
     source_record: Name
 
 
-class ConversationKeptAsked(BaseModel):
+class PastedConversationKeptAsked(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     item_id: Name
@@ -146,22 +146,24 @@ class ConversationKeptAsked(BaseModel):
     stated_by: Name
 
 
-class CarryAsked(BaseModel):
+class PastedCarryAsked(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    exports: list[ExportAsked] = Field(default_factory=list, max_length=MOST)
-    seeds: list[SeedAsked] = Field(default_factory=list, max_length=MOST)
-    conversations_kept: list[ConversationKeptAsked] = Field(default_factory=list, max_length=MOST)
+    exports: list[PastedExportAsked] = Field(default_factory=list, max_length=MOST)
+    seeds: list[PastedSeedAsked] = Field(default_factory=list, max_length=MOST)
+    conversations_kept: list[PastedConversationKeptAsked] = Field(
+        default_factory=list, max_length=MOST
+    )
 
 
-class ReparseView(BaseModel):
+class PastedReparseView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     item_id: str
     content_digest: str
 
 
-class ArchiveView(BaseModel):
+class PastedArchiveView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     archived: list[str]
@@ -169,23 +171,23 @@ class ArchiveView(BaseModel):
     searchable: list[str]
 
 
-class CarryView(BaseModel):
+class PastedCarryView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     #: Every export, to be read again from its original bytes. There is no field for a vector.
-    reparse: list[ReparseView]
+    reparse: list[PastedReparseView]
     vectors_discarded: list[str]
     seed_findings: list[str]
     #: Whether a saved register that is agreed was found to compare the export and the
     #: conversations with. When it was not, the two parts that need one are empty and `why` says so.
     register_agreed: bool
     export_gaps: list[str]
-    archive: ArchiveView | None
+    archive: PastedArchiveView | None
     why: str
 
 
 # ------------------------------------------------------------------------------- learning
-class MemoryAsked(BaseModel):
+class PastedMemoryAsked(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     source_file: Name
@@ -193,7 +195,7 @@ class MemoryAsked(BaseModel):
     written_at: datetime | None = None
 
 
-class DerivationAsked(BaseModel):
+class PastedDerivationAsked(BaseModel):
     """One conclusion a person drew from one old memory file."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -205,14 +207,14 @@ class DerivationAsked(BaseModel):
     because: Name
 
 
-class LearningAsked(BaseModel):
+class PastedLearningAsked(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    memories: list[MemoryAsked] = Field(max_length=MOST)
-    derivations: list[DerivationAsked] = Field(default_factory=list, max_length=MOST)
+    memories: list[PastedMemoryAsked] = Field(max_length=MOST)
+    derivations: list[PastedDerivationAsked] = Field(default_factory=list, max_length=MOST)
 
 
-class DerivedView(BaseModel):
+class PastedDerivedView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     source_file: str
@@ -220,7 +222,7 @@ class DerivedView(BaseModel):
     derived_by: str
 
 
-class RefusedView(BaseModel):
+class PastedRefusedView(BaseModel):
     """One thing the package refused, named by the file or the agent it was about."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -229,11 +231,11 @@ class RefusedView(BaseModel):
     because: str
 
 
-class LearningView(BaseModel):
+class PastedLearningView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    derived: list[DerivedView]
-    refused: list[RefusedView]
+    derived: list[PastedDerivedView]
+    refused: list[PastedRefusedView]
     derived_twice: list[str]
     note: str
     files_read: int
@@ -244,7 +246,7 @@ class LearningView(BaseModel):
 
 
 # ------------------------------------------------------------------------------- audience
-class ForeignAgentAsked(BaseModel):
+class PastedForeignAgentAsked(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: Name
@@ -252,31 +254,31 @@ class ForeignAgentAsked(BaseModel):
     tools: list[str] = Field(default_factory=list, max_length=200)
 
 
-class AudienceAsked(BaseModel):
+class PastedAudienceAsked(BaseModel):
     """The agents, what each availability means here, and whose agents they will be."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    agents: list[ForeignAgentAsked] = Field(max_length=MOST)
+    agents: list[PastedForeignAgentAsked] = Field(max_length=MOST)
     #: Their availability word to one of this system's audience levels. Decided per company.
     mapping: dict[str, Visibility]
     owner_id: Name
     department: str = ""
 
 
-class AudienceView(BaseModel):
+class PastedAudienceView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
     level: str
 
 
-class AudiencesView(BaseModel):
+class PastedAudiencesView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    audiences: list[AudienceView]
+    audiences: list[PastedAudienceView]
     #: Agents whose availability nobody mapped, in the package's words. Never defaulted.
-    unmapped: list[RefusedView]
+    unmapped: list[PastedRefusedView]
     #: What this does not decide: what each agent may reach, which is its authority.
     authority_is_not_decided_here: bool = True
 
@@ -293,9 +295,13 @@ async def _begin(request: Request, asked: Asked) -> None:
 
 
 @router.post(
-    "/migration/skills/convert", response_model=SkillsConvertedView, responses=COMMON_RESPONSES
+    "/migration/skills/convert",
+    response_model=PastedSkillsConvertedView,
+    responses=COMMON_RESPONSES,
 )
-async def convert_skills(request: Request, body: SkillsAsked, asked: Asked) -> SkillsConvertedView:
+async def convert_skills(
+    request: Request, body: PastedSkillsAsked, asked: Asked
+) -> PastedSkillsConvertedView:
     """Say what the package would do with these skills: a description to read, what is still
     written at a router, what to leave behind and what nobody has run a real task through."""
     await _begin(request, asked)
@@ -315,9 +321,9 @@ async def convert_skills(request: Request, body: SkillsAsked, asked: Asked) -> S
             )
             for one in body.checks
         ]
-        return SkillsConvertedView(
+        return PastedSkillsConvertedView(
             descriptions=[
-                SkillConversionView(
+                PastedSkillConversionView(
                     name=one.name, proposed_description=skills.proposed_description(one)
                 )
                 for one in foreign
@@ -330,8 +336,8 @@ async def convert_skills(request: Request, body: SkillsAsked, asked: Asked) -> S
         raise _refused_because(str(refused)) from None
 
 
-@router.post("/migration/carry", response_model=CarryView, responses=COMMON_RESPONSES)
-async def check_carry(request: Request, body: CarryAsked, asked: Asked) -> CarryView:
+@router.post("/migration/carry", response_model=PastedCarryView, responses=COMMON_RESPONSES)
+async def check_carry(request: Request, body: PastedCarryAsked, asked: Asked) -> PastedCarryView:
     """Say what must be re-read, which vectors are discarded, which seeds a person must look at, and
     where the export and the agreed register disagree."""
     await _begin(request, asked)
@@ -382,21 +388,21 @@ async def check_carry(request: Request, body: CarryAsked, asked: Asked) -> Carry
         except ValueError:
             why = "the saved register does not read, so nothing is compared with it"
     gaps: list[str] = []
-    archived: ArchiveView | None = None
+    archived: PastedArchiveView | None = None
     if agreed is not None:
         gaps = list(carry.export_gaps(agreed, exports))
         try:
             made = carry.archive(agreed, kept)
         except MigrationError as refused:
             raise _refused_because(str(refused)) from None
-        archived = ArchiveView(
+        archived = PastedArchiveView(
             archived=list(made.archived),
             kept_as_artefacts=[one.item_id for one in made.imported],
             searchable=list(made.searchable),
         )
-    return CarryView(
+    return PastedCarryView(
         reparse=[
-            ReparseView(item_id=one.item_id, content_digest=one.content_digest)
+            PastedReparseView(item_id=one.item_id, content_digest=one.content_digest)
             for one in carry.reparse_plan(exports)
         ],
         vectors_discarded=list(carry.carried_vectors(exports)),
@@ -408,8 +414,10 @@ async def check_carry(request: Request, body: CarryAsked, asked: Asked) -> Carry
     )
 
 
-@router.post("/migration/learning", response_model=LearningView, responses=COMMON_RESPONSES)
-async def check_learning(request: Request, body: LearningAsked, asked: Asked) -> LearningView:
+@router.post("/migration/learning", response_model=PastedLearningView, responses=COMMON_RESPONSES)
+async def check_learning(
+    request: Request, body: PastedLearningAsked, asked: Asked
+) -> PastedLearningView:
     """Re-derive each conclusion the ordinary way, refuse the ones that would widen a scope, and
     write the handover note from what was derived."""
     await _begin(request, asked)
@@ -424,12 +432,12 @@ async def check_learning(request: Request, body: LearningAsked, asked: Asked) ->
         raise _refused_because(str(refused)) from None
     by_file = {one.source_file: one for one in memories}
     derived: list[learning.Derivation] = []
-    refused_ones: list[RefusedView] = []
+    refused_ones: list[PastedRefusedView] = []
     for one in body.derivations:
         memory = by_file.get(one.source_file)
         if memory is None:
             refused_ones.append(
-                RefusedView(
+                PastedRefusedView(
                     subject=one.source_file,
                     because=(
                         "it is not among the memory files handed over, so there is nothing it "
@@ -449,11 +457,11 @@ async def check_learning(request: Request, body: LearningAsked, asked: Asked) ->
                 )
             )
         except (MigrationError, ValueError) as refused:
-            refused_ones.append(RefusedView(subject=one.source_file, because=str(refused)))
+            refused_ones.append(PastedRefusedView(subject=one.source_file, because=str(refused)))
     note = learning.learning_note(derived, memories)
-    return LearningView(
+    return PastedLearningView(
         derived=[
-            DerivedView(
+            PastedDerivedView(
                 source_file=one.source_file,
                 change=one.proposal.change.value,
                 derived_by=one.derived_by,
@@ -468,13 +476,15 @@ async def check_learning(request: Request, body: LearningAsked, asked: Asked) ->
     )
 
 
-@router.post("/migration/audience", response_model=AudiencesView, responses=COMMON_RESPONSES)
-async def map_audience(request: Request, body: AudienceAsked, asked: Asked) -> AudiencesView:
+@router.post("/migration/audience", response_model=PastedAudiencesView, responses=COMMON_RESPONSES)
+async def map_audience(
+    request: Request, body: PastedAudienceAsked, asked: Asked
+) -> PastedAudiencesView:
     """Map each agent's availability over there onto who may see it here, from the mapping given,
     and name the agents whose availability the mapping does not cover. Never a default."""
     await _begin(request, asked)
-    audiences: list[AudienceView] = []
-    unmapped: list[RefusedView] = []
+    audiences: list[PastedAudienceView] = []
+    unmapped: list[PastedRefusedView] = []
     try:
         for one in body.agents:
             foreign = rebuild.ForeignAgent(
@@ -488,9 +498,9 @@ async def map_audience(request: Request, body: AudienceAsked, asked: Asked) -> A
                     department=body.department,
                 )
             except rebuild.RebuildError as refused:
-                unmapped.append(RefusedView(subject=one.name, because=str(refused)))
+                unmapped.append(PastedRefusedView(subject=one.name, because=str(refused)))
                 continue
-            audiences.append(AudienceView(name=one.name, level=made.level.value))
+            audiences.append(PastedAudienceView(name=one.name, level=made.level.value))
     except (MigrationError, ValueError) as refused:
         raise _refused_because(str(refused)) from None
-    return AudiencesView(audiences=audiences, unmapped=unmapped)
+    return PastedAudiencesView(audiences=audiences, unmapped=unmapped)

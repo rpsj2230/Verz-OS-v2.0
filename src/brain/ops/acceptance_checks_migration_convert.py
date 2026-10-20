@@ -102,14 +102,14 @@ async def _begin(h: Harness) -> tuple[str, str, Any]:
     ),
 )
 async def pasted_skills_are_converted_and_nothing_is_imported(h: Harness) -> None:
-    from brain.migration_convert_routes import SkillsAsked, convert_skills
+    from brain.migration_convert_routes import PastedSkillsAsked, convert_skills
 
     administrator, stranger, console = await _begin(h)
 
     async def ask(who: str) -> Any:
         return await convert_skills(
             console.request("POST"),
-            SkillsAsked.model_validate(_SKILLS),
+            PastedSkillsAsked.model_validate(_SKILLS),
             await asking_as(h, who, strong=True),
         )
 
@@ -144,7 +144,7 @@ async def pasted_skills_are_converted_and_nothing_is_imported(h: Harness) -> Non
     ),
 )
 async def a_pasted_export_is_planned_compared_and_archived(h: Harness) -> None:
-    from brain.migration_convert_routes import CarryAsked, check_carry
+    from brain.migration_convert_routes import PastedCarryAsked, check_carry
     from brain.migration_routes import RegisterAsked, save_register
 
     administrator, _, console = await _begin(h)
@@ -170,7 +170,7 @@ async def a_pasted_export_is_planned_compared_and_archived(h: Harness) -> None:
     async def ask(document: dict[str, Any]) -> Any:
         return await check_carry(
             console.request("POST"),
-            CarryAsked.model_validate(document),
+            PastedCarryAsked.model_validate(document),
             await asking_as(h, administrator, strong=True),
         )
 
@@ -215,7 +215,7 @@ async def a_pasted_export_is_planned_compared_and_archived(h: Harness) -> None:
     ),
 )
 async def a_conclusion_is_re_derived_and_a_widening_is_refused(h: Harness) -> None:
-    from brain.migration_convert_routes import LearningAsked, check_learning
+    from brain.migration_convert_routes import PastedLearningAsked, check_learning
 
     administrator, _, console = await _begin(h)
 
@@ -230,7 +230,7 @@ async def a_conclusion_is_re_derived_and_a_widening_is_refused(h: Harness) -> No
 
     answer = await check_learning(
         console.request("POST"),
-        LearningAsked.model_validate(
+        PastedLearningAsked.model_validate(
             {
                 "memories": [{"source_file": "memory/made-up.md", "text": "Likes short answers"}],
                 "derivations": [one("scope_widening"), one("preference")],
@@ -255,12 +255,12 @@ async def a_conclusion_is_re_derived_and_a_widening_is_refused(h: Harness) -> No
     ),
 )
 async def availability_is_mapped_and_never_defaulted(h: Harness) -> None:
-    from brain.migration_convert_routes import AudienceAsked, map_audience
+    from brain.migration_convert_routes import PastedAudienceAsked, map_audience
 
     administrator, _, console = await _begin(h)
     answer = await map_audience(
         console.request("POST"),
-        AudienceAsked.model_validate(
+        PastedAudienceAsked.model_validate(
             {
                 "agents": [
                     {"name": "made-up helper", "availability": "everyone"},
