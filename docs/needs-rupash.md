@@ -6,6 +6,33 @@ Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
 # Open
 
+## 255. May the server keep the key that opens its own encrypted backups, so a rehearsal can run by itself?
+
+**In plain terms:** tasks M30.3.4 and M30.3.6 want each backup encrypted with a key you hold, and a
+restore rehearsal every week without anybody remembering. The two pull against each other. A copy is now
+encrypted to your public key on the server before it leaves the machine, so the server cannot read it back.
+The weekly rehearsal has to read a copy back to check it, and that needs the private half. What is built
+works under every answer: the rehearsal opens an encrypted copy only if you have left the private key's path
+on the server for it (`BRAIN_BACKUP_IDENTITY`), and if you have not it records a failed rehearsal that says
+so, which the Recovery screen shows loudly.
+
+**Option A: leave the private key on the server for rehearsals.** Rehearsals run by themselves. Anybody who
+reaches the server and the bucket together can read every copy, which is the case the encryption was meant
+to cover.
+
+**Option B: keep the private key off the server.** Copies stay unreadable to the server and to anybody who
+reaches only the bucket. A rehearsal is then done by a person bringing the key, and the weekly one shows as
+failed with the reason until they do.
+
+**Option C: encrypt to two keys, yours and a second one kept on the server only for rehearsals.** Rehearsals
+run by themselves, and you can still open a copy with the key only you hold. The second key reads every copy
+too, so it is option A with a second lock. This is not built.
+
+**My recommendation:** A for an install on a server only your people reach; B where the bucket and the server
+are reachable by different people and the point of encrypting is to separate them.
+
+**What I need from you:** reply "255: A", "255: B" or "255: C".
+
 ## 241. When an agent is published, do we price one run with the product's estimator now, or wait until rehearsals record a measured cost?
 
 **In plain terms:** task M20.5.2 says an agent whose median rehearsed run costs more than its department's

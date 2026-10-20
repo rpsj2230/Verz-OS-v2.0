@@ -931,7 +931,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/referrals",
     ],
     routes: [
-      "/api/v1/install/recovery",
+      "/api/v1/install/recovery*",
       "/api/v1/govern/retention*",
       "/api/v1/govern/legal-holds*",
       "/api/v1/govern/erasures",
@@ -949,7 +949,13 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "gate.escalation",
     ],
     installation: [],
-    gaps: [{ what: "A recovery drill cannot be started, and a restore cannot be verified, from the console.", leaf: "M30.3.9" }],
+    gaps: [
+      {
+        what: "A recovery drill is asked for from the console and started by the server, so a press does not say it began.",
+        because:
+          "Nothing the product runs holds the access to start a container (needs-rupash item 235); the press leaves a request for the drill service, and the leaf is proved only when a person has pressed it on an install that has the service and read the record that appears.",
+      },
+    ],
   },
   "Import and export": {
     screens: ["/import-export"],
@@ -960,10 +966,16 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "Version, build and deployment information": {
     screens: ["/updates", "/install"],
-    routes: ["/api/v1/install/updates"],
+    routes: ["/api/v1/install/updates", "/api/v1/handover*"],
     tables: ["ops.deployment_record"],
     installation: ["INSTALL_UPDATE_MODE"],
-    gaps: [],
+    gaps: [
+      {
+        what: "No page draws the handover pack: the service level statement, the subprocessors, the named owners and the booked review are served and nothing links to them.",
+        because:
+          "brain.handover_routes serves them to the install authority (M30.5.4, M30.6.6, M37.4.2.4, M37.4.3.3, M37.4.3.5) and the console has not been given a Handover page.",
+      },
+    ],
   },
 };
 

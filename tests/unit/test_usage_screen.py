@@ -9,7 +9,7 @@ day that record changes a test here says the screen has nowhere to show the figu
 
 Dates are 2019, far from any wall clock, because nothing here is about the present.
 
-Task ids: M27.7.14
+Task ids: M27.9.8, M27.7.14
 """
 
 from __future__ import annotations
@@ -688,3 +688,25 @@ def test_a_question_with_no_department_brings_its_tokens_under_the_same_line() -
 
     by_department = next(one for one in shown.tokens if one.axis is Axis.DEPARTMENT)
     assert [(line.key, line.tokens_in) for line in by_department.lines] == [(NO_DEPARTMENT, 40)]
+
+
+def test_the_reason_the_usage_screen_gives_does_not_say_nothing_writes_a_cost() -> None:
+    """The reason said the cost ledger had no writer and that nothing called a model, and both
+    stopped being true (`UsageRecorder` writes a request's cost, `ModelCalls` calls the model). It
+    is held against the source, not against the sentence: a module that uses the store's writer
+    exists, so a reason saying there is none is wrong. Delete this and the screen's account of what
+    it can and cannot measure falls behind the product again."""
+    from pathlib import Path
+
+    from brain.console import agent_profile
+    from brain.console.usage_screen import (
+        QUESTIONS_ARE_THE_ONE_USAGE_FIGURE_A_LEDGER_HOLDS_TODAY as WHY,
+    )
+
+    src = Path(__file__).resolve().parents[2] / "src"
+    usage_store = (src / "brain" / "ops" / "usage_store.py").read_text(encoding="utf-8")
+    assert agent_profile.spend_writers({"brain.ops.usage_store": usage_store}) == (
+        "brain.ops.usage_store",
+    )
+    assert "no writer" not in WHY
+    assert "nothing calls a model" not in WHY

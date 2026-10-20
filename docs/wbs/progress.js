@@ -159,6 +159,11 @@ const PROGRESS = {
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
     updated: "2026-10-13",
   },
+  "M27.15.1": {
+    status: "READY FOR TESTING",
+    why: "BUILT AND TESTED: opening the text of a document that sits in a department the reader does not belong to writes one ledger entry naming the document and the reader, from both the library's text route and the page a citation opens, and a failure to write it fails the opening. Seeing a document listed and reading its text were already two reads (the department's read, which People grants and withdraws). A company-wide document, a reader's own department and a refused opening write nothing. An install check calls the route and fails in both directions. Install proof: with two departments, open a document in the other one from the Knowledge page as someone who holds the read there, then find the entry in the Audit log under the document.",
+    updated: "2026-10-20",
+  },
   "M27.15.3": {
     status: "READY FOR TESTING",
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
@@ -2255,9 +2260,9 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.10.2": {
-    status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in agent_routes, components/kit/ConfirmDialog.tsx, components/kit/DetailPage.tsx +50 more; NOT wired: components/kit/index.ts, components/ui/badge.tsx, components/ui/card.tsx +8 more. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M13/wire-agent-upgrade, no PR; +23 more",
-    updated: "2026-10-06",
+    status: "READY FOR TESTING",
+    why: "BUILT AND TESTED: the toast region is mounted once, in the shell, and a Note of kind done announces its sentence in it while the page keeps its own line (console/tests/done-notes-announce.test.tsx), which gives the thirty-eight places that say a write took effect the toast without an edit to each. The other named parts were already drawn by the pages: sidebar, header, breadcrumbs, list page, detail page, tabs, drawer, empty, loading and failed states, bulk bar and the write-once secret field. Install proof: switch a feature on or off under Features and read the message that appears at the corner of the screen as well as the line on the page.",
+    updated: "2026-10-20",
   },
   "M27.11.1": {
     status: "OPEN",
@@ -2559,10 +2564,15 @@ const PROGRESS = {
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (app, console.entity_stats, console_stats_routes +6 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #154's branch M21/record-usage-for-stats (may be replayed already); closed PR #167's branch M38/migration-train-0118-0138-0139 (may be replayed already); closed PR #209's branch M39/w3-agent-workspace (may be replayed already); +5 more",
     updated: "2026-10-06",
   },
+  "M27.15.12": {
+    status: "READY FOR TESTING",
+    why: "BUILT AND TESTED: the Requirement checks screen names M27.15.12 as the leaf the Console area is checked for, and an install check passes only when every requirement of the register's Console area has a newest check recorded by a person that passed. Install proof, which only you can give: open Requirement checks, choose the Console area, open each requirement on its page, and record passed or failed with a sentence about what you did.",
+    updated: "2026-10-20",
+  },
   "M27.16.1": {
-    status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in access_request_routes, audit_routes, automations_routes +255 more; NOT wired: pages/AccessReview.route.tsx, pages/AgentTemplate.route.tsx, pages/AgentTemplate.tsx +36 more. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; branch M16/w3-learning-tables, no PR; branch M27/webhook-switch-on-and-replay, no PR; +28 more",
-    updated: "2026-10-06",
+    status: "READY FOR TESTING",
+    why: "BUILT AND TESTED: docs/console-pages.json lists the 42 primary pages (the 41 menu entries and the page of one agent) and console/tests/console-pages.test.ts holds its statement that each is built on the page kit against the source (all 42 are). /build/pages lists which pages are rebuilt, with what each still lacks. Install proof: open /build/pages after the next deploy and read the list; it says how many pages are rebuilt and names what each of the others waits on.",
+    updated: "2026-10-20",
   },
   "M27.2.1": {
     status: "OPEN",
@@ -2844,6 +2854,11 @@ const PROGRESS = {
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_operations_console); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
   },
+  "M27.9.8": {
+    status: "READY FOR TESTING",
+    why: "BUILT AND TESTED in the repository (no install step): the stale statements named in the console plan's W0.7 are corrected where they were still wrong, each behavioural one with a test: the schema count in brain.db (a test now reads the number it states), the stop-control sentence the runs route serves, the usage screen's account of what is measured, and the embedding queue's, chunk store's and streaming's statements about callers and routes that now exist. Proved by the Unit tests job.",
+    updated: "2026-10-20",
+  },
   "M27.9.9": {
     status: "OPEN",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (connector_routes, data_steward_routes, identity.data_steward +8 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #125's branch M27/people-grant-controls (may be replayed already); closed PR #173's branch M27/connector-test-probe (may be replayed already); old backup branch recovery/from-windows-20260928-wt-integrate2; +4 more",
@@ -2965,9 +2980,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M30.3.11": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): recovery.alerts() ranks VERIFICATION_FAILED above BACKUP_AGED and last_attempt covers a drill that ran and did not verify (tested). Same gap: backup_exposure runner has no run, no drill records are written, no channel sends it. NEXT: same wiring as M30.3.10 plus the drill record writer (M30.3.8) so a failed verification exists to alert on",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: a rehearsal that did not verify is recorded by the drill service and is the first alert the existing report raises. PROOF ON THE INSTALL: the check a_rehearsal_that_did_not_verify_is_the_loudest_alert passes; to see it live, a failed record on the Recovery screen appears above a late copy.",
+    updated: "2026-10-20",
   },
   "M30.3.2": {
     status: "OPEN",
@@ -2975,14 +2990,14 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M30.3.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): recovery.destination_gaps() refuses an on-host destination (tested) but nothing calls it; brain-install-backup defaults the endpoint to the install's own SeaweedFS container, so copies stay on the host unless an operator sets another endpoint. Manifest has no off_host field. NEXT: require an off-host endpoint in brain-install-backup and the setup wizard, record it in the manifest, and call destination_gaps from the recovery panel route",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: the installer refuses a default and an address that is plainly this machine, copies declare off_host on the manifest, and the Recovery screen states a copy kept on the host (brain.ops.recovery.placement_findings). PROOF ON THE INSTALL: 1. Run ops/backup/brain-install-backup with BRAIN_BACKUP_ENDPOINT set to an object store on another machine and BRAIN_BACKUP_OFF_HOST=yes. 2. Take one copy (systemctl start brain-backup.service). 3. Open Backup and recovery: no finding says the copy is on the same host. The install check the_newest_copy_is_off_the_host_under_the_clients_key passes on the next run.",
+    updated: "2026-10-20",
   },
   "M30.3.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): recovery.KeyHolder and destination_gaps() refuse platform-held or no key (tested) but brain-backup and brain-install-backup contain no encryption step at all and the manifest records no key holder; nothing calls destination_gaps. NEXT: add client-held-key encryption (age or gpg public key from setup) to brain-backup before upload, record key holder in the manifest, surface in recovery panel",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: brain-backup-crypt encrypts each copy to the client's public key before it leaves the machine and the manifest names the client as key holder. PROOF ON THE INSTALL: 1. Generate a key pair on the client's own machine and copy only the public file to the server. 2. Run the installer with BRAIN_BACKUP_RECIPIENT set to that file. 3. Take a copy: the bucket holds a .dump.enc and a .dump.key and no plain .dump. 4. The Recovery screen lists no finding about the key. The install check the_newest_copy_is_off_the_host_under_the_clients_key passes.",
+    updated: "2026-10-20",
   },
   "M30.3.5": {
     status: "READY FOR TESTING",
@@ -2990,24 +3005,24 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M30.3.6": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): ops/backup/brain-restore-drill loads one copy into a named scratch database and compares counts and migration head; docs/install/restore-drill.md. Run by hand: schedule_runner Runner restore_drill has needs= and no run; no timer; it does not create the scratch container or write the drill record. NEXT: give Runner restore_drill a run that fetches the newest copy, drives the script, writes the drill record to the backups bucket, started weekly by the worker",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: ops/backup/brain-drill-service with brain-drill.timer rehearses the newest copy when a week has passed or one is asked for, behind the choice in needs-rupash 235 (option B). PROOF ON THE INSTALL: 1. Run the installer with BRAIN_DRILL_SERVICE=yes. 2. Wait ten minutes or press Start a rehearsal once its switch is on. 3. A record ending .drill.json appears beside the copy and the Recovery screen shows the rehearsal. The check the_newest_rehearsal_asked_all_three_questions passes on the next run.",
+    updated: "2026-10-20",
   },
   "M30.3.7": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): recovery.Check has SCHEMA_COMPLETE, SMOKE_QUERY, PERMISSION_CANARY as required checks (tested); brain-restore-drill does row counts and migration head only and says the schema check, RLS sweep and canary are manual steps in the drill document. NEXT: extend the drill runner to run schema, smoke and permission canary checks on the scratch copy and record each CheckRun in the drill record",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: python -m brain.ops.drill_checks asks the loaded copy for its schema and the permission canary (a stranger refused, the owner shown, role and fast lane attributes). PROOF ON THE INSTALL: the record written by the first rehearsal lists schema_complete, smoke_query and permission_canary as asked; the check the_newest_rehearsal_asked_all_three_questions passes.",
+    updated: "2026-10-20",
   },
   "M30.3.8": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): recovery.verification_of() refuses an RTO on an unverified drill and backup_manifest.read_drills() reads drill records (tested); nothing writes a drill record, the script leaves it to the person, so the install records no measured RTO. NEXT: have the drill runner time the restore and write the drill record; then GET /install/recovery shows the measured RTO against the profile target",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: the drill service writes the record the product reads, and a verified record carries its measured recovery time. PROOF ON THE INSTALL: after a rehearsal verifies, Backup and recovery shows how long the last restore took against the profile's promise. The check a_verified_rehearsal_states_its_measured_time passes.",
+    updated: "2026-10-20",
   },
   "M30.3.9": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): GET /install/recovery (install_routes.py) and console RecoveryPage show last backup, last verified restore, last attempt and drill due via console/recovery_view.py; tested. No one-click drill: install_routes.py says it is a write nothing performs. backup_ladder unwired. NEXT: add a POST drill route starting the drill runner (M30.3.6) under admin capability, and a Start rehearsal button on RecoveryPage",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: Start a rehearsal on Backup and recovery leaves a request for the server's drill service (POST /install/recovery/rehearsal), behind the backup_drill_requests switch which ships off; it says it asked and never that a rehearsal began. PROOF ON THE INSTALL: 1. Turn Ask the server for a restore rehearsal on under Features (this is your answer to needs-rupash 235). 2. Press Start a rehearsal and confirm. 3. Within about ten minutes the screen shows a new rehearsal record. Only a person pressing it with the drill service installed can close this leaf.",
+    updated: "2026-10-20",
   },
   "M30.4.2": {
     status: "IN PROGRESS",
@@ -3030,9 +3045,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M30.5.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): launch.service_level() builds the profile's RPO and RTO statement and refuses it without a verified drill (tested in test_launch.py, register DEC-31); reliability.RECOVERY_OBJECTIVES says nothing writes it into an agreement. Nothing calls service_level; no route or document serves it. NEXT: expose launch.service_level through a route on the handover or recovery page that renders the statement or its refusal reason",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: GET /handover returns the service level statement for the install's profile or the one sentence for why it cannot be made. PROOF ON THE INSTALL: 1. Call GET /api/v1/handover as the first administrator, or read it from the console once a page draws it. 2. Before any rehearsal has verified a copy it says no restore has ever verified. 3. After a rehearsal verifies and every copy is inside the recovery point it carries the profile's recovery point, time and the time measured. The check the_statement_is_made_only_after_a_rehearsal_verified passes.",
+    updated: "2026-10-20",
   },
   "M32.1.2.3": {
     status: "OPEN",
@@ -3630,9 +3645,9 @@ const PROGRESS = {
     updated: "2026-10-20",
   },
   "M37.2.4.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): migration/learning.py: learning_note() renders THE_SYSTEM_STARTS_WITHOUT_THEIR_ACCUMULATED_LEARNING from derivations (tested). launch.assemble handover pack does not include it and nothing imports learning. NEXT: add the learning note as a section of the handover pack (launch.assemble) and serve it; then check reads it",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: the handover carries the sentence that the new system starts without the old one's accumulated learning and why that is the right trade, with the counts of what was carried (none until a migration re-derives something). PROOF ON THE INSTALL: GET /handover shows the learning sentence.",
+    updated: "2026-10-20",
   },
   "M37.3.2.4": {
     status: "READY FOR TESTING",
@@ -3640,19 +3655,19 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M37.4.2.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): launch.py subprocessors() derives the list from provider slots that hold a key (ops.provider_keys.PROVIDER_SLOTS) and refuses an undeclared slot; tested in test_launch.py. Nothing outside launch.py calls it; no route or screen serves the subprocessor list. NEXT: expose launch.subprocessors() through a route on the data or handover page and render it; then check that a provider with a key appears and one without does not",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: GET /handover lists the model providers whose key this process holds, each with what it is for, and says in words when it holds none. PROOF ON THE INSTALL: the list matches the providers shown with a key on the Models screen. The check the_subprocessors_are_the_providers_whose_key_is_held passes.",
+    updated: "2026-10-20",
   },
   "M37.4.3.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): launch.py Owner/owner_gaps() refuses a handover pack where knowledge, grants or connectors lack a named client owner (tested). No caller outside launch.py; no table, route or page records owners (data steward appointment is a separate leaf). NEXT: add a handover owners table and route feeding launch.owner_gaps, or reuse the data steward record; then check",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: PUT /handover/owners records who owns knowledge, grants and connectors with a way to reach them, behind the handover_pack switch (ships off). PROOF ON THE INSTALL: 1. Turn Record the named owners and the review date on under Features. 2. PUT the three owners; GET /handover lists them and no gap. 3. Leave one out: the gap names it.",
+    updated: "2026-10-20",
   },
   "M37.4.3.5": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): launch.py review_gaps(launched_on, review_booked_for) refuses a review not within thirty days (tested). No caller outside launch.py; nothing books the review (no calendar, task or table). NEXT: record the review date in the handover route and surface review_gaps on the handover page; then check",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: PUT /handover/review books the thirty-day review and refuses launch day or past thirty days. PROOF ON THE INSTALL: with the switch on, book a review 30 days after launch and read it back; 31 days is refused.",
+    updated: "2026-10-20",
   },
   "M37.5.1.2": {
     status: "READY FOR TESTING",
@@ -3660,9 +3675,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M37.5.1.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops/controls.py overdue() builds the alert (tested), and ops/notices.py lists CONTROL_NOT_RUN with 'No channel is chosen for it yet, so nothing sends it'. Nothing calls controls.overdue; worker and schedule_runner do not. NEXT: call controls.overdue from a scheduled runner using schedule_store last-run times and deliver via the notice sender to the operations alert holder; the channel choice may need a needs-rupash item",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT (under M17.7.2) and now claimed by its install check: brain.control_not_run_told tells whoever holds the operations alert, once per episode, when a safety mechanism has not run in its window. PROOF ON THE INSTALL: 1. Turn Tell whoever holds the alert when a safety mechanism has not run on under Features (it ships off). 2. The check a_mechanism_that_has_not_run_is_told_to_whoever_holds_the_alert passes on the next run (it says not run until the switch is on). 3. To see it live, stop the worker for longer than a control's window: the holder is told once in the chat tool they last used.",
+    updated: "2026-10-20",
   },
   "M37.5.1.4": {
     status: "READY FOR TESTING",
@@ -3670,9 +3685,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M37.5.2.1": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): ops/alerting.py Severity, Route, route_for(), routing_gaps() and controls.py use route_for for each control's runbook (tested in test_alerting.py). No delivery path: notices CONTROL_NOT_RUN and BACKUP_EXPOSURE say no channel is chosen, so no alert is routed to anyone. NEXT: wire alert delivery: resolve route_for's role to people and send via a channel (ops.notices sender); likely needs an owner decision on the channel",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT (under M17.7.2): the severity of each control's alert decides who is told, through alerting.route_for: everyone holding the operations alert, and the incident capability's holders too for an alert that wakes somebody, each only if they may open Incidents. PROOF ON THE INSTALL: the same check as M37.5.1.3 passes; a holder who cannot open Incidents is told nothing.",
+    updated: "2026-10-20",
   },
   "M37.5.2.2": {
     status: "IN PROGRESS",
@@ -4800,9 +4815,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M30.6.6": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): launch.service_level() is produced only with a verified Drill and a newest copy inside the RPO, otherwise raises with the reason (four refusals, tested in test_launch.py, DEC-31). Nothing calls it and no route serves the statement or its refusal. NEXT: same route as M30.5.4; the check asks for the statement on an install with no verified drill and expects the stated reason",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: the statement is produced only after a verified rehearsal and every copy inside the recovery point, and otherwise refused with the reason (launch.service_level, now served). PROOF ON THE INSTALL: the same steps as M30.5.4; the refusal names the coverage nothing has copied or the missing rehearsal.",
+    updated: "2026-10-20",
   },
   "M30.6.7": {
     status: "BLOCKED",
@@ -5043,6 +5058,16 @@ const PROGRESS = {
     status: "READY FOR TESTING",
     why: "Built on branch M27/console-lists-wizards-buttons. Prove it on the install. (1) Open Agents (or People, Skills, Connectors): the toolbar ends in Saved filters. Type a search, choose a filter, open Saved filters, give it a name and Save. Clear the search, reopen Saved filters and press the name: the list narrows to the same question. Reload the page and it is still there; sign in as somebody else and it is not. Audit and Logs have the same control beside their filters. (2) Every list table has Columns (hide one and it goes), Export (downloads a file of the rows shown, in the columns shown), a tick box on every row (Export selected appears), and a small panel button on each row that opens a drawer showing every column, including hidden ones. People, Sessions, Access review and the Library also offer an act on the ticked rows. (3) No list shows a total, a page count or an of N anywhere.",
     updated: "2026-10-14",
+  },
+  "M27.16.4": {
+    status: "READY FOR TESTING",
+    why: "BUILT AND TESTED: docs/screens.html draws a screen for every primary page, screens 15 to 45 being the thirty-one that had none (wireframes drawn from the built pages, example values in place of data) beside the fourteen designs it began with, and the agent page keeps screen 14. tests/unit/test_console_pages.py fails when a page has no screen, names a screen that is not drawn, or has a walk-through recorded before it has a screen. Install proof: open /build/screens and /build/pages; every page on the list links to a screen.",
+    updated: "2026-10-20",
+  },
+  "M27.16.5": {
+    status: "READY FOR TESTING",
+    why: "BUILT, and it waits on you: a page counts as rebuilt on /build/pages only when a walk-through of it has passed on your install, and every row starts without one, so the count of rebuilt pages is nought. To record one, open the page on your install, find it as its screen draws it, and set that row's walked in docs/console-pages.json to the day and the release it passed on. The register refuses a walk-through for a page that is not on the shared parts or has no screen.",
+    updated: "2026-10-20",
   },
   "M12.3.5": {
     status: "READY FOR TESTING",

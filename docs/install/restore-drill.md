@@ -7,13 +7,17 @@ against two local PostgreSQL clusters with docker and the object store stood in 
 around them have not been rehearsed at all. Read it the way you would read a runbook somebody
 wrote carefully and never ran on a real install, and expect the first run to find something.
 
-**A script does part of this for you, and only part.** `ops/backup/brain-restore-drill` loads a
-copy into the scratch database and checks that every table's row count and the migration head
-came back as the copy's manifest states them. Downloading the copy, starting the scratch
-database, creating the roles, the schema check, the row-level security sweep, the permission
-canary and the record are still yours. No timer schedules a drill, and the console control the
-recovery screen describes is not built. The table near the foot of this page says so piece by
-piece, and a test holds that table to the repository.
+**Two ways to do this, and the second is opt-in.** By hand, as this page's steps say, with
+`ops/backup/brain-restore-drill` loading the copy and checking its row counts. Or with the drill
+service, which does steps 1 to 10 itself: `ops/backup/brain-drill-service`, started every ten
+minutes by `brain-drill.timer` when the installer was told to set it up
+(`BRAIN_DRILL_SERVICE=yes` to `ops/backup/brain-install-backup`). It starts nothing unless a
+rehearsal is owed (the last one is a week old) or somebody asked for one, loads the newest copy into a
+scratch database on an internal network, asks the three questions below, writes the record
+beside the copy and destroys everything it downloaded. **Whether to trust the install with that
+is the owner's decision** (needs-rupash item 235), which is why it is opt-in and why the Recovery
+screen's button is behind a switch that ships off. The steps below stay true either way, and are
+what the service does.
 
 ## What a drill proves, and what it does not
 
@@ -53,9 +57,9 @@ and still have lost a policy.
 
 | Check | What it asks | How |
 | --- | --- | --- |
-| `schema_complete` | every schema the application expects is present in the loaded copy | `python -m brain.ops.schema_check <scratch database url>` |
+| `schema_complete` | every schema the application expects is present in the loaded copy | `python -m brain.ops.drill_checks <scratch database url>`, which asks this and the canary in one run |
 | `smoke_query` | a question with a known answer returns that answer | `brain-restore-drill`, which asks the loaded copy for its revision in `alembic_version` and every table's row count, and compares each with what the copy's manifest states |
-| `permission_canary` | row-level security is still switched on for every entity table, and a restricted field is still refused to somebody who may not read it | `python -m brain.ops.sweeps rls` for the first half; nothing runs the second half for you |
+| `permission_canary` | row-level security is still switched on for every entity table, the application's role cannot bypass it, the fast lane cannot write, and a stranger is refused a row an owner is shown | `python -m brain.ops.drill_checks <scratch database url>`, as above |
 
 The schema check looks at schemas and not at tables or policies, so it catches a load that
 stopped early and not one that lost a policy. The drill script's counts catch a load that brought
@@ -63,10 +67,13 @@ back fewer rows, or more, than the copy held, table by table; the manifest's fig
 inside the snapshot the copy was taken from, so a busy database does not make them disagree. The
 row-level security sweep catches a table whose protection did not come back. **None of them asks
 a question as a person**, and that is the half of the canary that sees the failure that matters
-most: an application pointed at the copy, asked by somebody without the grant for a restricted
-field, has to refuse. Nothing in this product asks that for you yet. Until you have asked it,
-record the canary as not passed and say why in its detail; a canary nobody asked is not a canary
-that passed.
+most: a role pointed at the copy, asked by somebody without the grant, has to refuse. `brain.ops.drill_checks`
+asks it in the database's own layer, which is the layer that fails: it writes a row for a made-up
+owner into the scratch copy, inside a transaction it always rolls back, and asks as the application's
+role whether a made-up stranger is shown it and whether the owner is. It asks the owner as well as the
+stranger because a copy that lost its policy refuses both, and a canary that only refused would read
+that broken copy as a working one. It does not ask through the application's HTTP routes, which would
+need the application started against the copy.
 
 ## The procedure
 
@@ -145,20 +152,21 @@ that passed.
    step 6 was skipped: destroy the scratch container, start again at step 5, and do not count the
    attempt. Its result is your answer to `smoke_query`.
 
-8. **Ask the other two questions.** Both run from the application image, on the drill network,
-   against the scratch database only. Find the application image with `docker ps`.
+8. **Ask the other two questions.** One program asks both, from the application image, on the drill
+   network, against the scratch database only. Find the application image with `docker ps`. It
+   prints the two entries your record needs, as JSON, and exits 0 whatever they say.
 
    ```sh
    SCRATCH="postgresql://postgres:drill@brain-drill-db:5432/brain_drill"
-   docker run --rm --network brain-drill <application image> python -m brain.ops.schema_check "$SCRATCH"
-   docker run --rm --network brain-drill -e DATABASE_URL="$SCRATCH" <application image> python -m brain.ops.sweeps rls
+   docker run --rm --network brain-drill <application image> python -m brain.ops.drill_checks "$SCRATCH" > checks.json
    ```
 
-   Then ask the second half of the canary as described above, and note the time again when the
-   last answer is in.
+   Note the time again when the answers are in.
 
 9. **Write the record and put it beside the copy.** Name it after the copy, ending in the drill
-   record suffix below, with the fields in the next section. Then upload it.
+   record suffix below, with the fields in the next section. `python -m brain.ops.drill_service
+   record` builds it from `checks.json` and your answer to the first question, and refuses one the
+   product could not read. Then upload it.
 
    ```sh
    aws --endpoint-url "$BRAIN_BACKUP_ENDPOINT" s3 cp "$ID.drill.json" "s3://$BRAIN_BACKUP_BUCKET/$ID.drill.json"
@@ -316,19 +324,20 @@ rather than the year the plan first named.
 
 | Piece | Exists today |
 | --- | --- |
-| A script that performs a drill | `no` |
-| A timer that schedules a drill | `no` |
-| A console control that starts a drill | `no` |
+| A script that performs a drill | `yes` |
+| A timer that schedules a drill | `yes` |
+| A console control that starts a drill | `yes` |
 | The recovery screen can be opened | `no` |
 | A reader that turns a drill record into a verdict | `yes` |
 
-Every `no` is a row a test compares with the repository, and it goes red on the day that piece is
-built. That is the day to read this procedure again, because some of it will have become a
-button.
+Every row is compared with the repository by a test, and goes red on the day a piece is built or
+removed. That is the day to read this procedure again.
 
-The first row stays `no` with `brain-restore-drill` in the repository, and that is the test being
-right rather than stale. A script that performs a drill writes the record, and this one performs
-step 7 and writes nothing: steps 1 to 6 and 8 to 10 are still a person's.
+**Three rows became `yes` together, and each is opt-in.** The script is `brain-drill-service`, which
+writes the record. The timer is `brain-drill.timer`, which the installer sets up only when asked.
+The control is a route, `POST /install/recovery/rehearsal`, behind a switch that ships off: it leaves
+a request beside the copies and does not start anything, because nothing the product runs can. None of
+the three has been run on a server (see the last rows of the next table).
 
 ## What is checked and what is not
 
@@ -344,6 +353,9 @@ step 7 and writes nothing: steps 1 to 6 and 8 to 10 are still a person's.
 | That a scratch target is loaded, and that nothing is ever run in the live container | the same test, on the calls the stand-ins recorded |
 | That a count or a head that did not come back fails naming the table, and a manifest without them is refused | the same test, against the manifest `brain-backup` itself wrote |
 | That `brain-backup` counts inside one read-only transaction and dumps the snapshot it counted in | the same test, on the statements its session was fed and the dump's arguments |
+| That the drill service plans a rehearsal on a request, on none ever recorded and on a week's age to the second, never on a failing one, writes a record the product reads, and removes everything it downloaded | `test_drill_service.py` and `test_drill_service_script.py`, the second running the script against stand-ins for docker and the bucket with the planner, the record writer and the reader the real ones |
+| That the schema check and the permission canary pass on a database built through every migration and fail on a table that lost its protection, a policy that came back as nothing, a grant, or a fast lane that can write | `test_drill_checks.py`, on PostgreSQL in CI |
+| That an encrypted copy is decrypted with the identity left for rehearsals and loaded as the original bytes, and with none left leaves a failed record saying so | `test_drill_service_script.py`, with the product's own encryption script |
 | **Every command in the procedure** | **nobody on an install. It has never been run on a server.** Both scripts ran once on a development machine against two local PostgreSQL 17 clusters, with docker and the object store replaced by shims that ran the real client programs: the counts matched while rows were being written during the copy, a load before the roles existed stopped at the first policy, and a manifest stating a wrong count and head failed naming both. The image, the containers, the bucket and the product's full schema were not part of that run. |
 | **That a load with the roles created first brings back working policies** | **nobody. It is what the canary is for, and no drill has run.** |
 
@@ -355,6 +367,7 @@ parts of it a machine can hold are held.
 M42.3.5 is not claimed by this page. Its scripts exist and are held by tests that need no
 server; its verified half is a drill on an install, and none has run.
 
-M30.3.9 is not claimed. It is the one-click drill, and the table above says there is no control.
-The retention ladder, M30.3.5, is not this page's claim: it is decided and held in
+M30.3.9 is the one-click drill. The control exists and asks the server's drill service; the leaf is
+proved only when a person presses it on an install, with the service set up, and reads the record that
+appears. The retention ladder, M30.3.5, is not this page's claim: it is decided and held in
 `brain.ops.recovery`, and nothing but the bucket's own rule removes a copy yet.

@@ -33,7 +33,7 @@ NAMING_CONVENTION = {
     "pk": "pk_%(table_name)s",
 }
 
-#: The nine namespaces. Each is a classification boundary, not a folder.
+#: The ten namespaces. Each is a classification boundary, not a folder.
 SCHEMAS: dict[str, str] = {
     "auth": "identity, principals, sessions",
     "gate": "capabilities, grants, scopes, entitlement cache",
