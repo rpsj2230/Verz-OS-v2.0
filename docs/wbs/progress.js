@@ -1785,9 +1785,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M19.1.1": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): browsing/sandbox.py:sandbox_for and sandbox_gaps build and re-check the gVisor (runsc) bodies; launcher.py creates and removes them; docker-compose.browser.yml deploys browser-launcher (opt-in, health = runsc present). Nothing calls the launcher; no body ever sent to a daemon. NEXT: Build the worker-side driver (compile an envelope, send wire start_fields to browser-launcher:7300, relay the run, call session_store.start/end and recording.write; launcher.py and recording.py say 'not built'), run ops/browser/REHEARSAL.md on a runsc host, then write a check reading launcher health and a labelled run's runtime.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-20 on browsing/sandbox.py and launcher.py (triage 2026-10-13 class 2): the launcher can rehearse a run (Launcher.rehearse): it makes the run's network, proxy and runner as a real run would, reads the Docker daemon's own description of them (browsing/inspection.py), removes them and counts what is left, starting no browser. The install check a_browser_sandbox_is_made_for_one_run_and_removed_with_it holds that description to the product's own expectations and reports NOT RUN, in one sentence, while browser runs are off or no launcher answers. This leaf: a gVisor container per run, named and labelled with the run id; the check requires the runner to report runtime runsc and two runs to get different names. INSTALL PROOF STEPS: 1. On the Features page switch on 'Let agents run a browser'. 2. Compose the browser overlay (docker-compose.browser.yml) on a host with gVisor as ops/browser/REHEARSAL.md sections 1 to 3 say, and confirm the browser-launcher container is healthy. 3. On the Install page press Run now and read the row a_browser_sandbox_is_made_for_one_run_and_removed_with_it: it must say Passed. NOT PROVED UNTIL a host with gVisor has run it.",
+    updated: "2026-10-20",
   },
   "M19.1.2": {
     status: "IN PROGRESS",
@@ -1805,14 +1805,14 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M19.1.5": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): sandbox.py declares a read-only root, tmpfs home/tmp/shm charged to the memory cap and no volumes (sandbox_gaps refuses one); launcher.py teardown removes the set; test_browsing_sandbox.py and test_browsing_launcher.py. Bodies never sent to a daemon. NEXT: Write a check that builds sandbox_for(...), requires sandbox_gaps()==() and a mutated body refused; the live half waits on the driver and REHEARSAL.md.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-20 on browsing/sandbox.py and launcher.py (triage 2026-10-13 class 2): the launcher can rehearse a run (Launcher.rehearse): it makes the run's network, proxy and runner as a real run would, reads the Docker daemon's own description of them (browsing/inspection.py), removes them and counts what is left, starting no browser. The install check a_browser_sandbox_is_made_for_one_run_and_removed_with_it holds that description to the product's own expectations and reports NOT RUN, in one sentence, while browser runs are off or no launcher answers. This leaf: a read-only root with only tmpfs writable and no bind or volume, destroyed with the run; the check requires the daemon to report exactly the declared tmpfs and nothing left behind. INSTALL PROOF STEPS: 1. On the Features page switch on 'Let agents run a browser'. 2. Compose the browser overlay (docker-compose.browser.yml) on a host with gVisor as ops/browser/REHEARSAL.md sections 1 to 3 say, and confirm the browser-launcher container is healthy. 3. On the Install page press Run now and read the row a_browser_sandbox_is_made_for_one_run_and_removed_with_it: it must say Passed. NOT PROVED UNTIL a host with gVisor has run it.",
+    updated: "2026-10-20",
   },
   "M19.1.6": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): sandbox.py gives each run an internal network named from the run id with the egress proxy as the only other member (egress_network_body); launcher.py removes it at teardown; test_browsing_sandbox.py, test_browsing_deployment.py. Never created on a daemon. NEXT: Static half as M19.1.5; live half is REHEARSAL.md plus the missing driver.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-20 on browsing/sandbox.py and launcher.py (triage 2026-10-13 class 2): the launcher can rehearse a run (Launcher.rehearse): it makes the run's network, proxy and runner as a real run would, reads the Docker daemon's own description of them (browsing/inspection.py), removes them and counts what is left, starting no browser. The install check a_browser_sandbox_is_made_for_one_run_and_removed_with_it holds that description to the product's own expectations and reports NOT RUN, in one sentence, while browser runs are off or no launcher answers. This leaf: a network of its own per run; the check requires the daemon to report it internal and the runner on no other network. INSTALL PROOF STEPS: 1. On the Features page switch on 'Let agents run a browser'. 2. Compose the browser overlay (docker-compose.browser.yml) on a host with gVisor as ops/browser/REHEARSAL.md sections 1 to 3 say, and confirm the browser-launcher container is healthy. 3. On the Install page press Run now and read the row a_browser_sandbox_is_made_for_one_run_and_removed_with_it: it must say Passed. NOT PROVED UNTIL a host with gVisor has run it.",
+    updated: "2026-10-20",
   },
   "M19.2.1": {
     status: "READY FOR TESTING",
@@ -1855,9 +1855,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M19.3.5": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): sandbox.py makes a mitmproxy container (EGRESS_IMAGE mitmproxy 11.1.3, unverified against a registry) the only member with a route out; egress_addon.py is the addon; test_browsing_sandbox.py covers its decisions. The proxy has never been started. NEXT: Pull and pin the proxy image, rehearse per REHEARSAL.md, then a check that a runner cannot reach an undeclared host.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-20 on browsing/sandbox.py and launcher.py (triage 2026-10-13 class 2): the launcher can rehearse a run (Launcher.rehearse): it makes the run's network, proxy and runner as a real run would, reads the Docker daemon's own description of them (browsing/inspection.py), removes them and counts what is left, starting no browser. The install check a_browser_sandbox_is_made_for_one_run_and_removed_with_it holds that description to the product's own expectations and reports NOT RUN, in one sentence, while browser runs are off or no launcher answers. This leaf: the proxy is the only route out; the check requires the proxy on exactly the run's network and the shared egress network and the runner on neither the shared one. Whether the proxy refuses an undeclared host is proved by the live read run, not by this check. INSTALL PROOF STEPS: 1. On the Features page switch on 'Let agents run a browser'. 2. Compose the browser overlay (docker-compose.browser.yml) on a host with gVisor as ops/browser/REHEARSAL.md sections 1 to 3 say, and confirm the browser-launcher container is healthy. 3. On the Install page press Run now and read the row a_browser_sandbox_is_made_for_one_run_and_removed_with_it: it must say Passed. NOT PROVED UNTIL a host with gVisor has run it.",
+    updated: "2026-10-20",
   },
   "M19.3.6": {
     status: "IN PROGRESS",
@@ -1925,9 +1925,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M19.6.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): sandbox.py:Caps sets memory (swap equal), pids and CPU quota for runner and proxy and refuses tmpfs sizes that leave no memory floor; test_browsing_sandbox.py, test_browsing_sessions.py. Figures are marked judgements; bodies never sent to a daemon. NEXT: Static check on sandbox_gaps with caps; measure real figures in the REHEARSAL.md run.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-20 on browsing/sandbox.py and launcher.py (triage 2026-10-13 class 2): the launcher can rehearse a run (Launcher.rehearse): it makes the run's network, proxy and runner as a real run would, reads the Docker daemon's own description of them (browsing/inspection.py), removes them and counts what is left, starting no browser. The install check a_browser_sandbox_is_made_for_one_run_and_removed_with_it holds that description to the product's own expectations and reports NOT RUN, in one sentence, while browser runs are off or no launcher answers. This leaf: memory, processor and process caps per session; the check requires the daemon to report the caps the product sets, which are judgements not yet measured under a real page. INSTALL PROOF STEPS: 1. On the Features page switch on 'Let agents run a browser'. 2. Compose the browser overlay (docker-compose.browser.yml) on a host with gVisor as ops/browser/REHEARSAL.md sections 1 to 3 say, and confirm the browser-launcher container is healthy. 3. On the Install page press Run now and read the row a_browser_sandbox_is_made_for_one_run_and_removed_with_it: it must say Passed. NOT PROVED UNTIL a host with gVisor has run it.",
+    updated: "2026-10-20",
   },
   "M19.6.5": {
     status: "IN PROGRESS",
@@ -3660,9 +3660,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M37.5.1.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops/controls.py overdue() builds the alert (tested), and ops/notices.py lists CONTROL_NOT_RUN with 'No channel is chosen for it yet, so nothing sends it'. Nothing calls controls.overdue; worker and schedule_runner do not. NEXT: call controls.overdue from a scheduled runner using schedule_store last-run times and deliver via the notice sender to the operations alert holder; the channel choice may need a needs-rupash item",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT (under M17.7.2) and now claimed by its install check: brain.control_not_run_told tells whoever holds the operations alert, once per episode, when a safety mechanism has not run in its window. PROOF ON THE INSTALL: 1. Turn Tell whoever holds the alert when a safety mechanism has not run on under Features (it ships off). 2. The check a_mechanism_that_has_not_run_is_told_to_whoever_holds_the_alert passes on the next run (it says not run until the switch is on). 3. To see it live, stop the worker for longer than a control's window: the holder is told once in the chat tool they last used.",
+    updated: "2026-10-20",
   },
   "M37.5.1.4": {
     status: "READY FOR TESTING",
@@ -3670,9 +3670,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M37.5.2.1": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): ops/alerting.py Severity, Route, route_for(), routing_gaps() and controls.py use route_for for each control's runbook (tested in test_alerting.py). No delivery path: notices CONTROL_NOT_RUN and BACKUP_EXPOSURE say no channel is chosen, so no alert is routed to anyone. NEXT: wire alert delivery: resolve route_for's role to people and send via a channel (ops.notices sender); likely needs an owner decision on the channel",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT (under M17.7.2): the severity of each control's alert decides who is told, through alerting.route_for: everyone holding the operations alert, and the incident capability's holders too for an alert that wakes somebody, each only if they may open Incidents. PROOF ON THE INSTALL: the same check as M37.5.1.3 passes; a holder who cannot open Incidents is told nothing.",
+    updated: "2026-10-20",
   },
   "M37.5.2.2": {
     status: "IN PROGRESS",
