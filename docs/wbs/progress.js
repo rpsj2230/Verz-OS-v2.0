@@ -159,6 +159,11 @@ const PROGRESS = {
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
     updated: "2026-10-13",
   },
+  "M27.15.1": {
+    status: "READY FOR TESTING",
+    why: "BUILT AND TESTED: opening the text of a document that sits in a department the reader does not belong to writes one ledger entry naming the document and the reader, from both the library's text route and the page a citation opens, and a failure to write it fails the opening. Seeing a document listed and reading its text were already two reads (the department's read, which People grants and withdraws). A company-wide document, a reader's own department and a refused opening write nothing. An install check calls the route and fails in both directions. Install proof: with two departments, open a document in the other one from the Knowledge page as someone who holds the read there, then find the entry in the Audit log under the document.",
+    updated: "2026-10-20",
+  },
   "M27.15.3": {
     status: "READY FOR TESTING",
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
