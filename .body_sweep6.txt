@@ -1,0 +1,8 @@
+The install's newest complete acceptance run (07ef91a, 2026-10-19 16:48 UTC) recorded all 604 checks with no failure: 552 passed and 52 were not run. The proof sweep (brain.ops.proof_sweep) wrote the evidence rows in docs/tracker-audit-2026-09-28.md and these lines. It also proposed three tasks whose builders report them partly built (the department cut of skills and knowledge, the first thing that learns an instruction change, and what describing an agent drafts); they are held in docs/proof-sweep-holds.d/ with the reason and the needs-page item, so they are not closed on a check that shows less than the leaf says.
+
+Closes: M13.8.11
+Closes: M39.10.3
+Proved-on-install: the acceptance run at 07ef91a (2026-10-19 16:48 UTC), complete with every registered check recorded, passed every install check naming each of these tasks; evidence rows in docs/tracker-audit-2026-09-28.md
+Proved-in-ci: "Unit tests" runs tests/unit/test_acceptance*.py, which run each of these checks against PostgreSQL at head and the breaks that fail them
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

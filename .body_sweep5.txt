@@ -1,0 +1,9 @@
+The install's newest complete acceptance run (53532d8, 2026-10-19 13:42 UTC) recorded all 598 checks with no failure: 546 passed and 52 were not run. The proof sweep (brain.ops.proof_sweep) wrote the evidence rows in docs/tracker-audit-2026-09-28.md and these lines. It also proposed two tasks whose builders report them partly built (the external AI call, and the measured cost of a published agent's run); they are held in docs/proof-sweep-holds.d/ with the reason, so they are not closed on a check that shows less than the leaf says.
+
+Closes: M13.7.9, M13.8.7, M13.8.8
+Closes: M20.5.1
+Closes: M27.11.12, M27.11.13, M27.11.14, M27.15.32, M27.15.34, M27.15.35, M27.15.75
+Proved-on-install: the acceptance run at 53532d8 (2026-10-19 13:42 UTC), complete with every registered check recorded, passed every install check naming each of these tasks; evidence rows in docs/tracker-audit-2026-09-28.md
+Proved-in-ci: "Unit tests" runs tests/unit/test_acceptance*.py, which run each of these checks against PostgreSQL at head and the breaks that fail them
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
