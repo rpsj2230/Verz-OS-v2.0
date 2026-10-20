@@ -102,7 +102,7 @@
  * ordinary text. Listening stops when the question is sent. See `askDictationCore.ts`.
  *
  * Task ids: M42.6.3, M35.2.1.3, M27.8.5, M3.9.8, M8.1.1, M8.1.2, M8.1.3, M7.4.7, M11.4.9, M7.6.1
- * Task ids: M9.1.1, M9.1.2, M9.1.3, M12.3.6, M16.2.2, M40.7.3, M40.7.7
+ * Task ids: M9.1.1, M9.1.2, M9.1.3, M12.3.6, M16.2.2, M40.7.3, M40.7.7, M40.7.6
  */
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
@@ -885,6 +885,13 @@ export function Ask() {
                   {one.title}
                 </button>{" "}
                 <span className="note">{channelWords(one.lastChannel)}</span>
+                {one.stateWords === "" ? null : (
+                  <>
+                    {" "}
+                    <strong data-state={one.state}>{one.stateWords}</strong>
+                    {one.failedStep === "" ? null : <span className="note">{` ${one.failedStep}`}</span>}
+                  </>
+                )}
               </li>
             ))}
           </ul>
