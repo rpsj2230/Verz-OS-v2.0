@@ -159,6 +159,11 @@ const PROGRESS = {
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
     updated: "2026-10-13",
   },
+  "M27.15.1": {
+    status: "READY FOR TESTING",
+    why: "BUILT AND TESTED: opening the text of a document that sits in a department the reader does not belong to writes one ledger entry naming the document and the reader, from both the library's text route and the page a citation opens, and a failure to write it fails the opening. Seeing a document listed and reading its text were already two reads (the department's read, which People grants and withdraws). A company-wide document, a reader's own department and a refused opening write nothing. An install check calls the route and fails in both directions. Install proof: with two departments, open a document in the other one from the Knowledge page as someone who holds the read there, then find the entry in the Audit log under the document.",
+    updated: "2026-10-20",
+  },
   "M27.15.3": {
     status: "READY FOR TESTING",
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
@@ -3040,9 +3045,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M30.5.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): launch.service_level() builds the profile's RPO and RTO statement and refuses it without a verified drill (tested in test_launch.py, register DEC-31); reliability.RECOVERY_OBJECTIVES says nothing writes it into an agreement. Nothing calls service_level; no route or document serves it. NEXT: expose launch.service_level through a route on the handover or recovery page that renders the statement or its refusal reason",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: GET /handover returns the service level statement for the install's profile or the one sentence for why it cannot be made. PROOF ON THE INSTALL: 1. Call GET /api/v1/handover as the first administrator, or read it from the console once a page draws it. 2. Before any rehearsal has verified a copy it says no restore has ever verified. 3. After a rehearsal verifies and every copy is inside the recovery point it carries the profile's recovery point, time and the time measured. The check the_statement_is_made_only_after_a_rehearsal_verified passes.",
+    updated: "2026-10-20",
   },
   "M32.1.2.3": {
     status: "OPEN",
@@ -3640,9 +3645,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M37.2.4.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): migration/learning.py: learning_note() renders THE_SYSTEM_STARTS_WITHOUT_THEIR_ACCUMULATED_LEARNING from derivations (tested). launch.assemble handover pack does not include it and nothing imports learning. NEXT: add the learning note as a section of the handover pack (launch.assemble) and serve it; then check reads it",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: the handover carries the sentence that the new system starts without the old one's accumulated learning and why that is the right trade, with the counts of what was carried (none until a migration re-derives something). PROOF ON THE INSTALL: GET /handover shows the learning sentence.",
+    updated: "2026-10-20",
   },
   "M37.3.2.4": {
     status: "READY FOR TESTING",
@@ -3650,19 +3655,19 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M37.4.2.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): launch.py subprocessors() derives the list from provider slots that hold a key (ops.provider_keys.PROVIDER_SLOTS) and refuses an undeclared slot; tested in test_launch.py. Nothing outside launch.py calls it; no route or screen serves the subprocessor list. NEXT: expose launch.subprocessors() through a route on the data or handover page and render it; then check that a provider with a key appears and one without does not",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: GET /handover lists the model providers whose key this process holds, each with what it is for, and says in words when it holds none. PROOF ON THE INSTALL: the list matches the providers shown with a key on the Models screen. The check the_subprocessors_are_the_providers_whose_key_is_held passes.",
+    updated: "2026-10-20",
   },
   "M37.4.3.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): launch.py Owner/owner_gaps() refuses a handover pack where knowledge, grants or connectors lack a named client owner (tested). No caller outside launch.py; no table, route or page records owners (data steward appointment is a separate leaf). NEXT: add a handover owners table and route feeding launch.owner_gaps, or reuse the data steward record; then check",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: PUT /handover/owners records who owns knowledge, grants and connectors with a way to reach them, behind the handover_pack switch (ships off). PROOF ON THE INSTALL: 1. Turn Record the named owners and the review date on under Features. 2. PUT the three owners; GET /handover lists them and no gap. 3. Leave one out: the gap names it.",
+    updated: "2026-10-20",
   },
   "M37.4.3.5": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): launch.py review_gaps(launched_on, review_booked_for) refuses a review not within thirty days (tested). No caller outside launch.py; nothing books the review (no calendar, task or table). NEXT: record the review date in the handover route and surface review_gaps on the handover page; then check",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: PUT /handover/review books the thirty-day review and refuses launch day or past thirty days. PROOF ON THE INSTALL: with the switch on, book a review 30 days after launch and read it back; 31 days is refused.",
+    updated: "2026-10-20",
   },
   "M37.5.1.2": {
     status: "READY FOR TESTING",
@@ -3670,9 +3675,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M37.5.1.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops/controls.py overdue() builds the alert (tested), and ops/notices.py lists CONTROL_NOT_RUN with 'No channel is chosen for it yet, so nothing sends it'. Nothing calls controls.overdue; worker and schedule_runner do not. NEXT: call controls.overdue from a scheduled runner using schedule_store last-run times and deliver via the notice sender to the operations alert holder; the channel choice may need a needs-rupash item",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT (under M17.7.2) and now claimed by its install check: brain.control_not_run_told tells whoever holds the operations alert, once per episode, when a safety mechanism has not run in its window. PROOF ON THE INSTALL: 1. Turn Tell whoever holds the alert when a safety mechanism has not run on under Features (it ships off). 2. The check a_mechanism_that_has_not_run_is_told_to_whoever_holds_the_alert passes on the next run (it says not run until the switch is on). 3. To see it live, stop the worker for longer than a control's window: the holder is told once in the chat tool they last used.",
+    updated: "2026-10-20",
   },
   "M37.5.1.4": {
     status: "READY FOR TESTING",
@@ -3680,9 +3685,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M37.5.2.1": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): ops/alerting.py Severity, Route, route_for(), routing_gaps() and controls.py use route_for for each control's runbook (tested in test_alerting.py). No delivery path: notices CONTROL_NOT_RUN and BACKUP_EXPOSURE say no channel is chosen, so no alert is routed to anyone. NEXT: wire alert delivery: resolve route_for's role to people and send via a channel (ops.notices sender); likely needs an owner decision on the channel",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT (under M17.7.2): the severity of each control's alert decides who is told, through alerting.route_for: everyone holding the operations alert, and the incident capability's holders too for an alert that wakes somebody, each only if they may open Incidents. PROOF ON THE INSTALL: the same check as M37.5.1.3 passes; a holder who cannot open Incidents is told nothing.",
+    updated: "2026-10-20",
   },
   "M37.5.2.2": {
     status: "IN PROGRESS",
@@ -4810,9 +4815,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M30.6.6": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): launch.service_level() is produced only with a verified Drill and a newest copy inside the RPO, otherwise raises with the reason (four refusals, tested in test_launch.py, DEC-31). Nothing calls it and no route serves the statement or its refusal. NEXT: same route as M30.5.4; the check asks for the statement on an install with no verified drill and expects the stated reason",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: the statement is produced only after a verified rehearsal and every copy inside the recovery point, and otherwise refused with the reason (launch.service_level, now served). PROOF ON THE INSTALL: the same steps as M30.5.4; the refusal names the coverage nothing has copied or the missing rehearsal.",
+    updated: "2026-10-20",
   },
   "M30.6.7": {
     status: "BLOCKED",
