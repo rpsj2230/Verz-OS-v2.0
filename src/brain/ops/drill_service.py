@@ -57,13 +57,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Final
 
-from brain.ops.backup_manifest import (
-    DRILL_SUFFIX,
-    MANIFEST_SUFFIX,
-    ManifestError,
-    drill_from,
-)
-from brain.ops.recovery import DRILL_INTERVAL_DAYS, Check, verification_of
+from brain.ops.backup_manifest import DRILL_SUFFIX, MANIFEST_SUFFIX, ManifestError, read_drills
+from brain.ops.recovery import DRILL_INTERVAL_DAYS, Check
 
 #: The object a console writes to ask for a rehearsal. A name no manifest or drill record can have.
 REQUEST_KEY: Final = "drill-request.json"
@@ -214,7 +209,13 @@ def record_document(
         ],
     }
     # Read back through the reader, so a record this module writes is a record the product reads.
-    verification_of(drill_from(document, where="the record this service is about to write"))
+    # `read_drills` and not the two functions it is made of: the rule for what counts as verified
+    # is applied in one place, and a second caller of it is refused by tests/unit/test_installation.
+    _, unreadable = read_drills(
+        [(f"the record this service is about to write{DRILL_SUFFIX}", json.dumps(document))]
+    )
+    if unreadable:
+        raise ManifestError(unreadable[0].why)
     return document
 
 

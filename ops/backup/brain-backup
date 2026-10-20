@@ -218,8 +218,8 @@ UPLOAD_NAME="$BACKUP_ID.dump"
 KEY_HELD_BY=nobody
 ENCRYPTION_FIELDS=
 if [ -n "$BRAIN_BACKUP_RECIPIENT" ]; then
-    [ -x "$BRAIN_BACKUP_CRYPT" ] || fail "$BRAIN_BACKUP_CRYPT is not there to encrypt the copy with, so nothing was uploaded"
-    "$BRAIN_BACKUP_CRYPT" encrypt --recipient "$BRAIN_BACKUP_RECIPIENT" --in "$ARTEFACT" \
+    [ -f "$BRAIN_BACKUP_CRYPT" ] || fail "$BRAIN_BACKUP_CRYPT is not there to encrypt the copy with, so nothing was uploaded"
+    sh "$BRAIN_BACKUP_CRYPT" encrypt --recipient "$BRAIN_BACKUP_RECIPIENT" --in "$ARTEFACT" \
         --out "$ARTEFACT.enc" --key-out "$ARTEFACT.key" \
         || { rm -f "$ARTEFACT" "$ARTEFACT.enc" "$ARTEFACT.key"; fail "the copy could not be encrypted to the client's key, so nothing was uploaded"; }
     ENCRYPTED_BYTES="$(wc -c < "$ARTEFACT.enc" | tr -d ' ')"

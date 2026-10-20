@@ -20,7 +20,7 @@
 #
 # WHAT THIS DOES NOT DO. `openssl enc` is not authenticated encryption: a flipped bit in the
 # object decrypts to garbage rather than to a refusal. The copy is not trusted on its own
-# account. The manifest states its size and the drill compares it, `pg_restore` stops at the
+# account. The manifest states its size and the drill compares it, the loader stops at the
 # first error, and the drill's row counts are compared with the manifest, so a corrupted copy is
 # a failed drill and never a verified one.
 #

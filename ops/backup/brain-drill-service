@@ -146,7 +146,7 @@ load_and_count() {
             step_failed "the copy is encrypted to the client's key and no private key is left on this server for rehearsals, so it was not read back"
             return 1
         fi
-        "$BRAIN_BACKUP_CRYPT" decrypt --identity "$BRAIN_BACKUP_IDENTITY" \
+        sh "$BRAIN_BACKUP_CRYPT" decrypt --identity "$BRAIN_BACKUP_IDENTITY" \
             --in "$WORK/$BACKUP_ID.dump.enc" --key "$WORK/$BACKUP_ID.dump.key" \
             --out "$WORK/$BACKUP_ID.dump" \
             || { step_failed "the copy could not be decrypted with the key on this server"; return 1; }
@@ -178,7 +178,7 @@ load_and_count() {
     # A role the scratch database already has is reported as existing, which is harmless.
     docker exec -i "$SCRATCH_CONTAINER" psql -X -q -U postgres < "$WORK/roles.sql" >/dev/null 2>&1 || :
 
-    if "$BRAIN_RESTORE_DRILL" --manifest "$WORK/$BACKUP_ID.manifest.json" \
+    if sh "$BRAIN_RESTORE_DRILL" --manifest "$WORK/$BACKUP_ID.manifest.json" \
         --dump "$WORK/$BACKUP_ID.dump" \
         --scratch-container "$SCRATCH_CONTAINER" --scratch-database "$SCRATCH_DATABASE"; then
         SMOKE=passed

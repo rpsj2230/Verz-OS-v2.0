@@ -289,17 +289,8 @@ async def a_verified_rehearsal_states_its_measured_time(
     ),
 )
 async def a_rehearsal_that_did_not_verify_is_the_loudest_alert(h: Harness) -> None:
-    from brain.ops.recovery import (
-        Backup,
-        Check,
-        CheckRun,
-        Coverage,
-        Drill,
-        Method,
-        Severity,
-        alerts,
-        verification_of,
-    )
+    from brain.ops.backup_manifest import read_drills
+    from brain.ops.recovery import Backup, Coverage, Method, Severity, alerts
 
     long_ago = h.now - timedelta(days=3)
     late = Backup(
@@ -312,20 +303,23 @@ async def a_rehearsal_that_did_not_verify_is_the_loudest_alert(h: Harness) -> No
         recoverable_to=long_ago,
         size_bytes=1024,
     )
-    failed = verification_of(
-        Drill(
-            backup_id=late.backup_id,
-            started_at=h.now - timedelta(hours=2),
-            finished_at=h.now - timedelta(hours=1),
-            into_scratch=True,
-            checks=(
-                CheckRun(check=Check.SCHEMA_COMPLETE, passed=True, detail="all schemas present"),
-                CheckRun(check=Check.SMOKE_QUERY, passed=True, detail="every count came back"),
-                CheckRun(check=Check.PERMISSION_CANARY, passed=False, detail="a row was shown"),
-            ),
-        )
-    )
-    raised = alerts(backups=[late], verifications=[failed], profile="lite", now=h.now)
+    # The failed rehearsal is written as a record and read by the product's reader, the only place
+    # that decides what counts as verified, so this check does not decide it a second time.
+    record = {
+        "backup_id": late.backup_id,
+        "started_at": (h.now - timedelta(hours=2)).isoformat(),
+        "finished_at": (h.now - timedelta(hours=1)).isoformat(),
+        "into_scratch": True,
+        "checks": [
+            {"check": "schema_complete", "passed": True, "detail": "all schemas present"},
+            {"check": "smoke_query", "passed": True, "detail": "every count came back"},
+            {"check": "permission_canary", "passed": False, "detail": "a row was shown"},
+        ],
+    }
+    failed, unreadable = read_drills([("acceptance.drill.json", json.dumps(record))])
+    if unreadable or len(failed) != 1 or failed[0].verified:
+        raise CheckFailedError(A_FAILURE_WAS_NOT_THE_LOUDEST)
+    raised = alerts(backups=[late], verifications=list(failed), profile="lite", now=h.now)
     if not raised or raised[0].severity is not Severity.VERIFICATION_FAILED:
         raise CheckFailedError(A_FAILURE_WAS_NOT_THE_LOUDEST)
     if not any(one.severity is Severity.BACKUP_AGED for one in raised):

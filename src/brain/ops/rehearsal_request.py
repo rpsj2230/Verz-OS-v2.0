@@ -48,7 +48,7 @@ class Pending:
     by: str | None
 
 
-def request_body(*, at: datetime, by: str) -> bytes:
+def request_object(*, at: datetime, by: str) -> bytes:
     """The request as the bucket holds it. `at` must carry an offset or the time shown is wrong."""
     if at.tzinfo is None:
         msg = "a request with a naive time would be shown at this machine's offset"
@@ -78,6 +78,6 @@ def put_request(backend: StorageBackend, *, at: datetime, by: str) -> None:
     backend.put_object(
         bucket_for(ObjectKind.DATABASE_DUMP).name,
         REQUEST_KEY,
-        request_body(at=at, by=by),
+        request_object(at=at, by=by),
         CONTENT_TYPE,
     )
