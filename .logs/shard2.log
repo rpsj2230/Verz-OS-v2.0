@@ -1,0 +1,752 @@
+........................................................................ [  2%]
+........................................................................ [  5%]
+........................................................................ [  7%]
+........................................................................ [ 10%]
+........................................................................ [ 12%]
+........................................................................ [ 15%]
+........................................................................ [ 17%]
+........................................................................ [ 20%]
+.........................................s.............................. [ 22%]
+..................................FFFFFEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE.. [ 25%]
+........................................................................ [ 27%]
+........................................................................ [ 30%]
+........................................................................ [ 32%]
+........................................................................ [ 35%]
+........................................................................ [ 37%]
+........................................................................ [ 40%]
+........................................................................ [ 42%]
+........................................................................ [ 45%]
+........................................................................ [ 47%]
+........................................................................ [ 50%]
+........................................................................ [ 52%]
+........................................................................ [ 55%]
+........................................................................ [ 57%]
+........................................................................ [ 60%]
+........................................................................ [ 62%]
+........................................................................ [ 65%]
+........................................................................ [ 67%]
+........................................................................ [ 70%]
+........................................................................ [ 72%]
+........................................................................ [ 75%]
+........................................................................ [ 77%]
+........................................................................ [ 80%]
+.............................s.......................................... [ 82%]
+........................................................................ [ 85%]
+........................................................................ [ 87%]
+........................................................................ [ 90%]
+........................................................................ [ 92%]
+........................................................................ [ 95%]
+........................................................................ [ 97%]
+.................................................................        [100%]
+==================================== ERRORS ====================================
+____ ERROR at setup of test_help_prints_the_usage_and_runs_nothing[--help] _____
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_help_prints_the_usage_and0')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+______ ERROR at setup of test_help_prints_the_usage_and_runs_nothing[-h] _______
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_help_prints_the_usage_and1')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_an_unknown_argument_or_an_option_without_a_value_is_refused_before_anything_runs[unknown] _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_an_unknown_argument_or_an0')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_an_unknown_argument_or_an_option_without_a_value_is_refused_before_anything_runs[equals-form] _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_an_unknown_argument_or_an1')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_an_unknown_argument_or_an_option_without_a_value_is_refused_before_anything_runs[no-value-at-end] _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_an_unknown_argument_or_an2')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_an_unknown_argument_or_an_option_without_a_value_is_refused_before_anything_runs[option-as-value] _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_an_unknown_argument_or_an3')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_a_drill_missing_any_required_argument_is_refused_before_docker_is_asked[manifest] _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_a_drill_missing_any_requi0')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_a_drill_missing_any_required_argument_is_refused_before_docker_is_asked[dump] _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_a_drill_missing_any_requi1')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_a_drill_missing_any_required_argument_is_refused_before_docker_is_asked[scratch_container] _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_a_drill_missing_any_requi2')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_a_drill_missing_any_required_argument_is_refused_before_docker_is_asked[scratch_database] _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_a_drill_missing_any_requi3')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_a_drill_that_cannot_tell_which_database_is_live_is_refused[BRAIN_DB_CONTAINER] _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_a_drill_that_cannot_tell_0')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_a_drill_that_cannot_tell_which_database_is_live_is_refused[BRAIN_DB_NAME] _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_a_drill_that_cannot_tell_1')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_the_live_container_named_as_the_scratch_target_is_refused_before_docker_is_asked _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_the_live_container_named_0')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_the_live_database_name_as_the_scratch_database_is_refused_before_docker_is_asked _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_the_live_database_name_as0')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_the_live_container_under_another_name_is_refused_and_nothing_is_executed[id-prefix] _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_the_live_container_under_0')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_the_live_container_under_another_name_is_refused_and_nothing_is_executed[other-name] _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_the_live_container_under_1')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_a_live_container_docker_cannot_find_is_refused_rather_than_assumed_to_differ _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_a_live_container_docker_c0')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_a_scratch_container_on_a_network_that_is_not_internal_is_refused _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_a_scratch_container_on_a_0')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_a_scratch_target_is_loaded_checked_and_is_the_only_container_anything_runs_in _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_a_scratch_target_is_loade0')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_a_table_whose_rows_did_not_come_back_fails_the_drill_and_is_named[one-count-differs] _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_a_table_whose_rows_did_no0')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_a_table_whose_rows_did_not_come_back_fails_the_drill_and_is_named[one-missing-one-extra] _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_a_table_whose_rows_did_no1')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_a_migration_head_that_did_not_come_back_fails_the_drill _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_a_migration_head_that_did0')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_a_copy_whose_size_disagrees_with_its_manifest_is_never_loaded _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_a_copy_whose_size_disagre0')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_a_manifest_that_does_not_state_what_a_load_is_compared_with_is_refused[row_counts] _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_a_manifest_that_does_not_0')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_a_manifest_that_does_not_state_what_a_load_is_compared_with_is_refused[migration_head] _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_a_manifest_that_does_not_1')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_a_manifest_that_does_not_state_what_a_load_is_compared_with_is_refused[size_bytes] _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_a_manifest_that_does_not_2')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_a_manifest_that_does_not_state_what_a_load_is_compared_with_is_refused[backup_id] _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_a_manifest_that_does_not_3')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_a_copy_and_a_manifest_of_two_different_backups_are_refused _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_a_copy_and_a_manifest_of_0')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_a_database_that_exists_or_a_load_that_stops_fails_and_is_not_checked[createdb_fails] _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_a_database_that_exists_or0')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_a_database_that_exists_or_a_load_that_stops_fails_and_is_not_checked[restore_fails] _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_a_database_that_exists_or1')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+_ ERROR at setup of test_the_drill_asks_the_scratch_database_what_the_taker_asked_the_live_one _
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_the_drill_asks_the_scratc0')
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    @pytest.fixture
+    def drill(
+        tmp_path: Path, taken: tuple[Stage, subprocess.CompletedProcess[str]]
+    ) -> tuple[Stage, Path, Path]:
+        """A stage with a live container, an internal scratch container, and the taker's own copy."""
+        source, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:405: AssertionError
+=================================== FAILURES ===================================
+_ test_both_scripts_parse_under_the_shell_that_runs_them_and_carry_no_carriage_return _
+
+    def test_both_scripts_parse_under_the_shell_that_runs_them_and_carry_no_carriage_return() -> None:
+        """Both run as `/bin/sh`, which is dash on the servers this ships to, so they are checked
+        with `sh -n` rather than with bash in its own mode. That difference is not academic: bash
+        outside POSIX mode rejects the taker's `${VAR:?...}` lines, whose messages hold an
+        apostrophe, and dash and `bash --posix` both accept them.
+    
+        Delete this and a quoting slip in a refusal ships as a drill that fails on the line meant to
+        explain why it stopped, or a CRLF from a Windows edit ships as an interpreter nobody named."""
+        assert SH is not None
+        for script in (TAKER, DRILL):
+            raw = script.read_bytes()
+            checked = subprocess.run(
+                [SH, "-n", script.as_posix()], capture_output=True, text=True, check=False
+            )
+    
+            assert raw.startswith(b"#!/bin/sh\n"), script.name
+            assert b"\r" not in raw, script.name
+>           assert checked.returncode == 0, (script.name, checked.stderr)
+E           AssertionError: ('brain-backup', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line ...OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 233: syntax error: unexpected end of file
+E             ')
+E           assert 2 == 0
+E            +  where 2 = CompletedProcess(args=['/bin/sh', '-n', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/bac...OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 233: syntax error: unexpected end of file\n').returncode
+
+tests/unit/test_backup_scripts.py:300: AssertionError
+_ test_the_taker_states_every_count_and_the_head_its_session_read_and_dumps_that_snapshot _
+
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    def test_the_taker_states_every_count_and_the_head_its_session_read_and_dumps_that_snapshot(
+        taken: tuple[Stage, subprocess.CompletedProcess[str]],
+    ) -> None:
+        """The manifest now says what a drill must get back, and the dump is taken from the snapshot
+        those figures were read in. The snapshot is what makes the counts comparable at all: counted
+        a second apart from the copy, a busy install's audit ledger differs on every drill.
+    
+        The uploaded manifest is still one `brain.ops.backup_manifest` reads, so the new fields did
+        not cost the old reader anything.
+    
+        Delete this and the counts can come from outside the snapshot, or not reach the manifest,
+        and every drill of every copy either always fails or has nothing to compare with."""
+        stage, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:316: AssertionError
+_ test_the_taker_counts_inside_one_read_only_transaction_on_the_live_database __
+
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    def test_the_taker_counts_inside_one_read_only_transaction_on_the_live_database(
+        taken: tuple[Stage, subprocess.CompletedProcess[str]],
+    ) -> None:
+        """**This replaced a textual ban on `psql` in the taker**, which `tests/unit/test_seed.py`
+        records. A read-only transaction is refused a write by PostgreSQL, so the one file allowed to
+        read the whole database still cannot change it, and that is held on the statements the
+        session was actually fed.
+    
+        Delete this and the session can open without `read only`, or commit before the dump has used
+        its snapshot, with nothing red."""
+        stage, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:346: AssertionError
+__ test_every_docker_exec_the_taker_runs_uses_only_flags_plain_docker_accepts __
+
+taken = (Stage(root=PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/taker0'))...in/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n'))
+
+    def test_every_docker_exec_the_taker_runs_uses_only_flags_plain_docker_accepts(
+        taken: tuple[Stage, subprocess.CompletedProcess[str]],
+    ) -> None:
+        """**Written for a defect found by reading, not by a run.** The taker said `docker exec -T`
+        until 2026-09-17. `-T` belongs to `docker compose exec`; plain `docker exec` has no such flag
+        and refuses the command, so every nightly run failed before copying anything, and nothing in
+        this repository ever ran the script to notice.
+    
+        Delete this and the flag can come back, and the only symptom is a bucket with no copies."""
+        stage, result = taken
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"'
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:374: AssertionError
+______ test_a_session_that_cannot_count_takes_no_copy_and_uploads_nothing ______
+
+tmp_path = PosixPath('/private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/pytest-of-rupash/pytest-2577/test_a_session_that_cannot_cou0')
+
+    def test_a_session_that_cannot_count_takes_no_copy_and_uploads_nothing(tmp_path: Path) -> None:
+        """A copy whose manifest cannot say what it holds is a copy no drill can verify, and the
+        usual cause, a role that may not read a table, would also have made the dump fail.
+    
+        Delete this and a failed count can fall through to a dump and a manifest with no figures,
+        which the drill then refuses every morning with nobody having been told at night."""
+        stage = Stage.at(tmp_path)
+        stage.flag("session_fails")
+    
+        result = stage.run(TAKER)
+    
+>       assert result.returncode == 1
+E       assert 2 == 1
+E        +  where 2 = CompletedProcess(args=['/bin/sh', '/Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh9/ops/backup/br...ain/.scratch/wt-cg-governance/wh9/ops/backup/brain-backup: line 232: unexpected EOF while looking for matching `"\'\n').returncode
+
+tests/unit/test_backup_scripts.py:392: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_backup_scripts.py::test_both_scripts_parse_under_the_shell_that_runs_them_and_carry_no_carriage_return
+FAILED tests/unit/test_backup_scripts.py::test_the_taker_states_every_count_and_the_head_its_session_read_and_dumps_that_snapshot
+FAILED tests/unit/test_backup_scripts.py::test_the_taker_counts_inside_one_read_only_transaction_on_the_live_database
+FAILED tests/unit/test_backup_scripts.py::test_every_docker_exec_the_taker_runs_uses_only_flags_plain_docker_accepts
+FAILED tests/unit/test_backup_scripts.py::test_a_session_that_cannot_count_takes_no_copy_and_uploads_nothing
+ERROR tests/unit/test_backup_scripts.py::test_help_prints_the_usage_and_runs_nothing[--help]
+ERROR tests/unit/test_backup_scripts.py::test_help_prints_the_usage_and_runs_nothing[-h]
+ERROR tests/unit/test_backup_scripts.py::test_an_unknown_argument_or_an_option_without_a_value_is_refused_before_anything_runs[unknown]
+ERROR tests/unit/test_backup_scripts.py::test_an_unknown_argument_or_an_option_without_a_value_is_refused_before_anything_runs[equals-form]
+ERROR tests/unit/test_backup_scripts.py::test_an_unknown_argument_or_an_option_without_a_value_is_refused_before_anything_runs[no-value-at-end]
+ERROR tests/unit/test_backup_scripts.py::test_an_unknown_argument_or_an_option_without_a_value_is_refused_before_anything_runs[option-as-value]
+ERROR tests/unit/test_backup_scripts.py::test_a_drill_missing_any_required_argument_is_refused_before_docker_is_asked[manifest]
+ERROR tests/unit/test_backup_scripts.py::test_a_drill_missing_any_required_argument_is_refused_before_docker_is_asked[dump]
+ERROR tests/unit/test_backup_scripts.py::test_a_drill_missing_any_required_argument_is_refused_before_docker_is_asked[scratch_container]
+ERROR tests/unit/test_backup_scripts.py::test_a_drill_missing_any_required_argument_is_refused_before_docker_is_asked[scratch_database]
+ERROR tests/unit/test_backup_scripts.py::test_a_drill_that_cannot_tell_which_database_is_live_is_refused[BRAIN_DB_CONTAINER]
+ERROR tests/unit/test_backup_scripts.py::test_a_drill_that_cannot_tell_which_database_is_live_is_refused[BRAIN_DB_NAME]
+ERROR tests/unit/test_backup_scripts.py::test_the_live_container_named_as_the_scratch_target_is_refused_before_docker_is_asked
+ERROR tests/unit/test_backup_scripts.py::test_the_live_database_name_as_the_scratch_database_is_refused_before_docker_is_asked
+ERROR tests/unit/test_backup_scripts.py::test_the_live_container_under_another_name_is_refused_and_nothing_is_executed[id-prefix]
+ERROR tests/unit/test_backup_scripts.py::test_the_live_container_under_another_name_is_refused_and_nothing_is_executed[other-name]
+ERROR tests/unit/test_backup_scripts.py::test_a_live_container_docker_cannot_find_is_refused_rather_than_assumed_to_differ
+ERROR tests/unit/test_backup_scripts.py::test_a_scratch_container_on_a_network_that_is_not_internal_is_refused
+ERROR tests/unit/test_backup_scripts.py::test_a_scratch_target_is_loaded_checked_and_is_the_only_container_anything_runs_in
+ERROR tests/unit/test_backup_scripts.py::test_a_table_whose_rows_did_not_come_back_fails_the_drill_and_is_named[one-count-differs]
+ERROR tests/unit/test_backup_scripts.py::test_a_table_whose_rows_did_not_come_back_fails_the_drill_and_is_named[one-missing-one-extra]
+ERROR tests/unit/test_backup_scripts.py::test_a_migration_head_that_did_not_come_back_fails_the_drill
+ERROR tests/unit/test_backup_scripts.py::test_a_copy_whose_size_disagrees_with_its_manifest_is_never_loaded
+ERROR tests/unit/test_backup_scripts.py::test_a_manifest_that_does_not_state_what_a_load_is_compared_with_is_refused[row_counts]
+ERROR tests/unit/test_backup_scripts.py::test_a_manifest_that_does_not_state_what_a_load_is_compared_with_is_refused[migration_head]
+ERROR tests/unit/test_backup_scripts.py::test_a_manifest_that_does_not_state_what_a_load_is_compared_with_is_refused[size_bytes]
+ERROR tests/unit/test_backup_scripts.py::test_a_manifest_that_does_not_state_what_a_load_is_compared_with_is_refused[backup_id]
+ERROR tests/unit/test_backup_scripts.py::test_a_copy_and_a_manifest_of_two_different_backups_are_refused
+ERROR tests/unit/test_backup_scripts.py::test_a_database_that_exists_or_a_load_that_stops_fails_and_is_not_checked[createdb_fails]
+ERROR tests/unit/test_backup_scripts.py::test_a_database_that_exists_or_a_load_that_stops_fails_and_is_not_checked[restore_fails]
+ERROR tests/unit/test_backup_scripts.py::test_the_drill_asks_the_scratch_database_what_the_taker_asked_the_live_one
+5 failed, 2835 passed, 2 skipped, 565 warnings, 31 errors in 646.14s (0:10:46)
+finished

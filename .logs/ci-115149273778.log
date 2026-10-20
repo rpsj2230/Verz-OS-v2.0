@@ -1,0 +1,1033 @@
+﻿2026-10-13T06:42:27.5365833Z Current runner version: '2.337.0'
+2026-10-13T06:42:27.5388664Z ##[group]Runner Image Provisioner
+2026-10-13T06:42:27.5389450Z Hosted Compute Agent
+2026-10-13T06:42:27.5389942Z Version: 20261002.596
+2026-10-13T06:42:27.5390488Z Commit: c3d12f3313a95f25162a1503be624f3b0617f8c0
+2026-10-13T06:42:27.5391037Z Build Date: 2026-10-02T22:28:27Z
+2026-10-13T06:42:27.5392010Z Worker ID: {16bcdb97-afce-4a63-a5dc-f4d4186569c2}
+2026-10-13T06:42:27.5392623Z Region: westus3
+2026-10-13T06:42:27.5393040Z Cloud: Azure
+2026-10-13T06:42:27.5393437Z ##[endgroup]
+2026-10-13T06:42:27.5394530Z ##[group]Operating System
+2026-10-13T06:42:27.5394981Z Ubuntu
+2026-10-13T06:42:27.5395447Z 24.04.5
+2026-10-13T06:42:27.5395893Z LTS
+2026-10-13T06:42:27.5396300Z ##[endgroup]
+2026-10-13T06:42:27.5396793Z ##[group]Runner Image
+2026-10-13T06:42:27.5397261Z Image: ubuntu-24.04
+2026-10-13T06:42:27.5397735Z Version: 20261004.327.1
+2026-10-13T06:42:27.5398744Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261004.327/images/ubuntu/Ubuntu2404-Readme.md
+2026-10-13T06:42:27.5399872Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261004.327
+2026-10-13T06:42:27.5400563Z ##[endgroup]
+2026-10-13T06:42:27.5401713Z ##[group]GITHUB_TOKEN Permissions
+2026-10-13T06:42:27.5403278Z Contents: read
+2026-10-13T06:42:27.5403766Z Metadata: read
+2026-10-13T06:42:27.5404204Z Packages: read
+2026-10-13T06:42:27.5404626Z ##[endgroup]
+2026-10-13T06:42:27.5406363Z Secret source: Actions
+2026-10-13T06:42:27.5407047Z Cache mode: write
+2026-10-13T06:42:27.5407643Z Prepare workflow directory
+2026-10-13T06:42:27.5711865Z Prepare all required actions
+2026-10-13T06:42:27.5756957Z Getting action download info
+2026-10-13T06:42:27.8919428Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-10-13T06:42:27.9727468Z Download action repository 'astral-sh/setup-uv@v5' (SHA:d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86)
+2026-10-13T06:42:28.9006496Z Complete job name: Schema and registry sweeps
+2026-10-13T06:42:28.9629819Z ##[group]Run actions/checkout@v4
+2026-10-13T06:42:28.9630403Z with:
+2026-10-13T06:42:28.9630719Z   fetch-depth: 0
+2026-10-13T06:42:28.9631066Z   repository: rpsj2230/Verz-OS-v2.0
+2026-10-13T06:42:28.9634025Z   token: ***
+2026-10-13T06:42:28.9634347Z   ssh-strict: true
+2026-10-13T06:42:28.9634673Z   ssh-user: git
+2026-10-13T06:42:28.9635008Z   persist-credentials: true
+2026-10-13T06:42:28.9635379Z   clean: true
+2026-10-13T06:42:28.9635714Z   sparse-checkout-cone-mode: true
+2026-10-13T06:42:28.9636105Z   fetch-tags: false
+2026-10-13T06:42:28.9636441Z   show-progress: true
+2026-10-13T06:42:28.9636774Z   lfs: false
+2026-10-13T06:42:28.9637097Z   submodules: false
+2026-10-13T06:42:28.9637451Z   set-safe-directory: true
+2026-10-13T06:42:28.9637829Z   allow-unsafe-pr-checkout: false
+2026-10-13T06:42:28.9638361Z env:
+2026-10-13T06:42:28.9638663Z   UV_VERSION: 0.12.9
+2026-10-13T06:42:28.9638996Z ##[endgroup]
+2026-10-13T06:42:29.0482011Z Syncing repository: rpsj2230/Verz-OS-v2.0
+2026-10-13T06:42:29.0484710Z ##[group]Getting Git version info
+2026-10-13T06:42:29.0485794Z Working directory is '/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0'
+2026-10-13T06:42:29.0487375Z [command]/usr/bin/git version
+2026-10-13T06:42:29.0532384Z git version 2.55.0
+2026-10-13T06:42:29.0549483Z ##[endgroup]
+2026-10-13T06:42:29.0573428Z Temporarily overriding HOME='/home/runner/work/_temp/e52e3853-d535-4f9c-a82a-eb849fddd4a5' before making global git config changes
+2026-10-13T06:42:29.0576023Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-13T06:42:29.0577788Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0
+2026-10-13T06:42:29.0628470Z Deleting the contents of '/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0'
+2026-10-13T06:42:29.0634699Z ##[group]Initializing the repository
+2026-10-13T06:42:29.0638558Z [command]/usr/bin/git init /home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0
+2026-10-13T06:42:29.0759667Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-10-13T06:42:29.0761960Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-10-13T06:42:29.0763328Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-10-13T06:42:29.0764476Z hint: call:
+2026-10-13T06:42:29.0765205Z hint:
+2026-10-13T06:42:29.0765950Z hint: 	git config --global init.defaultBranch <name>
+2026-10-13T06:42:29.0766665Z hint:
+2026-10-13T06:42:29.0767326Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-10-13T06:42:29.0768328Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-10-13T06:42:29.0769152Z hint:
+2026-10-13T06:42:29.0769744Z hint: 	git branch -m <name>
+2026-10-13T06:42:29.0770368Z hint:
+2026-10-13T06:42:29.0771523Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-10-13T06:42:29.0772957Z Initialized empty Git repository in /home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/.git/
+2026-10-13T06:42:29.0775267Z [command]/usr/bin/git remote add origin https://github.com/rpsj2230/Verz-OS-v2.0
+2026-10-13T06:42:29.0827417Z ##[endgroup]
+2026-10-13T06:42:29.0828146Z ##[group]Disabling automatic garbage collection
+2026-10-13T06:42:29.0831570Z [command]/usr/bin/git config --local gc.auto 0
+2026-10-13T06:42:29.0869393Z ##[endgroup]
+2026-10-13T06:42:29.0870153Z ##[group]Setting up auth
+2026-10-13T06:42:29.0876883Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-13T06:42:29.0917684Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-13T06:42:29.1292430Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-13T06:42:29.1330181Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-13T06:42:29.1553495Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-13T06:42:29.1592298Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-13T06:42:29.1810535Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-10-13T06:42:29.1855050Z ##[endgroup]
+2026-10-13T06:42:29.1855999Z ##[group]Fetching the repository
+2026-10-13T06:42:29.1863954Z [command]/usr/bin/git -c protocol.version=2 fetch --prune --no-recurse-submodules origin +refs/heads/*:refs/remotes/origin/* +refs/tags/*:refs/tags/* +f7640fe13c0ae899bf8dcfa0a01aab845a50d4d6:refs/remotes/pull/553/merge
+2026-10-13T06:42:33.4969013Z From https://github.com/rpsj2230/Verz-OS-v2.0
+2026-10-13T06:42:33.4970988Z  * [new branch]        M0/keycloak-first-start-memory           -> origin/M0/keycloak-first-start-memory
+2026-10-13T06:42:33.4972108Z  * [new branch]        M0/keycloak-fixed-heap                   -> origin/M0/keycloak-fixed-heap
+2026-10-13T06:42:33.4973016Z  * [new branch]        M0/w2-ci-path-filters                    -> origin/M0/w2-ci-path-filters
+2026-10-13T06:42:33.4974001Z  * [new branch]        M0/w2-test-selection-shadow              -> origin/M0/w2-test-selection-shadow
+2026-10-13T06:42:33.4974941Z  * [new branch]        M1/acceptance-people                     -> origin/M1/acceptance-people
+2026-10-13T06:42:33.4975665Z  * [new branch]        M1/add-work-email                        -> origin/M1/add-work-email
+2026-10-13T06:42:33.4976220Z  * [new branch]        M1/console-token-scope                   -> origin/M1/console-token-scope
+2026-10-13T06:42:33.4977155Z  * [new branch]        M1/departments-from                      -> origin/M1/departments-from
+2026-10-13T06:42:33.4978170Z  * [new branch]        M1/departments-from-relanded             -> origin/M1/departments-from-relanded
+2026-10-13T06:42:33.4979531Z  * [new branch]        M1/group-sync-break-glass-notice         -> origin/M1/group-sync-break-glass-notice
+2026-10-13T06:42:33.4980521Z  * [new branch]        M1/head-audit-reads                      -> origin/M1/head-audit-reads
+2026-10-13T06:42:33.4981484Z  * [new branch]        M1/ldap-staff-source                     -> origin/M1/ldap-staff-source
+2026-10-13T06:42:33.4982309Z  * [new branch]        M1/people-status                         -> origin/M1/people-status
+2026-10-13T06:42:33.4983205Z  * [new branch]        M1/relay-to-sign-in                      -> origin/M1/relay-to-sign-in
+2026-10-13T06:42:33.4984098Z  * [new branch]        M1/requirement-area-proofs               -> origin/M1/requirement-area-proofs
+2026-10-13T06:42:33.4985015Z  * [new branch]        M1/role-grants-deputies-floor            -> origin/M1/role-grants-deputies-floor
+2026-10-13T06:42:33.4985993Z  * [new branch]        M1/role-grants-deputies-floor-r225625    -> origin/M1/role-grants-deputies-floor-r225625
+2026-10-13T06:42:33.4987011Z  * [new branch]        M1/staff-accounts                        -> origin/M1/staff-accounts
+2026-10-13T06:42:33.4987870Z  * [new branch]        M1/staff-adapters-gws-entra-lark         -> origin/M1/staff-adapters-gws-entra-lark
+2026-10-13T06:42:33.4988751Z  * [new branch]        M1/staff-are-people                      -> origin/M1/staff-are-people
+2026-10-13T06:42:33.4989679Z  * [new branch]        M1/staff-source-connect-leaver-stop      -> origin/M1/staff-source-connect-leaver-stop
+2026-10-13T06:42:33.4990592Z  * [new branch]        M1/staff-sync-diagnostics                -> origin/M1/staff-sync-diagnostics
+2026-10-13T06:42:33.5059884Z  * [new branch]        M1/starter-pack-per-department           -> origin/M1/starter-pack-per-department
+2026-10-13T06:42:33.5061159Z  * [new branch]        M1/wg3-lark-sign-in                      -> origin/M1/wg3-lark-sign-in
+2026-10-13T06:42:33.5062374Z  * [new branch]        M10/channel-email                        -> origin/M10/channel-email
+2026-10-13T06:42:33.5063214Z  * [new branch]        M10/channel-email-mailbox                -> origin/M10/channel-email-mailbox
+2026-10-13T06:42:33.5063912Z  * [new branch]        M10/channel-pipeline                     -> origin/M10/channel-pipeline
+2026-10-13T06:42:33.5064682Z  * [new branch]        M10/channel-slack                        -> origin/M10/channel-slack
+2026-10-13T06:42:33.5065466Z  * [new branch]        M10/channel-teams                        -> origin/M10/channel-teams
+2026-10-13T06:42:33.5066342Z  * [new branch]        M10/channel-telegram                     -> origin/M10/channel-telegram
+2026-10-13T06:42:33.5066992Z  * [new branch]        M10/channel-whatsapp                     -> origin/M10/channel-whatsapp
+2026-10-13T06:42:33.5067718Z  * [new branch]        M10/channels-screen-binding              -> origin/M10/channels-screen-binding
+2026-10-13T06:42:33.5068424Z  * [new branch]        M10/lark-chat-channel                    -> origin/M10/lark-chat-channel
+2026-10-13T06:42:33.5069178Z  * [new branch]        M10/w2-approval-cards                    -> origin/M10/w2-approval-cards
+2026-10-13T06:42:33.5069880Z  * [new branch]        M10/w2-card-on-raise                     -> origin/M10/w2-card-on-raise
+2026-10-13T06:42:33.5070575Z  * [new branch]        M10/w2-channel-checks                    -> origin/M10/w2-channel-checks
+2026-10-13T06:42:33.5071469Z  * [new branch]        M10/w2-widget-public                     -> origin/M10/w2-widget-public
+2026-10-13T06:42:33.5072134Z  * [new branch]        M10/w2-widget-session                    -> origin/M10/w2-widget-session
+2026-10-13T06:42:33.5072823Z  * [new branch]        M10/wb-channel-delivery                  -> origin/M10/wb-channel-delivery
+2026-10-13T06:42:33.5073506Z  * [new branch]        M10/wb2-needs-178                        -> origin/M10/wb2-needs-178
+2026-10-13T06:42:33.5074032Z  * [new branch]        M10/wg3-channels-roll-up                 -> origin/M10/wg3-channels-roll-up
+2026-10-13T06:42:33.5074885Z  * [new branch]        M10/widget-model-answers                 -> origin/M10/widget-model-answers
+2026-10-13T06:42:33.5075575Z  * [new branch]        M10/widget-test-clock                    -> origin/M10/widget-test-clock
+2026-10-13T06:42:33.5076040Z  * [new branch]        M11/ceilings-discovery                   -> origin/M11/ceilings-discovery
+2026-10-13T06:42:33.5076576Z  * [new branch]        M11/connector-discovery                  -> origin/M11/connector-discovery
+2026-10-13T06:42:33.5077419Z  * [new branch]        M11/connector-registries-minimal-index   -> origin/M11/connector-registries-minimal-index
+2026-10-13T06:42:33.5078250Z  * [new branch]        M11/freshdesk-connector                  -> origin/M11/freshdesk-connector
+2026-10-13T06:42:33.5078925Z  * [new branch]        M11/laravel-rule                         -> origin/M11/laravel-rule
+2026-10-13T06:42:33.5079657Z  * [new branch]        M11/lark-wiki-base-connectors            -> origin/M11/lark-wiki-base-connectors
+2026-10-13T06:42:33.5080445Z  * [new branch]        M11/live-read-speed-budget               -> origin/M11/live-read-speed-budget
+2026-10-13T06:42:33.5083290Z  * [new branch]        M11/live-read-speed-budget-r2            -> origin/M11/live-read-speed-budget-r2
+2026-10-13T06:42:33.5084050Z  * [new branch]        M11/w2-change-signals                    -> origin/M11/w2-change-signals
+2026-10-13T06:42:33.5084728Z  * [new branch]        M11/w2-cloudflare                        -> origin/M11/w2-cloudflare
+2026-10-13T06:42:33.5085581Z  * [new branch]        M11/w2-connect-drive-laravel             -> origin/M11/w2-connect-drive-laravel
+2026-10-13T06:42:33.5086365Z  * [new branch]        M11/w2-connector-checks                  -> origin/M11/w2-connector-checks
+2026-10-13T06:42:33.5086834Z  * [new branch]        M11/w2-connector-lifecycle               -> origin/M11/w2-connector-lifecycle
+2026-10-13T06:42:33.5087295Z  * [new branch]        M11/w2-connector-metrics                 -> origin/M11/w2-connector-metrics
+2026-10-13T06:42:33.5087918Z  * [new branch]        M11/w2-connectors-tools                  -> origin/M11/w2-connectors-tools
+2026-10-13T06:42:33.5088387Z  * [new branch]        M11/w2-connectors-tools-2                -> origin/M11/w2-connectors-tools-2
+2026-10-13T06:42:33.5088836Z  * [new branch]        M11/w2-domains                           -> origin/M11/w2-domains
+2026-10-13T06:42:33.5089288Z  * [new branch]        M11/w2-drive-depth-first                 -> origin/M11/w2-drive-depth-first
+2026-10-13T06:42:33.5089744Z  * [new branch]        M11/w2-drive-read                        -> origin/M11/w2-drive-read
+2026-10-13T06:42:33.5090193Z  * [new branch]        M11/w2-framework-checks                  -> origin/M11/w2-framework-checks
+2026-10-13T06:42:33.5090646Z  * [new branch]        M11/w2-freshdesk-live                    -> origin/M11/w2-freshdesk-live
+2026-10-13T06:42:33.5091125Z  * [new branch]        M11/w2-freshdesk-reply                   -> origin/M11/w2-freshdesk-reply
+2026-10-13T06:42:33.5092047Z  * [new branch]        M11/w2-google-analytics                  -> origin/M11/w2-google-analytics
+2026-10-13T06:42:33.5092705Z  * [new branch]        M11/w2-google-workspace                  -> origin/M11/w2-google-workspace
+2026-10-13T06:42:33.5093154Z  * [new branch]        M11/w2-hubspot-live                      -> origin/M11/w2-hubspot-live
+2026-10-13T06:42:33.5093589Z  * [new branch]        M11/w2-laravel-read                      -> origin/M11/w2-laravel-read
+2026-10-13T06:42:33.5094014Z  * [new branch]        M11/w2-lark-base                         -> origin/M11/w2-lark-base
+2026-10-13T06:42:33.5094424Z  * [new branch]        M11/w2-oauth                             -> origin/M11/w2-oauth
+2026-10-13T06:42:33.5094864Z  * [new branch]        M11/w2-requirement-areas                 -> origin/M11/w2-requirement-areas
+2026-10-13T06:42:33.5095323Z  * [new branch]        M11/w2-schema-drift                      -> origin/M11/w2-schema-drift
+2026-10-13T06:42:33.5095776Z  * [new branch]        M11/w2-search-console                    -> origin/M11/w2-search-console
+2026-10-13T06:42:33.5096626Z  * [new branch]        M11/w2-slack-source                      -> origin/M11/w2-slack-source
+2026-10-13T06:42:33.5097317Z  * [new branch]        M11/w2-spec-connector                    -> origin/M11/w2-spec-connector
+2026-10-13T06:42:33.5098004Z  * [new branch]        M11/w2-staleness                         -> origin/M11/w2-staleness
+2026-10-13T06:42:33.5098519Z  * [new branch]        M11/w2-transports                        -> origin/M11/w2-transports
+2026-10-13T06:42:33.5098954Z  * [new branch]        M11/w2-write-tools                       -> origin/M11/w2-write-tools
+2026-10-13T06:42:33.5099426Z  * [new branch]        M11/w3-connectable-checks                -> origin/M11/w3-connectable-checks
+2026-10-13T06:42:33.5099886Z  * [new branch]        M11/w3-live-answers                      -> origin/M11/w3-live-answers
+2026-10-13T06:42:33.5100344Z  * [new branch]        M11/w3-ready-from-console                -> origin/M11/w3-ready-from-console
+2026-10-13T06:42:33.5100814Z  * [new branch]        M11/w3-write-proved                      -> origin/M11/w3-write-proved
+2026-10-13T06:42:33.5101439Z  * [new branch]        M11/wave2-acceptance                     -> origin/M11/wave2-acceptance
+2026-10-13T06:42:33.5101901Z  * [new branch]        M11/wb-connector-proof                   -> origin/M11/wb-connector-proof
+2026-10-13T06:42:33.5102352Z  * [new branch]        M11/wg3-google-ready                     -> origin/M11/wg3-google-ready
+2026-10-13T06:42:33.5102808Z  * [new branch]        M12/skill-import-review                  -> origin/M12/skill-import-review
+2026-10-13T06:42:33.5103277Z  * [new branch]        M12/skill-package-checks                 -> origin/M12/skill-package-checks
+2026-10-13T06:42:33.5103752Z  * [new branch]        M12/tool-catalogue-switch                -> origin/M12/tool-catalogue-switch
+2026-10-13T06:42:33.5104263Z  * [new branch]        M12/tool-catalogue-switch-r195618        -> origin/M12/tool-catalogue-switch-r195618
+2026-10-13T06:42:33.5104921Z  * [new branch]        M12/w2-chat-attach-control               -> origin/M12/w2-chat-attach-control
+2026-10-13T06:42:33.5105387Z  * [new branch]        M12/w2-chat-attachments                  -> origin/M12/w2-chat-attachments
+2026-10-13T06:42:33.5105834Z  * [new branch]        M12/w2-default-leash                     -> origin/M12/w2-default-leash
+2026-10-13T06:42:33.5106271Z  * [new branch]        M12/w2-skill-packages                    -> origin/M12/w2-skill-packages
+2026-10-13T06:42:33.5106732Z  * [new branch]        M12/w2-skill-script-digest               -> origin/M12/w2-skill-script-digest
+2026-10-13T06:42:33.5107180Z  * [new branch]        M12/w2-sop-import                        -> origin/M12/w2-sop-import
+2026-10-13T06:42:33.5107604Z  * [new branch]        M12/w2-website-check                     -> origin/M12/w2-website-check
+2026-10-13T06:42:33.5108073Z  * [new branch]        M12/w3-skill-export-rehearsal            -> origin/M12/w3-skill-export-rehearsal
+2026-10-13T06:42:33.5108562Z  * [new branch]        M12/w3-skill-pin-checks                  -> origin/M12/w3-skill-pin-checks
+2026-10-13T06:42:33.5109011Z  * [new branch]        M12/w3-skill-pins-wired                  -> origin/M12/w3-skill-pins-wired
+2026-10-13T06:42:33.5109475Z  * [new branch]        M12/wb-skill-tools-wired                 -> origin/M12/wb-skill-tools-wired
+2026-10-13T06:42:33.5109920Z  * [new branch]        M12/wb2-tools-checks                     -> origin/M12/wb2-tools-checks
+2026-10-13T06:42:33.5110350Z  * [new branch]        M12/wb2-tools-items                      -> origin/M12/wb2-tools-items
+2026-10-13T06:42:33.5110825Z  * [new branch]        M12/website-check-tool                   -> origin/M12/website-check-tool
+2026-10-13T06:42:33.5111648Z  * [new branch]        M12/wg1-needs-items                      -> origin/M12/wg1-needs-items
+2026-10-13T06:42:33.5112412Z  * [new branch]        M12/wg1-skill-draft-migration            -> origin/M12/wg1-skill-draft-migration
+2026-10-13T06:42:33.5113401Z  * [new branch]        M12/wg1-skill-needs-migration            -> origin/M12/wg1-skill-needs-migration
+2026-10-13T06:42:33.5114139Z  * [new branch]        M12/wg1-starter-skills                   -> origin/M12/wg1-starter-skills
+2026-10-13T06:42:33.5114823Z  * [new branch]        M13/halt-agent                           -> origin/M13/halt-agent
+2026-10-13T06:42:33.5115491Z  * [new branch]        M13/harness-proofs                       -> origin/M13/harness-proofs
+2026-10-13T06:42:33.5116242Z  * [new branch]        M13/install-checks-agents                -> origin/M13/install-checks-agents
+2026-10-13T06:42:33.5117042Z  * [new branch]        M13/requirement-check-areas              -> origin/M13/requirement-check-areas
+2026-10-13T06:42:33.5117794Z  * [new branch]        M13/runtime-proofs                       -> origin/M13/runtime-proofs
+2026-10-13T06:42:33.5118514Z  * [new branch]        M13/runtime-side-effects                 -> origin/M13/runtime-side-effects
+2026-10-13T06:42:33.5119275Z  * [new branch]        M13/supervision-review                   -> origin/M13/supervision-review
+2026-10-13T06:42:33.5120039Z  * [new branch]        M13/template-signing-key                 -> origin/M13/template-signing-key
+2026-10-13T06:42:33.5120854Z  * [new branch]        M13/templates-audience-migration         -> origin/M13/templates-audience-migration
+2026-10-13T06:42:33.5121900Z  * [new branch]        M13/two-person-approval-migration        -> origin/M13/two-person-approval-migration
+2026-10-13T06:42:33.5122670Z  * [new branch]        M13/w2-template-key                      -> origin/M13/w2-template-key
+2026-10-13T06:42:33.5123365Z  * [new branch]        M13/w3-actions-stack                     -> origin/M13/w3-actions-stack
+2026-10-13T06:42:33.5124087Z  * [new branch]        M13/w3-agent-channels-edit               -> origin/M13/w3-agent-channels-edit
+2026-10-13T06:42:33.5124783Z  * [new branch]        M13/w3-agent-reach                       -> origin/M13/w3-agent-reach
+2026-10-13T06:42:33.5125657Z  * [new branch]        M13/w3-agent-runtime                     -> origin/M13/w3-agent-runtime
+2026-10-13T06:42:33.5126370Z  * [new branch]        M13/w3-approved-runs-once                -> origin/M13/w3-approved-runs-once
+2026-10-13T06:42:33.5127200Z  * [new branch]        M13/w3-builder-checks                    -> origin/M13/w3-builder-checks
+2026-10-13T06:42:33.5128039Z  * [new branch]        M13/w3-connector-binding                 -> origin/M13/w3-connector-binding
+2026-10-13T06:42:33.5128938Z  * [new branch]        M13/w3-runtime-side-effects              -> origin/M13/w3-runtime-side-effects
+2026-10-13T06:42:33.5129670Z  * [new branch]        M13/w3-template-checks                   -> origin/M13/w3-template-checks
+2026-10-13T06:42:33.5130362Z  * [new branch]        M13/w3-wiki-page-read                    -> origin/M13/w3-wiki-page-read
+2026-10-13T06:42:33.5130945Z  * [new branch]        M13/wire-agent-upgrade                   -> origin/M13/wire-agent-upgrade
+2026-10-13T06:42:33.5131576Z  * [new branch]        M13/wire-answer-key                      -> origin/M13/wire-answer-key
+2026-10-13T06:42:33.5132019Z  * [new branch]        M13/wire-publish-gate                    -> origin/M13/wire-publish-gate
+2026-10-13T06:42:33.5132452Z  * [new branch]        M14/entity-proofs                        -> origin/M14/entity-proofs
+2026-10-13T06:42:33.5132920Z  * [new branch]        M14/entity-resolution-proofs             -> origin/M14/entity-resolution-proofs
+2026-10-13T06:42:33.5133374Z  * [new branch]        M14/w3-calibration                       -> origin/M14/w3-calibration
+2026-10-13T06:42:33.5133815Z  * [new branch]        M14/w3-entity-resolution                 -> origin/M14/w3-entity-resolution
+2026-10-13T06:42:33.5134241Z  * [new branch]        M14/w3-pepper                            -> origin/M14/w3-pepper
+2026-10-13T06:42:33.5134676Z  * [new branch]        M14/w3-register-decisions                -> origin/M14/w3-register-decisions
+2026-10-13T06:42:33.5135122Z  * [new branch]        M14/w3-unresolved                        -> origin/M14/w3-unresolved
+2026-10-13T06:42:33.5135704Z  * [new branch]        M15/retrieval-log-replay                 -> origin/M15/retrieval-log-replay
+2026-10-13T06:42:33.5136207Z  * [new branch]        M15/typed-rows-department-scope          -> origin/M15/typed-rows-department-scope
+2026-10-13T06:42:33.5136699Z  * [new branch]        M15/w2-narrow-reader-scan                -> origin/M15/w2-narrow-reader-scan
+2026-10-13T06:42:33.5137159Z  * [new branch]        M15/wg2-retrieval-rules                  -> origin/M15/wg2-retrieval-rules
+2026-10-13T06:42:33.5137596Z  * [new branch]        M16/answer-copied                        -> origin/M16/answer-copied
+2026-10-13T06:42:33.5138038Z  * [new branch]        M16/maintenance-view-doc                 -> origin/M16/maintenance-view-doc
+2026-10-13T06:42:33.5138752Z  * [new branch]        M16/memory-proofs                        -> origin/M16/memory-proofs
+2026-10-13T06:42:33.5139422Z  * [new branch]        M16/memory-proofs-2                      -> origin/M16/memory-proofs-2
+2026-10-13T06:42:33.5140146Z  * [new branch]        M16/needs-memory-items                   -> origin/M16/needs-memory-items
+2026-10-13T06:42:33.5140672Z  * [new branch]        M16/w3-channel-marks                     -> origin/M16/w3-channel-marks
+2026-10-13T06:42:33.5141096Z  * [new branch]        M16/w3-confirmed                         -> origin/M16/w3-confirmed
+2026-10-13T06:42:33.5141669Z  * [new branch]        M16/w3-context                           -> origin/M16/w3-context
+2026-10-13T06:42:33.5142116Z  * [new branch]        M16/w3-learning-candidates               -> origin/M16/w3-learning-candidates
+2026-10-13T06:42:33.5142605Z  * [new branch]        M16/w3-learning-tables                   -> origin/M16/w3-learning-tables
+2026-10-13T06:42:33.5143017Z  * [new branch]        M16/w3-marks                             -> origin/M16/w3-marks
+2026-10-13T06:42:33.5143437Z  * [new branch]        M16/w3-memory-learning                   -> origin/M16/w3-memory-learning
+2026-10-13T06:42:33.5144016Z  * [new branch]        M16/w3-signal-log                        -> origin/M16/w3-signal-log
+2026-10-13T06:42:33.5144418Z  * [new branch]        M16/w3-waiting                           -> origin/M16/w3-waiting
+2026-10-13T06:42:33.5144829Z  * [new branch]        M16/w3-weekly-digest                     -> origin/M16/w3-weekly-digest
+2026-10-13T06:42:33.5145265Z  * [new branch]        M17/wm3-checks                           -> origin/M17/wm3-checks
+2026-10-13T06:42:33.5145656Z  * [new branch]        M17/wm3-needs                            -> origin/M17/wm3-needs
+2026-10-13T06:42:33.5146044Z  * [new branch]        M17/wm3-runs                             -> origin/M17/wm3-runs
+2026-10-13T06:42:33.5146454Z  * [new branch]        M20/draft-forms-fix                      -> origin/M20/draft-forms-fix
+2026-10-13T06:42:33.5146896Z  * [new branch]        M20/w3-publish-record                    -> origin/M20/w3-publish-record
+2026-10-13T06:42:33.5147361Z  * [new branch]        M20/wire-builder-sections                -> origin/M20/wire-builder-sections
+2026-10-13T06:42:33.5147808Z  * [new branch]        M20/wire-coauthor                        -> origin/M20/wire-coauthor
+2026-10-13T06:42:33.5148223Z  * [new branch]        M21/budget-stops                         -> origin/M21/budget-stops
+2026-10-13T06:42:33.5148678Z  * [new branch]        M21/record-usage-for-stats               -> origin/M21/record-usage-for-stats
+2026-10-13T06:42:33.5149145Z  * [new branch]        M21/wm4-ceilings-banner                  -> origin/M21/wm4-ceilings-banner
+2026-10-13T06:42:33.5149570Z  * [new branch]        M21/wm4-spend                            -> origin/M21/wm4-spend
+2026-10-13T06:42:33.5149998Z  * [new branch]        M22/w2-admission-classes                 -> origin/M22/w2-admission-classes
+2026-10-13T06:42:33.5150493Z  * [new branch]        M22/w2-capacity-trace-pii-checks         -> origin/M22/w2-capacity-trace-pii-checks
+2026-10-13T06:42:33.5150968Z  * [new branch]        M22/w2-class-pools                       -> origin/M22/w2-class-pools
+2026-10-13T06:42:33.5151672Z  * [new branch]        M22/w2-pool-limits                       -> origin/M22/w2-pool-limits
+2026-10-13T06:42:33.5152085Z  * [new branch]        M22/w2-ready-probe                       -> origin/M22/w2-ready-probe
+2026-10-13T06:42:33.5152496Z  * [new branch]        M22/wg2-load-peak                        -> origin/M22/wg2-load-peak
+2026-10-13T06:42:33.5152921Z  * [new branch]        M22/wg2-needs-194-196                    -> origin/M22/wg2-needs-194-196
+2026-10-13T06:42:33.5153352Z  * [new branch]        M23/rate-limits-live                     -> origin/M23/rate-limits-live
+2026-10-13T06:42:33.5153782Z  * [new branch]        M23/w2-proof-recovery                    -> origin/M23/w2-proof-recovery
+2026-10-13T06:42:33.5154193Z  * [new branch]        M23/w2-redrive                           -> origin/M23/w2-redrive
+2026-10-13T06:42:33.5154655Z  * [new branch]        M24/decisions-compliance-breach          -> origin/M24/decisions-compliance-breach
+2026-10-13T06:42:33.5155154Z  * [new branch]        M24/trace-and-session-audit              -> origin/M24/trace-and-session-audit
+2026-10-13T06:42:33.5155635Z  * [new branch]        M25/payload-expiry-migration             -> origin/M25/payload-expiry-migration
+2026-10-13T06:42:33.5156080Z  * [new branch]        M25/wm4-checks                           -> origin/M25/wm4-checks
+2026-10-13T06:42:33.5156513Z  * [new branch]        M26/wm1-joiner-mover-leaver              -> origin/M26/wm1-joiner-mover-leaver
+2026-10-13T06:42:33.5156945Z  * [new branch]        M26/wm1-welcome                          -> origin/M26/wm1-welcome
+2026-10-13T06:42:33.5157351Z  * [new branch]        M27/agent-builder                        -> origin/M27/agent-builder
+2026-10-13T06:42:33.5157843Z  * [new branch]        M27/alert-acknowledgement-migration      -> origin/M27/alert-acknowledgement-migration
+2026-10-13T06:42:33.5158325Z  * [new branch]        M27/connect-wizards                      -> origin/M27/connect-wizards
+2026-10-13T06:42:33.5158870Z  * [new branch]        M27/connect-wizards-2                    -> origin/M27/connect-wizards-2
+2026-10-13T06:42:33.5159310Z  * [new branch]        M27/connect-wizards-3                    -> origin/M27/connect-wizards-3
+2026-10-13T06:42:33.5159742Z  * [new branch]        M27/connect-wizards-4                    -> origin/M27/connect-wizards-4
+2026-10-13T06:42:33.5160170Z  * [new branch]        M27/connector-drift                      -> origin/M27/connector-drift
+2026-10-13T06:42:33.5160638Z  * [new branch]        M27/connector-test-probe                 -> origin/M27/connector-test-probe
+2026-10-13T06:42:33.5161104Z  * [new branch]        M27/console-automations                  -> origin/M27/console-automations
+2026-10-13T06:42:33.5161715Z  * [new branch]        M27/console-batch-0928                   -> origin/M27/console-batch-0928
+2026-10-13T06:42:33.5162183Z  * [new branch]        M27/console-builds-approvals             -> origin/M27/console-builds-approvals
+2026-10-13T06:42:33.5162676Z  * [new branch]        M27/console-builds-manifest              -> origin/M27/console-builds-manifest
+2026-10-13T06:42:33.5163133Z  * [new branch]        M27/console-channels                     -> origin/M27/console-channels
+2026-10-13T06:42:33.5163582Z  * [new branch]        M27/console-checks-agents                -> origin/M27/console-checks-agents
+2026-10-13T06:42:33.5164049Z  * [new branch]        M27/console-checks-roles                 -> origin/M27/console-checks-roles
+2026-10-13T06:42:33.5164498Z  * [new branch]        M27/console-connectors                   -> origin/M27/console-connectors
+2026-10-13T06:42:33.5164944Z  * [new branch]        M27/console-credentials                  -> origin/M27/console-credentials
+2026-10-13T06:42:33.5165408Z  * [new branch]        M27/console-credentials-r2               -> origin/M27/console-credentials-r2
+2026-10-13T06:42:33.5165864Z  * [new branch]        M27/console-governance                   -> origin/M27/console-governance
+2026-10-13T06:42:33.5166423Z  * [new branch]        M27/console-knowledge                    -> origin/M27/console-knowledge
+2026-10-13T06:42:33.5166868Z  * [new branch]        M27/console-knowledge-r2                 -> origin/M27/console-knowledge-r2
+2026-10-13T06:42:33.5167321Z  * [new branch]        M27/console-knowledge-r3                 -> origin/M27/console-knowledge-r3
+2026-10-13T06:42:33.5167768Z  * [new branch]        M27/console-last-pages                   -> origin/M27/console-last-pages
+2026-10-13T06:42:33.5168199Z  * [new branch]        M27/console-lists                        -> origin/M27/console-lists
+2026-10-13T06:42:33.5168645Z  * [new branch]        M27/console-models-routing               -> origin/M27/console-models-routing
+2026-10-13T06:42:33.5169132Z  * [new branch]        M27/console-navigation-groups            -> origin/M27/console-navigation-groups
+2026-10-13T06:42:33.5169601Z  * [new branch]        M27/console-operations                   -> origin/M27/console-operations
+2026-10-13T06:42:33.5170064Z  * [new branch]        M27/console-overview-home                -> origin/M27/console-overview-home
+2026-10-13T06:42:33.5170544Z  * [new branch]        M27/console-page-kit-agents              -> origin/M27/console-page-kit-agents
+2026-10-13T06:42:33.5171007Z  * [new branch]        M27/console-people-org                   -> origin/M27/console-people-org
+2026-10-13T06:42:33.5171587Z  * [new branch]        M27/console-platform                     -> origin/M27/console-platform
+2026-10-13T06:42:33.5172034Z  * [new branch]        M27/console-proof-estate                 -> origin/M27/console-proof-estate
+2026-10-13T06:42:33.5172491Z  * [new branch]        M27/console-proof-govern                 -> origin/M27/console-proof-govern
+2026-10-13T06:42:33.5172957Z  * [new branch]        M27/console-proof-incidents              -> origin/M27/console-proof-incidents
+2026-10-13T06:42:33.5173419Z  * [new branch]        M27/console-proof-leash                  -> origin/M27/console-proof-leash
+2026-10-13T06:42:33.5173993Z  * [new branch]        M27/console-proof-naming                 -> origin/M27/console-proof-naming
+2026-10-13T06:42:33.5174458Z  * [new branch]        M27/console-proof-naming-2               -> origin/M27/console-proof-naming-2
+2026-10-13T06:42:33.5174922Z  * [new branch]        M27/console-proof-naming-3               -> origin/M27/console-proof-naming-3
+2026-10-13T06:42:33.5175388Z  * [new branch]        M27/console-proof-operate                -> origin/M27/console-proof-operate
+2026-10-13T06:42:33.5175853Z  * [new branch]        M27/console-proof-people                 -> origin/M27/console-proof-people
+2026-10-13T06:42:33.5176316Z  * [new branch]        M27/console-proof-platform               -> origin/M27/console-proof-platform
+2026-10-13T06:42:33.5176823Z  * [new branch]        M27/console-registries-per-module        -> origin/M27/console-registries-per-module
+2026-10-13T06:42:33.5177304Z  * [new branch]        M27/console-reports                      -> origin/M27/console-reports
+2026-10-13T06:42:33.5177734Z  * [new branch]        M27/console-skills                       -> origin/M27/console-skills
+2026-10-13T06:42:33.5178187Z  * [new branch]        M27/console-stats-overview               -> origin/M27/console-stats-overview
+2026-10-13T06:42:33.5178673Z  * [new branch]        M27/console-stats-overview-r2            -> origin/M27/console-stats-overview-r2
+2026-10-13T06:42:33.5179164Z  * [new branch]        M27/console-stats-overview-r3            -> origin/M27/console-stats-overview-r3
+2026-10-13T06:42:33.5179645Z  * [new branch]        M27/console-stats-overview-r4            -> origin/M27/console-stats-overview-r4
+2026-10-13T06:42:33.5180125Z  * [new branch]        M27/console-stats-overview-r5            -> origin/M27/console-stats-overview-r5
+2026-10-13T06:42:33.5180612Z  * [new branch]        M27/console-stats-overview-r6            -> origin/M27/console-stats-overview-r6
+2026-10-13T06:42:33.5181091Z  * [new branch]        M27/console-teardown-flake               -> origin/M27/console-teardown-flake
+2026-10-13T06:42:33.5181823Z  * [new branch]        M27/department-about-flake               -> origin/M27/department-about-flake
+2026-10-13T06:42:33.5182301Z  * [new branch]        M27/departments-page-writes              -> origin/M27/departments-page-writes
+2026-10-13T06:42:33.5182721Z  * [new branch]        M27/halt                                 -> origin/M27/halt
+2026-10-13T06:42:33.5183152Z  * [new branch]        M27/halt-and-agent-lifecycle             -> origin/M27/halt-and-agent-lifecycle
+2026-10-13T06:42:33.5183599Z  * [new branch]        M27/halt-screen                          -> origin/M27/halt-screen
+2026-10-13T06:42:33.5183993Z  * [new branch]        M27/halt-store                           -> origin/M27/halt-store
+2026-10-13T06:42:33.5184427Z  * [new branch]        M27/harness-console-proofs               -> origin/M27/harness-console-proofs
+2026-10-13T06:42:33.5184879Z  * [new branch]        M27/incidents-screen                     -> origin/M27/incidents-screen
+2026-10-13T06:42:33.5185357Z  * [new branch]        M27/knowledge-archive-migration          -> origin/M27/knowledge-archive-migration
+2026-10-13T06:42:33.5185812Z  * [new branch]        M27/models-matrix                        -> origin/M27/models-matrix
+2026-10-13T06:42:33.5186249Z  * [new branch]        M27/models-routing-plain                 -> origin/M27/models-routing-plain
+2026-10-13T06:42:33.5186705Z  * [new branch]        M27/models-screen-matrix                 -> origin/M27/models-screen-matrix
+2026-10-13T06:42:33.5187192Z  * [new branch]        M27/money-figures-carry-currency         -> origin/M27/money-figures-carry-currency
+2026-10-13T06:42:33.5187684Z  * [new branch]        M27/people-grant-controls                -> origin/M27/people-grant-controls
+2026-10-13T06:42:33.5188149Z  * [new branch]        M27/service-accounts-page                -> origin/M27/service-accounts-page
+2026-10-13T06:42:33.5188631Z  * [new branch]        M27/stats-live-reads-skill-runs          -> origin/M27/stats-live-reads-skill-runs
+2026-10-13T06:42:33.5189211Z  * [new branch]        M27/system-health                        -> origin/M27/system-health
+2026-10-13T06:42:33.5189666Z  * [new branch]        M27/telemetry-stages-migration           -> origin/M27/telemetry-stages-migration
+2026-10-13T06:42:33.5190122Z  * [new branch]        M27/w3-browser-e2e                       -> origin/M27/w3-browser-e2e
+2026-10-13T06:42:33.5190549Z  * [new branch]        M27/w3-browser-harness                   -> origin/M27/w3-browser-harness
+2026-10-13T06:42:33.5190997Z  * [new branch]        M27/w3-credentials-checks                -> origin/M27/w3-credentials-checks
+2026-10-13T06:42:33.5191655Z  * [new branch]        M27/w3-harness-app-memory                -> origin/M27/w3-harness-app-memory
+2026-10-13T06:42:33.5192127Z  * [new branch]        M27/w3-harness-console-proofs            -> origin/M27/w3-harness-console-proofs
+2026-10-13T06:42:33.5192603Z  * [new branch]        M27/w3-ops-screen-checks-a               -> origin/M27/w3-ops-screen-checks-a
+2026-10-13T06:42:33.5193035Z  * [new branch]        M27/w3b-ops-1                            -> origin/M27/w3b-ops-1
+2026-10-13T06:42:33.5193423Z  * [new branch]        M27/w3b-ops-2                            -> origin/M27/w3b-ops-2
+2026-10-13T06:42:33.5193800Z  * [new branch]        M27/w3b-ops-3                            -> origin/M27/w3b-ops-3
+2026-10-13T06:42:33.5194171Z  * [new branch]        M27/w3b-ops-4                            -> origin/M27/w3b-ops-4
+2026-10-13T06:42:33.5194558Z  * [new branch]        M27/w3b-people-1                         -> origin/M27/w3b-people-1
+2026-10-13T06:42:33.5194957Z  * [new branch]        M27/w3b-people-2                         -> origin/M27/w3b-people-2
+2026-10-13T06:42:33.5195348Z  * [new branch]        M27/w3b-people-3                         -> origin/M27/w3b-people-3
+2026-10-13T06:42:33.5195741Z  * [new branch]        M27/walk-defects                         -> origin/M27/walk-defects
+2026-10-13T06:42:33.5196209Z  * [new branch]        M27/webhook-switch-on-and-replay         -> origin/M27/webhook-switch-on-and-replay
+2026-10-13T06:42:33.5196876Z  * [new branch]        M28/golden-corpus-blocks-merge           -> origin/M28/golden-corpus-blocks-merge
+2026-10-13T06:42:33.5197343Z  * [new branch]        M28/quality-migration                    -> origin/M28/quality-migration
+2026-10-13T06:42:33.5197791Z  * [new branch]        M3/risk-and-route-on-row                 -> origin/M3/risk-and-route-on-row
+2026-10-13T06:42:33.5198230Z  * [new branch]        M3/wg1-shared-prefix                     -> origin/M3/wg1-shared-prefix
+2026-10-13T06:42:33.5198690Z  * [new branch]        M30/compat-permissive-policy             -> origin/M30/compat-permissive-policy
+2026-10-13T06:42:33.5199144Z  * [new branch]        M31/apps-are-freed                       -> origin/M31/apps-are-freed
+2026-10-13T06:42:33.5199556Z  * [new branch]        M31/fork-workers                         -> origin/M31/fork-workers
+2026-10-13T06:42:33.5199957Z  * [new branch]        M31/simple-vault                         -> origin/M31/simple-vault
+2026-10-13T06:42:33.5200416Z  * [new branch]        M31/worker-loads-saved-settings          -> origin/M31/worker-loads-saved-settings
+2026-10-13T06:42:33.5200890Z  * [new branch]        M31/worker-mb-measured                   -> origin/M31/worker-mb-measured
+2026-10-13T06:42:33.5201467Z  * [new branch]        M32/proof-sweep-module                   -> origin/M32/proof-sweep-module
+2026-10-13T06:42:33.5201906Z  * [new branch]        M32/w2-deploy-proof                      -> origin/M32/w2-deploy-proof
+2026-10-13T06:42:33.5202335Z  * [new branch]        M32/w2-deploy-proof-2                    -> origin/M32/w2-deploy-proof-2
+2026-10-13T06:42:33.5202765Z  * [new branch]        M32/w2-deploy-proof-3                    -> origin/M32/w2-deploy-proof-3
+2026-10-13T06:42:33.5203183Z  * [new branch]        M32/w2-egress-scrub                      -> origin/M32/w2-egress-scrub
+2026-10-13T06:42:33.5203729Z  * [new branch]        M32/w2-overlay-langfuse                  -> origin/M32/w2-overlay-langfuse
+2026-10-13T06:42:33.5204177Z  * [new branch]        M32/w2-overlay-presidio                  -> origin/M32/w2-overlay-presidio
+2026-10-13T06:42:33.5204604Z  * [new branch]        M32/w2-payload-role                      -> origin/M32/w2-payload-role
+2026-10-13T06:42:33.5205024Z  * [new branch]        M32/w2-proof-records                     -> origin/M32/w2-proof-records
+2026-10-13T06:42:33.5205460Z  * [new branch]        M32/w2-proof-sweep-1005                  -> origin/M32/w2-proof-sweep-1005
+2026-10-13T06:42:33.5205900Z  * [new branch]        M32/w2-proof-sweep-1006                  -> origin/M32/w2-proof-sweep-1006
+2026-10-13T06:42:33.5206321Z  * [new branch]        M32/w2-sandbox-pr                        -> origin/M32/w2-sandbox-pr
+2026-10-13T06:42:33.5206745Z  * [new branch]        M32/w2-scrub-cpu-clock                   -> origin/M32/w2-scrub-cpu-clock
+2026-10-13T06:42:33.5207175Z  * [new branch]        M32/w2-trace-export                      -> origin/M32/w2-trace-export
+2026-10-13T06:42:33.5207614Z  * [new branch]        M32/w2-trace-graph-page                  -> origin/M32/w2-trace-graph-page
+2026-10-13T06:42:33.5208083Z  * [new branch]        M32/w2-trace-retention-proof             -> origin/M32/w2-trace-retention-proof
+2026-10-13T06:42:33.5208546Z  * [new branch]        M32/w3-proof-sweep-1006b                 -> origin/M32/w3-proof-sweep-1006b
+2026-10-13T06:42:33.5209016Z  * [new branch]        M32/wb-names-and-environment             -> origin/M32/wb-names-and-environment
+2026-10-13T06:42:33.5209473Z  * [new branch]        M32/wb2-storage-checks                   -> origin/M32/wb2-storage-checks
+2026-10-13T06:42:33.5209921Z  * [new branch]        M32/wg2-vault-worker-check               -> origin/M32/wg2-vault-worker-check
+2026-10-13T06:42:33.5210360Z  * [new branch]        M33/approval-reach                       -> origin/M33/approval-reach
+2026-10-13T06:42:33.5210780Z  * [new branch]        M33/audit-statistics                     -> origin/M33/audit-statistics
+2026-10-13T06:42:33.5211440Z  * [new branch]        M33/company-views                        -> origin/M33/company-views
+2026-10-13T06:42:33.5211893Z  * [new branch]        M33/department-activity-check            -> origin/M33/department-activity-check
+2026-10-13T06:42:33.5212355Z  * [new branch]        M33/department-views                     -> origin/M33/department-views
+2026-10-13T06:42:33.5212773Z  * [new branch]        M33/elevation-chain                      -> origin/M33/elevation-chain
+2026-10-13T06:42:33.5213317Z  * [new branch]        M33/install-checks-console               -> origin/M33/install-checks-console
+2026-10-13T06:42:33.5213780Z  * [new branch]        M33/my-conversation-export               -> origin/M33/my-conversation-export
+2026-10-13T06:42:33.5214245Z  * [new branch]        M33/people-history-grants                -> origin/M33/people-history-grants
+2026-10-13T06:42:33.5214721Z  * [new branch]        M33/permission-sync-decision             -> origin/M33/permission-sync-decision
+2026-10-13T06:42:33.5215183Z  * [new branch]        M33/role-nominations                     -> origin/M33/role-nominations
+2026-10-13T06:42:33.5215599Z  * [new branch]        M33/role-proofs-2                        -> origin/M33/role-proofs-2
+2026-10-13T06:42:33.5216024Z  * [new branch]        M33/role-surface-proofs                  -> origin/M33/role-surface-proofs
+2026-10-13T06:42:33.5216440Z  * [new branch]        M33/train-0200                           -> origin/M33/train-0200
+2026-10-13T06:42:33.5216852Z  * [new branch]        M33/w3-global-publish                    -> origin/M33/w3-global-publish
+2026-10-13T06:42:33.5217293Z  * [new branch]        M33/w3-governance-checks                 -> origin/M33/w3-governance-checks
+2026-10-13T06:42:33.5217745Z  * [new branch]        M33/w3-governance-checks-2               -> origin/M33/w3-governance-checks-2
+2026-10-13T06:42:33.5218161Z  * [new branch]        M34/wm4-reads                            -> origin/M34/wm4-reads
+2026-10-13T06:42:33.5218721Z  * [new branch]        M38/acceptance-chat-and-skills           -> origin/M38/acceptance-chat-and-skills
+2026-10-13T06:42:33.5219227Z  * [new branch]        M38/acceptance-chat-and-skills-r2        -> origin/M38/acceptance-chat-and-skills-r2
+2026-10-13T06:42:33.5219727Z  * [new branch]        M38/acceptance-counts-derived            -> origin/M38/acceptance-counts-derived
+2026-10-13T06:42:33.5220230Z  * [new branch]        M38/acceptance-modules-discovered        -> origin/M38/acceptance-modules-discovered
+2026-10-13T06:42:33.5220694Z  * [new branch]        M38/acceptance-w3                        -> origin/M38/acceptance-w3
+2026-10-13T06:42:33.5221137Z  * [new branch]        M38/channel-send-every-wire              -> origin/M38/channel-send-every-wire
+2026-10-13T06:42:33.5221731Z  * [new branch]        M38/ci-selection-on                      -> origin/M38/ci-selection-on
+2026-10-13T06:42:33.5222173Z  * [new branch]        M38/ci-task-list-fast-path               -> origin/M38/ci-task-list-fast-path
+2026-10-13T06:42:33.5222651Z  * [new branch]        M38/console-enterprise-tasks             -> origin/M38/console-enterprise-tasks
+2026-10-13T06:42:33.5223096Z  * [new branch]        M38/h1-governance-1                      -> origin/M38/h1-governance-1
+2026-10-13T06:42:33.5223550Z  * [new branch]        M38/install-acceptance-checks            -> origin/M38/install-acceptance-checks
+2026-10-13T06:42:33.5224055Z  * [new branch]        M38/install-acceptance-checks-r2         -> origin/M38/install-acceptance-checks-r2
+2026-10-13T06:42:33.5224557Z  * [new branch]        M38/install-acceptance-checks-r3         -> origin/M38/install-acceptance-checks-r3
+2026-10-13T06:42:33.5225055Z  * [new branch]        M38/install-acceptance-checks-r4         -> origin/M38/install-acceptance-checks-r4
+2026-10-13T06:42:33.5225528Z  * [new branch]        M38/install-check-fixes                  -> origin/M38/install-check-fixes
+2026-10-13T06:42:33.5226024Z  * [new branch]        M38/live-read-tests-not-a-stopwatch      -> origin/M38/live-read-tests-not-a-stopwatch
+2026-10-13T06:42:33.5226590Z  * [new branch]        M38/m571-wave5                           -> origin/M38/m571-wave5
+2026-10-13T06:42:33.5227011Z  * [new branch]        M38/merge-duplicates-w3-5                -> origin/M38/merge-duplicates-w3-5
+2026-10-13T06:42:33.5227471Z  * [new branch]        M38/migration-lock-timeout               -> origin/M38/migration-lock-timeout
+2026-10-13T06:42:33.5227979Z  * [new branch]        M38/migration-train-0118-0138-0139       -> origin/M38/migration-train-0118-0138-0139
+2026-10-13T06:42:33.5228464Z  * [new branch]        M38/migration-train-0190-0207            -> origin/M38/migration-train-0190-0207
+2026-10-13T06:42:33.5228934Z  * [new branch]        M38/migration-train-0204-0211            -> origin/M38/migration-train-0204-0211
+2026-10-13T06:42:33.5229399Z  * [new branch]        M38/migration-train-0217-0222            -> origin/M38/migration-train-0217-0222
+2026-10-13T06:42:33.5229870Z  * [new branch]        M38/migration-train-0221-0225            -> origin/M38/migration-train-0221-0225
+2026-10-13T06:42:33.5230318Z  * [new branch]        M38/migration-train-1                    -> origin/M38/migration-train-1
+2026-10-13T06:42:33.5230746Z  * [new branch]        M38/migration-train-2                    -> origin/M38/migration-train-2
+2026-10-13T06:42:33.5231293Z  * [new branch]        M38/migration-train-r2                   -> origin/M38/migration-train-r2
+2026-10-13T06:42:33.5231722Z  * [new branch]        M38/needs-115-118                        -> origin/M38/needs-115-118
+2026-10-13T06:42:33.5232139Z  * [new branch]        M38/needs-117-decided                    -> origin/M38/needs-117-decided
+2026-10-13T06:42:33.5232582Z  * [new branch]        M38/needs-121-conversations              -> origin/M38/needs-121-conversations
+2026-10-13T06:42:33.5233011Z  * [new branch]        M38/needs-122-125                        -> origin/M38/needs-122-125
+2026-10-13T06:42:33.5233538Z  * [new branch]        M38/needs-125-chat-use                   -> origin/M38/needs-125-chat-use
+2026-10-13T06:42:33.5233968Z  * [new branch]        M38/needs-125-decided                    -> origin/M38/needs-125-decided
+2026-10-13T06:42:33.5234386Z  * [new branch]        M38/needs-126-decided                    -> origin/M38/needs-126-decided
+2026-10-13T06:42:33.5234807Z  * [new branch]        M38/needs-126-services                   -> origin/M38/needs-126-services
+2026-10-13T06:42:33.5235224Z  * [new branch]        M38/needs-126-steps                      -> origin/M38/needs-126-steps
+2026-10-13T06:42:33.5235627Z  * [new branch]        M38/needs-127-129                        -> origin/M38/needs-127-129
+2026-10-13T06:42:33.5236042Z  * [new branch]        M38/needs-131-accounts                   -> origin/M38/needs-131-accounts
+2026-10-13T06:42:33.5236477Z  * [new branch]        M38/needs-131-relay-once                 -> origin/M38/needs-131-relay-once
+2026-10-13T06:42:33.5236901Z  * [new branch]        M38/needs-132-email                      -> origin/M38/needs-132-email
+2026-10-13T06:42:33.5237324Z  * [new branch]        M38/needs-132-mailbox                    -> origin/M38/needs-132-mailbox
+2026-10-13T06:42:33.5237752Z  * [new branch]        M38/needs-132-no-address                 -> origin/M38/needs-132-no-address
+2026-10-13T06:42:33.5238180Z  * [new branch]        M38/needs-133-indexing                   -> origin/M38/needs-133-indexing
+2026-10-13T06:42:33.5238597Z  * [new branch]        M38/needs-134-slack                      -> origin/M38/needs-134-slack
+2026-10-13T06:42:33.5239038Z  * [new branch]        M38/needs-135-drive-sharing              -> origin/M38/needs-135-drive-sharing
+2026-10-13T06:42:33.5239492Z  * [new branch]        M38/needs-138-laravel-rule               -> origin/M38/needs-138-laravel-rule
+2026-10-13T06:42:33.5239929Z  * [new branch]        M38/needs-14-reopened                    -> origin/M38/needs-14-reopened
+2026-10-13T06:42:33.5240352Z  * [new branch]        M38/needs-143-sources                    -> origin/M38/needs-143-sources
+2026-10-13T06:42:33.5240874Z  * [new branch]        M38/needs-148-laravel                    -> origin/M38/needs-148-laravel
+2026-10-13T06:42:33.5241420Z  * [new branch]        M38/needs-150-drive                      -> origin/M38/needs-150-drive
+2026-10-13T06:42:33.5241859Z  * [new branch]        M38/needs-151-slack-hubspot              -> origin/M38/needs-151-slack-hubspot
+2026-10-13T06:42:33.5242299Z  * [new branch]        M38/needs-153-chinese                    -> origin/M38/needs-153-chinese
+2026-10-13T06:42:33.5242719Z  * [new branch]        M38/needs-154-reload                     -> origin/M38/needs-154-reload
+2026-10-13T06:42:33.5243135Z  * [new branch]        M38/needs-154-sandbox                    -> origin/M38/needs-154-sandbox
+2026-10-13T06:42:33.5243541Z  * [new branch]        M38/needs-157-158                        -> origin/M38/needs-157-158
+2026-10-13T06:42:33.5243925Z  * [new branch]        M38/needs-162                            -> origin/M38/needs-162
+2026-10-13T06:42:33.5244312Z  * [new branch]        M38/needs-163-164                        -> origin/M38/needs-163-164
+2026-10-13T06:42:33.5244699Z  * [new branch]        M38/needs-165                            -> origin/M38/needs-165
+2026-10-13T06:42:33.5245108Z  * [new branch]        M38/needs-166-167                        -> origin/M38/needs-166-167
+2026-10-13T06:42:33.5245488Z  * [new branch]        M38/needs-168                            -> origin/M38/needs-168
+2026-10-13T06:42:33.5245884Z  * [new branch]        M38/needs-168-decided                    -> origin/M38/needs-168-decided
+2026-10-13T06:42:33.5246278Z  * [new branch]        M38/needs-169                            -> origin/M38/needs-169
+2026-10-13T06:42:33.5246648Z  * [new branch]        M38/needs-170                            -> origin/M38/needs-170
+2026-10-13T06:42:33.5247019Z  * [new branch]        M38/needs-171                            -> origin/M38/needs-171
+2026-10-13T06:42:33.5247387Z  * [new branch]        M38/needs-172                            -> origin/M38/needs-172
+2026-10-13T06:42:33.5247877Z  * [new branch]        M38/needs-173                            -> origin/M38/needs-173
+2026-10-13T06:42:33.5248272Z  * [new branch]        M38/needs-answers-2                      -> origin/M38/needs-answers-2
+2026-10-13T06:42:33.5248718Z  * [new branch]        M38/needs-answers-2026-10-13             -> origin/M38/needs-answers-2026-10-13
+2026-10-13T06:42:33.5249166Z  * [new branch]        M38/needs-decided-0929                   -> origin/M38/needs-decided-0929
+2026-10-13T06:42:33.5249623Z  * [new branch]        M38/oauth-seal-test-not-flaky            -> origin/M38/oauth-seal-test-not-flaky
+2026-10-13T06:42:33.5250081Z  * [new branch]        M38/owner-answers-83                     -> origin/M38/owner-answers-83
+2026-10-13T06:42:33.5250530Z  * [new branch]        M38/owner-answers-83-r224134             -> origin/M38/owner-answers-83-r224134
+2026-10-13T06:42:33.5250981Z  * [new branch]        M38/owner-answers-85-97                  -> origin/M38/owner-answers-85-97
+2026-10-13T06:42:33.5251590Z  * [new branch]        M38/owner-answers-99-106                 -> origin/M38/owner-answers-99-106
+2026-10-13T06:42:33.5252050Z  * [new branch]        M38/owner-architecture-tasks             -> origin/M38/owner-architecture-tasks
+2026-10-13T06:42:33.5252517Z  * [new branch]        M38/owner-decisions-tasks                -> origin/M38/owner-decisions-tasks
+2026-10-13T06:42:33.5253089Z  * [new branch]        M38/postdeploy-proof-needs-three         -> origin/M38/postdeploy-proof-needs-three
+2026-10-13T06:42:33.5253564Z  * [new branch]        M38/proof-required                       -> origin/M38/proof-required
+2026-10-13T06:42:33.5254003Z  * [new branch]        M38/proof-sweep-2026-10-07               -> origin/M38/proof-sweep-2026-10-07
+2026-10-13T06:42:33.5254443Z  * [new branch]        M38/proof-to-close                       -> origin/M38/proof-to-close
+2026-10-13T06:42:33.5254877Z  * [new branch]        M38/proof-train-2026-10-12               -> origin/M38/proof-train-2026-10-12
+2026-10-13T06:42:33.5255424Z  * [new branch]        M38/proofs-0929a                         -> origin/M38/proofs-0929a
+2026-10-13T06:42:33.5255824Z  * [new branch]        M38/proofs-0929b                         -> origin/M38/proofs-0929b
+2026-10-13T06:42:33.5256223Z  * [new branch]        M38/proofs-0929c                         -> origin/M38/proofs-0929c
+2026-10-13T06:42:33.5256617Z  * [new branch]        M38/proofs-0929d                         -> origin/M38/proofs-0929d
+2026-10-13T06:42:33.5257011Z  * [new branch]        M38/proofs-0929e                         -> origin/M38/proofs-0929e
+2026-10-13T06:42:33.5257400Z  * [new branch]        M38/proofs-0929f                         -> origin/M38/proofs-0929f
+2026-10-13T06:42:33.5257790Z  * [new branch]        M38/proofs-0929g                         -> origin/M38/proofs-0929g
+2026-10-13T06:42:33.5258178Z  * [new branch]        M38/proofs-0929h                         -> origin/M38/proofs-0929h
+2026-10-13T06:42:33.5258573Z  * [new branch]        M38/proofs-0929i                         -> origin/M38/proofs-0929i
+2026-10-13T06:42:33.5258989Z  * [new branch]        M38/proofs-2026-09-28                    -> origin/M38/proofs-2026-09-28
+2026-10-13T06:42:33.5259417Z  * [new branch]        M38/proofs-2026-09-28b                   -> origin/M38/proofs-2026-09-28b
+2026-10-13T06:42:33.5259844Z  * [new branch]        M38/proofs-2026-09-28c                   -> origin/M38/proofs-2026-09-28c
+2026-10-13T06:42:33.5260264Z  * [new branch]        M38/proofs-2026-09-28d                   -> origin/M38/proofs-2026-09-28d
+2026-10-13T06:42:33.5260685Z  * [new branch]        M38/proofs-2026-09-29a                   -> origin/M38/proofs-2026-09-29a
+2026-10-13T06:42:33.5261109Z  * [new branch]        M38/proofs-rate-limits                   -> origin/M38/proofs-rate-limits
+2026-10-13T06:42:33.5261722Z  * [new branch]        M38/recovery-consolidation               -> origin/M38/recovery-consolidation
+2026-10-13T06:42:33.5262303Z  * [new branch]        M38/requirements-register                -> origin/M38/requirements-register
+2026-10-13T06:42:33.5262756Z  * [new branch]        M38/reuse-first-rule                     -> origin/M38/reuse-first-rule
+2026-10-13T06:42:33.5263201Z  * [new branch]        M38/screens-agent-detail                 -> origin/M38/screens-agent-detail
+2026-10-13T06:42:33.5263656Z  * [new branch]        M38/task-notes-prior-work                -> origin/M38/task-notes-prior-work
+2026-10-13T06:42:33.5264106Z  * [new branch]        M38/task-notes-refresh                   -> origin/M38/task-notes-refresh
+2026-10-13T06:42:33.5264545Z  * [new branch]        M38/traceability-fix                     -> origin/M38/traceability-fix
+2026-10-13T06:42:33.5264969Z  * [new branch]        M38/tracker-2026-09-28                   -> origin/M38/tracker-2026-09-28
+2026-10-13T06:42:33.5265410Z  * [new branch]        M38/tracker-batch1-landed                -> origin/M38/tracker-batch1-landed
+2026-10-13T06:42:33.5265868Z  * [new branch]        M38/tracker-install-audit                -> origin/M38/tracker-install-audit
+2026-10-13T06:42:33.5266352Z  * [new branch]        M38/tracker-wave1-landed                 -> origin/M38/tracker-wave1-landed
+2026-10-13T06:42:33.5266794Z  * [new branch]        M38/triage-waves-4-5-a                   -> origin/M38/triage-waves-4-5-a
+2026-10-13T06:42:33.5267224Z  * [new branch]        M38/triage-waves-4-5-b                   -> origin/M38/triage-waves-4-5-b
+2026-10-13T06:42:33.5267649Z  * [new branch]        M38/triage-waves-4-5-d                   -> origin/M38/triage-waves-4-5-d
+2026-10-13T06:42:33.5268068Z  * [new branch]        M38/w2-digest-body                       -> origin/M38/w2-digest-body
+2026-10-13T06:42:33.5268506Z  * [new branch]        M38/w2-digest-destination                -> origin/M38/w2-digest-destination
+2026-10-13T06:42:33.5268955Z  * [new branch]        M38/w2-digest-send-final                 -> origin/M38/w2-digest-send-final
+2026-10-13T06:42:33.5269374Z  * [new branch]        M38/wave0-record                         -> origin/M38/wave0-record
+2026-10-13T06:42:33.5269896Z  * [new branch]        M38/wave2-questions                      -> origin/M38/wave2-questions
+2026-10-13T06:42:33.5270324Z  * [new branch]        M38/worker-ready-fast                    -> origin/M38/worker-ready-fast
+2026-10-13T06:42:33.5270764Z  * [new branch]        M39/agent-config-proofs                  -> origin/M39/agent-config-proofs
+2026-10-13T06:42:33.5271381Z  * [new branch]        M39/agent-conversations-overseen         -> origin/M39/agent-conversations-overseen
+2026-10-13T06:42:33.5271853Z  * [new branch]        M39/agent-deep-links                     -> origin/M39/agent-deep-links
+2026-10-13T06:42:33.5272262Z  * [new branch]        M39/agent-kinds                          -> origin/M39/agent-kinds
+2026-10-13T06:42:33.5272679Z  * [new branch]        M39/agent-knowledge-add                  -> origin/M39/agent-knowledge-add
+2026-10-13T06:42:33.5273195Z  * [new branch]        M39/agent-knowledge-and-automation-plan  -> origin/M39/agent-knowledge-and-automation-plan
+2026-10-13T06:42:33.5273719Z  * [new branch]        M39/agent-knowledge-check                -> origin/M39/agent-knowledge-check
+2026-10-13T06:42:33.5274180Z  * [new branch]        M39/agent-knowledge-counts               -> origin/M39/agent-knowledge-counts
+2026-10-13T06:42:33.5274640Z  * [new branch]        M39/agent-knowledge-finish               -> origin/M39/agent-knowledge-finish
+2026-10-13T06:42:33.5275093Z  * [new branch]        M39/agent-knowledge-read                 -> origin/M39/agent-knowledge-read
+2026-10-13T06:42:33.5275551Z  * [new branch]        M39/agent-knowledge-replace              -> origin/M39/agent-knowledge-replace
+2026-10-13T06:42:33.5276061Z  * [new branch]        M39/agent-knowledge-source-migration     -> origin/M39/agent-knowledge-source-migration
+2026-10-13T06:42:33.5276571Z  * [new branch]        M39/agent-knowledge-sources              -> origin/M39/agent-knowledge-sources
+2026-10-13T06:42:33.5277109Z  * [new branch]        M39/agent-parts                          -> origin/M39/agent-parts
+2026-10-13T06:42:33.5277568Z  * [new branch]        M39/agent-run-overseen-migration         -> origin/M39/agent-run-overseen-migration
+2026-10-13T06:42:33.5278068Z  * [new branch]        M39/agent-workspace-proofs               -> origin/M39/agent-workspace-proofs
+2026-10-13T06:42:33.5278525Z  * [new branch]        M39/automation-authoring                 -> origin/M39/automation-authoring
+2026-10-13T06:42:33.5279012Z  * [new branch]        M39/automation-authoring-migration       -> origin/M39/automation-authoring-migration
+2026-10-13T06:42:33.5279515Z  * [new branch]        M39/automation-paused-told               -> origin/M39/automation-paused-told
+2026-10-13T06:42:33.5279945Z  * [new branch]        M39/channel-rows                         -> origin/M39/channel-rows
+2026-10-13T06:42:33.5280342Z  * [new branch]        M39/group-install                        -> origin/M39/group-install
+2026-10-13T06:42:33.5280797Z  * [new branch]        M39/install-checks-workspace             -> origin/M39/install-checks-workspace
+2026-10-13T06:42:33.5281407Z  * [new branch]        M39/knowledge-finish-train2              -> origin/M39/knowledge-finish-train2
+2026-10-13T06:42:33.5281873Z  * [new branch]        M39/memory-kinds-migration               -> origin/M39/memory-kinds-migration
+2026-10-13T06:42:33.5282312Z  * [new branch]        M39/train-0191-0195                      -> origin/M39/train-0191-0195
+2026-10-13T06:42:33.5282706Z  * [new branch]        M39/train-0196                           -> origin/M39/train-0196
+2026-10-13T06:42:33.5283145Z  * [new branch]        M39/w3-agent-artifacts-replay            -> origin/M39/w3-agent-artifacts-replay
+2026-10-13T06:42:33.5283640Z  * [new branch]        M39/w3-agent-attachments-replay          -> origin/M39/w3-agent-attachments-replay
+2026-10-13T06:42:33.5284118Z  * [new branch]        M39/w3-agent-conversations               -> origin/M39/w3-agent-conversations
+2026-10-13T06:42:33.5284611Z  * [new branch]        M39/w3-agent-conversations-replay        -> origin/M39/w3-agent-conversations-replay
+2026-10-13T06:42:33.5285210Z  * [new branch]        M39/w3-agent-leash-replay                -> origin/M39/w3-agent-leash-replay
+2026-10-13T06:42:33.5285658Z  * [new branch]        M39/w3-agent-workspace                   -> origin/M39/w3-agent-workspace
+2026-10-13T06:42:33.5286099Z  * [new branch]        M39/w3-agent-workspace-2                 -> origin/M39/w3-agent-workspace-2
+2026-10-13T06:42:33.5286546Z  * [new branch]        M39/w3-agent-workspace-3                 -> origin/M39/w3-agent-workspace-3
+2026-10-13T06:42:33.5286984Z  * [new branch]        M39/w3-agent-workspace-4                 -> origin/M39/w3-agent-workspace-4
+2026-10-13T06:42:33.5287419Z  * [new branch]        M39/w3-agent-workspace-5                 -> origin/M39/w3-agent-workspace-5
+2026-10-13T06:42:33.5287851Z  * [new branch]        M39/w3-agent-workspace-6                 -> origin/M39/w3-agent-workspace-6
+2026-10-13T06:42:33.5288287Z  * [new branch]        M39/w3-agent-workspace-7                 -> origin/M39/w3-agent-workspace-7
+2026-10-13T06:42:33.5288724Z  * [new branch]        M39/w3-agent-workspace-8                 -> origin/M39/w3-agent-workspace-8
+2026-10-13T06:42:33.5289133Z  * [new branch]        M39/w3b-agent-1                          -> origin/M39/w3b-agent-1
+2026-10-13T06:42:33.5289524Z  * [new branch]        M39/w3b-agent-2                          -> origin/M39/w3b-agent-2
+2026-10-13T06:42:33.5289961Z  * [new branch]        M40/member-account-migration             -> origin/M40/member-account-migration
+2026-10-13T06:42:33.5290399Z  * [new branch]        M40/member-needs                         -> origin/M40/member-needs
+2026-10-13T06:42:33.5290854Z  * [new branch]        M40/member-preference-migration          -> origin/M40/member-preference-migration
+2026-10-13T06:42:33.5291478Z  * [new branch]        M40/member-preferences                   -> origin/M40/member-preferences
+2026-10-13T06:42:33.5292019Z  * [new branch]        M40/member-routes                        -> origin/M40/member-routes
+2026-10-13T06:42:33.5292450Z  * [new branch]        M40/member-self-checks                   -> origin/M40/member-self-checks
+2026-10-13T06:42:33.5292870Z  * [new branch]        M40/member-share                         -> origin/M40/member-share
+2026-10-13T06:42:33.5293278Z  * [new branch]        M40/member-undo-all                      -> origin/M40/member-undo-all
+2026-10-13T06:42:33.5293709Z  * [new branch]        M41/acceptance-starter                   -> origin/M41/acceptance-starter
+2026-10-13T06:42:33.5294140Z  * [new branch]        M41/ci-eight-shards                      -> origin/M41/ci-eight-shards
+2026-10-13T06:42:33.5294578Z  * [new branch]        M41/ci-main-run-finishes                 -> origin/M41/ci-main-run-finishes
+2026-10-13T06:42:33.5295050Z  * [new branch]        M41/ci-main-runs-deploy-gates            -> origin/M41/ci-main-runs-deploy-gates
+2026-10-13T06:42:33.5295543Z  * [new branch]        M41/worker-gets-cache-address            -> origin/M41/worker-gets-cache-address
+2026-10-13T06:42:33.5296007Z  * [new branch]        M42/realm-volume-owner                   -> origin/M42/realm-volume-owner
+2026-10-13T06:42:33.5296428Z  * [new branch]        M42/wm1-first-run                        -> origin/M42/wm1-first-run
+2026-10-13T06:42:33.5296858Z  * [new branch]        M42/wm1-install-template                 -> origin/M42/wm1-install-template
+2026-10-13T06:42:33.5297272Z  * [new branch]        M42/wm1-needs                            -> origin/M42/wm1-needs
+2026-10-13T06:42:33.5297681Z  * [new branch]        M5/last-step-budget                      -> origin/M5/last-step-budget
+2026-10-13T06:42:33.5298158Z  * [new branch]        M5/model-health-routing-residency        -> origin/M5/model-health-routing-residency
+2026-10-13T06:42:33.5298640Z  * [new branch]        M5/moonshot-end-to-end                   -> origin/M5/moonshot-end-to-end
+2026-10-13T06:42:33.5299082Z  * [new branch]        M5/provider-acceptance                   -> origin/M5/provider-acceptance
+2026-10-13T06:42:33.5299634Z  * [new branch]        M5/routing-proof-rest                    -> origin/M5/routing-proof-rest
+2026-10-13T06:42:33.5300070Z  * [new branch]        M6/record-cache-proofs                   -> origin/M6/record-cache-proofs
+2026-10-13T06:42:33.5300493Z  * [new branch]        M6/w3-caches-wired                       -> origin/M6/w3-caches-wired
+2026-10-13T06:42:33.5300913Z  * [new branch]        M6/w3-fastlane-role                      -> origin/M6/w3-fastlane-role
+2026-10-13T06:42:33.5301502Z  * [new branch]        M6/w3-source-epochs-cache                -> origin/M6/w3-source-epochs-cache
+2026-10-13T06:42:33.5301916Z  * [new branch]        M6/w3-speed                              -> origin/M6/w3-speed
+2026-10-13T06:42:33.5302356Z  * [new branch]        M7/classification-read-scope             -> origin/M7/classification-read-scope
+2026-10-13T06:42:33.5302814Z  * [new branch]        M7/classified-tables                     -> origin/M7/classified-tables
+2026-10-13T06:42:33.5303275Z  * [new branch]        M7/classified-tables-r191711             -> origin/M7/classified-tables-r191711
+2026-10-13T06:42:33.5303735Z  * [new branch]        M7/knowledge-lifecycle                   -> origin/M7/knowledge-lifecycle
+2026-10-13T06:42:33.5304180Z  * [new branch]        M7/knowledge-upload-text                 -> origin/M7/knowledge-upload-text
+2026-10-13T06:42:33.5304630Z  * [new branch]        M7/links-scanning-queue                  -> origin/M7/links-scanning-queue
+2026-10-13T06:42:33.5305063Z  * [new branch]        M7/price-list-fixes                      -> origin/M7/price-list-fixes
+2026-10-13T06:42:33.5305498Z  * [new branch]        M7/text-path-app-budget                  -> origin/M7/text-path-app-budget
+2026-10-13T06:42:33.5305918Z  * [new branch]        M7/w2-knowledge                          -> origin/M7/w2-knowledge
+2026-10-13T06:42:33.5306318Z  * [new branch]        M7/w2-knowledge-2                        -> origin/M7/w2-knowledge-2
+2026-10-13T06:42:33.5306874Z  * [new branch]        M7/w2-knowledge-3                        -> origin/M7/w2-knowledge-3
+2026-10-13T06:42:33.5307273Z  * [new branch]        M7/w2-knowledge-4                        -> origin/M7/w2-knowledge-4
+2026-10-13T06:42:33.5307663Z  * [new branch]        M7/w2-knowledge-5                        -> origin/M7/w2-knowledge-5
+2026-10-13T06:42:33.5308054Z  * [new branch]        M7/w2-knowledge-6                        -> origin/M7/w2-knowledge-6
+2026-10-13T06:42:33.5308447Z  * [new branch]        M7/w2-knowledge-7                        -> origin/M7/w2-knowledge-7
+2026-10-13T06:42:33.5308834Z  * [new branch]        M7/w2-knowledge-8                        -> origin/M7/w2-knowledge-8
+2026-10-13T06:42:33.5309272Z  * [new branch]        M7/w2-knowledge-checks-area              -> origin/M7/w2-knowledge-checks-area
+2026-10-13T06:42:33.5309728Z  * [new branch]        M7/w2-knowledge-needs                    -> origin/M7/w2-knowledge-needs
+2026-10-13T06:42:33.5310176Z  * [new branch]        M7/w2-knowledge-stewards                 -> origin/M7/w2-knowledge-stewards
+2026-10-13T06:42:33.5310597Z  * [new branch]        M7/w2-queue-url                          -> origin/M7/w2-queue-url
+2026-10-13T06:42:33.5311010Z  * [new branch]        M7/wb2-knowledge-checks                  -> origin/M7/wb2-knowledge-checks
+2026-10-13T06:42:33.5311566Z  * [new branch]        M7/wg2-reembed                           -> origin/M7/wg2-reembed
+2026-10-13T06:42:33.5312025Z  * [new branch]        M8/citations-freshness-abstention        -> origin/M8/citations-freshness-abstention
+2026-10-13T06:42:33.5312559Z  * [new branch]        M8/citations-freshness-abstention-r2     -> origin/M8/citations-freshness-abstention-r2
+2026-10-13T06:42:33.5313098Z  * [new branch]        M8/citations-freshness-abstention-r3     -> origin/M8/citations-freshness-abstention-r3
+2026-10-13T06:42:33.5313630Z  * [new branch]        M8/citations-freshness-abstention-r4     -> origin/M8/citations-freshness-abstention-r4
+2026-10-13T06:42:33.5314167Z  * [new branch]        M8/citations-freshness-abstention-r5     -> origin/M8/citations-freshness-abstention-r5
+2026-10-13T06:42:33.5314738Z  * [new branch]        M8/w2-escalation                         -> origin/M8/w2-escalation
+2026-10-13T06:42:33.5315155Z  * [new branch]        M8/w2-escalation-direct                  -> origin/M8/w2-escalation-direct
+2026-10-13T06:42:33.5315560Z  * [new branch]        M8/w2-takeover                           -> origin/M8/w2-takeover
+2026-10-13T06:42:33.5315961Z  * [new branch]        M8/w2-tell-the-asker                     -> origin/M8/w2-tell-the-asker
+2026-10-13T06:42:33.5316340Z  * [new branch]        main                                     -> origin/main
+2026-10-13T06:42:33.5316760Z  * [new branch]        recovery/from-windows-20260928           -> origin/recovery/from-windows-20260928
+2026-10-13T06:42:33.5317384Z  * [new branch]        recovery/from-windows-20260928-branch-M38-needs-95-96 -> origin/recovery/from-windows-20260928-branch-M38-needs-95-96
+2026-10-13T06:42:33.5318007Z  * [new branch]        recovery/from-windows-20260928-gate_wt   -> origin/recovery/from-windows-20260928-gate_wt
+2026-10-13T06:42:33.5318572Z  * [new branch]        recovery/from-windows-20260928-wt-agent-api -> origin/recovery/from-windows-20260928-wt-agent-api
+2026-10-13T06:42:33.5319191Z  * [new branch]        recovery/from-windows-20260928-wt-agent-lifecycle -> origin/recovery/from-windows-20260928-wt-agent-lifecycle
+2026-10-13T06:42:33.5319792Z  * [new branch]        recovery/from-windows-20260928-wt-amr    -> origin/recovery/from-windows-20260928-wt-amr
+2026-10-13T06:42:33.5320336Z  * [new branch]        recovery/from-windows-20260928-wt-ans    -> origin/recovery/from-windows-20260928-wt-ans
+2026-10-13T06:42:33.5320962Z  * [new branch]        recovery/from-windows-20260928-wt-automation-memory -> origin/recovery/from-windows-20260928-wt-automation-memory
+2026-10-13T06:42:33.5321739Z  * [new branch]        recovery/from-windows-20260928-wt-ci-shards -> origin/recovery/from-windows-20260928-wt-ci-shards
+2026-10-13T06:42:33.5322419Z  * [new branch]        recovery/from-windows-20260928-wt-close2 -> origin/recovery/from-windows-20260928-wt-close2
+2026-10-13T06:42:33.5322972Z  * [new branch]        recovery/from-windows-20260928-wt-close3 -> origin/recovery/from-windows-20260928-wt-close3
+2026-10-13T06:42:33.5323516Z  * [new branch]        recovery/from-windows-20260928-wt-close4 -> origin/recovery/from-windows-20260928-wt-close4
+2026-10-13T06:42:33.5324058Z  * [new branch]        recovery/from-windows-20260928-wt-close5 -> origin/recovery/from-windows-20260928-wt-close5
+2026-10-13T06:42:33.5324599Z  * [new branch]        recovery/from-windows-20260928-wt-close6 -> origin/recovery/from-windows-20260928-wt-close6
+2026-10-13T06:42:33.5325141Z  * [new branch]        recovery/from-windows-20260928-wt-close7 -> origin/recovery/from-windows-20260928-wt-close7
+2026-10-13T06:42:33.5325685Z  * [new branch]        recovery/from-windows-20260928-wt-close8 -> origin/recovery/from-windows-20260928-wt-close8
+2026-10-13T06:42:33.5326231Z  * [new branch]        recovery/from-windows-20260928-wt-close9 -> origin/recovery/from-windows-20260928-wt-close9
+2026-10-13T06:42:33.5326769Z  * [new branch]        recovery/from-windows-20260928-wt-dec    -> origin/recovery/from-windows-20260928-wt-dec
+2026-10-13T06:42:33.5327319Z  * [new branch]        recovery/from-windows-20260928-wt-deploy2 -> origin/recovery/from-windows-20260928-wt-deploy2
+2026-10-13T06:42:33.5327893Z  * [new branch]        recovery/from-windows-20260928-wt-deployfix -> origin/recovery/from-windows-20260928-wt-deployfix
+2026-10-13T06:42:33.5328473Z  * [new branch]        recovery/from-windows-20260928-wt-downgrade -> origin/recovery/from-windows-20260928-wt-downgrade
+2026-10-13T06:42:33.5329042Z  * [new branch]        recovery/from-windows-20260928-wt-dsnleak -> origin/recovery/from-windows-20260928-wt-dsnleak
+2026-10-13T06:42:33.5329587Z  * [new branch]        recovery/from-windows-20260928-wt-fast   -> origin/recovery/from-windows-20260928-wt-fast
+2026-10-13T06:42:33.5330132Z  * [new branch]        recovery/from-windows-20260928-wt-flaky  -> origin/recovery/from-windows-20260928-wt-flaky
+2026-10-13T06:42:33.5330770Z  * [new branch]        recovery/from-windows-20260928-wt-g1     -> origin/recovery/from-windows-20260928-wt-g1
+2026-10-13T06:42:33.5331425Z  * [new branch]        recovery/from-windows-20260928-wt-g2     -> origin/recovery/from-windows-20260928-wt-g2
+2026-10-13T06:42:33.5331945Z  * [new branch]        recovery/from-windows-20260928-wt-g3     -> origin/recovery/from-windows-20260928-wt-g3
+2026-10-13T06:42:33.5332460Z  * [new branch]        recovery/from-windows-20260928-wt-g4     -> origin/recovery/from-windows-20260928-wt-g4
+2026-10-13T06:42:33.5332987Z  * [new branch]        recovery/from-windows-20260928-wt-gate   -> origin/recovery/from-windows-20260928-wt-gate
+2026-10-13T06:42:33.5333526Z  * [new branch]        recovery/from-windows-20260928-wt-halt   -> origin/recovery/from-windows-20260928-wt-halt
+2026-10-13T06:42:33.5334101Z  * [new branch]        recovery/from-windows-20260928-wt-integrate2 -> origin/recovery/from-windows-20260928-wt-integrate2
+2026-10-13T06:42:33.5334667Z  * [new branch]        recovery/from-windows-20260928-wt-kc     -> origin/recovery/from-windows-20260928-wt-kc
+2026-10-13T06:42:33.5335218Z  * [new branch]        recovery/from-windows-20260928-wt-kcaccount -> origin/recovery/from-windows-20260928-wt-kcaccount
+2026-10-13T06:42:33.5335801Z  * [new branch]        recovery/from-windows-20260928-wt-kcactions -> origin/recovery/from-windows-20260928-wt-kcactions
+2026-10-13T06:42:33.5336396Z  * [new branch]        recovery/from-windows-20260928-wt-keyfield -> origin/recovery/from-windows-20260928-wt-keyfield
+2026-10-13T06:42:33.5336991Z  * [new branch]        recovery/from-windows-20260928-wt-larkconnect -> origin/recovery/from-windows-20260928-wt-larkconnect
+2026-10-13T06:42:33.5337564Z  * [new branch]        recovery/from-windows-20260928-wt-n81    -> origin/recovery/from-windows-20260928-wt-n81
+2026-10-13T06:42:33.5338200Z  * [new branch]        recovery/from-windows-20260928-wt-n91    -> origin/recovery/from-windows-20260928-wt-n91
+2026-10-13T06:42:33.5338729Z  * [new branch]        recovery/from-windows-20260928-wt-n96    -> origin/recovery/from-windows-20260928-wt-n96
+2026-10-13T06:42:33.5339265Z  * [new branch]        recovery/from-windows-20260928-wt-needs  -> origin/recovery/from-windows-20260928-wt-needs
+2026-10-13T06:42:33.5339818Z  * [new branch]        recovery/from-windows-20260928-wt-needs2 -> origin/recovery/from-windows-20260928-wt-needs2
+2026-10-13T06:42:33.5340371Z  * [new branch]        recovery/from-windows-20260928-wt-needs3 -> origin/recovery/from-windows-20260928-wt-needs3
+2026-10-13T06:42:33.5340912Z  * [new branch]        recovery/from-windows-20260928-wt-org    -> origin/recovery/from-windows-20260928-wt-org
+2026-10-13T06:42:33.5341608Z  * [new branch]        recovery/from-windows-20260928-wt-overview -> origin/recovery/from-windows-20260928-wt-overview
+2026-10-13T06:42:33.5342168Z  * [new branch]        recovery/from-windows-20260928-wt-own    -> origin/recovery/from-windows-20260928-wt-own
+2026-10-13T06:42:33.5342714Z  * [new branch]        recovery/from-windows-20260928-wt-owner1 -> origin/recovery/from-windows-20260928-wt-owner1
+2026-10-13T06:42:33.5343281Z  * [new branch]        recovery/from-windows-20260928-wt-profiles -> origin/recovery/from-windows-20260928-wt-profiles
+2026-10-13T06:42:33.5343835Z  * [new branch]        recovery/from-windows-20260928-wt-reg    -> origin/recovery/from-windows-20260928-wt-reg
+2026-10-13T06:42:33.5344376Z  * [new branch]        recovery/from-windows-20260928-wt-shell  -> origin/recovery/from-windows-20260928-wt-shell
+2026-10-13T06:42:33.5344962Z  * [new branch]        recovery/from-windows-20260928-wt-skills-life -> origin/recovery/from-windows-20260928-wt-skills-life
+2026-10-13T06:42:33.5345587Z  * [new branch]        recovery/from-windows-20260928-wt-skills-run -> origin/recovery/from-windows-20260928-wt-skills-run
+2026-10-13T06:42:33.5346178Z  * [new branch]        recovery/from-windows-20260928-wt-staffsrc -> origin/recovery/from-windows-20260928-wt-staffsrc
+2026-10-13T06:42:33.5346867Z  * [new branch]        recovery/from-windows-20260928-wt-steward -> origin/recovery/from-windows-20260928-wt-steward
+2026-10-13T06:42:33.5347478Z  * [new branch]        recovery/from-windows-20260928-wt-ui-foundation -> origin/recovery/from-windows-20260928-wt-ui-foundation
+2026-10-13T06:42:33.5348086Z  * [new branch]        recovery/from-windows-20260928-wt-vaultfix -> origin/recovery/from-windows-20260928-wt-vaultfix
+2026-10-13T06:42:33.5348636Z  * [new branch]        recovery/from-windows-20260928-wt-w03    -> origin/recovery/from-windows-20260928-wt-w03
+2026-10-13T06:42:33.5349164Z  * [new branch]        recovery/from-windows-20260928-wt-w04    -> origin/recovery/from-windows-20260928-wt-w04
+2026-10-13T06:42:33.5349703Z  * [new branch]        recovery/from-windows-20260928-wt-w04b   -> origin/recovery/from-windows-20260928-wt-w04b
+2026-10-13T06:42:33.5350246Z  * [new branch]        recovery/from-windows-20260928-wt-w05c   -> origin/recovery/from-windows-20260928-wt-w05c
+2026-10-13T06:42:33.5350789Z  * [new branch]        recovery/from-windows-20260928-wt-w0a    -> origin/recovery/from-windows-20260928-wt-w0a
+2026-10-13T06:42:33.5351451Z  * [new branch]        recovery/from-windows-20260928-wt-w0b    -> origin/recovery/from-windows-20260928-wt-w0b
+2026-10-13T06:42:33.5351978Z  * [new branch]        recovery/from-windows-20260928-wt-w0c    -> origin/recovery/from-windows-20260928-wt-w0c
+2026-10-13T06:42:33.5352503Z  * [new branch]        recovery/from-windows-20260928-wt-w0d    -> origin/recovery/from-windows-20260928-wt-w0d
+2026-10-13T06:42:33.5353028Z  * [new branch]        recovery/from-windows-20260928-wt-w0e    -> origin/recovery/from-windows-20260928-wt-w0e
+2026-10-13T06:42:33.5353553Z  * [new branch]        recovery/from-windows-20260928-wt-w0f    -> origin/recovery/from-windows-20260928-wt-w0f
+2026-10-13T06:42:33.5354081Z  * [new branch]        recovery/from-windows-20260928-wt-w0g    -> origin/recovery/from-windows-20260928-wt-w0g
+2026-10-13T06:42:33.5354720Z  * [new branch]        recovery/from-windows-20260928-wt-w0h    -> origin/recovery/from-windows-20260928-wt-w0h
+2026-10-13T06:42:33.5355249Z  * [new branch]        recovery/from-windows-20260928-wt-w0i    -> origin/recovery/from-windows-20260928-wt-w0i
+2026-10-13T06:42:33.5355780Z  * [new branch]        recovery/from-windows-20260928-wt-w0j    -> origin/recovery/from-windows-20260928-wt-w0j
+2026-10-13T06:42:33.5356310Z  * [new branch]        recovery/from-windows-20260928-wt-w0k    -> origin/recovery/from-windows-20260928-wt-w0k
+2026-10-13T06:42:33.5356835Z  * [new branch]        recovery/from-windows-20260928-wt-w0l    -> origin/recovery/from-windows-20260928-wt-w0l
+2026-10-13T06:42:33.5357360Z  * [new branch]        recovery/from-windows-20260928-wt-w0m    -> origin/recovery/from-windows-20260928-wt-w0m
+2026-10-13T06:42:33.5357890Z  * [new branch]        recovery/from-windows-20260928-wt-w0n    -> origin/recovery/from-windows-20260928-wt-w0n
+2026-10-13T06:42:33.5358425Z  * [new branch]        recovery/from-windows-20260928-wt-w1-1   -> origin/recovery/from-windows-20260928-wt-w1-1
+2026-10-13T06:42:33.5358960Z  * [new branch]        recovery/from-windows-20260928-wt-w1-2   -> origin/recovery/from-windows-20260928-wt-w1-2
+2026-10-13T06:42:33.5359501Z  * [new branch]        recovery/from-windows-20260928-wt-w1-2a  -> origin/recovery/from-windows-20260928-wt-w1-2a
+2026-10-13T06:42:33.5360045Z  * [new branch]        recovery/from-windows-20260928-wt-w1-2b  -> origin/recovery/from-windows-20260928-wt-w1-2b
+2026-10-13T06:42:33.5360586Z  * [new branch]        recovery/from-windows-20260928-wt-w1-3   -> origin/recovery/from-windows-20260928-wt-w1-3
+2026-10-13T06:42:33.5361122Z  * [new branch]        recovery/from-windows-20260928-wt-w1-4   -> origin/recovery/from-windows-20260928-wt-w1-4
+2026-10-13T06:42:33.5361788Z  * [new branch]        recovery/from-windows-20260928-wt-w1-5   -> origin/recovery/from-windows-20260928-wt-w1-5
+2026-10-13T06:42:33.5362334Z  * [new branch]        recovery/from-windows-20260928-wt-w1-5b  -> origin/recovery/from-windows-20260928-wt-w1-5b
+2026-10-13T06:42:33.5362984Z  * [new branch]        recovery/from-windows-20260928-wt-w1-5c  -> origin/recovery/from-windows-20260928-wt-w1-5c
+2026-10-13T06:42:33.5363516Z  * [new branch]        recovery/from-windows-20260928-wt-w1-6   -> origin/recovery/from-windows-20260928-wt-w1-6
+2026-10-13T06:42:33.5364047Z  * [new branch]        recovery/from-windows-20260928-wt-w1-7   -> origin/recovery/from-windows-20260928-wt-w1-7
+2026-10-13T06:42:33.5364575Z  * [new branch]        recovery/from-windows-20260928-wt-w1-8   -> origin/recovery/from-windows-20260928-wt-w1-8
+2026-10-13T06:42:33.5365112Z  * [new branch]        recovery/from-windows-20260928-wt-w1-9   -> origin/recovery/from-windows-20260928-wt-w1-9
+2026-10-13T06:42:33.5365673Z  * [new branch]        recovery/from-windows-20260928-wt-workerfix -> origin/recovery/from-windows-20260928-wt-workerfix
+2026-10-13T06:42:33.5366147Z  * [new branch]        status                                   -> origin/status
+2026-10-13T06:42:33.5366568Z  * [new branch]        train/migrations-0190-0207               -> origin/train/migrations-0190-0207
+2026-10-13T06:42:33.5367017Z  * [new branch]        wip/0928/acceptance                      -> origin/wip/0928/acceptance
+2026-10-13T06:42:33.5367488Z  * [new branch]        wip/0928/crud-departments-writes         -> origin/wip/0928/crud-departments-writes
+2026-10-13T06:42:33.5367983Z  * [new branch]        wip/0928/crud-people-grants              -> origin/wip/0928/crud-people-grants
+2026-10-13T06:42:33.5368472Z  * [new branch]        wip/0928/crud-service-accounts           -> origin/wip/0928/crud-service-accounts
+2026-10-13T06:42:33.5368960Z  * [new branch]        wip/0928/land-agent-lifecycle            -> origin/wip/0928/land-agent-lifecycle
+2026-10-13T06:42:33.5369406Z  * [new branch]        wip/0928/land-halt                       -> origin/wip/0928/land-halt
+2026-10-13T06:42:33.5369934Z  * [new branch]        wip/0928/land-overview                   -> origin/wip/0928/land-overview
+2026-10-13T06:42:33.5370364Z  * [new branch]        wip/0928/land-shell                      -> origin/wip/0928/land-shell
+2026-10-13T06:42:33.5370768Z  * [new branch]        wip/0928/models                          -> origin/wip/0928/models
+2026-10-13T06:42:33.5371313Z  * [new branch]        wip/0928/models-polish                   -> origin/wip/0928/models-polish
+2026-10-13T06:42:33.5371731Z  * [new branch]        wip/0928/shell                           -> origin/wip/0928/shell
+2026-10-13T06:42:33.5372121Z  * [new branch]        wip/0928/w2-ch2                          -> origin/wip/0928/w2-ch2
+2026-10-13T06:42:33.5372504Z  * [new branch]        wip/0928/w2-k2                           -> origin/wip/0928/w2-k2
+2026-10-13T06:42:33.5372883Z  * [new branch]        wip/0928/w2-k3                           -> origin/wip/0928/w2-k3
+2026-10-13T06:42:33.5373254Z  * [new branch]        wip/0928/w2-k6                           -> origin/wip/0928/w2-k6
+2026-10-13T06:42:33.5373629Z  * [new branch]        wip/0928/w2-t1                           -> origin/wip/0928/w2-t1
+2026-10-13T06:42:33.5374032Z  * [new branch]        wip/0929/wt-b-answer                     -> origin/wip/0929/wt-b-answer
+2026-10-13T06:42:33.5374464Z  * [new branch]        wip/0929/wt-b-knowledge                  -> origin/wip/0929/wt-b-knowledge
+2026-10-13T06:42:33.5374891Z  * [new branch]        wip/0929/wt-b-memory                     -> origin/wip/0929/wt-b-memory
+2026-10-13T06:42:33.5375305Z  * [new branch]        wip/0929/wt-b-tools                      -> origin/wip/0929/wt-b-tools
+2026-10-13T06:42:33.5375729Z  * [new branch]        wip/0929/wt-b-workspace                  -> origin/wip/0929/wt-b-workspace
+2026-10-13T06:42:33.5376186Z  * [new branch]        wip/0929/wt-connect-wizards              -> origin/wip/0929/wt-connect-wizards
+2026-10-13T06:42:33.5376630Z  * [new branch]        wip/0929/wt-staff-diag                   -> origin/wip/0929/wt-staff-diag
+2026-10-13T06:42:33.5377062Z  * [new branch]        wip/0930/wt-a-caches                     -> origin/wip/0930/wt-a-caches
+2026-10-13T06:42:33.5377614Z  * [new branch]        wip/0930/wt-b-drive                      -> origin/wip/0930/wt-b-drive
+2026-10-13T06:42:33.5378033Z  * [new branch]        wip/0930/wt-b-headers                    -> origin/wip/0930/wt-b-headers
+2026-10-13T06:42:33.5378458Z  * [new branch]        wip/0930/wt-b-laravel                    -> origin/wip/0930/wt-b-laravel
+2026-10-13T06:42:33.5378882Z  * [new branch]        wip/0930/wt-b-schema                     -> origin/wip/0930/wt-b-schema
+2026-10-13T06:42:33.5379331Z  * [new branch]        wip/0930/wt-channel-telegram             -> origin/wip/0930/wt-channel-telegram
+2026-10-13T06:42:33.5379806Z  * [new branch]        wip/0930/wt-channel-whatsapp             -> origin/wip/0930/wt-channel-whatsapp
+2026-10-13T06:42:33.5380247Z  * [new branch]        wip/0930/wt-chk-b                        -> origin/wip/0930/wt-chk-b
+2026-10-13T06:42:33.5380655Z  * [new branch]        wip/0930/wt-chk-c                        -> origin/wip/0930/wt-chk-c
+2026-10-13T06:42:33.5381074Z  * [new branch]        wip/0930/wt-cm-models                    -> origin/wip/0930/wt-cm-models
+2026-10-13T06:42:33.5381655Z  * [new branch]        wip/0930/wt-cm-overview                  -> origin/wip/0930/wt-cm-overview
+2026-10-13T06:42:33.5382084Z  * [new branch]        wip/0930/wt-cm-people                    -> origin/wip/0930/wt-cm-people
+2026-10-13T06:42:33.5382499Z  * [new branch]        wip/0930/wt-depts                        -> origin/wip/0930/wt-depts
+2026-10-13T06:42:33.5382907Z  * [new branch]        wip/0930/wt-land-halt                    -> origin/wip/0930/wt-land-halt
+2026-10-13T06:42:33.5383328Z  * [new branch]        wip/0930/wt-land-shell                   -> origin/wip/0930/wt-land-shell
+2026-10-13T06:42:33.5403309Z  * [new branch]        wip/0930/wt-land308                      -> origin/wip/0930/wt-land308
+2026-10-13T06:42:33.5403970Z  * [new branch]        wip/0930/wt-relay-realm                  -> origin/wip/0930/wt-relay-realm
+2026-10-13T06:42:33.5404407Z  * [new branch]        wip/0930/wt-w2-ch2                       -> origin/wip/0930/wt-w2-ch2
+2026-10-13T06:42:33.5404795Z  * [new branch]        wip/0930/wtc                             -> origin/wip/0930/wtc
+2026-10-13T06:42:33.5405171Z  * [new branch]        wip/0930/wtt                             -> origin/wip/0930/wtt
+2026-10-13T06:42:33.5405544Z  * [new branch]        wip/1006/wrows                           -> origin/wip/1006/wrows
+2026-10-13T06:42:33.5405947Z  * [new branch]        wip/1006/wt-b-p4c                        -> origin/wip/1006/wt-b-p4c
+2026-10-13T06:42:33.5406351Z  * [new branch]        wip/1007/wc-areas                        -> origin/wip/1007/wc-areas
+2026-10-13T06:42:33.5406741Z  * [new branch]        wip/1007/wc-er                           -> origin/wip/1007/wc-er
+2026-10-13T06:42:33.5407123Z  * [new branch]        wip/1007/wc-mem                          -> origin/wip/1007/wc-mem
+2026-10-13T06:42:33.5407518Z  * [new branch]        wip/1007/wc-roles                        -> origin/wip/1007/wc-roles
+2026-10-13T06:42:33.5407932Z  * [new branch]        wip/1007/wc-runtime                      -> origin/wip/1007/wc-runtime
+2026-10-13T06:42:33.5408328Z  * [new branch]        wip/1007/wc-ws                           -> origin/wip/1007/wc-ws
+2026-10-13T06:42:33.5408766Z  * [new branch]        wip/1012/requirement-areas-2             -> origin/wip/1012/requirement-areas-2
+2026-10-13T06:42:33.5409174Z  * [new tag]           v0.1.0                                   -> v0.1.0
+2026-10-13T06:42:33.5409548Z  * [new ref]           f7640fe13c0ae899bf8dcfa0a01aab845a50d4d6 -> pull/553/merge
+2026-10-13T06:42:33.5411099Z ##[endgroup]
+2026-10-13T06:42:33.5411594Z ##[group]Determining the checkout info
+2026-10-13T06:42:33.5411949Z ##[endgroup]
+2026-10-13T06:42:33.5412170Z [command]/usr/bin/git sparse-checkout disable
+2026-10-13T06:42:33.5412757Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-10-13T06:42:33.5413593Z ##[group]Checking out the ref
+2026-10-13T06:42:33.5414035Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/553/merge
+2026-10-13T06:42:33.8992194Z Note: switching to 'refs/remotes/pull/553/merge'.
+2026-10-13T06:42:33.8992555Z 
+2026-10-13T06:42:33.8992781Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-10-13T06:42:33.8993215Z changes and commit them, and you can discard any commits you make in this
+2026-10-13T06:42:33.8993541Z state without impacting any branches by switching back to a branch.
+2026-10-13T06:42:33.8993735Z 
+2026-10-13T06:42:33.8993867Z If you want to create a new branch to retain commits you create, you may
+2026-10-13T06:42:33.8994176Z do so (now or later) by using -c with the switch command. Example:
+2026-10-13T06:42:33.8994352Z 
+2026-10-13T06:42:33.8994441Z   git switch -c <new-branch-name>
+2026-10-13T06:42:33.8994598Z 
+2026-10-13T06:42:33.8994672Z Or undo this operation with:
+2026-10-13T06:42:33.8994787Z 
+2026-10-13T06:42:33.8994858Z   git switch -
+2026-10-13T06:42:33.8994983Z 
+2026-10-13T06:42:33.8995129Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-10-13T06:42:33.8995337Z 
+2026-10-13T06:42:33.8995574Z HEAD is now at f7640fe1 Merge eecc09eb96ccfc94889143a3597683f36f63cbed into 5548a39982e7494ec1c02d10733724d323a650bd
+2026-10-13T06:42:33.9035056Z ##[endgroup]
+2026-10-13T06:42:33.9083339Z [command]/usr/bin/git log -1 --format=%H
+2026-10-13T06:42:33.9112766Z f7640fe13c0ae899bf8dcfa0a01aab845a50d4d6
+2026-10-13T06:42:33.9337850Z ##[group]Run astral-sh/setup-uv@v5
+2026-10-13T06:42:33.9338048Z with:
+2026-10-13T06:42:33.9338187Z   version: 0.12.9
+2026-10-13T06:42:33.9338333Z   enable-cache: true
+2026-10-13T06:42:33.9339942Z   github-token: ***
+2026-10-13T06:42:33.9340141Z   cache-dependency-glob: **/uv.lock
+**/requirements*.txt
+
+2026-10-13T06:42:33.9340374Z   prune-cache: true
+2026-10-13T06:42:33.9340533Z   ignore-nothing-to-cache: false
+2026-10-13T06:42:33.9340719Z   ignore-empty-workdir: false
+2026-10-13T06:42:33.9340900Z env:
+2026-10-13T06:42:33.9341031Z   UV_VERSION: 0.12.9
+2026-10-13T06:42:33.9341304Z ##[endgroup]
+2026-10-13T06:42:34.0763401Z (node:2198) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-13T06:42:34.0763944Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-13T06:42:34.0896254Z Downloading uv from "https://github.com/astral-sh/uv/releases/download/0.12.9/uv-x86_64-unknown-linux-gnu.tar.gz" ...
+2026-10-13T06:42:34.5233311Z [command]/usr/bin/tar xz --warning=no-unknown-keyword --overwrite -C /home/runner/work/_temp/8a963622-e6ad-4eea-81d0-761883fcc1c7 -f /home/runner/work/_temp/29594d12-994e-4cef-a572-34aaf23f9153
+2026-10-13T06:42:35.0324458Z Added /home/runner/.local/bin to the path
+2026-10-13T06:42:35.0327125Z Added /opt/hostedtoolcache/uv/0.12.9/x86_64 to the path
+2026-10-13T06:42:35.0352264Z Set UV_CACHE_DIR to /home/runner/work/_temp/setup-uv-cache
+2026-10-13T06:42:35.0352679Z Successfully installed uv version 0.12.9
+2026-10-13T06:42:35.0353169Z Searching files using cache dependency glob: **/uv.lock,**/requirements*.txt
+2026-10-13T06:42:35.1833120Z /home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/matcher/uv.lock
+2026-10-13T06:42:35.2909361Z /home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/uv.lock
+2026-10-13T06:42:35.2922660Z Found 2 files to hash.
+2026-10-13T06:42:35.3854716Z Trying to restore uv cache from GitHub Actions cache with key: setup-uv-1-x86_64-unknown-linux-gnu-unknown-4fa71487548199487345489e1f4ab912cdc9b009220d8b57baa546f1323899d3
+2026-10-13T06:42:35.5980309Z Cache hit for: setup-uv-1-x86_64-unknown-linux-gnu-unknown-4fa71487548199487345489e1f4ab912cdc9b009220d8b57baa546f1323899d3
+2026-10-13T06:42:35.6065527Z (node:2198) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-10-13T06:42:35.8899695Z Received 1118 of 1118 (100.0%), 0.0 MBs/sec
+2026-10-13T06:42:35.8900466Z Cache Size: ~0 MB (1118 B)
+2026-10-13T06:42:35.8918736Z [command]/usr/bin/tar -xf /home/runner/work/_temp/f21fbe60-7f03-4df8-bbf3-9381582890e9/cache.tzst -P -C /home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0 --use-compress-program unzstd
+2026-10-13T06:42:35.8998296Z Cache restored successfully
+2026-10-13T06:42:35.9004707Z uv cache restored from GitHub Actions cache with key: setup-uv-1-x86_64-unknown-linux-gnu-unknown-4fa71487548199487345489e1f4ab912cdc9b009220d8b57baa546f1323899d3
+2026-10-13T06:42:35.9154366Z ##[group]Run uv sync --locked
+2026-10-13T06:42:35.9154641Z [36;1muv sync --locked[0m
+2026-10-13T06:42:35.9418415Z shell: /usr/bin/bash -e {0}
+2026-10-13T06:42:35.9418650Z env:
+2026-10-13T06:42:35.9418808Z   UV_VERSION: 0.12.9
+2026-10-13T06:42:35.9419013Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-10-13T06:42:35.9419245Z ##[endgroup]
+2026-10-13T06:42:36.2232425Z Downloading cpython-3.13.15-linux-x86_64-gnu (download) (33.2MiB)
+2026-10-13T06:42:37.5818270Z  Downloaded cpython-3.13.15-linux-x86_64-gnu (download)
+2026-10-13T06:42:37.7363493Z Using CPython 3.13.15
+2026-10-13T06:42:37.7363772Z Creating virtual environment at: .venv
+2026-10-13T06:42:37.7392655Z Resolved 124 packages in 0.60ms
+2026-10-13T06:42:37.7521955Z    Building verz-brain @ file:///home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0
+2026-10-13T06:42:37.7801610Z Downloading pygments (1.2MiB)
+2026-10-13T06:42:37.7804242Z Downloading hypothesis (1.1MiB)
+2026-10-13T06:42:37.7806677Z Downloading pydantic-core (2.0MiB)
+2026-10-13T06:42:37.7807565Z Downloading mypy (14.5MiB)
+2026-10-13T06:42:37.7808806Z Downloading uvloop (4.2MiB)
+2026-10-13T06:42:37.7811016Z Downloading cryptography (4.5MiB)
+2026-10-13T06:42:37.7813736Z Downloading ast-serialize (1.2MiB)
+2026-10-13T06:42:37.7814962Z Downloading lxml (5.0MiB)
+2026-10-13T06:42:37.7818885Z Downloading zstandard (5.3MiB)
+2026-10-13T06:42:37.7821922Z Downloading ruff (9.8MiB)
+2026-10-13T06:42:37.7823293Z Downloading psycopg-binary (5.0MiB)
+2026-10-13T06:42:37.7824662Z Downloading sqlalchemy (3.2MiB)
+2026-10-13T06:42:37.9467496Z  Downloaded hypothesis
+2026-10-13T06:42:37.9468038Z  Downloaded ast-serialize
+2026-10-13T06:42:37.9477086Z  Downloaded pygments
+2026-10-13T06:42:37.9785596Z  Downloaded pydantic-core
+2026-10-13T06:42:38.0089629Z  Downloaded sqlalchemy
+2026-10-13T06:42:38.0195704Z  Downloaded uvloop
+2026-10-13T06:42:38.0372634Z  Downloaded cryptography
+2026-10-13T06:42:38.0373343Z  Downloaded psycopg-binary
+2026-10-13T06:42:38.0392199Z  Downloaded zstandard
+2026-10-13T06:42:38.0414930Z  Downloaded lxml
+2026-10-13T06:42:38.0636372Z  Downloaded ruff
+2026-10-13T06:42:38.1647444Z  Downloaded mypy
+2026-10-13T06:42:38.5541678Z       Built verz-brain @ file:///home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0
+2026-10-13T06:42:38.5550154Z Prepared 91 packages in 814ms
+2026-10-13T06:42:38.6254066Z Installed 91 packages in 70ms
+2026-10-13T06:42:38.6254447Z  + alembic==1.19.1
+2026-10-13T06:42:38.6254716Z  + annotated-doc==0.0.5
+2026-10-13T06:42:38.6254996Z  + annotated-types==0.8.0
+2026-10-13T06:42:38.6255302Z  + anyio==4.15.0
+2026-10-13T06:42:38.6255543Z  + asgiref==3.12.1
+2026-10-13T06:42:38.6255792Z  + ast-serialize==0.9.0
+2026-10-13T06:42:38.6256052Z  + attrs==26.1.0
+2026-10-13T06:42:38.6256291Z  + certifi==2026.7.22
+2026-10-13T06:42:38.6256526Z  + cffi==2.1.1
+2026-10-13T06:42:38.6256783Z  + charset-normalizer==3.5.1
+2026-10-13T06:42:38.6257062Z  + click==8.5.0
+2026-10-13T06:42:38.6257299Z  + coverage==7.16.0
+2026-10-13T06:42:38.6257542Z  + croniter==6.2.4
+2026-10-13T06:42:38.6257804Z  + cryptography==50.0.1
+2026-10-13T06:42:38.6258243Z  + distro==1.9.0
+2026-10-13T06:42:38.6258517Z  + fastapi==0.141.1
+2026-10-13T06:42:38.6258753Z  + greenlet==3.5.5
+2026-10-13T06:42:38.6259097Z  + h11==0.16.0
+2026-10-13T06:42:38.6259535Z  + httpcore==1.0.9
+2026-10-13T06:42:38.6259929Z  + httpcore2==2.13.0
+2026-10-13T06:42:38.6260438Z  + httptools==0.8.0
+2026-10-13T06:42:38.6260834Z  + httpx==0.28.1
+2026-10-13T06:42:38.6261392Z  + httpx2==2.13.0
+2026-10-13T06:42:38.6261715Z  + hypothesis==6.167.1
+2026-10-13T06:42:38.6262229Z  + idna==3.19
+2026-10-13T06:42:38.6262511Z  + iniconfig==2.3.0
+2026-10-13T06:42:38.6262919Z  + jsonpatch==1.33
+2026-10-13T06:42:38.6263326Z  + jsonpointer==3.1.1
+2026-10-13T06:42:38.6263830Z  + langchain-core==1.6.3
+2026-10-13T06:42:38.6264329Z  + langchain-protocol==0.0.19
+2026-10-13T06:42:38.6264820Z  + langgraph==1.2.11
+2026-10-13T06:42:38.6265231Z  + langgraph-checkpoint==4.2.0
+2026-10-13T06:42:38.6265599Z  + langgraph-checkpoint-postgres==3.1.2
+2026-10-13T06:42:38.6266149Z  + langgraph-prebuilt==1.1.0
+2026-10-13T06:42:38.6266448Z  + langgraph-sdk==0.4.4
+2026-10-13T06:42:38.6266725Z  + langsmith==0.12.4
+2026-10-13T06:42:38.6266969Z  + ldap3==2.9.1
+2026-10-13T06:42:38.6267200Z  + librt==0.15.0
+2026-10-13T06:42:38.6267435Z  + lxml==6.1.3
+2026-10-13T06:42:38.6267665Z  + mako==1.4.1
+2026-10-13T06:42:38.6267945Z  + markupsafe==3.0.3
+2026-10-13T06:42:38.6268297Z  + mypy==2.3.1
+2026-10-13T06:42:38.6268623Z  + mypy-extensions==1.1.0
+2026-10-13T06:42:38.6268901Z  + orjson==3.12.0
+2026-10-13T06:42:38.6269198Z  + ormsgpack==1.12.2
+2026-10-13T06:42:38.6269456Z  + packaging==26.3
+2026-10-13T06:42:38.6269788Z  + pathspec==1.1.1
+2026-10-13T06:42:38.6270043Z  + pluggy==1.6.0
+2026-10-13T06:42:38.6270451Z  + procrastinate==3.9.0
+2026-10-13T06:42:38.6270716Z  + psycopg==3.3.5
+2026-10-13T06:42:38.6270972Z  + psycopg-binary==3.3.5
+2026-10-13T06:42:38.6271359Z  + psycopg-pool==3.3.1
+2026-10-13T06:42:38.6271669Z  + pyasn1==0.6.4
+2026-10-13T06:42:38.6271902Z  + pycparser==3.0
+2026-10-13T06:42:38.6272165Z  + pydantic==2.13.5
+2026-10-13T06:42:38.6272441Z  + pydantic-core==2.46.5
+2026-10-13T06:42:38.6272758Z  + pydantic-settings==2.15.0
+2026-10-13T06:42:38.6273034Z  + pygments==2.21.0
+2026-10-13T06:42:38.6273296Z  + pymysql==1.2.3
+2026-10-13T06:42:38.6273525Z  + pypdf==6.19.0
+2026-10-13T06:42:38.6273793Z  + pytest==9.1.1
+2026-10-13T06:42:38.6274027Z  + pytest-cov==7.1.0
+2026-10-13T06:42:38.6274310Z  + python-dateutil==2.9.0.post0
+2026-10-13T06:42:38.6274633Z  + python-docx==1.2.0
+2026-10-13T06:42:38.6274887Z  + python-dotenv==1.2.3
+2026-10-13T06:42:38.6275164Z  + pyyaml==6.0.3
+2026-10-13T06:42:38.6275393Z  + redis==8.1.0
+2026-10-13T06:42:38.6275638Z  + requests==2.34.2
+2026-10-13T06:42:38.6275887Z  + requests-toolbelt==1.0.0
+2026-10-13T06:42:38.6276197Z  + ruff==0.16.6
+2026-10-13T06:42:38.6276418Z  + six==1.17.0
+2026-10-13T06:42:38.6276662Z  + sniffio==1.3.1
+2026-10-13T06:42:38.6276943Z  + sortedcontainers==2.4.0
+2026-10-13T06:42:38.6277254Z  + sqlalchemy==2.0.52
+2026-10-13T06:42:38.6277499Z  + starlette==1.6.0
+2026-10-13T06:42:38.6277757Z  + structlog==26.1.0
+2026-10-13T06:42:38.6278029Z  + tenacity==9.1.4
+2026-10-13T06:42:38.6278289Z  + truststore==0.10.4
+2026-10-13T06:42:38.6278555Z  + types-pymysql==1.2.0.20260923
+2026-10-13T06:42:38.6278894Z  + types-pyyaml==6.0.12.20260815
+2026-10-13T06:42:38.6279241Z  + typing-extensions==4.16.0
+2026-10-13T06:42:38.6279591Z  + typing-inspection==0.4.4
+2026-10-13T06:42:38.6279860Z  + urllib3==2.7.0
+2026-10-13T06:42:38.6280121Z  + uuid-utils==0.17.1
+2026-10-13T06:42:38.6280358Z  + uvicorn==0.52.4
+2026-10-13T06:42:38.6280634Z  + uvloop==0.22.1
+2026-10-13T06:42:38.6281025Z  + verz-brain==0.1.0 (from file:///home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0)
+2026-10-13T06:42:38.6281756Z  + watchfiles==1.2.0
+2026-10-13T06:42:38.6281996Z  + websockets==16.1.1
+2026-10-13T06:42:38.6282232Z  + xxhash==4.0.1
+2026-10-13T06:42:38.6282453Z  + zstandard==0.25.0
+2026-10-13T06:42:38.6456923Z ##[group]Run uv run python -m brain.ops.sweeps rls
+2026-10-13T06:42:38.6457223Z [36;1muv run python -m brain.ops.sweeps rls[0m
+2026-10-13T06:42:38.6521746Z shell: /usr/bin/bash -e {0}
+2026-10-13T06:42:38.6521932Z env:
+2026-10-13T06:42:38.6522070Z   UV_VERSION: 0.12.9
+2026-10-13T06:42:38.6522265Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-10-13T06:42:38.6522487Z ##[endgroup]
+2026-10-13T06:42:39.7176436Z skip: DATABASE_URL unset, so nothing was checked. CI runs this against a real schema in the stack job.
+2026-10-13T06:42:39.8101132Z ##[group]Run uv run python -m brain.ops.sweeps grant_isolation
+2026-10-13T06:42:39.8101933Z [36;1muv run python -m brain.ops.sweeps grant_isolation[0m
+2026-10-13T06:42:39.8163945Z shell: /usr/bin/bash -e {0}
+2026-10-13T06:42:39.8164124Z env:
+2026-10-13T06:42:39.8164265Z   UV_VERSION: 0.12.9
+2026-10-13T06:42:39.8164460Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-10-13T06:42:39.8164679Z ##[endgroup]
+2026-10-13T06:42:40.1156572Z skip: DATABASE_URL unset, so nothing was checked. CI runs this against a real schema in the stack job.
+2026-10-13T06:42:40.2101917Z ##[group]Run uv run python -m brain.ops.sweeps tool_registry
+2026-10-13T06:42:40.2102492Z [36;1muv run python -m brain.ops.sweeps tool_registry[0m
+2026-10-13T06:42:40.2187095Z shell: /usr/bin/bash -e {0}
+2026-10-13T06:42:40.2187406Z env:
+2026-10-13T06:42:40.2187637Z   UV_VERSION: 0.12.9
+2026-10-13T06:42:40.2187957Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-10-13T06:42:40.2188327Z ##[endgroup]
+2026-10-13T06:42:42.2846052Z ok: every tool name matches the grammar (20 registered, 7 literal(s) checked)
+2026-10-13T06:42:42.7071383Z ##[group]Run uv run python -m brain.ops.sweeps one_tool_grammar
+2026-10-13T06:42:42.7071800Z [36;1muv run python -m brain.ops.sweeps one_tool_grammar[0m
+2026-10-13T06:42:42.7135380Z shell: /usr/bin/bash -e {0}
+2026-10-13T06:42:42.7135562Z env:
+2026-10-13T06:42:42.7135706Z   UV_VERSION: 0.12.9
+2026-10-13T06:42:42.7135898Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-10-13T06:42:42.7136123Z ##[endgroup]
+2026-10-13T06:42:43.4708022Z ok: one tool-name grammar, in brain/core/envelope.py
+2026-10-13T06:42:43.5362247Z ##[group]Run uv run python -m brain.ops.sweeps house_style
+2026-10-13T06:42:43.5362572Z [36;1muv run python -m brain.ops.sweeps house_style[0m
+2026-10-13T06:42:43.5424462Z shell: /usr/bin/bash -e {0}
+2026-10-13T06:42:43.5424649Z env:
+2026-10-13T06:42:43.5424791Z   UV_VERSION: 0.12.9
+2026-10-13T06:42:43.5424979Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-10-13T06:42:43.5425201Z ##[endgroup]
+2026-10-13T06:42:44.0493184Z ok: no em dash in src, migrations, ops, docs, tests
+2026-10-13T06:42:44.1243334Z ##[group]Run uv run python -m brain.ops.sweeps client_independence
+2026-10-13T06:42:44.1243918Z [36;1muv run python -m brain.ops.sweeps client_independence[0m
+2026-10-13T06:42:44.1315416Z shell: /usr/bin/bash -e {0}
+2026-10-13T06:42:44.1315615Z env:
+2026-10-13T06:42:44.1315756Z   UV_VERSION: 0.12.9
+2026-10-13T06:42:44.1315956Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-10-13T06:42:44.1316184Z ##[endgroup]
+2026-10-13T06:42:51.6002813Z FAIL client_independence:
+2026-10-13T06:42:51.6003416Z   src/brain/ops/acceptance_checks_agent_knowledge.py:67: a client host, '169.254.169.254'
+2026-10-13T06:42:51.6003834Z   src/brain/ops/acceptance_checks_agent_knowledge.py:67: an address, '169.254.169.254'
+2026-10-13T06:42:51.6004215Z   src/brain/ops/acceptance_checks_agent_knowledge.py:230: an address, '93.184.216.34'
+2026-10-13T06:42:51.6700861Z ##[error]Process completed with exit code 1.
+2026-10-13T06:42:51.6829288Z Post job cleanup.
+2026-10-13T06:42:51.7554720Z [command]/usr/bin/git version
+2026-10-13T06:42:51.7595756Z git version 2.55.0
+2026-10-13T06:42:51.7640930Z Temporarily overriding HOME='/home/runner/work/_temp/c30444fc-ae20-4c3a-a16a-3c896b9173a7' before making global git config changes
+2026-10-13T06:42:51.7642470Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-13T06:42:51.7645442Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0
+2026-10-13T06:42:51.7674603Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-13T06:42:51.7710108Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-13T06:42:51.7961025Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-13T06:42:51.7994332Z http.https://github.com/.extraheader
+2026-10-13T06:42:51.8004986Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-10-13T06:42:51.8044144Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-13T06:42:51.8294261Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-13T06:42:51.8333841Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-13T06:42:51.8724908Z Cleaning up orphan processes
+2026-10-13T06:42:51.8939897Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, astral-sh/setup-uv@v5. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

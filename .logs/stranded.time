@@ -1,0 +1,1 @@
+uv run python -m pytest $F --no-header --disable-warnings -p no:cacheprovider  1.31s user 0.09s system 91% cpu 1.541 total
