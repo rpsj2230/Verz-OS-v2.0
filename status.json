@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-20T05:50:44.859579+00:00",
-  "commit": "3e9134dc",
-  "commit_subject": "The console's pages have a register: which are rebuilt, which screen each was drawn to, and the toast region is mounted (#639)",
+  "generated_at": "2026-10-20T11:59:47.099511+00:00",
+  "commit": "9b668ad3",
+  "commit_subject": "Opening the text of another department's document leaves an entry naming the document and the reader (M27.15.1) (#640)",
   "total": 1626,
-  "done": 1159,
+  "done": 1160,
   "percent": 71.3,
-  "built": 1326,
-  "built_percent": 81.5,
+  "built": 1327,
+  "built_percent": 81.6,
   "built_unproven": 167,
   "built_task_ids": [
     "M1.1.8",
@@ -230,16 +230,16 @@
       "wave": 3,
       "name": "Agents, knowledge, console",
       "total": 599,
-      "done": 473,
-      "percent": 79.0,
+      "done": 474,
+      "percent": 79.1,
       "in_progress": 7,
       "ready_for_testing": 59,
       "blocked": 4,
-      "open": 56,
+      "open": 55,
       "acts": 1,
       "decided": 56,
-      "built": 534,
-      "built_percent": 89.1
+      "built": 535,
+      "built_percent": 89.3
     },
     {
       "wave": 4,
@@ -563,10 +563,10 @@
       "name": "Console, reports, observability",
       "wave": 3,
       "total": 216,
-      "done": 163,
+      "done": 164,
       "acts": 0,
       "decided": 22,
-      "built": 184
+      "built": 185
     },
     {
       "module": "M28",
@@ -1222,6 +1222,7 @@
     "M27.13.2",
     "M27.13.6",
     "M27.13.7",
+    "M27.15.1",
     "M27.15.10",
     "M27.15.13",
     "M27.15.14",
@@ -4057,11 +4058,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 7,
+  "closed_today": 8,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "9b668ad",
+      "at": "2026-10-20T11:49:46+00:00",
+      "subject": "Opening the text of another department's document leaves an entry naming the document and the reader (M27.15.1) (#640)",
+      "closed": "M27.15.1"
+    },
     {
       "sha": "60e1184",
       "at": "2026-10-20T04:49:21+00:00",
@@ -4175,12 +4182,6 @@
       "at": "2026-10-06T00:48:06+00:00",
       "subject": "The console is walked in a real browser against a furnished install: a second-factor first run, every module's pages, a reader and two tabs (#412)",
       "closed": "M27.10.6"
-    },
-    {
-      "sha": "6fddf3d",
-      "at": "2026-10-05T21:27:28+00:00",
-      "subject": "Fifty-one tasks close on the install's own acceptance runs after the evening's deploys (#394)",
-      "closed": "M10.7.2,M11.1.4,M11.2.4,M11.5.2,M11.8.5,M15.4.2,M16.3.4,M16.3.5,M16.3.6,M16.4.2,M16.5.3,M16.5.4,M16.6.8,M16.7.13,M16.7.4,M16.7.5,M22.1.1,M27.7.21,M32.2.1.3,M32.2.2.1,M33.3.1.4,M39.4.1.1,M39.4.1.2,M39.4.1.3,M39.4.1.4,M39.4.1.5,M39.4.2.1,M39.4.2.2,M39.4.2.4,M39.6.1.1,M39.6.1.2,M39.6.1.3,M39.6.1.4,M39.6.1.5,M39.6.2.1,M39.6.2.2,M39.6.2.4,M6.1.1,M6.1.2,M6.1.4,M6.1.6,M6.3.1,M6.3.2,M6.3.3,M6.3.4,M6.3.5,M6.4.2,M6.4.3,M6.4.4,M6.5.2,M7.7.2"
     }
   ]
 }
