@@ -1,0 +1,54 @@
+A department's builder is offered only the tools and connectors their department holds, and a person can start an agent's draft by describing it
+
+M13.9.2, partly. A department administrator already makes an agent in the same flow as a Super Admin (the
+builder routes), so what the leaf adds is that they can choose only what their department holds. The form
+the builder writes in is now served per reader: a reader whose install authority is held in one department
+and not over everything gets the same form with the tool lists (`allowed_tools`, `required_tools`) and the
+connector list cut to an enum of what their own reach admits, and a sentence saying why; a Super Admin gets
+the form whole. "Holds" is `brain.gate.catalogue.project`'s answer, the one place that decides which tools
+an entitlement admits, asked over every registered tool, and a connector is held when a tool of its source
+is. A department holding nothing is served a list with no room in it, because JSON Schema refuses an empty
+enum.
+
+**This narrows the offer and not the gate, on purpose.** An authored list is intent and never
+authorisation (M20.1.5): a name typed past the form still cannot reach what its author does not hold, and a
+publish reaching further than its author waits for a second person who holds it. Refusing the name at save
+would change a decided behaviour for every builder, so it is a question for the owner rather than something
+decided here. Not built: the same cut for skills (the library is one company-wide object and which skills a
+department holds depends on what each skill's tools need) and for knowledge (it is not a section of the form,
+it is set on the agent's own page behind that page's reach). M13.9.2 is IN PROGRESS for that reason.
+Rejected: offering the cut to everybody, which would stop a Super Admin who was deliberately not granted a
+department's data from naming that department's tools in a draft a colleague who does hold them approves.
+
+M20.5.3, partly. Behind the switch `describe_an_agent` (ships off), New agent offers "Describe it": the
+person writes what the agent is for, a draft of their own is started, and the co-author is asked for its
+name, summary, instructions, skills and connectors. The answer is the co-author's own proposal, so it is
+not applied: the Write step opens on it with each suggestion beside what the draft holds, none ticked, and
+taking is the existing take, by name. The draft is saved before the model is asked, so a failed call leaves
+a draft to ask again from rather than nothing, and a process with no model, a person who may not build, a
+blank request and the switch off are all refused before any draft exists. What is not drafted is said in the
+answer and on the page (the tools and permissions, the knowledge, the channels, how closely it is watched),
+because the co-author writes words and never reach (`THE_COAUTHOR_WRITES_WORDS_AND_NEVER_REACH`), so a short
+proposal is never read as a finished agent, and "within the person's ceiling" is true by construction: the
+draft reaches nothing until its author names something. A procedure is not drawn either. Whether describing
+may itself count as taking, and whether the co-author may propose tools and knowledge from within the
+person's ceiling, are questions for the owner and change a rule the co-author module argues for.
+
+Install checks: `a department builder is offered only what their department holds` (M13.9.2; compares the
+cut list with the capability each registered tool requires and the grants the builder was given, and not with
+the module under test; says it was not run on an install with no tool a department builder lacks; four
+breaks) and `describing an agent starts a draft and applies nothing` (M20.5.3; drives the route through the
+install's own executor with a stand-in answering, as the co-author's check does; four breaks).
+
+Console: DescribeAgent on New agent, drawn only when `GET /agent-drafts` says `can_describe`, confirmed
+first because it sends the words to the model provider; the co-author panel opens on the described draft's
+suggestions and the list of what is not drafted. The console audit's write-route table names the new route.
+
+Reused: brain.agent_builder_routes (start_agent_draft, the form route, _may_build), brain.agent_coauthor_routes
+(suggest_changes, the take, calls_of), brain.builder.coauthor (checked_ask and the rule that reach is never
+proposed), brain.gate.catalogue.project (what is held), brain.builder.form.form_document (cut on a copy, never
+on the description the console's fixture is held equal to), CoauthorPanel. Replaced: nothing.
+
+Mutation table: in the empty commit that follows, so this one could be pushed before the run finished.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
