@@ -212,6 +212,11 @@ from brain.console_overview_routes import router as console_overview_router
 # `brain.console_overview_routes`.
 from brain.console_stats_routes import router as console_stats_router
 
+# A coordinating agent: which agents it may hand a subtask to, whether it may run them together,
+# and splitting a request between them behind the `multi_agent_coordination` switch, which ships
+# off. See `brain.coordination_routes`.
+from brain.coordination_routes import router as coordination_router
+
 # Setting a credential, and seeing which are held. Beside the wizard because the wizard's
 # provider key is kept through the same store, and a router of its own because its subject is
 # the one value no other route may carry: it writes into the vault, answers that a secret is
