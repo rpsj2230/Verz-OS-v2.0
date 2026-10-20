@@ -494,3 +494,52 @@ def test_a_question_a_budget_stops_is_turned_away_with_the_sentence_before_any_l
     assert isinstance(outcome, BudgetStopped) and isinstance(outcome, Halted)
     assert outcome.told == SPENDING_LIMIT_REACHED
     assert asked == [Asker(principal_id="u_asker", department="finance", agent_id="quote_helper")]
+
+
+# ------------------------------------------------------------------- naming the budget (M21.2.6)
+@pytest.mark.needs_db
+def test_on_postgres_naming_the_budget_waits_for_the_switch_and_the_readers_reach() -> None:
+    """**The refusal's wording on the real tables.** A department's month is spent and enforcement
+    is on. With the naming switch off, a reader who may read the department's spend and one who
+    may not are told the same plain sentence. With it on, the first is told which budget and who
+    raises it, and the second is still told the plain one. Delete this and the switch either does
+    nothing, or names a budget to somebody who may not read its spend."""
+    from brain.console.spend_view import USAGE_AUTHORITY
+    from brain.core.entitlement import EntitlementSet, Grant
+    from tests.unit.test_acceptance import at_head
+
+    reader = EntitlementSet(
+        principal_id="u_reader",
+        grants=(Grant(capability=USAGE_AUTHORITY, scope=Scope.department("finance")),),
+    )
+    stranger = EntitlementSet(principal_id="u_stranger")
+
+    with at_head("brain_budget_stop_named") as url:
+
+        async def work(sessions: async_sessionmaker[AsyncSession]) -> dict[str, str | None]:
+            from brain.ops.features import BUDGET_ENFORCEMENT, switch
+            from brain.ops.features_declared.named_budget_refusal import NAMED_BUDGET_REFUSAL
+
+            await _ceiling_and_spend(sessions, 1000)
+            async with sessions() as session, session.begin():
+                await switch(session, BUDGET_ENFORCEMENT, on=True, by="u_owner")
+            asker = Asker(principal_id="u_asker", department="finance")
+            told: dict[str, str | None] = {}
+            for label, who in (("reader", reader), ("stranger", stranger), ("none", None)):
+                told[f"off_{label}"] = await budget_refusal_for(
+                    sessions, asker, at=datetime.now(UTC), trace_id="t-1", reach=who
+                )
+            async with sessions() as session, session.begin():
+                await switch(session, NAMED_BUDGET_REFUSAL, on=True, by="u_owner")
+            for label, who in (("reader", reader), ("stranger", stranger), ("none", None)):
+                told[f"on_{label}"] = await budget_refusal_for(
+                    sessions, asker, at=datetime.now(UTC), trace_id="t-2", reach=who
+                )
+            return told
+
+        told = _as_app(url, work)
+
+    assert told["off_reader"] == told["off_stranger"] == told["off_none"] == SPENDING_LIMIT_REACHED
+    assert told["on_stranger"] == told["on_none"] == SPENDING_LIMIT_REACHED
+    assert told["on_reader"] is not None and told["on_reader"] != SPENDING_LIMIT_REACHED
+    assert "department" in told["on_reader"]

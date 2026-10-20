@@ -79,6 +79,24 @@ async def history_of(session: AsyncSession, key: BudgetKey) -> BudgetHistory | N
     return BudgetHistory(rows=rows) if rows else None
 
 
+async def subjects_of(session: AsyncSession, level: BudgetLevel, *, limit: int) -> list[str]:
+    """Every subject a ceiling at this level has ever been written for, in name order, bounded.
+
+    A subject whose ceilings all take effect later than the instant somebody asks about is still
+    here; `in_force` answers None for it, which is the caller's decision to make and not this
+    read's. Does not say how many there are beyond `limit`: a bound is a resource limit and not a
+    fact about rows the reader may not see.
+    """
+    found = await session.execute(
+        select(BudgetVersionRow.subject)
+        .where(BudgetVersionRow.level == level.value)
+        .distinct()
+        .order_by(BudgetVersionRow.subject)
+        .limit(limit)
+    )
+    return [str(one) for one in found.scalars().all()]
+
+
 async def in_force(session: AsyncSession, key: BudgetKey, at: datetime) -> BudgetRow | None:
     """The version that governed that ceiling at that instant, or None when none did."""
     history = await history_of(session, key)

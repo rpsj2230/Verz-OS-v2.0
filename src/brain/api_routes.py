@@ -2224,6 +2224,7 @@ async def answered_for(
         ),
         at=asking.now,
         trace_id=bound_trace_id(request),
+        reach=asking.reach,
     )
     if spent:
         return BudgetStopped(spent)
