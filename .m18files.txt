@@ -1,0 +1,13 @@
+migrations/versions/0240_fanout_gate.py
+src/brain/ops/acceptance_checks_orchestration_rehearsal.py
+src/brain/ops/erasure_store.py
+src/brain/ops/fanout_gate_store.py
+src/brain/ops/features.py
+src/brain/orchestration_routes.py
+src/brain/routers.py
+src/brain/tables/__init__.py
+src/brain/tables/fanout_gate.py
+tests/unit/test_acceptance_checks_orchestration_rehearsal.py
+tests/unit/test_features.py
+tests/unit/test_orchestration_routes.py
+tests/unit/test_tables.py

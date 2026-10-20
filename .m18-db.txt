@@ -1,0 +1,17 @@
+============================= test session starts ==============================
+collected 223 items
+
+tests/unit/test_acceptance_checks_orchestration_rehearsal.py .......     [  3%]
+tests/unit/test_orchestration_routes.py ....................             [ 12%]
+tests/unit/test_tables.py .............................................. [ 32%]
+........................................................................ [ 65%]
+........................................................................ [ 97%]
+......                                                                   [100%]
+
+============================= slowest 5 durations ==============================
+1.79s call     tests/unit/test_tables.py::test_importing_the_package_alone_registers_every_table
+0.88s call     tests/unit/test_orchestration_routes.py::test_a_caller_without_the_authority_over_everything_is_refused_before_the_database[POST-u_narrow]
+0.88s call     tests/unit/test_orchestration_routes.py::test_a_caller_without_the_authority_over_everything_is_refused_before_the_database[GET-u_narrow]
+0.79s setup    tests/unit/test_acceptance_checks_orchestration_rehearsal.py::test_every_check_passes_on_an_install_and_leaves_nothing
+0.72s call     tests/unit/test_orchestration_routes.py::test_a_caller_without_the_authority_over_everything_is_refused_before_the_database[POST-u_none]
+====================== 223 passed, 20 warnings in 16.26s =======================

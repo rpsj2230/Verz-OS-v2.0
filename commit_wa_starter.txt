@@ -1,0 +1,38 @@
+Install check that a new install is furnished as the owner decided, and the tool prefix question as Needs page item 175
+
+M41.2.7 ("starter pack loaded at install") is built and was decided on 2026-10-06 (item 168, option
+A: accept both narrowings), but no install check names it. The new check
+`a_new_install_is_furnished_as_decided_and_not_blank` reads the install as it is and writes
+nothing:
+
+- the six roles, held as six words and not read back from the enum the product builds its own
+  list from, so a seventh or a rename fails the check instead of moving with the product;
+- the starter permission set and the company-wide scope are live on the install, and the scope is
+  not a department;
+- every built-in agent template is on file and signed;
+- the furnishing's own ledger trace wrote only its setting, scope and pack, so no agent was
+  installed at the start (item 168's second narrowing, shown on the install and not asserted);
+- the two session limits the starter defaults name are the ones `identity.sessions` enforces, and
+  none of the four defaults is an installation setting (item 168's first narrowing). The defaults
+  are held against the code that makes them true, not against their own declaration, which would
+  compare a constant with itself. A table query for a setting row was rejected: the settings key
+  grammar refuses those names, so it could never fail.
+- NOT_RUN, in a literal sentence, where nothing furnished the database or somebody retired the
+  starter pack or scope (furnishing never puts back what an administrator took away).
+
+M3.7.2 is not built. Its register row (ARC-B-097) asks for the shared start of a model request to be
+a union of every tool, which contradicts the catalogue's own rule that a tool a person may not use is
+absent and never shown and refused, and the real question path shares no tools at all today. A
+design that narrows a requirement is a question, so this adds Needs page item 175 (A: share only the
+tools everybody holds, recommended; B: the union, as the architecture says), with the count in the
+header and in architecture.html moved together. The register row records a decision only once the
+owner answers.
+
+Mutation (brain.ops.mutation, three rows, unmutated tests clean first):
+| the six roles are not held to six words | caught by test_a_platform_that_furnishes_other_than_six_roles_fails_the_check |
+| the idle limit is not compared with the sign-in code's | caught by test_a_session_limit_that_is_not_the_defaults_fails_the_check |
+| a default becoming a setting is not noticed | caught by test_a_default_that_has_become_a_setting_fails_the_check |
+
+No Closes line: the leaves close from the install's results.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

@@ -1,0 +1,2101 @@
+{
+ "M19.1.1": {
+  "sentence": "Ephemeral gVisor container per run",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.launcher, browsing.sandbox); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/browsing/launcher.py",
+   "src/brain/browsing/sandbox.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_deployment.py",
+   "tests/unit/test_browsing_launcher.py",
+   "tests/unit/test_browsing_sandbox.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "610522e A browser run is judged on its actions, then on masked pictures, then on its system of rec"
+  ]
+ },
+ "M19.1.2": {
+  "sentence": "Playwright for Python with Chromium",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.runner); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/browsing/runner.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_runner.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": [
+   "610522e A browser run is judged on its actions, then on masked pictures, then on its system of rec"
+  ]
+ },
+ "M19.1.3": {
+  "sentence": "Worker owning the CDP session and snapshot serialisation",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.runner, browsing.wire); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/browsing/runner.py",
+   "src/brain/browsing/wire.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_runner.py",
+   "tests/unit/test_browsing_wire.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "610522e A browser run is judged on its actions, then on masked pictures, then on its system of rec"
+  ]
+ },
+ "M19.1.4": {
+  "sentence": "Accessibility-tree snapshots rather than screenshots",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.observation); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/browsing/observation.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_targets.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "8cd397c Nineteen leaves that were built and never claimed are proven and claimed, and one claimed "
+  ]
+ },
+ "M19.1.5": {
+  "sentence": "tmpfs-only writable layer, destroyed at run end, never reused",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.launcher, browsing.sandbox); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/browsing/launcher.py",
+   "src/brain/browsing/sandbox.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_launcher.py",
+   "tests/unit/test_browsing_sandbox.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": [
+   "610522e A browser run is judged on its actions, then on masked pictures, then on its system of rec"
+  ]
+ },
+ "M19.1.6": {
+  "sentence": "Per-run network namespace",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.launcher, browsing.sandbox); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/browsing/launcher.py",
+   "src/brain/browsing/sandbox.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_deployment.py",
+   "tests/unit/test_browsing_launcher.py",
+   "tests/unit/test_browsing_sandbox.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": [
+   "610522e A browser run is judged on its actions, then on masked pictures, then on its system of rec"
+  ]
+ },
+ "M19.2.1": {
+  "sentence": "Planner that never reads page content, asserted by test",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in browsing.observation, browsing.planning; NOT wired: browsing.shape",
+  "src": [
+   "src/brain/browsing/observation.py",
+   "src/brain/browsing/planning.py",
+   "src/brain/browsing/shape.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_plan.py",
+   "tests/unit/test_browsing_shape.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e9e00b4 A browser is an agent with hands, and the four refusals are the deliverable"
+  ]
+ },
+ "M19.2.2": {
+  "sentence": "Envelope compilation: plan intersected with capabilities and skill ceiling",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.envelope); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/browsing/envelope.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_plan.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e9e00b4 A browser is an agent with hands, and the four refusals are the deliverable"
+  ]
+ },
+ "M19.2.3": {
+  "sentence": "Envelope storage and approval record",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.approval, browsing.envelope_store, tables.browsing); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-gate_wt",
+  "src": [
+   "src/brain/browsing/approval.py",
+   "src/brain/browsing/envelope_store.py",
+   "src/brain/tables/browsing.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_envelope_store.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "3902e40 A browser run is bounded per domain and per agent, and every write waits on an approved, s"
+  ]
+ },
+ "M19.2.4": {
+  "sentence": "Target registry with declared surface maps",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.targets); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/browsing/targets.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_targets.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e9e00b4 A browser is an agent with hands, and the four refusals are the deliverable"
+  ]
+ },
+ "M19.3.1": {
+  "sentence": "Enforcer with policy compiled at container start and immutable after",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.egress_addon, browsing.enforcer, browsing.envelope); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-gate_wt",
+  "src": [
+   "src/brain/browsing/egress_addon.py",
+   "src/brain/browsing/enforcer.py",
+   "src/brain/browsing/envelope.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_enforcer.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e9e00b4 A browser is an agent with hands, and the four refusals are the deliverable"
+  ]
+ },
+ "M19.3.2": {
+  "sentence": "Reference validation against the snapshot just produced",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.enforcer); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-gate_wt",
+  "src": [
+   "src/brain/browsing/enforcer.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_enforcer.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e9e00b4 A browser is an agent with hands, and the four refusals are the deliverable"
+  ]
+ },
+ "M19.3.3": {
+  "sentence": "Origin allowlist check per action",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.enforcer); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-gate_wt",
+  "src": [
+   "src/brain/browsing/enforcer.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_enforcer.py",
+   "tests/unit/test_browsing_plan.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e9e00b4 A browser is an agent with hands, and the four refusals are the deliverable"
+  ]
+ },
+ "M19.3.4": {
+  "sentence": "Write verb and count checks against the envelope",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.enforcer); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-gate_wt",
+  "src": [
+   "src/brain/browsing/enforcer.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_enforcer.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e9e00b4 A browser is an agent with hands, and the four refusals are the deliverable"
+  ]
+ },
+ "M19.3.5": {
+  "sentence": "mitmproxy sidecar as the sole route out",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.egress_addon, browsing.sandbox); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/browsing/egress_addon.py",
+   "src/brain/browsing/sandbox.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_sandbox.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": [
+   "610522e A browser run is judged on its actions, then on masked pictures, then on its system of rec"
+  ]
+ },
+ "M19.3.6": {
+  "sentence": "Second independent check in the control plane on every returned result",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.enforcer); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-gate_wt",
+  "src": [
+   "src/brain/browsing/enforcer.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_enforcer.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e9e00b4 A browser is an agent with hands, and the four refusals are the deliverable"
+  ]
+ },
+ "M19.4.1": {
+  "sentence": "Placeholder resolution at the tool-execution boundary",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in browsing.credentials; NOT wired: browsing.shape",
+  "src": [
+   "src/brain/browsing/credentials.py",
+   "src/brain/browsing/shape.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_credentials.py",
+   "tests/unit/test_browsing_shape.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e9e00b4 A browser is an agent with hands, and the four refusals are the deliverable"
+  ]
+ },
+ "M19.4.2": {
+  "sentence": "Origin binding so a secret only substitutes on its own domain",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.credentials); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/browsing/credentials.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_credentials.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e9e00b4 A browser is an agent with hands, and the four refusals are the deliverable"
+  ]
+ },
+ "M19.4.3": {
+  "sentence": "TOTP generation server-side from a stored seed",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.credentials); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/browsing/credentials.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_credentials.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e9e00b4 A browser is an agent with hands, and the four refusals are the deliverable"
+  ]
+ },
+ "M19.4.4": {
+  "sentence": "Outbound scrubbing from message history",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.credentials); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/browsing/credentials.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_credentials.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e9e00b4 A browser is an agent with hands, and the four refusals are the deliverable"
+  ]
+ },
+ "M19.4.5": {
+  "sentence": "Vision disabled so a credential cannot be read off a screenshot",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in browsing.grading, browsing.observation; NOT wired: browsing.verification",
+  "src": [
+   "src/brain/browsing/grading.py",
+   "src/brain/browsing/observation.py",
+   "src/brain/browsing/verification.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_grading.py",
+   "tests/unit/test_browsing_targets.py",
+   "tests/unit/test_browsing_verification.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "610522e A browser run is judged on its actions, then on masked pictures, then on its system of rec",
+   "8cd397c Nineteen leaves that were built and never claimed are proven and claimed, and one claimed ",
+   "e9e00b4 A browser is an agent with hands, and the four refusals are the deliverable"
+  ]
+ },
+ "M19.5.1": {
+  "sentence": "Rubric generated from the goal before seeing the trajectory",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in browsing.grading; NOT wired: browsing.shape",
+  "src": [
+   "src/brain/browsing/grading.py",
+   "src/brain/browsing/shape.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_grading.py",
+   "tests/unit/test_browsing_shape.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "610522e A browser run is judged on its actions, then on masked pictures, then on its system of rec",
+   "e9e00b4 A browser is an agent with hands, and the four refusals are the deliverable"
+  ]
+ },
+ "M19.5.2": {
+  "sentence": "Two-pass scoring: actions only, then with screenshots",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in browsing.observation; NOT wired: browsing.verification",
+  "src": [
+   "src/brain/browsing/observation.py",
+   "src/brain/browsing/verification.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_grading.py",
+   "tests/unit/test_browsing_verification.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "610522e A browser run is judged on its actions, then on masked pictures, then on its system of rec"
+  ]
+ },
+ "M19.5.3": {
+  "sentence": "Agent's own success claim ignored",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.enforcer, browsing.grading); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/browsing/enforcer.py",
+   "src/brain/browsing/grading.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_grading.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e9e00b4 A browser is an agent with hands, and the four refusals are the deliverable"
+  ]
+ },
+ "M19.5.4": {
+  "sentence": "Tuned for low false-positive rate, accepting false negatives",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in browsing.grading; NOT wired: browsing.verification",
+  "src": [
+   "src/brain/browsing/grading.py",
+   "src/brain/browsing/verification.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_grading.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e9e00b4 A browser is an agent with hands, and the four refusals are the deliverable"
+  ]
+ },
+ "M19.5.5": {
+  "sentence": "Out-of-band read-back from the system of record where possible",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in browsing.grading, browsing.targets; NOT wired: browsing.verification",
+  "src": [
+   "src/brain/browsing/grading.py",
+   "src/brain/browsing/targets.py",
+   "src/brain/browsing/verification.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_verification.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "610522e A browser run is judged on its actions, then on masked pictures, then on its system of rec"
+  ]
+ },
+ "M19.6.2": {
+  "sentence": "Per-domain concurrency limit",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: browsing.concurrency name it and nothing imports it. Wire it (route, page or caller); do not rewrite. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-gate_wt",
+  "src": [
+   "src/brain/browsing/concurrency.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_concurrency.py",
+   "tests/unit/test_browsing_sessions.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "3902e40 A browser run is bounded per domain and per agent, and every write waits on an approved, s"
+  ]
+ },
+ "M19.6.3": {
+  "sentence": "Per-agent limit",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: browsing.concurrency name it and nothing imports it. Wire it (route, page or caller); do not rewrite. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-gate_wt",
+  "src": [
+   "src/brain/browsing/concurrency.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_concurrency.py",
+   "tests/unit/test_browsing_sessions.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "3902e40 A browser run is bounded per domain and per agent, and every write waits on an approved, s"
+  ]
+ },
+ "M19.6.4": {
+  "sentence": "Memory and CPU caps per session",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.sandbox, browsing.sessions); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/browsing/sandbox.py",
+   "src/brain/browsing/sessions.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_sandbox.py",
+   "tests/unit/test_browsing_sessions.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": [
+   "610522e A browser run is judged on its actions, then on masked pictures, then on its system of rec",
+   "3902e40 A browser run is bounded per domain and per agent, and every write waits on an approved, s"
+  ]
+ },
+ "M19.6.5": {
+  "sentence": "Global kill switch",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.enforcer, browsing.sessions); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-gate_wt",
+  "src": [
+   "src/brain/browsing/enforcer.py",
+   "src/brain/browsing/sessions.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_enforcer.py",
+   "tests/unit/test_browsing_sessions.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e9e00b4 A browser is an agent with hands, and the four refusals are the deliverable"
+  ]
+ },
+ "M19.6.6": {
+  "sentence": "Full session recording with retention policy",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.recording); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/browsing/recording.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_recording.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": [
+   "610522e A browser run is judged on its actions, then on masked pictures, then on its system of rec"
+  ]
+ },
+ "M19.6.7": {
+  "sentence": "Skill loader refusing a browser skill where an API tool exists, unless exempted with a named approver and expiry",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.skill_gate, browsing.targets); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/browsing/skill_gate.py",
+   "src/brain/browsing/targets.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_sessions.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e9e00b4 A browser is an agent with hands, and the four refusals are the deliverable"
+  ]
+ },
+ "M19.7.1": {
+  "sentence": "Read-only capability shipped first",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.sessions); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-gate_wt",
+  "src": [
+   "src/brain/browsing/sessions.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_sessions.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e9e00b4 A browser is an agent with hands, and the four refusals are the deliverable"
+  ]
+ },
+ "M19.7.2": {
+  "sentence": "Write capability behind envelope approval",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.approval, browsing.enforcer, browsing.sessions); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-gate_wt",
+  "src": [
+   "src/brain/browsing/approval.py",
+   "src/brain/browsing/enforcer.py",
+   "src/brain/browsing/sessions.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_approval.py",
+   "tests/unit/test_browsing_enforcer.py",
+   "tests/unit/test_browsing_sessions.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "3902e40 A browser run is bounded per domain and per agent, and every write waits on an approved, s"
+  ]
+ },
+ "M19.7.3": {
+  "sentence": "Assisted ceiling on writes unless a per-surface exception is signed",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (browsing.autonomy); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-gate_wt",
+  "src": [
+   "src/brain/browsing/autonomy.py"
+  ],
+  "tests": [
+   "tests/unit/test_browsing_autonomy.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "3902e40 A browser run is bounded per domain and per agent, and every write waits on an approved, s"
+  ]
+ },
+ "M19.8.1": {
+  "sentence": "An agent can operate an allowlisted desktop application inside an isolated virtual desktop, with every action recorded, every write held for a person's approval, and no route to any other application or network",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M19.9.1": {
+  "sentence": "A browser action outside its approved envelope suspends the run and sends a new approval naming the breach, and actions inside the envelope never ask again",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M19.9.10": {
+  "sentence": "On the install an agent's browser write to an allowlisted site is compiled into an envelope, approved by a person, signs in with a vaulted credential that never appears in the plan, trace or recording, and performs exactly the approved writes",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M19.9.11": {
+  "sentence": "Browser session recordings on the install are written to the object store at run end, and a scheduled job removes expired ones, keeps held ones and reports undated objects",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M19.9.2": {
+  "sentence": "Browser approval is proved on an install: a read-only website check runs without approval, a planned browser write is shown once as a readable diff of its envelope and approved, steps inside the envelope are not asked again, and a step outside it suspends the run and asks again, with the checks recorded",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M19.9.3": {
+  "sentence": "A browser run starts from an empty profile in its own container and cannot attach to or import a staff member's browser profile, cookies or session, asserted by a test",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M19.9.4": {
+  "sentence": "Website and portal reading is proved on an install: asked whether a live website is working, an agent checks it over HTTP, opens the rendered page in the read-only browser from an empty sandboxed profile with egress limited to that origin, and cites what it observed; and a read-only browser task logs in to a portal with no API using a vault credential the model never sees and returns the figure asked for; the session recording is kept under its retention class and the checks are recorded",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M19.9.5": {
+  "sentence": "A browser write is proved on an install: one multi-step form-filling task against a registered target runs at the Assisted rung only after its plan is approved, a step outside the approved plan is refused, and the task is reported done only after an independent read-back from the target system, with the checks recorded",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M19.9.6": {
+  "sentence": "The browser sandbox runs on an install, and an agent whose ceiling holds the browser tools opens a page in it.",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M19.9.7": {
+  "sentence": "An administrator grants a per-surface browser write exception or a browser-over-API exemption from the console with an approver and expiry, it is recorded in the audit ledger as a leash change, listed until it lapses, and a run compiled after expiry no longer has it",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M19.9.8": {
+  "sentence": "On the install a browser run's outcome is scored by a judge from its actions and admitted frames against the rubric fixed before the run, and a declared target's result is read back from its system of record before the run is reported done",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M19.9.9": {
+  "sentence": "On the install open browser sessions are counted as they start and end, and a session over the global, per-website or per-agent limit waits or is refused with a sentence naming the limit",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M42.1.1": {
+  "sentence": "Per-client variables in a separate private repository, one file per install, documented field by field",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (deployment.variables, ops.install_settings, setup_routes); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/deployment/variables.py",
+   "src/brain/ops/install_settings.py",
+   "src/brain/setup_routes.py"
+  ],
+  "tests": [
+   "tests/unit/test_deployment_variables.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "82afbfb A fresh install reaches a signed-in first administrator over HTTP: the setup code's holder",
+   "b2dd59d One command and one file are different things, and only the command was asked for"
+  ]
+ },
+ "M42.1.2": {
+  "sentence": "Secrets minted per install and never copied between clients, enforced by a check that refuses a shared value",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (deployment.variables); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/deployment/variables.py"
+  ],
+  "tests": [
+   "tests/unit/test_deployment_variables.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "b2dd59d One command and one file are different things, and only the command was asked for"
+  ]
+ },
+ "M42.1.3": {
+  "sentence": "One published image deployed by tag, never rebuilt per client",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (deployment.installer); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/deployment/installer.py"
+  ],
+  "tests": [
+   "tests/unit/test_deployment_installer.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "b2dd59d One command and one file are different things, and only the command was asked for"
+  ]
+ },
+ "M42.1.4": {
+  "sentence": "Release pinning per client, so one client can hold a version back without forking",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (deployment.installer); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/deployment/installer.py"
+  ],
+  "tests": [
+   "tests/unit/test_deployment_installer.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/needs-rupash.md",
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "79f1fee Every container of this product needs its image named, and a fresh install writes that nam",
+   "13529e4 One variable pins every container of an install, and staging keeps its own"
+  ]
+ },
+ "M42.2.10": {
+  "sentence": "Update procedure and rollback procedure, both rehearsed rather than written",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/install/README.md",
+   "docs/install/update-and-rollback.md",
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "8cd397c Nineteen leaves that were built and never claimed are proven and claimed, and one claimed ",
+   "a7d6569 An install can move to a release and back, and the rollback refuses rather than guessing"
+  ]
+ },
+ "M42.2.3": {
+  "sentence": "Step-by-step install from a clean server, written so it needs no reference to the Verz install",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.install_docs); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/install_docs.py"
+  ],
+  "tests": [
+   "tests/unit/test_install_docs.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/install/README.md",
+   "docs/install/install.md",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "63c9698 The operations chapter said twelve and eleven was true"
+  ]
+ },
+ "M42.2.8": {
+  "sentence": "Backup, monitoring, logging and health-check configuration",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.install_docs); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/install_docs.py"
+  ],
+  "tests": [
+   "tests/unit/test_install_docs.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/install/README.md",
+   "docs/install/operations.md",
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "63c9698 The operations chapter said twelve and eleven was true"
+  ]
+ },
+ "M42.3.1": {
+  "sentence": "Install script, idempotent and safe to run twice",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (deployment.installer); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/deployment/installer.py"
+  ],
+  "tests": [
+   "tests/unit/test_deployment_installer.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "183540d A fresh server is one command, and the command is a file you can read first",
+   "e3c95d2 Three things that broke a fresh install, and the largest profile is down to two blockers",
+   "b2dd59d One command and one file are different things, and only the command was asked for"
+  ]
+ },
+ "M42.3.2": {
+  "sentence": "Environment template generator that refuses to emit a value it cannot explain",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (deployment.variables); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/deployment/variables.py"
+  ],
+  "tests": [
+   "tests/unit/test_deployment_variables.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "b2dd59d One command and one file are different things, and only the command was asked for"
+  ]
+ },
+ "M42.3.3": {
+  "sentence": "Database create, migrate and seed scripts",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in ops.install_docs; NOT wired: deployment.database",
+  "src": [
+   "src/brain/deployment/database.py",
+   "src/brain/ops/install_docs.py"
+  ],
+  "tests": [
+   "tests/unit/test_deployment_database.py",
+   "tests/unit/test_install_docs.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "24d8556 A client creates, migrates and seeds their database with three commands that refuse out of"
+  ]
+ },
+ "M42.3.4": {
+  "sentence": "Health-check script a person runs after deploying and can read the output of",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (deployment.installer); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/deployment/installer.py"
+  ],
+  "tests": [
+   "tests/unit/test_deployment_installer.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "b2dd59d One command and one file are different things, and only the command was asked for"
+  ]
+ },
+ "M42.3.5": {
+  "sentence": "Backup and restore scripts, with the restore verified rather than assumed",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [
+   "tests/unit/test_backup_scripts.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/install/restore-drill.md",
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c244150 An administrator files a request to erase somebody's data from the Retention screen and th"
+  ]
+ },
+ "M42.3.6": {
+  "sentence": "Update script pinning a release tag, and a rollback script re-pinning the previous one",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (deployment.release); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/deployment/release.py"
+  ],
+  "tests": [
+   "tests/unit/test_deployment_release.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/install/update-and-rollback.md",
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "183540d A fresh server is one command, and the command is a file you can read first",
+   "a7d6569 An install can move to a release and back, and the rollback refuses rather than guessing"
+  ]
+ },
+ "M42.3.8": {
+  "sentence": "A published release for every fix, with plain-English notes stating what changed, whether it changes the database, and how urgent it is",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (deployment.release); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/deployment/release.py"
+  ],
+  "tests": [
+   "tests/unit/test_deployment_release.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/needs-rupash.md",
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "ba8d388 A tag now publishes the image the archive pins, so a release is two artefacts rather than ",
+   "d1b7404 Publishing the first release and writing down the product-versus-client rule are tasks too",
+   "72d04fa A release publishes an archive a client can install from, so a copy of this repository nev"
+  ]
+ },
+ "M42.3.9": {
+  "sentence": "The console shows the running version and whether a newer release exists, because nothing else reminds a client IT team to update",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.screens, console.version_view, deployment.release_feed +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #180's branch M27/console-platform (may be replayed already); old backup branch recovery/from-windows-20260928-wt-w0b",
+  "src": [
+   "src/brain/console/screens.py",
+   "src/brain/console/version_view.py",
+   "src/brain/deployment/release_feed.py",
+   "src/brain/install_routes.py"
+  ],
+  "tests": [
+   "tests/unit/test_install_routes.py",
+   "tests/unit/test_release_feed.py",
+   "tests/unit/test_screens.py",
+   "tests/unit/test_version_view.py"
+  ],
+  "console": [
+   "console/src/pages/Updates.tsx",
+   "console/src/pages/install/UpdatesPage.tsx"
+  ],
+  "ctests": [
+   "console/tests/install-pages.test.tsx"
+  ],
+  "docs": [
+   "docs/needs-rupash.md",
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "4af0717 The console names the release an install is running and whether a newer one is published, ",
+   "328c2fe Twelve console screens exist in a browser, each served by the read module that already dec",
+   "24d8556 A client creates, migrates and seeds their database with three commands that refuse out of"
+  ]
+ },
+ "M42.4.2": {
+  "sentence": "Audit the database, logs, uploads, object store, vector store, embeddings and caches",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [],
+  "acc": [],
+  "git": []
+ },
+ "M42.4.3": {
+  "sentence": "Audit credentials, tokens, webhooks, third-party integrations and default administrator accounts",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M42.4.4": {
+  "sentence": "Verz is client number one: their live system is installed from the template by running the installer on their server, not migrated from the development environment",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M42.4.5": {
+  "sentence": "Verify on that install: it boots, sign-in works, the administrator works, core features answer and integrations configure, with nothing carried over from the development environment",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M42.4.6": {
+  "sentence": "Record the measured time from bare server to first answered question, because that number is what the template is for",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [],
+  "acc": [],
+  "git": []
+ },
+ "M42.4.7": {
+  "sentence": "A second install on a throwaway server as a fictitious client, run start to finish by somebody following only the documentation, because Verz succeeding proves the installer works for the person who wrote it",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M42.4.8": {
+  "sentence": "Every question asked during those two installs becomes a line in the documentation, since a question asked twice is a missing step",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [],
+  "acc": [],
+  "git": []
+ },
+ "M42.5.1": {
+  "sentence": "install.sh: one command on a fresh server that checks the machine, installs what is missing, downloads the release, builds the database and starts everything",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (deployment.install_script, deployment.installer); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-g4",
+  "src": [
+   "src/brain/deployment/install_script.py",
+   "src/brain/deployment/installer.py"
+  ],
+  "tests": [
+   "tests/unit/test_install_script.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/install/install.md",
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "183540d A fresh server is one command, and the command is a file you can read first",
+   "24d8556 A client creates, migrates and seeds their database with three commands that refuse out of",
+   "e3c95d2 Three things that broke a fresh install, and the largest profile is down to two blockers"
+  ]
+ },
+ "M42.5.10": {
+  "sentence": "Wizard step: review everything before any of it is written, because a wizard that commits each screen as it goes cannot be corrected",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.install_settings, setup_routes, setup_wizard); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #180's branch M27/console-platform (may be replayed already); old backup branch recovery/from-windows-20260928-wt-integrate2; old backup branch recovery/from-windows-20260928-wt-steward",
+  "src": [
+   "src/brain/ops/install_settings.py",
+   "src/brain/setup_routes.py",
+   "src/brain/setup_wizard.py"
+  ],
+  "tests": [
+   "tests/unit/test_install_settings.py",
+   "tests/unit/test_setup_routes.py",
+   "tests/unit/test_setup_wizard.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "5defffa The setup wizard saves what it collects, so a fresh install needs no hand-edited environme",
+   "82afbfb A fresh install reaches a signed-in first administrator over HTTP: the setup code's holder",
+   "019a0e3 The install wizard, and the draft of it that let a stranger read the review screen"
+  ]
+ },
+ "M42.5.11": {
+  "sentence": "The wizard becomes unreachable the moment the first administrator exists, so the install path cannot be replayed by anybody who finds the address",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (setup_wizard); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-integrate2; old backup branch recovery/from-windows-20260928-wt-steward",
+  "src": [
+   "src/brain/setup_wizard.py"
+  ],
+  "tests": [
+   "tests/unit/test_setup_wizard.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "019a0e3 The install wizard, and the draft of it that let a stranger read the review screen"
+  ]
+ },
+ "M42.5.12": {
+  "sentence": "A resumable install: closing the browser halfway continues where it stopped rather than starting the server again",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (setup_routes, setup_wizard); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-integrate2; old backup branch recovery/from-windows-20260928-wt-steward",
+  "src": [
+   "src/brain/setup_routes.py",
+   "src/brain/setup_wizard.py"
+  ],
+  "tests": [
+   "tests/unit/test_setup_wizard.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "c48ea6c The console draws first run: sign in, give the setup code and the wizard's answers, approv",
+   "82afbfb A fresh install reaches a signed-in first administrator over HTTP: the setup code's holder",
+   "019a0e3 The install wizard, and the draft of it that let a stranger read the review screen"
+  ]
+ },
+ "M42.5.13": {
+  "sentence": "Every step validates before it advances and says what is wrong in words the person can act on",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (setup_wizard); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-integrate2; old backup branch recovery/from-windows-20260928-wt-steward",
+  "src": [
+   "src/brain/setup_wizard.py"
+  ],
+  "tests": [
+   "tests/unit/test_setup_wizard.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "019a0e3 The install wizard, and the draft of it that let a stranger read the review screen"
+  ]
+ },
+ "M42.5.14": {
+  "sentence": "A finishing screen that hands the person straight into the console already signed in, with nothing further to configure before the system answers a question",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console_static, deployment.vault_setup, ops.install_settings +6 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +11 more",
+  "src": [
+   "src/brain/console_static.py",
+   "src/brain/deployment/vault_setup.py",
+   "src/brain/ops/install_settings.py",
+   "src/brain/runtime.py",
+   "src/brain/setup_routes.py",
+   "src/brain/setup_wizard.py",
+   "src/brain/sign_in_routes.py"
+  ],
+  "tests": [
+   "tests/unit/test_console_served.py",
+   "tests/unit/test_install_settings.py",
+   "tests/unit/test_setup_routes.py",
+   "tests/unit/test_setup_wizard.py",
+   "tests/unit/test_sign_in_routes.py",
+   "tests/unit/test_vault_setup.py"
+  ],
+  "console": [
+   "console/src/pages/FirstRun.tsx",
+   "console/src/setup/wizard.ts"
+  ],
+  "ctests": [
+   "console/tests/first-run.test.tsx"
+  ],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": [
+   "0c4b5f8 A fresh install runs the secrets vault, opens it once and hands the application and the wo",
+   "6c86e6f An install's console, built into the release image and served at its root, is credited to ",
+   "0176d18 The console an install ships with is now reachable: the image builds it and the applicatio",
+   "c48ea6c The console draws first run: sign in, give the setup code and the wizard's answers, approv"
+  ]
+ },
+ "M42.5.15": {
+  "sentence": "Installer output legible to a person: what it is doing, how far through it is, and what to do if a step fails",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (deployment.installer); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/deployment/installer.py"
+  ],
+  "tests": [
+   "tests/unit/test_deployment_installer.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "b2dd59d One command and one file are different things, and only the command was asked for"
+  ]
+ },
+ "M42.5.16": {
+  "sentence": "Wizard step: chat and email channels, each connected and sent a test message before the finish, skippable and repeatable later from the console",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/needs-rupash.md",
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M42.5.17": {
+  "sentence": "The installer is run start to finish on a fresh AWS instance and on a fresh VPS, each ending with the company's Brain answering a question, with the time taken recorded",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/needs-rupash.md",
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M42.5.2": {
+  "sentence": "Every password, key and secret generated on the client server during install, never defaulted and never shipped in the template",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (deployment.installer, deployment.variables); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/deployment/installer.py",
+   "src/brain/deployment/variables.py"
+  ],
+  "tests": [
+   "tests/unit/test_deployment_variables.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "b2dd59d One command and one file are different things, and only the command was asked for"
+  ]
+ },
+ "M42.5.3": {
+  "sentence": "A setup code printed once by the installer and required by the first wizard screen, so whoever loads the page first cannot claim the system",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (deployment.app_environment, deployment.installer, firstrun +1 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-w0e",
+  "src": [
+   "src/brain/deployment/app_environment.py",
+   "src/brain/deployment/installer.py",
+   "src/brain/firstrun.py",
+   "src/brain/setup_wizard.py"
+  ],
+  "tests": [
+   "tests/unit/test_app_environment.py",
+   "tests/unit/test_setup_wizard.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "00abc8f The value the installer prints is now the enrolment the wizard is judged against",
+   "019a0e3 The install wizard, and the draft of it that let a stranger read the review screen"
+  ]
+ },
+ "M42.5.4": {
+  "sentence": "Setup wizard in the console: numbered steps with visible progress, step 3 of 10, and a back button on every screen",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (setup_wizard); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/setup_wizard.py"
+  ],
+  "tests": [
+   "tests/unit/test_setup_wizard.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "019a0e3 The install wizard, and the draft of it that let a stranger read the review screen"
+  ]
+ },
+ "M42.5.5": {
+  "sentence": "Wizard step: company name, logo upload and web address",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (setup_wizard); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/setup_wizard.py"
+  ],
+  "tests": [
+   "tests/unit/test_setup_wizard.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "019a0e3 The install wizard, and the draft of it that let a stranger read the review screen"
+  ]
+ },
+ "M42.5.7": {
+  "sentence": "Wizard step: staff source, choosing between Google Workspace, Microsoft, Lark or a spreadsheet, signing in and pulling the list",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (connectors.staff_directories, setup_staff_routes, components/StaffListCheck.tsx +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-integrate2; old backup branch recovery/from-windows-20260928-wt-steward; old backup branch recovery/from-windows-20260928-wt-w03; +1 more",
+  "src": [
+   "src/brain/connectors/staff_directories.py",
+   "src/brain/setup_staff_routes.py"
+  ],
+  "tests": [
+   "tests/unit/test_authentication_guide.py",
+   "tests/unit/test_setup_staff_routes.py",
+   "tests/unit/test_staff_directories.py"
+  ],
+  "console": [
+   "console/src/components/StaffListCheck.tsx",
+   "console/src/pages/FirstRun.tsx",
+   "console/src/pages/StaffListSignedIn.tsx",
+   "console/src/setup/staffList.ts"
+  ],
+  "ctests": [
+   "console/tests/first-run-staff-list.test.tsx"
+  ],
+  "docs": [
+   "docs/install/authentication.md",
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "bec9a5e A person who does not use a terminal installs by double-clicking a file on Windows, and th",
+   "a1a4ace An install chooses which staff list it reads, and choosing nothing reads nothing",
+   "019a0e3 The install wizard, and the draft of it that let a stranger read the review screen"
+  ]
+ },
+ "M42.5.8": {
+  "sentence": "Wizard step: AI provider, either their own key or a local-only profile with no external provider",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (setup_wizard); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/setup_wizard.py"
+  ],
+  "tests": [
+   "tests/unit/test_setup_wizard.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "019a0e3 The install wizard, and the draft of it that let a stranger read the review screen"
+  ]
+ },
+ "M42.5.9": {
+  "sentence": "Wizard step: optional data source connections, skippable and repeatable later from the console",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (components/ConnectSource.tsx, pages/FirstRun.tsx, pages/connectorsQuery.ts +1 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +8 more",
+  "src": [],
+  "tests": [],
+  "console": [
+   "console/src/components/ConnectSource.tsx",
+   "console/src/pages/FirstRun.tsx",
+   "console/src/pages/connectorsQuery.ts",
+   "console/src/setup/ConnectSourcesStep.tsx"
+  ],
+  "ctests": [
+   "console/tests/first-run.test.tsx",
+   "console/tests/support/consoleAudit.ts"
+  ],
+  "docs": [
+   "docs/console-audit/10-knowledge-bases-documents-and-data-sources.md",
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "c0e5865 An administrator connects a source from the console with its key written once into the vau",
+   "019a0e3 The install wizard, and the draft of it that let a stranger read the review screen"
+  ]
+ },
+ "M42.6.2": {
+  "sentence": "The setup wizard writes what it collects, so a first install needs no hand-edited environment file for the values it asks for",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (deployment.app_environment, deployment.install_script, deployment.installer +5 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +12 more",
+  "src": [
+   "src/brain/deployment/app_environment.py",
+   "src/brain/deployment/install_script.py",
+   "src/brain/deployment/installer.py",
+   "src/brain/deployment/vault_setup.py",
+   "src/brain/ops/openbao.py",
+   "src/brain/ops/schedule_runner.py",
+   "src/brain/ops/vault_renewal.py",
+   "src/brain/setup_routes.py"
+  ],
+  "tests": [
+   "tests/unit/test_setup_routes.py",
+   "tests/unit/test_vault_renewal.py",
+   "tests/unit/test_vault_setup.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "0c4b5f8 A fresh install runs the secrets vault, opens it once and hands the application and the wo",
+   "6c86e6f An install's console, built into the release image and served at its root, is credited to "
+  ]
+ },
+ "M42.6.3": {
+  "sentence": "A question can be asked and its answer read in the console, so an install proves itself end to end before any channel is connected",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (pages/Ask.tsx, pages/askQuery.ts); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #117's branch M8/citations-freshness-abstention (may be replayed already); closed PR #131's branch M8/citations-freshness-abstention-r2 (may be replayed already); closed PR #143's branch M8/citations-freshness-abstention-r3 (may be replayed already); +7 more",
+  "src": [],
+  "tests": [],
+  "console": [
+   "console/src/pages/Ask.tsx",
+   "console/src/pages/askQuery.ts"
+  ],
+  "ctests": [
+   "console/tests/ask-page.test.tsx"
+  ],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "c8cf7f4 A question can be asked in the console and its answer read, so an install proves itself"
+  ]
+ },
+ "M42.6.4": {
+  "sentence": "Console screens for skills: add a skill, see what it is trusted to reach, and assign it to an agent",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.skill_library, ops.skill_store, skill_routes +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; branch M16/w3-learning-tables, no PR; branch M33/train-0200, no PR; +14 more",
+  "src": [
+   "src/brain/console/skill_library.py",
+   "src/brain/ops/skill_store.py",
+   "src/brain/skill_routes.py",
+   "src/brain/tables/skill.py"
+  ],
+  "tests": [
+   "tests/unit/test_conventions.py",
+   "tests/unit/test_skill_library.py",
+   "tests/unit/test_skill_routes.py",
+   "tests/unit/test_skill_store.py"
+  ],
+  "console": [
+   "console/src/pages/skills/SkillForms.tsx",
+   "console/src/pages/skillsQuery.ts"
+  ],
+  "ctests": [
+   "console/tests/skills-page.test.tsx"
+  ],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "bb78308 An administrator adds a skill from a pasted or uploaded SKILL.md, somebody else approves i",
+   "be1b515 Four console screens an administrator asked for: connectors, skills, staff sources, and th"
+  ]
+ },
+ "M42.6.5": {
+  "sentence": "Console screens for connectors: connect one, hold its credential in the vault, and see what it is trusted to read",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit.ledger, audit.record, connector_routes +15 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; +21 more",
+  "src": [
+   "src/brain/audit/ledger.py",
+   "src/brain/audit/record.py",
+   "src/brain/connector_routes.py",
+   "src/brain/console/connector_trust.py",
+   "src/brain/ops/connectable.py",
+   "src/brain/ops/connector_admin.py",
+   "src/brain/ops/connector_store.py",
+   "src/brain/ops/connector_sync.py",
+   "src/brain/ops/connector_sync_run.py",
+   "src/brain/ops/connector_sync_store.py",
+   "src/brain/ops/credentials.py",
+   "src/brain/ops/openbao.py",
+   "src/brain/ops/schedule_runner.py",
+   "src/brain/tables/connector_connection.py",
+   "src/brain/tables/connector_sync.py"
+  ],
+  "tests": [
+   "tests/unit/test_connectable.py",
+   "tests/unit/test_connector_admin.py",
+   "tests/unit/test_connector_routes.py",
+   "tests/unit/test_connector_store.py",
+   "tests/unit/test_connector_sync.py",
+   "tests/unit/test_connector_sync_run.py",
+   "tests/unit/test_connector_trust.py"
+  ],
+  "console": [
+   "console/src/components/ConnectSource.tsx",
+   "console/src/pages/connectors/SourceFlow.tsx",
+   "console/src/pages/connectorsQuery.ts"
+  ],
+  "ctests": [
+   "console/tests/connectors-page.test.tsx"
+  ],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "4866f33 A source whose declaration changed shows what changed, in plain words, before a person may",
+   "e3c61fc Connect Lark asks who may read each wiki space and says a Base's tables are granted per ta",
+   "2c78257 Every other connector is connected one screen at a time with a picture per step, and a sou",
+   "55ec388 Every other connector is connected one screen at a time with a picture per step, and a sou"
+  ]
+ },
+ "M42.6.6": {
+  "sentence": "A helper for a person who does not use a terminal: it asks for the server address and runs the one install command there",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (deployment.windows_helper); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/deployment/windows_helper.py"
+  ],
+  "tests": [
+   "tests/unit/test_windows_helper.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/install/windows.md",
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "bec9a5e A person who does not use a terminal installs by double-clicking a file on Windows, and th"
+  ]
+ },
+ "M42.6.7": {
+  "sentence": "The first real release is published and fetched back on a clean machine, so the image and the archive are known to exist rather than known to be built",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [
+   "tests/unit/test_deployment_release.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": [
+   "6c86e6f An install's console, built into the release image and served at its root, is credited to ",
+   "ba8d388 A tag now publishes the image the archive pins, so a release is two artefacts rather than "
+  ]
+ },
+ "M42.7.1": {
+  "sentence": "The install health check reports whether the host exposes kernel virtualisation, and the browser isolation stated to the administrator is taken from that result rather than assumed",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M42.7.2": {
+  "sentence": "The release lifecycle is proved on an install: a CI-built, signed image that passed lint, types, tests, canaries and the licence check is pulled by digest with no inbound access, migrations run before traffic, in-flight work including a running workflow drains without loss, an unnamed image is refused, rollback to the previous release completes, and the copied-deployment check passes, with the checks recorded",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M42.7.3": {
+  "sentence": "The release image and archive carry the licence notice of every bundled third-party component and font, generated from the lockfiles, and a release missing one fails",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M42.7.4": {
+  "sentence": "The release archive carries the backup and restore scripts and the installer schedules the nightly backup, so an install made from a release backs itself up without a file copied from the repository",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M42.7.5": {
+  "sentence": "The owner's install runs the standard profile, and the System health screen shows the worker, the vault, the object store and the connection pooler each ready, with the provider key held in the vault and not in the environment file",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M42.7.6": {
+  "sentence": "The owner's install is pinned to a published release tag rather than the latest image, and the Version screen shows that tag and whether a newer release exists",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M42.7.7": {
+  "sentence": "Every other requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M42.7.8": {
+  "sentence": "Probed from an address outside the allowlist, the install answers only on its public ports with valid TLS, every administrative console refuses sign-in, and a certificate within fourteen days of expiry alerts a named person",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ }
+}

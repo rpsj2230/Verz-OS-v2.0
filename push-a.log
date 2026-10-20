@@ -1,0 +1,67 @@
+pre-push: the commit, not the working tree
+Using CPython 3.13.15 interpreter at: /Users/rupash/.local/share/uv/python/cpython-3.13.15-macos-aarch64-none/bin/python3
+Creating virtual environment at: .venv
+   Building verz-brain @ file:///private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/tmp.SBM3MXdXiV
+      Built verz-brain @ file:///private/var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/tmp.SBM3MXdXiV
+Installed 91 packages in 105ms
+Success: no issues found in 2124 source files
+ok: 1412 task id(s) claimed, all traceable, every closed leaf has a test
+note: 644 leaf/leaves claimed in source only
+note: 0 claimed id(s) name a group, so the tracker credits nothing
+note: 4 console read(s) have no screen in the browser, 1 exempted with a written reason
+      brain.console.automation_gallery declares no screen key, so no route could reach it and nothing in console/src names it
+      brain.console.automation_schedule declares no screen key, so no route could reach it and nothing in console/src names it
+      brain.console.automations declares no screen key, so no route could reach it and nothing in console/src names it
+      brain.console.role_surfaces declares no screen key, so no route could reach it and nothing in console/src names it
+note: navigations the design draws with no shell of their own to compare yet: My Workspace, Inside an Agent
+pre-push: format
+2124 files already formatted
+pre-push: lint
+All checks passed!
+pre-push: types (strict, as the runner sees them)
+Success: no issues found in 2124 source files
+pre-push: invariants
+........................................................................ [  4%]
+........................................................................ [  9%]
+........................................................................ [ 14%]
+........................................................................ [ 19%]
+........................................................................ [ 24%]
+........................................................................ [ 28%]
+........................................................................ [ 33%]
+........................................................................ [ 38%]
+........................................................................ [ 43%]
+........................................................................ [ 48%]
+........................................................................ [ 53%]
+........................................................................ [ 57%]
+........................................................................ [ 62%]
+........................................................................ [ 67%]
+........................................................................ [ 72%]
+........................................................................ [ 77%]
+........................................................................ [ 82%]
+........................................................................ [ 86%]
+........................................................................ [ 91%]
+........................................................................ [ 96%]
+...................................................                      [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.13/site-packages/starlette/testclient.py:53
+  /Users/rupash/Claude/Verz-OS-v2.0/brain/.scratch/wt-cg-governance/wh6/.venv/lib/python3.13/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+pre-push: sweeps
+ok: every tool name matches the grammar (20 registered, 7 literal(s) checked)
+ok: 1412 task id(s) claimed, all traceable, every closed leaf has a test
+note: 644 leaf/leaves claimed in source only
+note: 0 claimed id(s) name a group, so the tracker credits nothing
+note: 4 console read(s) have no screen in the browser, 1 exempted with a written reason
+      brain.console.automation_gallery declares no screen key, so no route could reach it and nothing in console/src names it
+      brain.console.automation_schedule declares no screen key, so no route could reach it and nothing in console/src names it
+      brain.console.automations declares no screen key, so no route could reach it and nothing in console/src names it
+      brain.console.role_surfaces declares no screen key, so no route could reach it and nothing in console/src names it
+note: navigations the design draws with no shell of their own to compare yet: My Workspace, Inside an Agent
+pre-push: all gates green
+remote: This repository moved. Please use the new location:        
+remote:   https://github.com/rpsj2230/Verz-OS-v2.0.git        
+To https://github.com/rpsj2230/verz-brain-v2.0.git
+ ! [remote rejected]   HEAD -> M38/triage-waves-4-5-a (cannot lock ref 'refs/heads/M38/triage-waves-4-5-a': reference already exists)
+error: failed to push some refs to 'https://github.com/rpsj2230/verz-brain-v2.0.git'

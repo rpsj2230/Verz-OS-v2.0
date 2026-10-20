@@ -1,0 +1,468 @@
+M1.1.8	Sign in with Lark: Keycloak brokers Lark as an identity provider, so a person on a Lark staff list signs in wi
+M12.3.5	An agent produces a document, a slide deck or a spreadsheet from an approved company template through one regi
+M12.3.7	An external AI service other than a chat model, such as image generation or speech to text, is registered as a
+M12.4.15	Every tools requirement in the requirements register is demonstrated on an install by a person, and each check
+M12.4.2	Human approval of sensitive actions is proved on an install: for each named sensitive effect an agent prepares
+M12.4.8	The tool catalogue is proved on an install: one agent calls a typed API tool, a pinned third-party tool server
+M13.7.9	A maintenance agent template ships in the catalogue declaring maintenance knowledge, a ticket desk and a maint
+M13.8.11	Accepting a new template version runs the same binding and completeness checks as installing it, so a tool the
+M13.8.12	Every agents requirement in the requirements register is demonstrated on an install by a person, and each chec
+M13.8.14	Every harness requirement in the requirements register is demonstrated on an install by a person, and each che
+M13.8.3	The harness is proved on an install: a question through each of the fast, answer and task lanes, a task killed
+M13.8.5	A department admin installs an agent from the catalogue on the install and it answers its golden set correctly
+M13.8.6	The maintenance agent template also declares a maintenance workflow, and installing it assigns that workflow s
+M13.8.7	The SEO agent template declares SEO knowledge, the analytics and search console connectors, SEO skills, the ch
+M13.8.8	The catalogue has a sales, a finance, a support and a project management agent template, each declaring its kn
+M13.8.9	The agent lifecycle is proved on an install: a template with a missing connector installs pinned to Shadow wit
+M13.9.1	A super admin creates an agent for the whole company from the console, from a template or from scratch, and in
+M13.9.2	A department admin creates an agent for their own department in the same flow, and can choose only the skills,
+M13.9.3	On the install a super admin and a department admin each create an agent from their requirements and a workflo
+M14.4.1	Splink offline job against a DuckDB export
+M14.8.2	Every entity resolution requirement in the requirements register is demonstrated on an install by a person, an
+M14.8.4	Records of one person from the CRM, the helpdesk and the chat directory resolve under a person-specific identi
+M16.2.5	Human takeover of an Assisted action
+M16.2.6	Ticket reopened within a window
+M16.2.7	Approval rejected with a reason
+M16.4.3	Source truth wins immediately, memory demoted and flagged
+M16.6.2	A question about a client project is answered with the current context of that project, its client, open ticke
+M16.7.1	Every change learning applies to an agent is marked machine-authored in that agent's per-field ownership, so a
+M16.7.11	Every memory requirement in the requirements register is demonstrated on an install by a person, and each chec
+M16.7.9	Every learning requirement in the requirements register is demonstrated on an install by a person, and each ch
+M17.1.1	Job table with state machine, attempts, and scheduling
+M17.1.2	Procrastinate integration on Postgres
+M17.1.4	Cancellation and timeout
+M17.1.5	Dead-letter handling with an operator surface
+M17.2.1	LangGraph checkpointer on Postgres
+M17.2.3	Checkpoint at every side-effect boundary
+M17.4.5	Timeout and expiry on every approval step
+M17.4.6	Run history with cost per run
+M17.6.1	An administrator can define a multi-step workflow from the console as stored, versioned data, and an agent ass
+M17.6.2	A workflow step can call a skill, read a connector or use a tool, and every such step runs through the gate at
+M17.6.3	A workflow step's output is named and schema-checked, and a later step can read only outputs that earlier step
+M17.6.4	A workflow step can run only when a condition over earlier named outputs holds, and a skipped step is recorded
+M17.6.5	Workflow steps declared parallel start together, and the step that combines them runs only after each has fini
+M17.6.6	Each workflow step carries its own retry limit and backoff, a side-effecting step is retried only through its 
+M17.6.7	Every finished workflow or automation run emits a success or failure signal naming the workflow, the agent and
+M17.6.8	A workflow that reads two connectors, calls two skills, waits for an approval and delivers a document runs end
+M17.7.1	The monthly search report workflow runs on the install for a named client: it resolves the client, reads the p
+M17.7.2	A scheduler inside the application runs every registered scheduled control when it is due, holding a database 
+M17.7.3	Automations are proved on an install: a scheduled, a connector-event and a webhook automation each run as thei
+M17.7.4	Workflow control flow is proved on an install: a workflow with two parallel skill steps, a conditional step th
+M17.7.5	The automation gallery ships a daily brief, capture of deals from group chats into the customer records held a
+M17.7.6	Every notice the product composes is delivered to the person it names through their bound channel or the confi
+M17.7.7	An agent runs only the workflows assigned to it, and a request that would start any other workflow through it 
+M17.7.8	Every human approval requirement in the requirements register is demonstrated on an install by a person, and e
+M18.1.2	Subtask contract: objective, output schema, tool hints, scope predicate
+M18.1.3	Schema validation on every subtask result, failure rather than merge input
+M18.1.4	Prose explicitly disallowed as a subtask contract
+M18.2.1	Dependency graph with cost and coupling weights
+M18.2.2	Six arithmetic conditions evaluated before any child starts
+M18.2.3	Collapse to a single loop as the default when any condition fails
+M18.2.4	Gate inputs and verdict recorded for audit
+M18.3.1	Child grant computed in SQL as parent intersect agent intersect subtask
+M18.3.2	Database trigger rejecting any non-subset delegation row
+M18.3.3	Orchestrator has no grant verb, asserted
+M18.3.4	Depth cap of two and per-run concurrency cap of eight
+M18.3.5	Global parallelism budget across all runs
+M18.4.1	Merge step writing the final answer from validated inputs
+M18.4.2	Per-subtask cost and duration surfaced to the user
+M18.4.3	Partial-failure handling with a stated gap
+M18.5.1	A coordinating agent can hand a subtask only to agents an administrator allowed it to call, and a call to any 
+M18.5.2	A specialist agent handed a subtask reads through its own knowledge, skills and connectors within the asker's 
+M18.5.3	A planner step asks a model for subtasks and their dependencies, and its proposal passes the existing proposal
+M18.6.1	A request to analyse a client's website and prepare an improvement proposal runs on the install as a coordinat
+M18.6.2	An agent spawns parallel subtasks or workers only when fan-out is enabled on it by its department admin, and a
+M18.7.1	The cost check may run a coordinator's specialist agents one after another, but never replaces a specialist's 
+M19.1.1	Ephemeral gVisor container per run
+M19.1.2	Playwright for Python with Chromium
+M19.1.3	Worker owning the CDP session and snapshot serialisation
+M19.1.4	Accessibility-tree snapshots rather than screenshots
+M19.1.5	tmpfs-only writable layer, destroyed at run end, never reused
+M19.1.6	Per-run network namespace
+M19.2.1	Planner that never reads page content, asserted by test
+M19.2.2	Envelope compilation: plan intersected with capabilities and skill ceiling
+M19.2.3	Envelope storage and approval record
+M19.2.4	Target registry with declared surface maps
+M19.3.1	Enforcer with policy compiled at container start and immutable after
+M19.3.2	Reference validation against the snapshot just produced
+M19.3.3	Origin allowlist check per action
+M19.3.4	Write verb and count checks against the envelope
+M19.3.5	mitmproxy sidecar as the sole route out
+M19.3.6	Second independent check in the control plane on every returned result
+M19.4.1	Placeholder resolution at the tool-execution boundary
+M19.4.2	Origin binding so a secret only substitutes on its own domain
+M19.4.3	TOTP generation server-side from a stored seed
+M19.4.4	Outbound scrubbing from message history
+M19.4.5	Vision disabled so a credential cannot be read off a screenshot
+M19.5.1	Rubric generated from the goal before seeing the trajectory
+M19.5.2	Two-pass scoring: actions only, then with screenshots
+M19.5.3	Agent's own success claim ignored
+M19.5.4	Tuned for low false-positive rate, accepting false negatives
+M19.5.5	Out-of-band read-back from the system of record where possible
+M19.6.2	Per-domain concurrency limit
+M19.6.3	Per-agent limit
+M19.6.4	Memory and CPU caps per session
+M19.6.5	Global kill switch
+M19.6.6	Full session recording with retention policy
+M19.6.7	Skill loader refusing a browser skill where an API tool exists, unless exempted with a named approver and expi
+M19.7.1	Read-only capability shipped first
+M19.7.2	Write capability behind envelope approval
+M19.7.3	Assisted ceiling on writes unless a per-surface exception is signed
+M19.8.1	An agent can operate an allowlisted desktop application inside an isolated virtual desktop, with every action 
+M19.9.1	A browser action outside its approved envelope suspends the run and sends a new approval naming the breach, an
+M19.9.10	On the install an agent's browser write to an allowlisted site is compiled into an envelope, approved by a per
+M19.9.11	Browser session recordings on the install are written to the object store at run end, and a scheduled job remo
+M19.9.2	Browser approval is proved on an install: a read-only website check runs without approval, a planned browser w
+M19.9.3	A browser run starts from an empty profile in its own container and cannot attach to or import a staff member'
+M19.9.4	Website and portal reading is proved on an install: asked whether a live website is working, an agent checks i
+M19.9.5	A browser write is proved on an install: one multi-step form-filling task against a registered target runs at 
+M19.9.6	The browser sandbox runs on an install, and an agent whose ceiling holds the browser tools opens a page in it.
+M19.9.7	An administrator grants a per-surface browser write exception or a browser-over-API exemption from the console
+M19.9.8	On the install a browser run's outcome is scored by a judge from its actions and admitted frames against the r
+M19.9.9	On the install open browser sessions are counted as they start and end, and a session over the global, per-web
+M20.1.1	Composer sections: identity, persona, knowledge, skills, tools, connectors, channels, workflows, memory, leash
+M20.4.5	Router collision check
+M20.5.1	An agent, skill or knowledge item published at department reach waits for that department's admin and one publ
+M20.5.2	Publishing an agent whose median rehearsed run costs more than its department's per-run ceiling is held until 
+M20.5.3	A person describes an agent in conversation and the system drafts its persona, knowledge, skills, connectors, 
+M21.1.1	Company budget with hard ceiling and alert thresholds
+M21.1.2	Department budget as a share, with explicit transfer only
+M21.1.3	User daily and monthly allowance with a fair-share cap
+M21.2.1	Pre-flight cost estimate from lane, tier, tool count and retrieval size
+M21.2.2	Refusal before tokens are spent
+M21.2.4	Estimator correction from actuals
+M21.2.5	At a budget limit the request is refused with no silent degradation to a cheaper tier, and at a department cei
+M21.2.6	Message naming which budget was hit and who can raise it
+M21.3.3	Cost per answer with the distribution, not only the mean
+M21.3.4	Most expensive agents and question shapes
+M21.3.6	Every budget refusal with the budget that caused it
+M21.4.1	Metered spend for a billing period is reported per provider key in the provider's own units and reconciles wit
+M21.4.2	Every spend row carries the trace id of the request it paid for, the trace records the request's tool count an
+M21.4.3	Budgets are proved on an install: company, department, person and agent limits are set in the console, a reque
+M21.4.4	The agent usage chart offers an all-time range beside seven, thirty and ninety days and month to date, and mar
+M21.4.5	Every cost requirement in the requirements register is demonstrated on an install by a person, and each check 
+M22.3.3	Load test at peak concurrency
+M25.1.3	Payload store thirty-day expiry
+M25.1.4	Trace and recording lifecycle
+M25.2.1	Subject access request assembling every store: rows, projections, memory, traces, recordings, backups
+M25.2.2	Deletion propagating to cache, index, memory and projection
+M25.2.4	Deletion certificate with what was removed and when
+M25.3.2	Bulk export for eDiscovery with an audit row and a required reason
+M25.3.3	Knowledge export preserving scope metadata
+M25.4.2	Retention and erasure are proved on an install: the retention sweep reports a dry run and removes nothing unti
+M25.4.3	A per-object sweep removes every stored artifact past its retention class's window, records each removal, and 
+M25.4.4	Every data and retention requirement in the requirements register is demonstrated on an install by a person, a
+M25.4.5	A configured trace destination receives redacted traces from an install, proved end to end.
+M26.1.1	Provisioning from the identity provider
+M26.1.2	Role and starter capability pack assignment
+M26.1.3	Department assignment with scope
+M26.1.4	Welcome path with three department-scoped starter questions
+M26.2.1	Entitlement re-resolution on the next request
+M26.2.2	Personal agents following the person
+M26.2.3	Delegations re-evaluated and suspended rather than narrowed
+M26.2.4	Cached answers unreachable by construction
+M26.2.6	Knowledge access changing with no reindex
+M26.2.7	Test covering every one of the above
+M26.3.1	Immediate disable with session termination
+M26.3.2	Owned agents flagged for adoption
+M26.3.3	Automations suspended
+M26.3.4	Personal knowledge and memory disposition policy
+M26.4.1	Joiner, mover and leaver handling is proved on an install: a person moved between departments loses the old de
+M27.1.5	Per-request fields: principal, agent version, policy epoch, entitlement hash, lane, model, provider, time to f
+M27.10.2	Shared parts every page is built from, taken from shadcn/ui on Radix with Tailwind (the owner chose it on 2026
+M27.11.12	The agent Profile lists its connected sources, pinned skills and channels, each with add and remove and an ove
+M27.11.13	The agent Profile shows who can find and use the agent, its owner, departments and people, with add and remove
+M27.11.14	The agent Profile carries the memory and learning switch and the browsing switch, and shows no switch for a ca
+M27.11.2	People: grant expiry, bulk grants, pack assignment, a leaver disabled with the adoption plan, reinstatement an
+M27.11.4	Sign-in, identity provider, staff source and the directory sync managed from the console
+M27.11.7	Agent templates installed, authored from an agent through the leak scan, and withdrawn
+M27.12.5	Model calls are metered into spend, budgets are versioned from the console, and stops in force are visible
+M27.13.3	The queue and side effects: unknown states resolved and dead letters redriven from the console
+M27.13.5	Backup drills started and recorded from the console
+M27.14.1	Home and People and access proved in the browser: list, search, filter, view, create, edit, verify, retire, re
+M27.14.2	Agents and AI proved in the browser by the same cases
+M27.14.3	Knowledge and data proved in the browser by the same cases
+M27.14.4	Channels and notifications proved in the browser by the same cases
+M27.14.5	Operations proved in the browser by the same cases
+M27.14.6	Governance proved in the browser by the same cases
+M27.14.7	Reports proved in the browser by the same cases
+M27.14.8	Platform proved in the browser by the same cases, at company scope only
+M27.15.1	Opening the content of another department's item is a capability separate from seeing it in the inventory, rev
+M27.15.11	A question answered with nothing found is shown to a knowledge owner only when the owner's own reach covers ev
+M27.15.12	Every console requirement in the requirements register is demonstrated on an install by a person, and each che
+M27.15.23	A department page shows members, lead history, its scope as a sentence, agents addressed to it and knowledge c
+M27.15.26	A service account runs at its owner's live reach narrowed by its ceiling, holds at most two live keys, can nev
+M27.15.32	The agent Profile offers computer use only once an isolated desktop runner exists, and says in a sentence that
+M27.15.34	The memory and artifact reads filter by agent, and the agent's tabs show only what the reader may see.
+M27.15.35	Withdrawing a template version and undoing it are insert-only and audited, installed agents stay pinned, and a
+M27.15.41	A reviewed classification is applied by a person other than its proposer, fast-path rules are listed, and pend
+M27.15.46	Runs and queue lists live runs by state, and resolving an unknown side effect asks for confirmation naming the
+M27.15.49	A settings write needs the settings admin capability, an identity provider change updates its redirect address
+M27.15.52	Every destructive control names its act (retire, end, disconnect, switch off, withdraw, detach, supersede), an
+M27.15.62	The console offers who-can-reach questions only for a capability over a scope, and no screen or route answers 
+M27.15.68	Template install and the first run of a new install are stepped wizards whose draft survives leaving the page
+M27.15.69	Every empty list says what would add a row and which role may add it
+M27.15.70	Every action the install cannot yet perform, or the reader cannot perform here, is explained by a sentence the
+M27.15.71	Buttons carry primary, quiet and danger variants, and the Dashboard shows KPI tiles, a Needs-you list and an a
+M27.15.72	Every class in the console's markup has a style rule and every page reports a failure through the shared failu
+M27.15.75	The console's fonts are served from the install itself, and loading any page makes no request to a font host
+M27.15.79	Every console dependency's licence is on an allowed list checked in CI
+M27.15.83	The reference screenshots are held in the docs and each console page they cover records what was adapted and w
+M27.16.1	Every console page is rebuilt on the shared shadcn/ui parts to the key screens design in docs/screens.html or 
+M27.16.2	A console-wide clean-up removes what an administrator does not need, such as internal ids in page text, develo
+M27.16.3	Every list page offers the management tools an enterprise console has: bulk actions over a selection, export o
+M27.16.4	The key screens page shows one designed screen for each primary page, the agent detail page included, and no p
+M27.16.5	A page counts as rebuilt only after a browser walk-through of it passes on the owner's install
+M27.5.2	Console rows entity-tagged so the redactor applies to reports
+M27.5.3	Report audience intersected with the caller's scope, never unioned
+M27.5.9	Every screen narrowable by department and by person, one filter shape for all of them
+M27.7.15	Spend, budgets and what happens at the ceiling
+M27.7.2	Staff source: choose it, configure it and try it before it runs
+M27.8.10	Feature and module enablement, managed from the console
+M27.8.17	Every control is proved to reach the system: the write is followed to the row, to the audit entry it leaves, a
+M27.9.8	Docstrings that describe a store or a route the code no longer matches are corrected, each behavioural correct
+M29.1.12	Notification sink interface
+M29.1.2	Connector and tool provider interface
+M29.1.3	Skill interface
+M29.1.4	Template interface
+M29.1.5	Model provider interface
+M29.1.7	Field classifier interface
+M29.2.1	Manifest schema: identity, version, required capabilities, config schema, core compatibility range
+M29.2.2	Registry tables
+M29.2.3	Install, enable, disable, upgrade, rollback
+M29.2.4	Drain on upgrade so in-flight work finishes on the old version
+M29.2.5	Isolation tier per point: in-process, sidecar, sandbox
+M29.2.6	Core contract test: a plugin cannot see an unredacted result it did not produce, and cannot widen entitlements
+M29.3.1	Modularity is proved on an install: a connector for a new API and a new channel record are added and switched 
+M29.3.2	Every modularity requirement in the requirements register is demonstrated on an install by a person, and each 
+M30.1.3	Cloudflare Tunnel option for zero inbound ports
+M30.3.1	pgBackRest with continuous WAL archiving, daily incremental, weekly full
+M30.3.10	Alert on backup age exceeding the profile RPO
+M30.3.11	Louder alert on a failed verification
+M30.3.2	restic for object store and configuration
+M30.3.3	Off-host destination, mandatory
+M30.3.4	Encryption at rest with a client-held key
+M30.3.5	Retention: thirty daily, twelve weekly, twelve monthly
+M30.3.6	Weekly automated restore into a scratch container
+M30.3.7	Smoke query and permission canary against the restored copy
+M30.3.8	Measured RTO recorded from the drill
+M30.3.9	Console recovery panel with last backup, last verified restore and a one-click drill
+M30.4.2	Operation classification: safe to retry, unsafe, retry after verification, needs a human
+M30.4.3	Chaos suite: kill Postgres, provider, connector, browser, worker
+M30.4.4	Malformed responses and 429 injection
+M30.4.5	Disk-full behaviour
+M30.4.6	Policy change during an active task
+M30.4.7	User disabled during an active task
+M30.4.9	Two-box split rehearsed without application change
+M30.5.2	Measurement wired to the ledger
+M30.5.4	RPO and RTO per profile written into the client agreement
+M30.6.1	Backups are proved on an install: a copy lands off-host with its manifest every night for seven consecutive ni
+M30.6.10	On the install the backup exposure control runs on its cadence and alerts a named person when the newest verif
+M30.6.2	Operations are proved on an install: the service levels screen shows each lane's measured p50 and p95, permiss
+M30.6.4	Enabling an edge proxy or tunnel on an install that declares a residency constraint states that encryption the
+M30.6.5	An install on a profile with a recovery point under four hours replicates its object store off the host and ha
+M30.6.6	The service level statement is produced only after a restore drill verified a copy and the newest copy is insi
+M30.6.7	Recovery and resilience are proved on an install: backups land off the host encrypted with the client's key, a
+M30.6.8	Every hosting and delivery requirement in the requirements register is demonstrated on an install by a person,
+M30.6.9	After a person asks a question on the install, the Service levels screen counts that request in its lane withi
+M32.5.2.1	TanStack Table for every grid, with server-side pagination and filters
+M32.5.2.3	React Flow for the trace graph and procedure canvas
+M32.6.1.1	Deployment as an optional sandboxed container
+M32.6.1.2	Egress allowlist and no database credentials
+M32.6.1.4	Enabled per client by configuration, not a fork
+M33.2.2.4	Lower a leash, never raise beyond the ceiling
+M33.4.1.3	Redaction and refusal statistics
+M33.8.2	Installer access and secrets are proved on an install: the installing partner holds no reach, opens a break-gl
+M33.8.3	Installing, enabling or removing a connector needs a capability of its own that a department admin cannot gran
+M34.1.1.1	First connector chosen so a real question is answerable before any document is uploaded
+M34.1.1.2	Three department-scoped starter questions generated from what actually indexed
+M34.1.1.3	Answers verifiable against a system the client already trusts
+M34.1.2.1	Per-scope statement: record counts and last sync
+M34.1.2.2	Explicit not-connected state per department
+M34.1.2.3	Shopping list for the champion rather than a progress bar
+M34.2.1.1	Each department lead verifies five documents in week one
+M34.2.2.1	Correction path in every channel
+M34.2.2.2	Wrong-sources feedback distinct from wrong-answer, so retrieval and reasoning bugs separate
+M34.3.1.3	How to ask well, with examples from their own department
+M34.3.3.3	Upgrade and rollback procedure
+M34.3.3.4	Restore drill procedure
+M35.1.1.1	English and Simplified Chinese interface strings
+M35.1.1.2	Locale-aware dates, numbers and currency
+M35.2.1.1	Screen-reader-safe streaming: no naive aria-live on a token stream
+M35.2.1.2	Announce on completion, not on every token
+M35.2.1.3	Skip-to-answer control
+M35.2.2.1	Keyboard navigation across the console
+M35.2.2.2	Visible focus states
+M35.2.2.4	Form labels and error association
+M35.3.1.1	Console usable on a phone for approvals at minimum
+M35.3.2.2	Push for approvals, deferred with a stated trigger
+M35.4.1	Each console module is proved in the browser operable by keyboard alone, with visible focus and every form err
+M35.4.2	Language and assistive use are proved on an install: a Chinese query and a mixed-language document retrieve co
+M35.4.3	Choosing a right-to-left locale in the console or at setup is refused with a sentence naming the deferral, pro
+M35.4.4	Every localisation and accessibility requirement in the requirements register is demonstrated on an install by
+M35.4.5	The install measures how long each approval waited before a decision, and when the typical wait passes the sta
+M35.4.6	At phone width every touch target is at least 44px and no element is wider than 320px, across every console pa
+M36.1.2.1	Streaming replica configuration
+M36.1.2.3	Replication lag monitoring with a staleness banner
+M36.1.2.4	Trigger: console queries affecting answer latency
+M36.1.3.1	Views for the heaviest report screens
+M36.1.3.3	Trigger: a report exceeding two seconds
+M36.1.4.1	Application and browser on one host, database and object store on the other
+M36.2.1.3	Per-source and global budgets still enforced under parallelism
+M36.2.2.2	Collapse into a single pass where semantics allow
+M36.2.2.3	Verify no detection coverage is lost
+M36.2.3.1	Identical in-flight requests share one execution
+M36.2.3.2	Entitlement equality required before sharing, never similarity
+M36.2.4.1	Peak concurrency test rather than daily volume
+M36.2.4.3	Results recorded against the SLO table
+M36.3.1	A load test at the company's declared peak concurrency runs against the owner's install on its own host, recor
+M37.1.1.1	Catalogue what the current Company Brain holds: knowledge, prompts, tool definitions, conversation history
+M37.1.1.2	Decide per item: migrate, rebuild or retire
+M37.1.1.3	Map old permissions onto the new capability model, explicitly rather than by assumption
+M37.1.2.1	Knowledge and asset export from the old system
+M37.1.2.2	Re-parse and re-embed rather than copying vectors, since embeddings are model-specific
+M37.1.2.3	Entity registry seeded from existing client records
+M37.1.2.4	Historical conversations archived, not imported, unless there is a stated reason
+M37.1.3.1	Both systems answering the same questions for an agreed period
+M37.1.3.2	Answer comparison log with disagreements surfaced
+M37.1.3.3	Cutover criteria agreed in writing before the period starts
+M37.1.4.1	Old system read-only, then archived
+M37.1.4.2	Credential revocation on every connector the old system held
+M37.1.4.3	Scheduled jobs disabled and verified stopped
+M37.1.4.4	Final backup retained per the retention policy
+M37.2.2.2	Convert the description convention, since theirs are written as router prompts beginning "Use the X skill to"
+M37.2.2.3	Re-review every imported skill through the normal queue rather than trusting it because it worked before
+M37.2.2.4	Diff behaviour on a real task before and after import, not just that the file parses
+M37.2.2.5	Retire any skill that has not been invoked in ninety days rather than carrying it over
+M37.2.3.1	Rebuild each agent from a template rather than importing its configuration, because their model has no ceiling
+M37.2.3.2	Set an explicit ceiling per agent, which AnyGen never had
+M37.2.3.3	Start every rebuilt agent at Shadow on writes regardless of how it behaved there
+M37.2.3.4	Map their Availability onto our availability, and their absent authority onto our entitlement, separately - co
+M37.2.4.2	Read the memory files as evidence and re-derive tier one preferences rather than importing beliefs wholesale
+M37.2.4.3	Discard anything that would widen a scope, since it was never approved by anyone under our rules
+M37.2.4.4	State plainly in the handover that the new system starts without their accumulated learning, and why that is t
+M37.3.2.4	Adoption measured as real questions from real people, machine traffic excluded
+M37.4.2.4	Subprocessor list covering every model provider used
+M37.4.3.3	Named client owner for knowledge, grants and connectors
+M37.4.3.5	Thirty-day post-launch review booked at handover
+M37.5.1.2	CI assertion that each control appears in the scheduler
+M37.5.1.3	Alert when a scheduled job has not run within its window
+M37.5.1.4	Explicit test that no safety mechanism lacks a caller
+M37.5.2.1	Alert routing and severity definitions
+M37.5.2.2	Runbook per alert
+M37.5.2.3	Escalation path to us where the client cannot resolve it
+M37.5.3.1	Measured spend against the projection after thirty days
+M37.5.3.3	Budget thresholds retuned with real distribution rather than assumptions
+M37.7.5	A migration cutover cannot be recorded complete while revoking the old system's authorisations, recording the 
+M37.7.6	A migration is rehearsed on a throwaway install: skills are imported and re-reviewed, agents are rebuilt from 
+M37.7.8	Every migration requirement in the requirements register is demonstrated on an install by a person, and each c
+M38.2.2.6	W5: real connector credentials wired, browser tasks, go-live
+M38.4.2.1	Obtain and store real credentials per connector
+M38.4.2.2	Replay the contract tests against the live API and diff against the cassette
+M38.4.2.3	Rate-limit ceilings confirmed against the live account tier, not the documentation
+M38.4.2.4	First sync run with the projection populated and verified
+M38.4.2.5	Cassettes refreshed from live so future development stays faithful
+M38.5.3	On the owner's install a Maintenance Agent assembled from the console answers a real maintenance question in L
+M39.1.2.5	Keyboard navigation across tabs and back to the roster
+M39.10.3	A personal agent is listed, usable and visible only to its owner and, for oversight, to a reader who holds the
+M39.10.4	A person connects their own Google account (mail, calendar, documents) to their personal agent and what it rea
+M39.10.5	A team agent never reads one person's mailbox for the team: team mail comes only from a shared mailbox an admi
+M39.10.7	Proved in the browser: the create flow offers the kind, shows a person who may only make their own the persona
+M39.5.1.3	Stored in the object store with the retention class of its most sensitive input
+M39.7.2	An agent is assembled on the install from console choices alone, picking knowledge, connectors, skills, channe
+M39.8.1	Changing an agent attachment is refused on the server unless the caller holds that attachment's editing role (
+M39.8.7	The maintenance agent runs end to end on the owner's install: a question in the chat channel is answered from 
+M39.8.8	Agent configuration is proved on an install: an agent is asked by a junior and a senior person, from an assign
+M39.9.1.7	The Knowledge section also lists the other sources the agent draws on, a connected source or a skill's referen
+M39.9.1.9	Proved in the browser: the Knowledge section lists, adds by upload and by link, refuses a link to a private ad
+M39.9.2.3	What a new automation does is an instruction to this agent within its ceiling and leash, with the skills and t
+M39.9.2.6	Proved in the browser: New automation creates, rehearses and switches on an automation from the agent's Automa
+M40.1.1.3	Session policy, idle timeout and device list
+M40.1.2.3	Responsive down to a phone since approvals arrive on phones
+M40.2.2.2	Open an agent into the same workspace surface, bounded to what this person may see
+M40.2.2.3	Build a personal agent from a template within the person's own ceiling
+M40.2.2.5	Request an agent the person cannot yet call, routed to the department admin
+M40.3.1.2	Upload, replace and retire with the review cycle set at upload time
+M40.3.1.3	Usage count so an author can see whether anything reads what they wrote
+M40.3.2.1	Personal skills with source, version and review state
+M40.3.2.2	Author in the studio, import from a repository or paste a URL
+M40.3.2.3	Submit to the department library for review
+M40.3.2.4	Personal skills usable only by this person's own agents until approved
+M40.3.3.1	Everything produced for this person by any agent
+M40.3.3.3	Share with a colleague only where that colleague's entitlement already covers the contents
+M40.4.1.1	Plain-language list of every preference learned, with the evidence that produced it
+M40.4.1.4	Opt out of personal learning entirely, with the cost stated honestly
+M40.4.2.1	What is stored about this person and where, in plain language
+M40.4.2.3	Deletion request routed to the retention policy rather than performed silently
+M40.4.2.4	Which agents have read my HR record, from the audit ledger
+M40.5.1.3	Disconnect with immediate token revocation
+M40.5.1.4	Department-provided connections shown as inherited and not disconnectable here
+M40.5.2.1	Which channels this person is reachable on and which is primary
+M40.5.2.2	Per-channel notification preferences
+M40.5.2.3	An approver's routing preference for envelope decisions chooses only between the console and a Lark card, neve
+M40.5.2.4	Quiet hours honoured by automations and digests
+M40.6.1.2	Approve, reject and amend, each written to the ledger
+M40.7.2	A person can try an approved skill from its card, which opens a conversation with that skill pinned, run throu
+M40.7.3	The web composer accepts an attached file and dictated speech, and dictation is transcribed through the regist
+M40.7.4	The member application is proved in the browser for a member who administers nothing: their agents, knowledge,
+M40.7.5	The member application offers two starting points, start a task and talk to an agent, and a task started witho
+M40.7.6	The member's recent tasks and threads each show their state, running, waiting for approval, done or failed, re
+M40.7.7	A person can create a personal project grouping their threads and uploaded files, and a run inside it reads th
+M40.7.8	Opening an agent shows three starter prompts drawn from that agent's skills and the knowledge the person may r
+M42.1.1	Per-client variables in a separate private repository, one file per install, documented field by field
+M42.1.2	Secrets minted per install and never copied between clients, enforced by a check that refuses a shared value
+M42.1.3	One published image deployed by tag, never rebuilt per client
+M42.1.4	Release pinning per client, so one client can hold a version back without forking
+M42.2.10	Update procedure and rollback procedure, both rehearsed rather than written
+M42.2.3	Step-by-step install from a clean server, written so it needs no reference to the Verz install
+M42.2.8	Backup, monitoring, logging and health-check configuration
+M42.3.1	Install script, idempotent and safe to run twice
+M42.3.2	Environment template generator that refuses to emit a value it cannot explain
+M42.3.3	Database create, migrate and seed scripts
+M42.3.4	Health-check script a person runs after deploying and can read the output of
+M42.3.5	Backup and restore scripts, with the restore verified rather than assumed
+M42.3.6	Update script pinning a release tag, and a rollback script re-pinning the previous one
+M42.3.8	A published release for every fix, with plain-English notes stating what changed, whether it changes the datab
+M42.3.9	The console shows the running version and whether a newer release exists, because nothing else reminds a clien
+M42.4.2	Audit the database, logs, uploads, object store, vector store, embeddings and caches
+M42.4.3	Audit credentials, tokens, webhooks, third-party integrations and default administrator accounts
+M42.4.4	Verz is client number one: their live system is installed from the template by running the installer on their 
+M42.4.5	Verify on that install: it boots, sign-in works, the administrator works, core features answer and integration
+M42.4.6	Record the measured time from bare server to first answered question, because that number is what the template
+M42.4.7	A second install on a throwaway server as a fictitious client, run start to finish by somebody following only 
+M42.4.8	Every question asked during those two installs becomes a line in the documentation, since a question asked twi
+M42.5.1	install.sh: one command on a fresh server that checks the machine, installs what is missing, downloads the rel
+M42.5.10	Wizard step: review everything before any of it is written, because a wizard that commits each screen as it go
+M42.5.11	The wizard becomes unreachable the moment the first administrator exists, so the install path cannot be replay
+M42.5.12	A resumable install: closing the browser halfway continues where it stopped rather than starting the server ag
+M42.5.13	Every step validates before it advances and says what is wrong in words the person can act on
+M42.5.14	A finishing screen that hands the person straight into the console already signed in, with nothing further to 
+M42.5.15	Installer output legible to a person: what it is doing, how far through it is, and what to do if a step fails
+M42.5.16	Wizard step: chat and email channels, each connected and sent a test message before the finish, skippable and 
+M42.5.17	The installer is run start to finish on a fresh AWS instance and on a fresh VPS, each ending with the company'
+M42.5.2	Every password, key and secret generated on the client server during install, never defaulted and never shippe
+M42.5.3	A setup code printed once by the installer and required by the first wizard screen, so whoever loads the page 
+M42.5.4	Setup wizard in the console: numbered steps with visible progress, step 3 of 10, and a back button on every sc
+M42.5.5	Wizard step: company name, logo upload and web address
+M42.5.7	Wizard step: staff source, choosing between Google Workspace, Microsoft, Lark or a spreadsheet, signing in and
+M42.5.8	Wizard step: AI provider, either their own key or a local-only profile with no external provider
+M42.5.9	Wizard step: optional data source connections, skippable and repeatable later from the console
+M42.6.2	The setup wizard writes what it collects, so a first install needs no hand-edited environment file for the val
+M42.6.3	A question can be asked and its answer read in the console, so an install proves itself end to end before any 
+M42.6.4	Console screens for skills: add a skill, see what it is trusted to reach, and assign it to an agent
+M42.6.5	Console screens for connectors: connect one, hold its credential in the vault, and see what it is trusted to r
+M42.6.6	A helper for a person who does not use a terminal: it asks for the server address and runs the one install com
+M42.6.7	The first real release is published and fetched back on a clean machine, so the image and the archive are know
+M42.7.1	The install health check reports whether the host exposes kernel virtualisation, and the browser isolation sta
+M42.7.2	The release lifecycle is proved on an install: a CI-built, signed image that passed lint, types, tests, canari
+M42.7.3	The release image and archive carry the licence notice of every bundled third-party component and font, genera
+M42.7.4	The release archive carries the backup and restore scripts and the installer schedules the nightly backup, so 
+M42.7.5	The owner's install runs the standard profile, and the System health screen shows the worker, the vault, the o
+M42.7.6	The owner's install is pinned to a published release tag rather than the latest image, and the Version screen 
+M42.7.7	Every other requirement in the requirements register is demonstrated on an install by a person, and each check
+M42.7.8	Probed from an address outside the allowlist, the install answers only on its public ports with valid TLS, eve
+M7.7.10	An OCR confidence floor is applied per page, and a page under it is kept out of the index with a visible parse
+M7.7.7	Every knowledge requirement in the requirements register is demonstrated on an install by a person, and each c
+M7.7.8	Every stored vector records the model that produced it, changing the embedding model rebuilds every chunk in t
+M7.7.9	Every stored chunk records which parser produced it, and a citation to a passage recognised by OCR or read by 
+M8.2.4	Refusal when no citation exists, configurable per agent

@@ -1,0 +1,4 @@
+mutation: 1 mutation(s) in /var/folders/5n/6cpx_24s6vvdtspdrpghmbw00000gn/T/brain-mutate-ecaafd5e1718; running the unmutated tests
+mutation: unmutated tests clean in 6.8s
+mutation: [1/1] readiness asks the engine the sessions are bound to now | caught    | test_readiness_asks_the_engine_the_sessions_are_bound_to_when_it_runs (2.9s)
+readiness asks the engine the sessions are bound to now | caught    | test_readiness_asks_the_engine_the_sessions_are_bound_to_when_it_runs

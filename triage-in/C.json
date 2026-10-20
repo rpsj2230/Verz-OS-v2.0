@@ -1,0 +1,2362 @@
+{
+ "M18.1.2": {
+  "sentence": "Subtask contract: objective, output schema, tool hints, scope predicate",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (orchestration.contract); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/orchestration/contract.py"
+  ],
+  "tests": [
+   "tests/unit/test_orchestration_contract.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "4f1f1d6 When agent A calls agent B, B runs at the person's reach and not at A's"
+  ]
+ },
+ "M18.1.3": {
+  "sentence": "Schema validation on every subtask result, failure rather than merge input",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in orchestration.contract; NOT wired: orchestration.merge",
+  "src": [
+   "src/brain/orchestration/contract.py",
+   "src/brain/orchestration/merge.py"
+  ],
+  "tests": [
+   "tests/unit/test_orchestration_contract.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "4f1f1d6 When agent A calls agent B, B runs at the person's reach and not at A's"
+  ]
+ },
+ "M18.1.4": {
+  "sentence": "Prose explicitly disallowed as a subtask contract",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (orchestration.contract); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/orchestration/contract.py"
+  ],
+  "tests": [
+   "tests/unit/test_orchestration_contract.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "4f1f1d6 When agent A calls agent B, B runs at the person's reach and not at A's"
+  ]
+ },
+ "M18.2.1": {
+  "sentence": "Dependency graph with cost and coupling weights",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (orchestration.plan); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/orchestration/plan.py"
+  ],
+  "tests": [
+   "tests/unit/test_orchestration_plan.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "4f1f1d6 When agent A calls agent B, B runs at the person's reach and not at A's"
+  ]
+ },
+ "M18.2.2": {
+  "sentence": "Six arithmetic conditions evaluated before any child starts",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: orchestration.fanout name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/orchestration/fanout.py"
+  ],
+  "tests": [
+   "tests/unit/test_orchestration_fanout.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "4f1f1d6 When agent A calls agent B, B runs at the person's reach and not at A's"
+  ]
+ },
+ "M18.2.3": {
+  "sentence": "Collapse to a single loop as the default when any condition fails",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: orchestration.fanout name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/orchestration/fanout.py"
+  ],
+  "tests": [
+   "tests/unit/test_orchestration_fanout.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "4f1f1d6 When agent A calls agent B, B runs at the person's reach and not at A's"
+  ]
+ },
+ "M18.2.4": {
+  "sentence": "Gate inputs and verdict recorded for audit",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: orchestration.fanout name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/orchestration/fanout.py"
+  ],
+  "tests": [
+   "tests/unit/test_orchestration_fanout.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "4f1f1d6 When agent A calls agent B, B runs at the person's reach and not at A's"
+  ]
+ },
+ "M18.3.1": {
+  "sentence": "Child grant computed in SQL as parent intersect agent intersect subtask",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (core.scope_sql, orchestration.delegation); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/core/scope_sql.py",
+   "src/brain/orchestration/delegation.py"
+  ],
+  "tests": [
+   "tests/unit/test_delegation_sql.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "60087ad A delegation row that widens is refused by the database, not only by the caller",
+   "4f1f1d6 When agent A calls agent B, B runs at the person's reach and not at A's"
+  ]
+ },
+ "M18.3.2": {
+  "sentence": "Database trigger rejecting any non-subset delegation row",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (core.scope_sql, orchestration.delegation); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/core/scope_sql.py",
+   "src/brain/orchestration/delegation.py"
+  ],
+  "tests": [
+   "tests/unit/test_delegation_sql.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "4a4ca97 The database's delegation check no longer admits a child that kept a wildcard its parent o",
+   "60087ad A delegation row that widens is refused by the database, not only by the caller",
+   "4f1f1d6 When agent A calls agent B, B runs at the person's reach and not at A's"
+  ]
+ },
+ "M18.3.3": {
+  "sentence": "Orchestrator has no grant verb, asserted",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (orchestration.delegation); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/orchestration/delegation.py"
+  ],
+  "tests": [
+   "tests/unit/test_orchestration_delegation.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "4f1f1d6 When agent A calls agent B, B runs at the person's reach and not at A's"
+  ]
+ },
+ "M18.3.4": {
+  "sentence": "Depth cap of two and per-run concurrency cap of eight",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (orchestration.delegation); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/orchestration/delegation.py"
+  ],
+  "tests": [
+   "tests/unit/test_orchestration_delegation.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "4f1f1d6 When agent A calls agent B, B runs at the person's reach and not at A's"
+  ]
+ },
+ "M18.3.5": {
+  "sentence": "Global parallelism budget across all runs",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (orchestration.delegation); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/orchestration/delegation.py"
+  ],
+  "tests": [
+   "tests/unit/test_orchestration_delegation.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "4f1f1d6 When agent A calls agent B, B runs at the person's reach and not at A's"
+  ]
+ },
+ "M18.4.1": {
+  "sentence": "Merge step writing the final answer from validated inputs",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: orchestration.merge name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/orchestration/merge.py"
+  ],
+  "tests": [
+   "tests/unit/test_orchestration_merge.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "4f1f1d6 When agent A calls agent B, B runs at the person's reach and not at A's"
+  ]
+ },
+ "M18.4.2": {
+  "sentence": "Per-subtask cost and duration surfaced to the user",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: orchestration.merge name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/orchestration/merge.py"
+  ],
+  "tests": [
+   "tests/unit/test_orchestration_merge.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "4f1f1d6 When agent A calls agent B, B runs at the person's reach and not at A's"
+  ]
+ },
+ "M18.4.3": {
+  "sentence": "Partial-failure handling with a stated gap",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: orchestration.merge name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/orchestration/merge.py"
+  ],
+  "tests": [
+   "tests/unit/test_orchestration_merge.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "4f1f1d6 When agent A calls agent B, B runs at the person's reach and not at A's"
+  ]
+ },
+ "M18.5.1": {
+  "sentence": "A coordinating agent can hand a subtask only to agents an administrator allowed it to call, and a call to any other agent is refused before the child starts",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M18.5.2": {
+  "sentence": "A specialist agent handed a subtask reads through its own knowledge, skills and connectors within the asker's reach, and the coordinator receives only the specialist's schema-checked result",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M18.5.3": {
+  "sentence": "A planner step asks a model for subtasks and their dependencies, and its proposal passes the existing proposal checks before any child runs",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/needs-rupash.md",
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M18.6.1": {
+  "sentence": "A request to analyse a client's website and prepare an improvement proposal runs on the install as a coordinating agent handing website, search data, competitor and services and pricing subtasks to specialist agents along administrator-set links, in parallel where independent, each at the asker's reach intersected with its own ceiling, and merging their checked results into one proposal whose single trace shows each child's reach, result, cost and the fan-out verdict, with the checks recorded",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M18.6.2": {
+  "sentence": "An agent spawns parallel subtasks or workers only when fan-out is enabled on it by its department admin, and a run of an agent without it runs as a single loop with the reason recorded",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M18.7.1": {
+  "sentence": "The cost check may run a coordinator's specialist agents one after another, but never replaces a specialist's work with the coordinator's own",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M30.1.3": {
+  "sentence": "Cloudflare Tunnel option for zero inbound ports",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (deployment.release, ops.tunnel); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/deployment/release.py",
+   "src/brain/ops/tunnel.py"
+  ],
+  "tests": [
+   "tests/unit/test_tunnel_option.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": [
+   "0728f1d The workers reach Postgres through a session-mode pooler, the ledger is kept in monthly pa",
+   "8b72552 The release carries the Cloudflare Tunnel, updates keep it, and sign-in reaches it on stan",
+   "6482152 A client can put the console behind a Cloudflare Tunnel and open no inbound port, on lite,"
+  ]
+ },
+ "M30.3.1": {
+  "sentence": "pgBackRest with continuous WAL archiving, daily incremental, weekly full",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.backup_manifest, ops.recovery); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/backup_manifest.py",
+   "src/brain/ops/recovery.py"
+  ],
+  "tests": [
+   "tests/unit/test_backup_manifest.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "b6a3abb A copy of the database is taken nightly and describes itself beside itself"
+  ]
+ },
+ "M30.3.10": {
+  "sentence": "Alert on backup age exceeding the profile RPO",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.recovery); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/recovery.py"
+  ],
+  "tests": [
+   "tests/unit/test_recovery.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "8922f9a A backup nobody has restored is a file, and the vocabulary now says which"
+  ]
+ },
+ "M30.3.11": {
+  "sentence": "Louder alert on a failed verification",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.recovery); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/recovery.py"
+  ],
+  "tests": [
+   "tests/unit/test_recovery.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "8922f9a A backup nobody has restored is a file, and the vocabulary now says which"
+  ]
+ },
+ "M30.3.2": {
+  "sentence": "restic for object store and configuration",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.backup_manifest, ops.recovery); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/backup_manifest.py",
+   "src/brain/ops/recovery.py"
+  ],
+  "tests": [
+   "tests/unit/test_backup_manifest.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "b6a3abb A copy of the database is taken nightly and describes itself beside itself"
+  ]
+ },
+ "M30.3.3": {
+  "sentence": "Off-host destination, mandatory",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.recovery); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/recovery.py"
+  ],
+  "tests": [
+   "tests/unit/test_recovery.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "8922f9a A backup nobody has restored is a file, and the vocabulary now says which"
+  ]
+ },
+ "M30.3.4": {
+  "sentence": "Encryption at rest with a client-held key",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.recovery); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/recovery.py"
+  ],
+  "tests": [
+   "tests/unit/test_recovery.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "8922f9a A backup nobody has restored is a file, and the vocabulary now says which"
+  ]
+ },
+ "M30.3.5": {
+  "sentence": "Retention: thirty daily, twelve weekly, twelve monthly",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in ops.recovery; NOT wired: ops.backup_ladder",
+  "src": [
+   "src/brain/ops/backup_ladder.py",
+   "src/brain/ops/recovery.py"
+  ],
+  "tests": [
+   "tests/unit/test_backup_ladder.py",
+   "tests/unit/test_recovery.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/install/restore-drill.md",
+   "docs/needs-rupash.md",
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "918a434 The backup retention task keeps its planned sentence, because a test reads the plan's ladd",
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "73fbc87 Backups are kept thirty days daily and weekly to day 35, the ladder the owner chose inside",
+   "c09d3d1 The restore drill procedure is a page the code checks, and the backup ladder is built but "
+  ]
+ },
+ "M30.3.6": {
+  "sentence": "Weekly automated restore into a scratch container",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.recovery); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/recovery.py"
+  ],
+  "tests": [
+   "tests/unit/test_recovery.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "8922f9a A backup nobody has restored is a file, and the vocabulary now says which"
+  ]
+ },
+ "M30.3.7": {
+  "sentence": "Smoke query and permission canary against the restored copy",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.recovery); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/recovery.py"
+  ],
+  "tests": [
+   "tests/unit/test_drill_record.py",
+   "tests/unit/test_recovery.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "669f386 The recovery panel exists, and on every real install today it can only raise an alarm",
+   "8922f9a A backup nobody has restored is a file, and the vocabulary now says which"
+  ]
+ },
+ "M30.3.8": {
+  "sentence": "Measured RTO recorded from the drill",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.recovery); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/recovery.py"
+  ],
+  "tests": [
+   "tests/unit/test_drill_record.py",
+   "tests/unit/test_recovery.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "669f386 The recovery panel exists, and on every real install today it can only raise an alarm",
+   "8922f9a A backup nobody has restored is a file, and the vocabulary now says which"
+  ]
+ },
+ "M30.3.9": {
+  "sentence": "Console recovery panel with last backup, last verified restore and a one-click drill",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in console.recovery_view, install_routes; NOT wired: ops.backup_ladder",
+  "src": [
+   "src/brain/console/recovery_view.py",
+   "src/brain/install_routes.py",
+   "src/brain/ops/backup_ladder.py"
+  ],
+  "tests": [
+   "tests/unit/test_install_routes.py"
+  ],
+  "console": [],
+  "ctests": [
+   "console/tests/support/consoleAudit.ts"
+  ],
+  "docs": [
+   "docs/console-audit/21-backup-and-recovery.md",
+   "docs/install/restore-drill.md",
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": [
+   "72f55c5 The application connects to the object store at start, the recovery screen reads last nigh",
+   "6c86e6f An install's console, built into the release image and served at its root, is credited to ",
+   "4b32c6b Artifacts, Retention and erasure, and My workspace open in a browser, and the recovery scr",
+   "328c2fe Twelve console screens exist in a browser, each served by the read module that already dec"
+  ]
+ },
+ "M30.4.2": {
+  "sentence": "Operation classification: safe to retry, unsafe, retry after verification, needs a human",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.reliability); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/reliability.py"
+  ],
+  "tests": [
+   "tests/unit/test_reliability.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "8922f9a A backup nobody has restored is a file, and the vocabulary now says which"
+  ]
+ },
+ "M30.4.3": {
+  "sentence": "Chaos suite: kill Postgres, provider, connector, browser, worker",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M30.4.4": {
+  "sentence": "Malformed responses and 429 injection",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.crash); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/crash.py"
+  ],
+  "tests": [
+   "tests/unit/test_crash.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "046612a A property that has to hold at every boundary cannot be tested at a list of boundaries"
+  ]
+ },
+ "M30.4.5": {
+  "sentence": "Disk-full behaviour",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in ops.reliability; NOT wired: deployment.database",
+  "src": [
+   "src/brain/deployment/database.py",
+   "src/brain/ops/reliability.py"
+  ],
+  "tests": [
+   "tests/unit/test_deployment_database.py",
+   "tests/unit/test_reliability.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "24d8556 A client creates, migrates and seeds their database with three commands that refuse out of"
+  ]
+ },
+ "M30.4.6": {
+  "sentence": "Policy change during an active task",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [
+   "tests/unit/test_crash.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "046612a A property that has to hold at every boundary cannot be tested at a list of boundaries"
+  ]
+ },
+ "M30.4.7": {
+  "sentence": "User disabled during an active task",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [
+   "tests/unit/test_crash.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "046612a A property that has to hold at every boundary cannot be tested at a list of boundaries"
+  ]
+ },
+ "M30.4.9": {
+  "sentence": "Two-box split rehearsed without application change",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/needs-rupash.md",
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M30.5.2": {
+  "sentence": "Measurement wired to the ledger",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (gate.answer, gate.finish, ops.reliability +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #117's branch M8/citations-freshness-abstention (may be replayed already); closed PR #131's branch M8/citations-freshness-abstention-r2 (may be replayed already); closed PR #142's branch M11/live-read-speed-budget (may be replayed already); +7 more",
+  "src": [
+   "src/brain/gate/answer.py",
+   "src/brain/gate/finish.py",
+   "src/brain/ops/reliability.py",
+   "src/brain/ops/telemetry.py",
+   "src/brain/ops/telemetry_store.py",
+   "src/brain/tables/telemetry.py"
+  ],
+  "tests": [
+   "tests/unit/test_reliability.py",
+   "tests/unit/test_request_finish.py",
+   "tests/unit/test_service_levels.py",
+   "tests/unit/test_telemetry.py",
+   "tests/unit/test_telemetry_store.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "1b9c907 Every finished request writes a telemetry row with how long it took, so a lane's latency o",
+   "7ca0ffe Every question that reaches the answer lane is recorded once, from the one place a request"
+  ]
+ },
+ "M30.5.4": {
+  "sentence": "RPO and RTO per profile written into the client agreement",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (launch, ops.reliability); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/launch.py",
+   "src/brain/ops/reliability.py"
+  ],
+  "tests": [
+   "tests/unit/test_launch.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "ca5047b The handover pack is rendered from the registers, so a change to the estate changes it"
+  ]
+ },
+ "M30.6.1": {
+  "sentence": "Backups are proved on an install: a copy lands off-host with its manifest every night for seven consecutive nights, a missed night raises an alert a person receives, the last verified restore reads never verified until a drill restores a copy and checks its schema, row-level security and permissions as well as its row counts, and no copy older than the erasure horizon remains, with the checks recorded",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M30.6.10": {
+  "sentence": "On the install the backup exposure control runs on its cadence and alerts a named person when the newest verified copy is older than the recovery point, including when the last rehearsal did not verify",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M30.6.2": {
+  "sentence": "Operations are proved on an install: the service levels screen shows each lane's measured p50 and p95, permission and redaction latency and success rate beside its target, computed from the ledger and naming the connector timeout in force, and a scheduled control that misses its window and a backup older than its recovery point each raise an alert, and stopping the worker and failing a permission canary each deliver an alert to the named on-call person within its window, with the checks recorded",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M30.6.4": {
+  "sentence": "Enabling an edge proxy or tunnel on an install that declares a residency constraint states that encryption then ends at the provider's edge and requires an administrator to record acceptance first",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M30.6.5": {
+  "sentence": "An install on a profile with a recovery point under four hours replicates its object store off the host and has a standby database it fails over to in a recorded drill before that profile is offered",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M30.6.6": {
+  "sentence": "The service level statement is produced only after a restore drill verified a copy and the newest copy is inside the promised recovery point, and otherwise it is refused with the reason",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M30.6.7": {
+  "sentence": "Recovery and resilience are proved on an install: backups land off the host encrypted with the client's key, a restore drill is timed against the profile's recovery targets, a worker killed mid-task recovers without repeating its action, the chaos suite runs, and the capacity profile and scaling trigger measurements are read back from the running install, with the checks recorded",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M30.6.8": {
+  "sentence": "Every hosting and delivery requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M30.6.9": {
+  "sentence": "After a person asks a question on the install, the Service levels screen counts that request in its lane within the window, and a lane with traffic is never shown as unmeasured",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M36.1.1.1": {
+  "sentence": "Monthly partitions of the metadata ledger, created and detached by the worker in plain SQL",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.ledger_partitions, ops.partitioning, tables.telemetry); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/ledger_partitions.py",
+   "src/brain/ops/partitioning.py",
+   "src/brain/tables/telemetry.py"
+  ],
+  "tests": [
+   "tests/unit/test_ledger_partitions.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/install/scaling.md",
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "0728f1d The workers reach Postgres through a session-mode pooler, the ledger is kept in monthly pa",
+   "de14f6a Retention runs on a schedule and reports what it did, the audit ledger, sessions and sign-"
+  ]
+ },
+ "M36.1.1.4": {
+  "sentence": "Trigger: ledger row count or query latency threshold",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: ops.scaling name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/ops/scaling.py"
+  ],
+  "tests": [
+   "tests/unit/test_scaling.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "876883d A threshold with no anchor is a number somebody liked, so there is nowhere here to write o"
+  ]
+ },
+ "M36.1.2.1": {
+  "sentence": "Streaming replica configuration",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.replica_store, ops.streaming_replica); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/replica_store.py",
+   "src/brain/ops/streaming_replica.py"
+  ],
+  "tests": [
+   "tests/unit/test_streaming_replica.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/install/scaling.md",
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": [
+   "0728f1d The workers reach Postgres through a session-mode pooler, the ledger is kept in monthly pa",
+   "c30be64 Console pages that only display can be read from a replica, and say how far behind it is w"
+  ]
+ },
+ "M36.1.2.2": {
+  "sentence": "Console reads routed to the replica",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.read_replica, ops.replica_store); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/console/read_replica.py",
+   "src/brain/ops/replica_store.py"
+  ],
+  "tests": [
+   "tests/unit/test_read_replica.py",
+   "tests/unit/test_replica_store.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "c30be64 Console pages that only display can be read from a replica, and say how far behind it is w"
+  ]
+ },
+ "M36.1.2.3": {
+  "sentence": "Replication lag monitoring with a staleness banner",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.read_replica, ops.replica_store); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/console/read_replica.py",
+   "src/brain/ops/replica_store.py"
+  ],
+  "tests": [
+   "tests/unit/test_read_replica.py",
+   "tests/unit/test_replica_store.py",
+   "tests/unit/test_routing_routes.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "c30be64 Console pages that only display can be read from a replica, and say how far behind it is w"
+  ]
+ },
+ "M36.1.2.4": {
+  "sentence": "Trigger: console queries affecting answer latency",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: ops.scaling name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/ops/scaling.py"
+  ],
+  "tests": [
+   "tests/unit/test_scaling.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "876883d A threshold with no anchor is a number somebody liked, so there is nowhere here to write o"
+  ]
+ },
+ "M36.1.3.1": {
+  "sentence": "Views for the heaviest report screens",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.spend_report_view, ops.spend_store, tables.spend); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #154's branch M21/record-usage-for-stats (may be replayed already); closed PR #167's branch M38/migration-train-0118-0138-0139 (may be replayed already)",
+  "src": [
+   "src/brain/console/spend_report_view.py",
+   "src/brain/ops/spend_store.py",
+   "src/brain/tables/spend.py"
+  ],
+  "tests": [
+   "tests/unit/test_spend_report_view.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "c04e77a The spend report reads from a daily materialised view that gives every reader the figures "
+  ]
+ },
+ "M36.1.3.2": {
+  "sentence": "Refresh schedule and staleness display",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.spend_report_view, ops.spend_store, tables.spend); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #154's branch M21/record-usage-for-stats (may be replayed already); closed PR #167's branch M38/migration-train-0118-0138-0139 (may be replayed already)",
+  "src": [
+   "src/brain/console/spend_report_view.py",
+   "src/brain/ops/spend_store.py",
+   "src/brain/tables/spend.py"
+  ],
+  "tests": [
+   "tests/unit/test_spend_report_view.py",
+   "tests/unit/test_worker_schedule.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "42abccb The worker ticks the control schedule, so the spend report refreshes daily and the retenti",
+   "c04e77a The spend report reads from a daily materialised view that gives every reader the figures "
+  ]
+ },
+ "M36.1.3.3": {
+  "sentence": "Trigger: a report exceeding two seconds",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: ops.scaling name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/ops/scaling.py"
+  ],
+  "tests": [
+   "tests/unit/test_scaling.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "876883d A threshold with no anchor is a number somebody liked, so there is nowhere here to write o"
+  ]
+ },
+ "M36.1.4.1": {
+  "sentence": "Application and browser on one host, database and object store on the other",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.split); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/split.py"
+  ],
+  "tests": [
+   "tests/unit/test_split.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/install/scaling.md",
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": [
+   "0728f1d The workers reach Postgres through a session-mode pooler, the ledger is kept in monthly pa"
+  ]
+ },
+ "M36.1.4.3": {
+  "sentence": "Trigger: RAM pressure or a resilience requirement",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: ops.scaling name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/ops/scaling.py"
+  ],
+  "tests": [
+   "tests/unit/test_scaling.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "876883d A threshold with no anchor is a number somebody liked, so there is nowhere here to write o"
+  ]
+ },
+ "M36.2.1.1": {
+  "sentence": "Dependency graph over independent source calls",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (connectors.federation); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/connectors/federation.py"
+  ],
+  "tests": [
+   "tests/unit/test_connectors_federation.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "8cd397c Nineteen leaves that were built and never claimed are proven and claimed, and one claimed "
+  ]
+ },
+ "M36.2.1.2": {
+  "sentence": "Fan-out with one critical path rather than a sum",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (connectors.federation); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/connectors/federation.py"
+  ],
+  "tests": [
+   "tests/unit/test_connectors_federation.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "8cd397c Nineteen leaves that were built and never claimed are proven and claimed, and one claimed "
+  ]
+ },
+ "M36.2.1.3": {
+  "sentence": "Per-source and global budgets still enforced under parallelism",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: ops.scaling name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/ops/scaling.py"
+  ],
+  "tests": [
+   "tests/unit/test_scaling.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "876883d A threshold with no anchor is a number somebody liked, so there is nowhere here to write o"
+  ]
+ },
+ "M36.2.2.2": {
+  "sentence": "Collapse into a single pass where semantics allow",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (gate.screening); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/gate/screening.py"
+  ],
+  "tests": [
+   "tests/unit/test_screening.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": [
+   "f352ea6 The three screens untrusted text passes through are measured, and collapsing them into one"
+  ]
+ },
+ "M36.2.2.3": {
+  "sentence": "Verify no detection coverage is lost",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (gate.screening); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/gate/screening.py"
+  ],
+  "tests": [
+   "tests/unit/test_screening.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": [
+   "f352ea6 The three screens untrusted text passes through are measured, and collapsing them into one"
+  ]
+ },
+ "M36.2.3.1": {
+  "sentence": "Identical in-flight requests share one execution",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: ops.scaling name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/ops/scaling.py"
+  ],
+  "tests": [
+   "tests/unit/test_scaling.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "876883d A threshold with no anchor is a number somebody liked, so there is nowhere here to write o"
+  ]
+ },
+ "M36.2.3.2": {
+  "sentence": "Entitlement equality required before sharing, never similarity",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: ops.scaling name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/ops/scaling.py"
+  ],
+  "tests": [
+   "tests/unit/test_scaling.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "876883d A threshold with no anchor is a number somebody liked, so there is nowhere here to write o"
+  ]
+ },
+ "M36.2.4.1": {
+  "sentence": "Peak concurrency test rather than daily volume",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.admission); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/admission.py"
+  ],
+  "tests": [
+   "tests/load/test_admission_at_peak.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "8cd397c Nineteen leaves that were built and never claimed are proven and claimed, and one claimed "
+  ]
+ },
+ "M36.2.4.2": {
+  "sentence": "Documented first bottleneck at ten and one hundred times",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.admission); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/admission.py"
+  ],
+  "tests": [
+   "tests/invariants/test_capacity_invariants.py",
+   "tests/unit/test_admission.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "8cd397c Nineteen leaves that were built and never claimed are proven and claimed, and one claimed "
+  ]
+ },
+ "M36.2.4.3": {
+  "sentence": "Results recorded against the SLO table",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M36.3.1": {
+  "sentence": "A load test at the company's declared peak concurrency runs against the owner's install on its own host, records latency per lane against the service level table and memory headroom under load, and a result outside either is a finding before go-live",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M37.1.1.1": {
+  "sentence": "Catalogue what the current Company Brain holds: knowledge, prompts, tool definitions, conversation history",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (migration.inventory); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/migration/inventory.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_inventory.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e59973d A catalogue is a claim about what was looked at, not a list of what was found"
+  ]
+ },
+ "M37.1.1.2": {
+  "sentence": "Decide per item: migrate, rebuild or retire",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (migration.inventory); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/migration/inventory.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_inventory.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e59973d A catalogue is a claim about what was looked at, not a list of what was found"
+  ]
+ },
+ "M37.1.1.3": {
+  "sentence": "Map old permissions onto the new capability model, explicitly rather than by assumption",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (migration.inventory); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/migration/inventory.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_inventory.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "e59973d A catalogue is a claim about what was looked at, not a list of what was found"
+  ]
+ },
+ "M37.1.2.1": {
+  "sentence": "Knowledge and asset export from the old system",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: migration.carry name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/migration/carry.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_carry.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "da0b4c7 A carried vector is the one thing in a migration that looks free and is not"
+  ]
+ },
+ "M37.1.2.2": {
+  "sentence": "Re-parse and re-embed rather than copying vectors, since embeddings are model-specific",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: migration.carry name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/migration/carry.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_carry.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "da0b4c7 A carried vector is the one thing in a migration that looks free and is not"
+  ]
+ },
+ "M37.1.2.3": {
+  "sentence": "Entity registry seeded from existing client records",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: migration.carry name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/migration/carry.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_carry.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "da0b4c7 A carried vector is the one thing in a migration that looks free and is not"
+  ]
+ },
+ "M37.1.2.4": {
+  "sentence": "Historical conversations archived, not imported, unless there is a stated reason",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: migration.carry name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/migration/carry.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_carry.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "da0b4c7 A carried vector is the one thing in a migration that looks free and is not"
+  ]
+ },
+ "M37.1.3.1": {
+  "sentence": "Both systems answering the same questions for an agreed period",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: migration.parallel name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/migration/parallel.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_parallel.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "5a9149d Cutover criteria that were written after the result are a description of the result"
+  ]
+ },
+ "M37.1.3.2": {
+  "sentence": "Answer comparison log with disagreements surfaced",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: migration.parallel name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/migration/parallel.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_parallel.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "5a9149d Cutover criteria that were written after the result are a description of the result"
+  ]
+ },
+ "M37.1.3.3": {
+  "sentence": "Cutover criteria agreed in writing before the period starts",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: migration.parallel name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/migration/parallel.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_parallel.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "5a9149d Cutover criteria that were written after the result are a description of the result"
+  ]
+ },
+ "M37.1.4.1": {
+  "sentence": "Old system read-only, then archived",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: migration.decommission name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/migration/decommission.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_decommission.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "f1c3a4c Verified stopped is a window of silence, and every other step of a decommission is like it"
+  ]
+ },
+ "M37.1.4.2": {
+  "sentence": "Credential revocation on every connector the old system held",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: migration.decommission name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/migration/decommission.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_decommission.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "f1c3a4c Verified stopped is a window of silence, and every other step of a decommission is like it"
+  ]
+ },
+ "M37.1.4.3": {
+  "sentence": "Scheduled jobs disabled and verified stopped",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: migration.decommission name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/migration/decommission.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_decommission.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "f1c3a4c Verified stopped is a window of silence, and every other step of a decommission is like it"
+  ]
+ },
+ "M37.1.4.4": {
+  "sentence": "Final backup retained per the retention policy",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: migration.decommission name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/migration/decommission.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_decommission.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "f1c3a4c Verified stopped is a window of silence, and every other step of a decommission is like it"
+  ]
+ },
+ "M37.2.2.2": {
+  "sentence": "Convert the description convention, since theirs are written as router prompts beginning \"Use the X skill to\"",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: migration.skills name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/migration/skills.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_skills.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "2a3b8a8 A description written for a router reads on a card as an instruction to the reader"
+  ]
+ },
+ "M37.2.2.3": {
+  "sentence": "Re-review every imported skill through the normal queue rather than trusting it because it worked before",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: migration.skills name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/migration/skills.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_skills.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "2a3b8a8 A description written for a router reads on a card as an instruction to the reader"
+  ]
+ },
+ "M37.2.2.4": {
+  "sentence": "Diff behaviour on a real task before and after import, not just that the file parses",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: migration.skills name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/migration/skills.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_skills.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "2a3b8a8 A description written for a router reads on a card as an instruction to the reader"
+  ]
+ },
+ "M37.2.2.5": {
+  "sentence": "Retire any skill that has not been invoked in ninety days rather than carrying it over",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: migration.skills name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/migration/skills.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_skills.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "2a3b8a8 A description written for a router reads on a card as an instruction to the reader"
+  ]
+ },
+ "M37.2.3.1": {
+  "sentence": "Rebuild each agent from a template rather than importing its configuration, because their model has no ceiling and no leash to carry across",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: migration.rebuild name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/migration/rebuild.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_rebuild.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "1940881 The ceiling cannot be derived from who could use the agent, and the signature is the proof"
+  ]
+ },
+ "M37.2.3.2": {
+  "sentence": "Set an explicit ceiling per agent, which AnyGen never had",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: migration.rebuild name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/migration/rebuild.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_rebuild.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "1940881 The ceiling cannot be derived from who could use the agent, and the signature is the proof"
+  ]
+ },
+ "M37.2.3.3": {
+  "sentence": "Start every rebuilt agent at Shadow on writes regardless of how it behaved there",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: migration.rebuild name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/migration/rebuild.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_rebuild.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "1940881 The ceiling cannot be derived from who could use the agent, and the signature is the proof"
+  ]
+ },
+ "M37.2.3.4": {
+  "sentence": "Map their Availability onto our availability, and their absent authority onto our entitlement, separately - conflating the two is the mistake their model makes",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: migration.rebuild name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/migration/rebuild.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_rebuild.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "1940881 The ceiling cannot be derived from who could use the agent, and the signature is the proof"
+  ]
+ },
+ "M37.2.4.2": {
+  "sentence": "Read the memory files as evidence and re-derive tier one preferences rather than importing beliefs wholesale",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: migration.learning name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/migration/learning.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_learning.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "53e5142 One switch and four tiers have no honest mapping, so nothing here converts one into the ot"
+  ]
+ },
+ "M37.2.4.3": {
+  "sentence": "Discard anything that would widen a scope, since it was never approved by anyone under our rules",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: migration.learning name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/migration/learning.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_learning.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "53e5142 One switch and four tiers have no honest mapping, so nothing here converts one into the ot"
+  ]
+ },
+ "M37.2.4.4": {
+  "sentence": "State plainly in the handover that the new system starts without their accumulated learning, and why that is the right trade",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT, NOT WIRED: migration.learning name it and nothing imports it. Wire it (route, page or caller); do not rewrite",
+  "src": [
+   "src/brain/migration/learning.py"
+  ],
+  "tests": [
+   "tests/unit/test_migration_learning.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "53e5142 One switch and four tiers have no honest mapping, so nothing here converts one into the ot"
+  ]
+ },
+ "M37.3.2.4": {
+  "sentence": "Adoption measured as real questions from real people, machine traffic excluded",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (adoption, console.adoption_view, gate.finish +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #154's branch M21/record-usage-for-stats (may be replayed already); closed PR #167's branch M38/migration-train-0118-0138-0139 (may be replayed already); old backup branch recovery/from-windows-20260928-wt-w1-8",
+  "src": [
+   "src/brain/adoption.py",
+   "src/brain/console/adoption_view.py",
+   "src/brain/gate/finish.py",
+   "src/brain/ops/question_store.py",
+   "src/brain/tables/adoption.py"
+  ],
+  "tests": [
+   "tests/unit/test_adoption.py",
+   "tests/unit/test_question_store.py",
+   "tests/unit/test_request_finish.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "7ca0ffe Every question that reaches the answer lane is recorded once, from the one place a request",
+   "e75bde0 Adoption is counted as questions people asked, one per trace, and machine traffic is exclu"
+  ]
+ },
+ "M37.4.2.4": {
+  "sentence": "Subprocessor list covering every model provider used",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (launch); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/launch.py"
+  ],
+  "tests": [
+   "tests/unit/test_launch.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "ca5047b The handover pack is rendered from the registers, so a change to the estate changes it"
+  ]
+ },
+ "M37.4.3.3": {
+  "sentence": "Named client owner for knowledge, grants and connectors",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (launch); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/launch.py"
+  ],
+  "tests": [
+   "tests/unit/test_launch.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "ca5047b The handover pack is rendered from the registers, so a change to the estate changes it"
+  ]
+ },
+ "M37.4.3.5": {
+  "sentence": "Thirty-day post-launch review booked at handover",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (launch); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/launch.py"
+  ],
+  "tests": [
+   "tests/unit/test_launch.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "ca5047b The handover pack is rendered from the registers, so a change to the estate changes it"
+  ]
+ },
+ "M37.5.1.2": {
+  "sentence": "CI assertion that each control appears in the scheduler",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.controls, ops.schedule); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/controls.py",
+   "src/brain/ops/schedule.py"
+  ],
+  "tests": [
+   "tests/invariants/test_no_safety_mechanism_lacks_a_caller.py",
+   "tests/unit/test_controls.py",
+   "tests/unit/test_schedule.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "01d9dbb Which of the thirteen controls is owed a run, and which of them this process may start",
+   "1a33f46 Twelve of the thirteen safety mechanisms here have no caller, and now something says so"
+  ]
+ },
+ "M37.5.1.3": {
+  "sentence": "Alert when a scheduled job has not run within its window",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.controls, ops.schedule_runner, ops.schedule_store +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #84's branch M5/model-health-routing-residency (may be replayed already); old backup branch recovery/from-windows-20260928; old backup branch recovery/from-windows-20260928-wt-automation-memory; +2 more",
+  "src": [
+   "src/brain/ops/controls.py",
+   "src/brain/ops/schedule_runner.py",
+   "src/brain/ops/schedule_store.py",
+   "src/brain/ops/worker.py",
+   "src/brain/tables/schedule.py"
+  ],
+  "tests": [
+   "tests/unit/test_controls.py",
+   "tests/unit/test_schedule_runner.py",
+   "tests/unit/test_schedule_store.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "1a33f46 Twelve of the thirteen safety mechanisms here have no caller, and now something says so"
+  ]
+ },
+ "M37.5.1.4": {
+  "sentence": "Explicit test that no safety mechanism lacks a caller",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.controls); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/controls.py"
+  ],
+  "tests": [
+   "tests/invariants/test_no_safety_mechanism_lacks_a_caller.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "1a33f46 Twelve of the thirteen safety mechanisms here have no caller, and now something says so"
+  ]
+ },
+ "M37.5.2.1": {
+  "sentence": "Alert routing and severity definitions",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.alerting); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/alerting.py"
+  ],
+  "tests": [
+   "tests/unit/test_alerting.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "1a33f46 Twelve of the thirteen safety mechanisms here have no caller, and now something says so"
+  ]
+ },
+ "M37.5.2.2": {
+  "sentence": "Runbook per alert",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.alerting, ops.controls); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/alerting.py",
+   "src/brain/ops/controls.py"
+  ],
+  "tests": [
+   "tests/unit/test_alerting.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "1a33f46 Twelve of the thirteen safety mechanisms here have no caller, and now something says so"
+  ]
+ },
+ "M37.5.2.3": {
+  "sentence": "Escalation path to us where the client cannot resolve it",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.alerting); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/alerting.py"
+  ],
+  "tests": [
+   "tests/unit/test_alerting.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "1a33f46 Twelve of the thirteen safety mechanisms here have no caller, and now something says so"
+  ]
+ },
+ "M37.5.3.1": {
+  "sentence": "Measured spend against the projection after thirty days",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.retune); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/retune.py"
+  ],
+  "tests": [
+   "tests/unit/test_retune.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "9d8f707 Enough samples is not a long enough window, and the estimator correction could not tell",
+   "1a33f46 Twelve of the thirteen safety mechanisms here have no caller, and now something says so"
+  ]
+ },
+ "M37.5.3.3": {
+  "sentence": "Budget thresholds retuned with real distribution rather than assumptions",
+  "status": "OPEN",
+  "note": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.retune); open for proof on the install or a decision, not for code",
+  "src": [
+   "src/brain/ops/retune.py"
+  ],
+  "tests": [
+   "tests/unit/test_retune.py"
+  ],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json",
+   "docs/tracker-audit-2026-09-17.md"
+  ],
+  "acc": [],
+  "git": [
+   "c082c13 Tasks the tracker showed as done are reopened where the owner's install does not show them",
+   "9d8f707 Enough samples is not a long enough window, and the estimator correction could not tell",
+   "1a33f46 Twelve of the thirteen safety mechanisms here have no caller, and now something says so"
+  ]
+ },
+ "M37.7.5": {
+  "sentence": "A migration cutover cannot be recorded complete while revoking the old system's authorisations, recording the date its access ended or the restore drill is unrecorded, and the refusal names which",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M37.7.6": {
+  "sentence": "A migration is rehearsed on a throwaway install: skills are imported and re-reviewed, agents are rebuilt from templates at Shadow with no learning carried, and the cutover is refused until every security act is recorded, with the checks recorded",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ },
+ "M37.7.8": {
+  "sentence": "Every migration requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
+  "status": "(none)",
+  "note": "",
+  "src": [],
+  "tests": [],
+  "console": [],
+  "ctests": [],
+  "docs": [
+   "docs/requirements/register.json"
+  ],
+  "acc": [],
+  "git": []
+ }
+}

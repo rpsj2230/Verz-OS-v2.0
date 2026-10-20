@@ -1,0 +1,1990 @@
+﻿2026-10-14T03:31:43.8638841Z Current runner version: '2.337.0'
+2026-10-14T03:31:43.8654584Z ##[group]Runner Image Provisioner
+2026-10-14T03:31:43.8655093Z Hosted Compute Agent
+2026-10-14T03:31:43.8655503Z Version: 20261002.596
+2026-10-14T03:31:43.8655872Z Commit: c3d12f3313a95f25162a1503be624f3b0617f8c0
+2026-10-14T03:31:43.8656313Z Build Date: 2026-10-02T22:28:27Z
+2026-10-14T03:31:43.8656753Z Worker ID: {9d01f30b-75a0-4cbe-9780-4f388d2888e5}
+2026-10-14T03:31:43.8657159Z Region: centralus
+2026-10-14T03:31:43.8657548Z Cloud: Azure
+2026-10-14T03:31:43.8657868Z ##[endgroup]
+2026-10-14T03:31:43.8658580Z ##[group]Operating System
+2026-10-14T03:31:43.8659177Z Ubuntu
+2026-10-14T03:31:43.8659482Z 24.04.5
+2026-10-14T03:31:43.8659801Z LTS
+2026-10-14T03:31:43.8660112Z ##[endgroup]
+2026-10-14T03:31:43.8660462Z ##[group]Runner Image
+2026-10-14T03:31:43.8660847Z Image: ubuntu-24.04
+2026-10-14T03:31:43.8661181Z Version: 20261004.327.1
+2026-10-14T03:31:43.8661935Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261004.327/images/ubuntu/Ubuntu2404-Readme.md
+2026-10-14T03:31:43.8662820Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261004.327
+2026-10-14T03:31:43.8663405Z ##[endgroup]
+2026-10-14T03:31:43.8664098Z ##[group]GITHUB_TOKEN Permissions
+2026-10-14T03:31:43.8665212Z Contents: read
+2026-10-14T03:31:43.8665597Z Metadata: read
+2026-10-14T03:31:43.8665973Z Packages: read
+2026-10-14T03:31:43.8666308Z ##[endgroup]
+2026-10-14T03:31:43.8667468Z Secret source: Actions
+2026-10-14T03:31:43.8668020Z Cache mode: write
+2026-10-14T03:31:43.8668507Z Prepare workflow directory
+2026-10-14T03:31:43.8919432Z Prepare all required actions
+2026-10-14T03:31:43.8948308Z Getting action download info
+2026-10-14T03:31:44.1251971Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-10-14T03:31:44.2267371Z Download action repository 'astral-sh/setup-uv@v5' (SHA:d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86)
+2026-10-14T03:31:44.7404903Z Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+2026-10-14T03:31:44.9119504Z Complete job name: Console types, boundaries, tests, build
+2026-10-14T03:31:44.9554853Z ##[group]Run actions/checkout@v4
+2026-10-14T03:31:44.9555240Z with:
+2026-10-14T03:31:44.9555470Z   repository: rpsj2230/Verz-OS-v2.0
+2026-10-14T03:31:44.9557352Z   token: ***
+2026-10-14T03:31:44.9557574Z   ssh-strict: true
+2026-10-14T03:31:44.9557804Z   ssh-user: git
+2026-10-14T03:31:44.9558105Z   persist-credentials: true
+2026-10-14T03:31:44.9558549Z   clean: true
+2026-10-14T03:31:44.9559019Z   sparse-checkout-cone-mode: true
+2026-10-14T03:31:44.9559396Z   fetch-depth: 1
+2026-10-14T03:31:44.9559692Z   fetch-tags: false
+2026-10-14T03:31:44.9559988Z   show-progress: true
+2026-10-14T03:31:44.9560368Z   lfs: false
+2026-10-14T03:31:44.9560654Z   submodules: false
+2026-10-14T03:31:44.9560977Z   set-safe-directory: true
+2026-10-14T03:31:44.9561324Z   allow-unsafe-pr-checkout: false
+2026-10-14T03:31:44.9561750Z env:
+2026-10-14T03:31:44.9562111Z   UV_VERSION: 0.12.9
+2026-10-14T03:31:44.9562440Z ##[endgroup]
+2026-10-14T03:31:45.0206780Z Syncing repository: rpsj2230/Verz-OS-v2.0
+2026-10-14T03:31:45.0208302Z ##[group]Getting Git version info
+2026-10-14T03:31:45.0208942Z Working directory is '/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0'
+2026-10-14T03:31:45.0209726Z [command]/usr/bin/git version
+2026-10-14T03:31:45.0277934Z git version 2.55.0
+2026-10-14T03:31:45.0299226Z ##[endgroup]
+2026-10-14T03:31:45.0304727Z Temporarily overriding HOME='/home/runner/work/_temp/f4517602-aa10-4ced-8332-5ca15d60a515' before making global git config changes
+2026-10-14T03:31:45.0307233Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-14T03:31:45.0308007Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0
+2026-10-14T03:31:45.0352705Z Deleting the contents of '/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0'
+2026-10-14T03:31:45.0354669Z ##[group]Initializing the repository
+2026-10-14T03:31:45.0357935Z [command]/usr/bin/git init /home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0
+2026-10-14T03:31:45.0463357Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-10-14T03:31:45.0464587Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-10-14T03:31:45.0465619Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-10-14T03:31:45.0466483Z hint: call:
+2026-10-14T03:31:45.0467090Z hint:
+2026-10-14T03:31:45.0467818Z hint: 	git config --global init.defaultBranch <name>
+2026-10-14T03:31:45.0468743Z hint:
+2026-10-14T03:31:45.0469711Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-10-14T03:31:45.0470608Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-10-14T03:31:45.0471407Z hint:
+2026-10-14T03:31:45.0471819Z hint: 	git branch -m <name>
+2026-10-14T03:31:45.0472339Z hint:
+2026-10-14T03:31:45.0472927Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-10-14T03:31:45.0473905Z Initialized empty Git repository in /home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/.git/
+2026-10-14T03:31:45.0479086Z [command]/usr/bin/git remote add origin https://github.com/rpsj2230/Verz-OS-v2.0
+2026-10-14T03:31:45.0521557Z ##[endgroup]
+2026-10-14T03:31:45.0522475Z ##[group]Disabling automatic garbage collection
+2026-10-14T03:31:45.0529997Z [command]/usr/bin/git config --local gc.auto 0
+2026-10-14T03:31:45.0556895Z ##[endgroup]
+2026-10-14T03:31:45.0557719Z ##[group]Setting up auth
+2026-10-14T03:31:45.0561095Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-14T03:31:45.0589661Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-14T03:31:45.0944582Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-14T03:31:45.0972417Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-14T03:31:45.1136997Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-14T03:31:45.1163073Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-14T03:31:45.1328187Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-10-14T03:31:45.1359751Z ##[endgroup]
+2026-10-14T03:31:45.1360332Z ##[group]Fetching the repository
+2026-10-14T03:31:45.1366759Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +f110b9e310f66688aa4f2bb5cff34752fbb782f4:refs/remotes/pull/591/merge
+2026-10-14T03:31:47.3191565Z From https://github.com/rpsj2230/Verz-OS-v2.0
+2026-10-14T03:31:47.3193214Z  * [new ref]         f110b9e310f66688aa4f2bb5cff34752fbb782f4 -> pull/591/merge
+2026-10-14T03:31:47.3195168Z ##[endgroup]
+2026-10-14T03:31:47.3195709Z ##[group]Determining the checkout info
+2026-10-14T03:31:47.3250735Z ##[endgroup]
+2026-10-14T03:31:47.3251266Z [command]/usr/bin/git sparse-checkout disable
+2026-10-14T03:31:47.3254008Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-10-14T03:31:47.3281914Z ##[group]Checking out the ref
+2026-10-14T03:31:47.3284272Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/591/merge
+2026-10-14T03:31:47.6111643Z Note: switching to 'refs/remotes/pull/591/merge'.
+2026-10-14T03:31:47.6112125Z 
+2026-10-14T03:31:47.6112371Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-10-14T03:31:47.6112860Z changes and commit them, and you can discard any commits you make in this
+2026-10-14T03:31:47.6113355Z state without impacting any branches by switching back to a branch.
+2026-10-14T03:31:47.6113950Z 
+2026-10-14T03:31:47.6114169Z If you want to create a new branch to retain commits you create, you may
+2026-10-14T03:31:47.6114626Z do so (now or later) by using -c with the switch command. Example:
+2026-10-14T03:31:47.6114860Z 
+2026-10-14T03:31:47.6114981Z   git switch -c <new-branch-name>
+2026-10-14T03:31:47.6115166Z 
+2026-10-14T03:31:47.6115312Z Or undo this operation with:
+2026-10-14T03:31:47.6115467Z 
+2026-10-14T03:31:47.6115568Z   git switch -
+2026-10-14T03:31:47.6115708Z 
+2026-10-14T03:31:47.6124818Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-10-14T03:31:47.6125142Z 
+2026-10-14T03:31:47.6125476Z HEAD is now at f110b9e Merge 0565a4259a6e9d5b2735d29cbc6137913c5ddad1 into 32c52f895d199525c9d7a80c9f1e541dd3c88e31
+2026-10-14T03:31:47.6126833Z ##[endgroup]
+2026-10-14T03:31:47.6165840Z [command]/usr/bin/git log -1 --format=%H
+2026-10-14T03:31:47.6187747Z f110b9e310f66688aa4f2bb5cff34752fbb782f4
+2026-10-14T03:31:47.6369129Z ##[group]Run astral-sh/setup-uv@v5
+2026-10-14T03:31:47.6369336Z with:
+2026-10-14T03:31:47.6369482Z   version: 0.12.9
+2026-10-14T03:31:47.6369624Z   enable-cache: true
+2026-10-14T03:31:47.6370929Z   github-token: ***
+2026-10-14T03:31:47.6371115Z   cache-dependency-glob: **/uv.lock
+**/requirements*.txt
+
+2026-10-14T03:31:47.6371324Z   prune-cache: true
+2026-10-14T03:31:47.6371491Z   ignore-nothing-to-cache: false
+2026-10-14T03:31:47.6371665Z   ignore-empty-workdir: false
+2026-10-14T03:31:47.6371824Z env:
+2026-10-14T03:31:47.6371954Z   UV_VERSION: 0.12.9
+2026-10-14T03:31:47.6372096Z ##[endgroup]
+2026-10-14T03:31:47.7427149Z (node:2101) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-14T03:31:47.7427712Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-14T03:31:47.7602298Z Downloading uv from "https://github.com/astral-sh/uv/releases/download/0.12.9/uv-x86_64-unknown-linux-gnu.tar.gz" ...
+2026-10-14T03:31:48.1993334Z [command]/usr/bin/tar xz --warning=no-unknown-keyword --overwrite -C /home/runner/work/_temp/5a4893b8-9da2-423d-abeb-2028862cc919 -f /home/runner/work/_temp/62c249b3-fe9f-49e9-a305-6acdff5b3d00
+2026-10-14T03:31:48.7036395Z Added /home/runner/.local/bin to the path
+2026-10-14T03:31:48.7038207Z Added /opt/hostedtoolcache/uv/0.12.9/x86_64 to the path
+2026-10-14T03:31:48.7057862Z Set UV_CACHE_DIR to /home/runner/work/_temp/setup-uv-cache
+2026-10-14T03:31:48.7058242Z Successfully installed uv version 0.12.9
+2026-10-14T03:31:48.7058768Z Searching files using cache dependency glob: **/uv.lock,**/requirements*.txt
+2026-10-14T03:31:48.7655280Z /home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/matcher/uv.lock
+2026-10-14T03:31:48.8505835Z /home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/uv.lock
+2026-10-14T03:31:48.8516676Z Found 2 files to hash.
+2026-10-14T03:31:48.9203921Z Trying to restore uv cache from GitHub Actions cache with key: setup-uv-1-x86_64-unknown-linux-gnu-unknown-4fa71487548199487345489e1f4ab912cdc9b009220d8b57baa546f1323899d3
+2026-10-14T03:31:49.0330359Z Cache hit for: setup-uv-1-x86_64-unknown-linux-gnu-unknown-4fa71487548199487345489e1f4ab912cdc9b009220d8b57baa546f1323899d3
+2026-10-14T03:31:49.0393595Z (node:2101) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-10-14T03:31:49.2008603Z Received 1118 of 1118 (100.0%), 0.0 MBs/sec
+2026-10-14T03:31:49.2009079Z Cache Size: ~0 MB (1118 B)
+2026-10-14T03:31:49.2024977Z [command]/usr/bin/tar -xf /home/runner/work/_temp/e7a8f25c-2e9f-4b3c-8101-743d3b6960e6/cache.tzst -P -C /home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0 --use-compress-program unzstd
+2026-10-14T03:31:49.2093094Z Cache restored successfully
+2026-10-14T03:31:49.2096982Z uv cache restored from GitHub Actions cache with key: setup-uv-1-x86_64-unknown-linux-gnu-unknown-4fa71487548199487345489e1f4ab912cdc9b009220d8b57baa546f1323899d3
+2026-10-14T03:31:49.2246976Z ##[group]Run uv sync --locked
+2026-10-14T03:31:49.2247354Z uv sync --locked
+2026-10-14T03:31:49.2901986Z shell: /usr/bin/bash -e {0}
+2026-10-14T03:31:49.2902155Z env:
+2026-10-14T03:31:49.2902267Z   UV_VERSION: 0.12.9
+2026-10-14T03:31:49.2902423Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-10-14T03:31:49.2902602Z ##[endgroup]
+2026-10-14T03:31:49.6286492Z Downloading cpython-3.13.15-linux-x86_64-gnu (download) (33.2MiB)
+2026-10-14T03:31:50.4004008Z  Downloaded cpython-3.13.15-linux-x86_64-gnu (download)
+2026-10-14T03:31:50.6433889Z Using CPython 3.13.15
+2026-10-14T03:31:50.6434588Z Creating virtual environment at: .venv
+2026-10-14T03:31:50.6457968Z Resolved 124 packages in 0.48ms
+2026-10-14T03:31:50.6567523Z    Building verz-brain @ file:///home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0
+2026-10-14T03:31:50.7101374Z Downloading uvloop (4.2MiB)
+2026-10-14T03:31:50.7102231Z Downloading zstandard (5.3MiB)
+2026-10-14T03:31:50.7104769Z Downloading pydantic-core (2.0MiB)
+2026-10-14T03:31:50.7114849Z Downloading sqlalchemy (3.2MiB)
+2026-10-14T03:31:50.7115678Z Downloading ast-serialize (1.2MiB)
+2026-10-14T03:31:50.7116816Z Downloading hypothesis (1.1MiB)
+2026-10-14T03:31:50.7117753Z Downloading pygments (1.2MiB)
+2026-10-14T03:31:50.7119126Z Downloading lxml (5.0MiB)
+2026-10-14T03:31:50.7120228Z Downloading ruff (9.8MiB)
+2026-10-14T03:31:50.7121523Z Downloading cryptography (4.5MiB)
+2026-10-14T03:31:50.7122399Z Downloading psycopg-binary (5.0MiB)
+2026-10-14T03:31:50.7123326Z Downloading mypy (14.5MiB)
+2026-10-14T03:31:50.9618178Z  Downloaded hypothesis
+2026-10-14T03:31:50.9712083Z  Downloaded pygments
+2026-10-14T03:31:50.9712601Z  Downloaded ast-serialize
+2026-10-14T03:31:50.9938124Z  Downloaded pydantic-core
+2026-10-14T03:31:51.0194000Z  Downloaded sqlalchemy
+2026-10-14T03:31:51.0334952Z  Downloaded uvloop
+2026-10-14T03:31:51.0397199Z  Downloaded cryptography
+2026-10-14T03:31:51.0475815Z  Downloaded psycopg-binary
+2026-10-14T03:31:51.0509333Z  Downloaded zstandard
+2026-10-14T03:31:51.0529245Z  Downloaded lxml
+2026-10-14T03:31:51.0764154Z  Downloaded ruff
+2026-10-14T03:31:51.1417612Z  Downloaded mypy
+2026-10-14T03:31:52.0396327Z       Built verz-brain @ file:///home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0
+2026-10-14T03:31:52.0448950Z Prepared 91 packages in 1.39s
+2026-10-14T03:31:52.5537351Z Installed 91 packages in 508ms
+2026-10-14T03:31:52.5539042Z  + alembic==1.19.1
+2026-10-14T03:31:52.5560572Z  + annotated-doc==0.0.5
+2026-10-14T03:31:52.5569309Z  + annotated-types==0.8.0
+2026-10-14T03:31:52.5569522Z  + anyio==4.15.0
+2026-10-14T03:31:52.5569706Z  + asgiref==3.12.1
+2026-10-14T03:31:52.5569894Z  + ast-serialize==0.9.0
+2026-10-14T03:31:52.5570085Z  + attrs==26.1.0
+2026-10-14T03:31:52.5570259Z  + certifi==2026.7.22
+2026-10-14T03:31:52.5570441Z  + cffi==2.1.1
+2026-10-14T03:31:52.5570651Z  + charset-normalizer==3.5.1
+2026-10-14T03:31:52.5570862Z  + click==8.5.0
+2026-10-14T03:31:52.5571036Z  + coverage==7.16.0
+2026-10-14T03:31:52.5571218Z  + croniter==6.2.4
+2026-10-14T03:31:52.5571439Z  + cryptography==50.0.1
+2026-10-14T03:31:52.5571638Z  + distro==1.9.0
+2026-10-14T03:31:52.5571808Z  + fastapi==0.141.1
+2026-10-14T03:31:52.5571990Z  + greenlet==3.5.5
+2026-10-14T03:31:52.5572162Z  + h11==0.16.0
+2026-10-14T03:31:52.5572330Z  + httpcore==1.0.9
+2026-10-14T03:31:52.5572507Z  + httpcore2==2.13.0
+2026-10-14T03:31:52.5572693Z  + httptools==0.8.0
+2026-10-14T03:31:52.5572872Z  + httpx==0.28.1
+2026-10-14T03:31:52.5573044Z  + httpx2==2.13.0
+2026-10-14T03:31:52.5573223Z  + hypothesis==6.167.1
+2026-10-14T03:31:52.5573405Z  + idna==3.19
+2026-10-14T03:31:52.5573578Z  + iniconfig==2.3.0
+2026-10-14T03:31:52.5573757Z  + jsonpatch==1.33
+2026-10-14T03:31:52.5573937Z  + jsonpointer==3.1.1
+2026-10-14T03:31:52.5574132Z  + langchain-core==1.6.3
+2026-10-14T03:31:52.5574345Z  + langchain-protocol==0.0.19
+2026-10-14T03:31:52.5574568Z  + langgraph==1.2.11
+2026-10-14T03:31:52.5574766Z  + langgraph-checkpoint==4.2.0
+2026-10-14T03:31:52.5575012Z  + langgraph-checkpoint-postgres==3.1.2
+2026-10-14T03:31:52.5575494Z  + langgraph-prebuilt==1.1.0
+2026-10-14T03:31:52.5575848Z  + langgraph-sdk==0.4.4
+2026-10-14T03:31:52.5576040Z  + langsmith==0.12.4
+2026-10-14T03:31:52.5576224Z  + ldap3==2.9.1
+2026-10-14T03:31:52.5576395Z  + librt==0.15.0
+2026-10-14T03:31:52.5576569Z  + lxml==6.1.3
+2026-10-14T03:31:52.5576734Z  + mako==1.4.1
+2026-10-14T03:31:52.5576905Z  + markupsafe==3.0.3
+2026-10-14T03:31:52.5577086Z  + mypy==2.3.1
+2026-10-14T03:31:52.5577264Z  + mypy-extensions==1.1.0
+2026-10-14T03:31:52.5577464Z  + orjson==3.12.0
+2026-10-14T03:31:52.5577643Z  + ormsgpack==1.12.2
+2026-10-14T03:31:52.5577824Z  + packaging==26.3
+2026-10-14T03:31:52.5578002Z  + pathspec==1.1.1
+2026-10-14T03:31:52.5578179Z  + pluggy==1.6.0
+2026-10-14T03:31:52.5578359Z  + procrastinate==3.9.0
+2026-10-14T03:31:52.5578550Z  + psycopg==3.3.5
+2026-10-14T03:31:52.5578844Z  + psycopg-binary==3.3.5
+2026-10-14T03:31:52.5579048Z  + psycopg-pool==3.3.1
+2026-10-14T03:31:52.5579236Z  + pyasn1==0.6.4
+2026-10-14T03:31:52.5579412Z  + pycparser==3.0
+2026-10-14T03:31:52.5579555Z  + pydantic==2.13.5
+2026-10-14T03:31:52.5579670Z  + pydantic-core==2.46.5
+2026-10-14T03:31:52.5579809Z  + pydantic-settings==2.15.0
+2026-10-14T03:31:52.5579941Z  + pygments==2.21.0
+2026-10-14T03:31:52.5580053Z  + pymysql==1.2.3
+2026-10-14T03:31:52.5580162Z  + pypdf==6.19.0
+2026-10-14T03:31:52.5580273Z  + pytest==9.1.1
+2026-10-14T03:31:52.5580385Z  + pytest-cov==7.1.0
+2026-10-14T03:31:52.5580574Z  + python-dateutil==2.9.0.post0
+2026-10-14T03:31:52.5580790Z  + python-docx==1.2.0
+2026-10-14T03:31:52.5580982Z  + python-dotenv==1.2.3
+2026-10-14T03:31:52.5581169Z  + pyyaml==6.0.3
+2026-10-14T03:31:52.5581279Z  + redis==8.1.0
+2026-10-14T03:31:52.5581388Z  + requests==2.34.2
+2026-10-14T03:31:52.5581509Z  + requests-toolbelt==1.0.0
+2026-10-14T03:31:52.5581637Z  + ruff==0.16.6
+2026-10-14T03:31:52.5581744Z  + six==1.17.0
+2026-10-14T03:31:52.5581851Z  + sniffio==1.3.1
+2026-10-14T03:31:52.5582057Z  + sortedcontainers==2.4.0
+2026-10-14T03:31:52.5582261Z  + sqlalchemy==2.0.52
+2026-10-14T03:31:52.5582446Z  + starlette==1.6.0
+2026-10-14T03:31:52.5582629Z  + structlog==26.1.0
+2026-10-14T03:31:52.5582816Z  + tenacity==9.1.4
+2026-10-14T03:31:52.5582995Z  + truststore==0.10.4
+2026-10-14T03:31:52.5583192Z  + types-pymysql==1.2.0.20260923
+2026-10-14T03:31:52.5583480Z  + types-pyyaml==6.0.12.20260815
+2026-10-14T03:31:52.5583703Z  + typing-extensions==4.16.0
+2026-10-14T03:31:52.5583924Z  + typing-inspection==0.4.4
+2026-10-14T03:31:52.5584126Z  + urllib3==2.7.0
+2026-10-14T03:31:52.5584301Z  + uuid-utils==0.17.1
+2026-10-14T03:31:52.5584484Z  + uvicorn==0.52.4
+2026-10-14T03:31:52.5584661Z  + uvloop==0.22.1
+2026-10-14T03:31:52.5584954Z  + verz-brain==0.1.0 (from file:///home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0)
+2026-10-14T03:31:52.5585291Z  + watchfiles==1.2.0
+2026-10-14T03:31:52.5585476Z  + websockets==16.1.1
+2026-10-14T03:31:52.5585663Z  + xxhash==4.0.1
+2026-10-14T03:31:52.5585838Z  + zstandard==0.25.0
+2026-10-14T03:31:52.5756037Z ##[group]Run actions/setup-node@v4
+2026-10-14T03:31:52.5756193Z with:
+2026-10-14T03:31:52.5756309Z   node-version: 22
+2026-10-14T03:31:52.5756425Z   cache: npm
+2026-10-14T03:31:52.5756573Z   cache-dependency-path: console/package-lock.json
+2026-10-14T03:31:52.5756745Z   always-auth: false
+2026-10-14T03:31:52.5756874Z   check-latest: false
+2026-10-14T03:31:52.5758456Z   token: ***
+2026-10-14T03:31:52.5758569Z env:
+2026-10-14T03:31:52.5758808Z   UV_VERSION: 0.12.9
+2026-10-14T03:31:52.5758959Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-10-14T03:31:52.5759144Z ##[endgroup]
+2026-10-14T03:31:52.6662364Z (node:2207) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-14T03:31:52.6662784Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-14T03:31:52.6673086Z Found in cache @ /opt/hostedtoolcache/node/22.23.3/x64
+2026-10-14T03:31:52.6674227Z ##[group]Environment details
+2026-10-14T03:31:53.0467980Z node: v22.23.3
+2026-10-14T03:31:53.0468176Z npm: 10.9.9
+2026-10-14T03:31:53.0468284Z yarn: 1.22.22
+2026-10-14T03:31:53.0468807Z ##[endgroup]
+2026-10-14T03:31:53.0479706Z [command]/opt/hostedtoolcache/node/22.23.3/x64/bin/npm config get cache
+2026-10-14T03:31:53.1410759Z /home/runner/.npm
+2026-10-14T03:31:53.3183417Z Cache hit for: node-cache-Linux-x64-npm-2de4e3167870bdcf22ef9f4763cefb79217e5b64b7fc92d81a666d0b13aac77e
+2026-10-14T03:31:53.3234261Z (node:2207) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-10-14T03:31:54.1666601Z Received 47113129 of 47113129 (100.0%), 62.3 MBs/sec
+2026-10-14T03:31:54.1666913Z Cache Size: ~45 MB (47113129 B)
+2026-10-14T03:31:54.1684377Z [command]/usr/bin/tar -xf /home/runner/work/_temp/80466ad3-c709-4841-9da6-9c502276100f/cache.tzst -P -C /home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0 --use-compress-program unzstd
+2026-10-14T03:31:54.2884053Z Cache restored successfully
+2026-10-14T03:31:54.2926607Z Cache restored from key: node-cache-Linux-x64-npm-2de4e3167870bdcf22ef9f4763cefb79217e5b64b7fc92d81a666d0b13aac77e
+2026-10-14T03:31:54.3856531Z ##[group]Run npm ci
+2026-10-14T03:31:54.3856696Z npm ci
+2026-10-14T03:31:54.3914226Z shell: /usr/bin/bash -e {0}
+2026-10-14T03:31:54.3914382Z env:
+2026-10-14T03:31:54.3914500Z   UV_VERSION: 0.12.9
+2026-10-14T03:31:54.3914670Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-10-14T03:31:54.3914854Z ##[endgroup]
+2026-10-14T03:31:57.9920734Z 
+2026-10-14T03:31:57.9926674Z added 315 packages, and audited 316 packages in 4s
+2026-10-14T03:31:57.9926948Z 
+2026-10-14T03:31:57.9927113Z 51 packages are looking for funding
+2026-10-14T03:31:57.9930256Z   run `npm fund` for details
+2026-10-14T03:31:58.0260138Z 
+2026-10-14T03:31:58.0260700Z 7 vulnerabilities (3 moderate, 4 high)
+2026-10-14T03:31:58.0260916Z 
+2026-10-14T03:31:58.0261406Z To address issues that do not require attention, run:
+2026-10-14T03:31:58.0262872Z   npm audit fix
+2026-10-14T03:31:58.0262949Z 
+2026-10-14T03:31:58.0263768Z To address all issues (including breaking changes), run:
+2026-10-14T03:31:58.0266003Z   npm audit fix --force
+2026-10-14T03:31:58.0266130Z 
+2026-10-14T03:31:58.0266753Z Run `npm audit` for details.
+2026-10-14T03:31:58.0884194Z ##[group]Run npm run api:generate
+2026-10-14T03:31:58.0884389Z npm run api:generate
+2026-10-14T03:31:58.0936792Z shell: /usr/bin/bash -e {0}
+2026-10-14T03:31:58.0936940Z env:
+2026-10-14T03:31:58.0937053Z   UV_VERSION: 0.12.9
+2026-10-14T03:31:58.0937210Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-10-14T03:31:58.0937389Z ##[endgroup]
+2026-10-14T03:31:58.1585828Z 
+2026-10-14T03:31:58.1586349Z > brain-console@0.1.0 api:generate
+2026-10-14T03:31:58.1586686Z > npm run api:schema && npm run api:types
+2026-10-14T03:31:58.1586853Z 
+2026-10-14T03:31:58.2179105Z 
+2026-10-14T03:31:58.2179670Z > brain-console@0.1.0 api:schema
+2026-10-14T03:31:58.2180087Z > uv run python scripts/export-openapi.py
+2026-10-14T03:31:58.2180280Z 
+2026-10-14T03:32:05.2345147Z wrote console/src/api/generated/openapi.internal.json with 470 paths
+2026-10-14T03:32:05.2345649Z   /api/v1/access-requests
+2026-10-14T03:32:05.2345926Z   /api/v1/access-requests/{request_id}/handled
+2026-10-14T03:32:05.2346249Z   /api/v1/agent-drafts
+2026-10-14T03:32:05.2346476Z   /api/v1/agent-drafts/import
+2026-10-14T03:32:05.2346715Z   /api/v1/agent-drafts/{draft_id}
+2026-10-14T03:32:05.2346969Z   /api/v1/agent-drafts/{draft_id}/approve
+2026-10-14T03:32:05.2347232Z   /api/v1/agent-drafts/{draft_id}/check
+2026-10-14T03:32:05.2347487Z   /api/v1/agent-drafts/{draft_id}/decline
+2026-10-14T03:32:05.2347748Z   /api/v1/agent-drafts/{draft_id}/procedure
+2026-10-14T03:32:05.2348050Z   /api/v1/agent-drafts/{draft_id}/publish
+2026-10-14T03:32:05.2348566Z   /api/v1/agent-drafts/{draft_id}/rehearse
+2026-10-14T03:32:05.2349022Z   /api/v1/agent-drafts/{draft_id}/revisions
+2026-10-14T03:32:05.2349301Z   /api/v1/agent-drafts/{draft_id}/suggestions
+2026-10-14T03:32:05.2349594Z   /api/v1/agent-drafts/{draft_id}/suggestions/take
+2026-10-14T03:32:05.2349861Z   /api/v1/agent-links/landing
+2026-10-14T03:32:05.2350410Z   /api/v1/agent-templates
+2026-10-14T03:32:05.2350648Z   /api/v1/agent-templates/{template_id}
+2026-10-14T03:32:05.2350971Z   /api/v1/agent-templates/{template_id}/versions/{version}
+2026-10-14T03:32:05.2351357Z   /api/v1/agent-templates/{template_id}/versions/{version}/install
+2026-10-14T03:32:05.2351657Z   /api/v1/agents
+2026-10-14T03:32:05.2351856Z   /api/v1/agents/{agent_id}/about
+2026-10-14T03:32:05.2352098Z   /api/v1/agents/{agent_id}/archive
+2026-10-14T03:32:05.2352389Z   /api/v1/agents/{agent_id}/artifacts
+2026-10-14T03:32:05.2352651Z   /api/v1/agents/{agent_id}/artifacts/latest
+2026-10-14T03:32:05.2352989Z   /api/v1/agents/{agent_id}/artifacts/{artifact_id}/archive
+2026-10-14T03:32:05.2353354Z   /api/v1/agents/{agent_id}/artifacts/{artifact_id}/download
+2026-10-14T03:32:05.2353732Z   /api/v1/agents/{agent_id}/artifacts/{artifact_id}/supersede
+2026-10-14T03:32:05.2354050Z   /api/v1/agents/{agent_id}/attachments
+2026-10-14T03:32:05.2354385Z   /api/v1/agents/{agent_id}/automation-authoring
+2026-10-14T03:32:05.2354731Z   /api/v1/agents/{agent_id}/automation-authoring/preview
+2026-10-14T03:32:05.2355069Z   /api/v1/agents/{agent_id}/automation-templates
+2026-10-14T03:32:05.2355451Z   /api/v1/agents/{agent_id}/automation-templates/{template_id}/preview
+2026-10-14T03:32:05.2355808Z   /api/v1/agents/{agent_id}/automations
+2026-10-14T03:32:05.2356099Z   /api/v1/agents/{agent_id}/automations/authored
+2026-10-14T03:32:05.2356445Z   /api/v1/agents/{agent_id}/automations/{automation_id}/start
+2026-10-14T03:32:05.2356820Z   /api/v1/agents/{agent_id}/automations/{automation_id}/stop
+2026-10-14T03:32:05.2357141Z   /api/v1/agents/{agent_id}/budget
+2026-10-14T03:32:05.2357417Z   /api/v1/agents/{agent_id}/budget/ceilings
+2026-10-14T03:32:05.2357704Z   /api/v1/agents/{agent_id}/capabilities
+2026-10-14T03:32:05.2357980Z   /api/v1/agents/{agent_id}/channels
+2026-10-14T03:32:05.2358246Z   /api/v1/agents/{agent_id}/conversations
+2026-10-14T03:32:05.2358526Z   /api/v1/agents/{agent_id}/disable
+2026-10-14T03:32:05.2358965Z   /api/v1/agents/{agent_id}/drafts
+2026-10-14T03:32:05.2359240Z   /api/v1/agents/{agent_id}/duplicate
+2026-10-14T03:32:05.2359798Z   /api/v1/agents/{agent_id}/enable
+2026-10-14T03:32:05.2360060Z   /api/v1/agents/{agent_id}/groups
+2026-10-14T03:32:05.2360332Z   /api/v1/agents/{agent_id}/groups/removal
+2026-10-14T03:32:05.2360618Z   /api/v1/agents/{agent_id}/knowledge
+2026-10-14T03:32:05.2360895Z   /api/v1/agents/{agent_id}/knowledge/links
+2026-10-14T03:32:05.2361193Z   /api/v1/agents/{agent_id}/knowledge/uploads
+2026-10-14T03:32:05.2361525Z   /api/v1/agents/{agent_id}/knowledge/{item_id}/refetch
+2026-10-14T03:32:05.2361871Z   /api/v1/agents/{agent_id}/knowledge/{item_id}/retire
+2026-10-14T03:32:05.2362177Z   /api/v1/agents/{agent_id}/learning
+2026-10-14T03:32:05.2362437Z   /api/v1/agents/{agent_id}/leash
+2026-10-14T03:32:05.2362698Z   /api/v1/agents/{agent_id}/leash/moves
+2026-10-14T03:32:05.2362965Z   /api/v1/agents/{agent_id}/lifecycle
+2026-10-14T03:32:05.2363239Z   /api/v1/agents/{agent_id}/manifest
+2026-10-14T03:32:05.2363505Z   /api/v1/agents/{agent_id}/memory
+2026-10-14T03:32:05.2363772Z   /api/v1/agents/{agent_id}/memory-kinds
+2026-10-14T03:32:05.2364099Z   /api/v1/agents/{agent_id}/memory/{memory_id}/deletion
+2026-10-14T03:32:05.2364438Z   /api/v1/agents/{agent_id}/memory/{memory_id}/edit
+2026-10-14T03:32:05.2364736Z   /api/v1/agents/{agent_id}/model-pin
+2026-10-14T03:32:05.2365006Z   /api/v1/agents/{agent_id}/preview
+2026-10-14T03:32:05.2365278Z   /api/v1/agents/{agent_id}/publications
+2026-10-14T03:32:05.2365548Z   /api/v1/agents/{agent_id}/publish
+2026-10-14T03:32:05.2365839Z   /api/v1/agents/{agent_id}/supervision/pin
+2026-10-14T03:32:05.2366140Z   /api/v1/agents/{agent_id}/supervision/review
+2026-10-14T03:32:05.2366456Z   /api/v1/agents/{agent_id}/supervision/verdicts
+2026-10-14T03:32:05.2366746Z   /api/v1/agents/{agent_id}/transfer
+2026-10-14T03:32:05.2367010Z   /api/v1/agents/{agent_id}/upgrade
+2026-10-14T03:32:05.2367285Z   /api/v1/agents/{agent_id}/upgrade/accept
+2026-10-14T03:32:05.2367767Z   /api/v1/agents/{agent_id}/upgrade/decline
+2026-10-14T03:32:05.2368051Z   /api/v1/agents/{agent_id}/workspace
+2026-10-14T03:32:05.2368295Z   /api/v1/answer
+2026-10-14T03:32:05.2368495Z   /api/v1/answer/copied
+2026-10-14T03:32:05.2368867Z   /api/v1/answer/mark
+2026-10-14T03:32:05.2369067Z   /api/v1/approvals
+2026-10-14T03:32:05.2369290Z   /api/v1/approvals/{suspension_id}
+2026-10-14T03:32:05.2369567Z   /api/v1/approvals/{suspension_id}/decision
+2026-10-14T03:32:05.2369816Z   /api/v1/audit
+2026-10-14T03:32:05.2370005Z   /api/v1/audit/history
+2026-10-14T03:32:05.2370215Z   /api/v1/audit/statistics
+2026-10-14T03:32:05.2370437Z   /api/v1/audit/verification
+2026-10-14T03:32:05.2370684Z   /api/v1/automation/tool-call
+2026-10-14T03:32:05.2370955Z   /api/v1/automations/{automation_id}/adopt
+2026-10-14T03:32:05.2371273Z   /api/v1/automations/{automation_id}/pause
+2026-10-14T03:32:05.2371571Z   /api/v1/automations/{automation_id}/remove
+2026-10-14T03:32:05.2371885Z   /api/v1/automations/{automation_id}/reschedule
+2026-10-14T03:32:05.2372203Z   /api/v1/automations/{automation_id}/resume
+2026-10-14T03:32:05.2372464Z   /api/v1/builder/form
+2026-10-14T03:32:05.2372668Z   /api/v1/channels
+2026-10-14T03:32:05.2372859Z   /api/v1/channels/{name}
+2026-10-14T03:32:05.2373100Z   /api/v1/channels/{name}/bindings
+2026-10-14T03:32:05.2373374Z   /api/v1/channels/{name}/bindings/unbind
+2026-10-14T03:32:05.2373655Z   /api/v1/channels/{name}/deliveries
+2026-10-14T03:32:05.2373920Z   /api/v1/channels/{name}/events
+2026-10-14T03:32:05.2374172Z   /api/v1/channels/{name}/health
+2026-10-14T03:32:05.2374419Z   /api/v1/channels/{name}/switch
+2026-10-14T03:32:05.2374665Z   /api/v1/channels/{name}/test
+2026-10-14T03:32:05.2374917Z   /api/v1/classifications/{entity}
+2026-10-14T03:32:05.2375247Z   /api/v1/classifications/{entity}/columns/{column}/marks
+2026-10-14T03:32:05.2375652Z   /api/v1/classifications/{entity}/columns/{column}/marks/review
+2026-10-14T03:32:05.2376064Z   /api/v1/classifications/{entity}/columns/{column}/review
+2026-10-14T03:32:05.2376406Z   /api/v1/classifications/{entity}/table
+2026-10-14T03:32:05.2376662Z   /api/v1/company/activity
+2026-10-14T03:32:05.2377070Z   /api/v1/company/budget
+2026-10-14T03:32:05.2377331Z   /api/v1/company/consumption
+2026-10-14T03:32:05.2377588Z   /api/v1/company/estate
+2026-10-14T03:32:05.2377799Z   /api/v1/connectors
+2026-10-14T03:32:05.2378029Z   /api/v1/connectors/consent/callback
+2026-10-14T03:32:05.2378282Z   /api/v1/connectors/lark-app
+2026-10-14T03:32:05.2378536Z   /api/v1/connectors/lark-app/switch-off
+2026-10-14T03:32:05.2378967Z   /api/v1/connectors/lark-app/test
+2026-10-14T03:32:05.2379268Z   /api/v1/connectors/lark-app/wiki-spaces
+2026-10-14T03:32:05.2379551Z   /api/v1/connectors/{connector}/accept
+2026-10-14T03:32:05.2379836Z   /api/v1/connectors/{connector}/consent
+2026-10-14T03:32:05.2380130Z   /api/v1/connectors/{connector}/disconnect
+2026-10-14T03:32:05.2380406Z   /api/v1/connectors/{connector}/edit
+2026-10-14T03:32:05.2380675Z   /api/v1/connectors/{connector}/key
+2026-10-14T03:32:05.2380952Z   /api/v1/connectors/{connector}/probe
+2026-10-14T03:32:05.2381229Z   /api/v1/connectors/{connector}/steward
+2026-10-14T03:32:05.2381511Z   /api/v1/console/agents/{agent_id}/stats
+2026-10-14T03:32:05.2381772Z   /api/v1/console/automations
+2026-10-14T03:32:05.2382039Z   /api/v1/console/automations/{automation_id}
+2026-10-14T03:32:05.2382359Z   /api/v1/console/automations/{automation_id}/stats
+2026-10-14T03:32:05.2382637Z   /api/v1/console/channels
+2026-10-14T03:32:05.2382878Z   /api/v1/console/channels/{name}
+2026-10-14T03:32:05.2383139Z   /api/v1/console/channels/{name}/stats
+2026-10-14T03:32:05.2383482Z   /api/v1/console/connectors
+2026-10-14T03:32:05.2383737Z   /api/v1/console/connectors/{connector}
+2026-10-14T03:32:05.2384037Z   /api/v1/console/connectors/{connector}/drift
+2026-10-14T03:32:05.2384353Z   /api/v1/console/connectors/{connector}/export
+2026-10-14T03:32:05.2384670Z   /api/v1/console/connectors/{connector}/probe
+2026-10-14T03:32:05.2384981Z   /api/v1/console/connectors/{connector}/stats
+2026-10-14T03:32:05.2385475Z   /api/v1/console/department/coverage
+2026-10-14T03:32:05.2385750Z   /api/v1/console/department/pace
+2026-10-14T03:32:05.2385996Z   /api/v1/console/incidents
+2026-10-14T03:32:05.2386255Z   /api/v1/console/incidents/acknowledgement
+2026-10-14T03:32:05.2386519Z   /api/v1/console/navigation
+2026-10-14T03:32:05.2386748Z   /api/v1/console/overview
+2026-10-14T03:32:05.2386989Z   /api/v1/console/overview/figures
+2026-10-14T03:32:05.2387233Z   /api/v1/console/search
+2026-10-14T03:32:05.2387484Z   /api/v1/console/skills/{skill_name}/stats
+2026-10-14T03:32:05.2387773Z   /api/v1/console/system-health
+2026-10-14T03:32:05.2388006Z   /api/v1/credentials
+2026-10-14T03:32:05.2388253Z   /api/v1/credentials/{family}/{name}
+2026-10-14T03:32:05.2388506Z   /api/v1/custom-connectors
+2026-10-14T03:32:05.2388965Z   /api/v1/custom-connectors/{name}
+2026-10-14T03:32:05.2389245Z   /api/v1/custom-connectors/{name}/review
+2026-10-14T03:32:05.2389504Z   /api/v1/data-transfer
+2026-10-14T03:32:05.2389745Z   /api/v1/data-transfer/exports
+2026-10-14T03:32:05.2389979Z   /api/v1/digest/destination
+2026-10-14T03:32:05.2390204Z   /api/v1/errors
+2026-10-14T03:32:05.2390402Z   /api/v1/escalations
+2026-10-14T03:32:05.2390635Z   /api/v1/govern/access-review
+2026-10-14T03:32:05.2390894Z   /api/v1/govern/access-review/decision
+2026-10-14T03:32:05.2391179Z   /api/v1/govern/access-review/decisions
+2026-10-14T03:32:05.2391461Z   /api/v1/govern/access-review/export
+2026-10-14T03:32:05.2391710Z   /api/v1/govern/artifacts
+2026-10-14T03:32:05.2391931Z   /api/v1/govern/capabilities
+2026-10-14T03:32:05.2392187Z   /api/v1/govern/compliance/breaches
+2026-10-14T03:32:05.2392511Z   /api/v1/govern/compliance/breaches/{case_id}/assessment
+2026-10-14T03:32:05.2392933Z   /api/v1/govern/compliance/breaches/{case_id}/close
+2026-10-14T03:32:05.2393288Z   /api/v1/govern/compliance/breaches/{case_id}/commission
+2026-10-14T03:32:05.2393650Z   /api/v1/govern/compliance/breaches/{case_id}/exception
+2026-10-14T03:32:05.2394014Z   /api/v1/govern/compliance/breaches/{case_id}/individuals
+2026-10-14T03:32:05.2394349Z   /api/v1/govern/compliance/register
+2026-10-14T03:32:05.2394819Z   /api/v1/govern/compliance/topics
+2026-10-14T03:32:05.2395103Z   /api/v1/govern/compliance/topics/{topic}
+2026-10-14T03:32:05.2395374Z   /api/v1/govern/data-steward
+2026-10-14T03:32:05.2395617Z   /api/v1/govern/departments
+2026-10-14T03:32:05.2395905Z   /api/v1/govern/departments/from-staff-source
+2026-10-14T03:32:05.2396214Z   /api/v1/govern/departments/lead
+2026-10-14T03:32:05.2396502Z   /api/v1/govern/departments/membership
+2026-10-14T03:32:05.2396792Z   /api/v1/govern/departments/rename
+2026-10-14T03:32:05.2397079Z   /api/v1/govern/departments/retirement
+2026-10-14T03:32:05.2397358Z   /api/v1/govern/departments/scopes
+2026-10-14T03:32:05.2397635Z   /api/v1/govern/departments/scopes/rename
+2026-10-14T03:32:05.2397949Z   /api/v1/govern/departments/scopes/retirement
+2026-10-14T03:32:05.2398239Z   /api/v1/govern/departments/team
+2026-10-14T03:32:05.2398513Z   /api/v1/govern/departments/team/rename
+2026-10-14T03:32:05.2398965Z   /api/v1/govern/departments/team/retirement
+2026-10-14T03:32:05.2399237Z   /api/v1/govern/directory
+2026-10-14T03:32:05.2399494Z   /api/v1/govern/directory/department
+2026-10-14T03:32:05.2399788Z   /api/v1/govern/directory/{principal_id}
+2026-10-14T03:32:05.2400126Z   /api/v1/govern/directory/{principal_id}/work-email
+2026-10-14T03:32:05.2400415Z   /api/v1/govern/elevation
+2026-10-14T03:32:05.2400656Z   /api/v1/govern/elevation/notices
+2026-10-14T03:32:05.2400922Z   /api/v1/govern/elevation/requests
+2026-10-14T03:32:05.2401243Z   /api/v1/govern/elevation/requests/{request_id}/decision
+2026-10-14T03:32:05.2401546Z   /api/v1/govern/erasures
+2026-10-14T03:32:05.2401793Z   /api/v1/govern/escalation-routes
+2026-10-14T03:32:05.2402075Z   /api/v1/govern/escalation-routes/{queue}
+2026-10-14T03:32:05.2402336Z   /api/v1/govern/grants
+2026-10-14T03:32:05.2402566Z   /api/v1/govern/grants/removal
+2026-10-14T03:32:05.2402821Z   /api/v1/govern/grants/several
+2026-10-14T03:32:05.2403215Z   /api/v1/govern/learning
+2026-10-14T03:32:05.2403459Z   /api/v1/govern/learning/settings
+2026-10-14T03:32:05.2403741Z   /api/v1/govern/learning/settings/{name}
+2026-10-14T03:32:05.2404019Z   /api/v1/govern/learning/undo
+2026-10-14T03:32:05.2404247Z   /api/v1/govern/legal-holds
+2026-10-14T03:32:05.2404491Z   /api/v1/govern/legal-holds/lift
+2026-10-14T03:32:05.2404738Z   /api/v1/govern/library
+2026-10-14T03:32:05.2404957Z   /api/v1/govern/memory
+2026-10-14T03:32:05.2405171Z   /api/v1/govern/packs
+2026-10-14T03:32:05.2405376Z   /api/v1/govern/packs/assignment
+2026-10-14T03:32:05.2405528Z   /api/v1/govern/packs/copy
+2026-10-14T03:32:05.2405679Z   /api/v1/govern/packs/retirement
+2026-10-14T03:32:05.2405836Z   /api/v1/govern/packs/version
+2026-10-14T03:32:05.2405975Z   /api/v1/govern/people
+2026-10-14T03:32:05.2406117Z   /api/v1/govern/people/disable
+2026-10-14T03:32:05.2406264Z   /api/v1/govern/people/enable
+2026-10-14T03:32:05.2406452Z   /api/v1/govern/prompts
+2026-10-14T03:32:05.2406605Z   /api/v1/govern/prompts/{agent_id}
+2026-10-14T03:32:05.2406786Z   /api/v1/govern/prompts/{agent_id}/give-back
+2026-10-14T03:32:05.2406953Z   /api/v1/govern/retention
+2026-10-14T03:32:05.2407105Z   /api/v1/govern/retention/controls
+2026-10-14T03:32:05.2407263Z   /api/v1/govern/retention/exports
+2026-10-14T03:32:05.2407425Z   /api/v1/govern/retention/release
+2026-10-14T03:32:05.2407582Z   /api/v1/govern/retention/withdrawal
+2026-10-14T03:32:05.2407731Z   /api/v1/govern/roles
+2026-10-14T03:32:05.2407869Z   /api/v1/govern/roles/appointment
+2026-10-14T03:32:05.2408018Z   /api/v1/govern/roles/deputy
+2026-10-14T03:32:05.2408170Z   /api/v1/govern/roles/group-rules
+2026-10-14T03:32:05.2408337Z   /api/v1/govern/roles/group-rules/retirement
+2026-10-14T03:32:05.2408510Z   /api/v1/govern/roles/holders
+2026-10-14T03:32:05.2408848Z   /api/v1/govern/roles/misconfigurations
+2026-10-14T03:32:05.2409059Z   /api/v1/govern/roles/nominations
+2026-10-14T03:32:05.2409253Z   /api/v1/govern/roles/nominations/{nomination_id}/decision
+2026-10-14T03:32:05.2409451Z   /api/v1/govern/roles/removal
+2026-10-14T03:32:05.2409586Z   /api/v1/govern/scopes
+2026-10-14T03:32:05.2409845Z   /api/v1/govern/service-accounts
+2026-10-14T03:32:05.2410007Z   /api/v1/govern/service-accounts/keys
+2026-10-14T03:32:05.2410186Z   /api/v1/govern/service-accounts/keys/revoke
+2026-10-14T03:32:05.2410365Z   /api/v1/govern/service-accounts/retire
+2026-10-14T03:32:05.2410542Z   /api/v1/govern/service-accounts/{client_id}
+2026-10-14T03:32:05.2410699Z   /api/v1/govern/sessions
+2026-10-14T03:32:05.2410834Z   /api/v1/govern/sessions/end
+2026-10-14T03:32:05.2410994Z   /api/v1/govern/sessions/end-several
+2026-10-14T03:32:05.2411143Z   /api/v1/govern/sign-ins
+2026-10-14T03:32:05.2411288Z   /api/v1/govern/sign-ins/unlink
+2026-10-14T03:32:05.2411439Z   /api/v1/govern/staff_sources
+2026-10-14T03:32:05.2411594Z   /api/v1/govern/staff_sources/connect
+2026-10-14T03:32:05.2411760Z   /api/v1/govern/staff_sources/credential
+2026-10-14T03:32:05.2411932Z   /api/v1/govern/staff_sources/first-sync
+2026-10-14T03:32:05.2412120Z   /api/v1/govern/staff_sources/first-sync/apply
+2026-10-14T03:32:05.2412299Z   /api/v1/govern/staff_sources/guides
+2026-10-14T03:32:05.2412465Z   /api/v1/govern/staff_sources/runs
+2026-10-14T03:32:05.2412625Z   /api/v1/govern/staff_sources/sync
+2026-10-14T03:32:05.2412782Z   /api/v1/govern/staff_sources/test
+2026-10-14T03:32:05.2412941Z   /api/v1/govern/staff_sources/transfers
+2026-10-14T03:32:05.2413126Z   /api/v1/govern/staff_sources/transfers/{agent_id}
+2026-10-14T03:32:05.2413307Z   /api/v1/govern/staff_sources/trial
+2026-10-14T03:32:05.2413459Z   /api/v1/govern/subscribers
+2026-10-14T03:32:05.2413592Z   /api/v1/halts
+2026-10-14T03:32:05.2413712Z   /api/v1/halts/resume
+2026-10-14T03:32:05.2413838Z   /api/v1/help/alerts
+2026-10-14T03:32:05.2413978Z   /api/v1/help/alerts/{control}
+2026-10-14T03:32:05.2414118Z   /api/v1/help/playbook
+2026-10-14T03:32:05.2414245Z   /api/v1/help/runbooks
+2026-10-14T03:32:05.2414377Z   /api/v1/help/runbooks/{key}
+2026-10-14T03:32:05.2414610Z   /api/v1/help/what-it-sees
+2026-10-14T03:32:05.2414745Z   /api/v1/install
+2026-10-14T03:32:05.2414867Z   /api/v1/install/capacity
+2026-10-14T03:32:05.2415008Z   /api/v1/install/features
+2026-10-14T03:32:05.2415154Z   /api/v1/install/features/{name}
+2026-10-14T03:32:05.2415301Z   /api/v1/install/limits
+2026-10-14T03:32:05.2415433Z   /api/v1/install/plugins
+2026-10-14T03:32:05.2415594Z   /api/v1/install/plugins/{plugin_id}/disable
+2026-10-14T03:32:05.2415778Z   /api/v1/install/plugins/{plugin_id}/enable
+2026-10-14T03:32:05.2415959Z   /api/v1/install/plugins/{plugin_id}/plan
+2026-10-14T03:32:05.2416140Z   /api/v1/install/plugins/{plugin_id}/remove
+2026-10-14T03:32:05.2416320Z   /api/v1/install/plugins/{plugin_id}/rollback
+2026-10-14T03:32:05.2416507Z   /api/v1/install/plugins/{plugin_id}/upgrade
+2026-10-14T03:32:05.2416665Z   /api/v1/install/recovery
+2026-10-14T03:32:05.2416800Z   /api/v1/install/settings
+2026-10-14T03:32:05.2416943Z   /api/v1/install/settings/{name}
+2026-10-14T03:32:05.2417106Z   /api/v1/install/settings/{name}/default
+2026-10-14T03:32:05.2417264Z   /api/v1/install/tuning
+2026-10-14T03:32:05.2417407Z   /api/v1/install/tuning/{name}
+2026-10-14T03:32:05.2417554Z   /api/v1/install/updates
+2026-10-14T03:32:05.2417682Z   /api/v1/jobs
+2026-10-14T03:32:05.2417797Z   /api/v1/jobs/dead
+2026-10-14T03:32:05.2417917Z   /api/v1/jobs/{name}
+2026-10-14T03:32:05.2418047Z   /api/v1/jobs/{name}/pause
+2026-10-14T03:32:05.2418185Z   /api/v1/jobs/{name}/resume
+2026-10-14T03:32:05.2418324Z   /api/v1/jobs/{name}/run
+2026-10-14T03:32:05.2418454Z   /api/v1/jobs/{name}/runs
+2026-10-14T03:32:05.2418598Z   /api/v1/knowledge/corrections
+2026-10-14T03:32:05.2418846Z   /api/v1/knowledge/corrections/{candidate_id}
+2026-10-14T03:32:05.2419055Z   /api/v1/knowledge/corrections/{candidate_id}/decision
+2026-10-14T03:32:05.2419231Z   /api/v1/knowledge/documents
+2026-10-14T03:32:05.2419391Z   /api/v1/knowledge/documents/{document_id}
+2026-10-14T03:32:05.2419550Z   /api/v1/knowledge/items
+2026-10-14T03:32:05.2419694Z   /api/v1/knowledge/items/{item_id}
+2026-10-14T03:32:05.2419866Z   /api/v1/knowledge/items/{item_id}/archive
+2026-10-14T03:32:05.2420135Z   /api/v1/knowledge/items/{item_id}/history
+2026-10-14T03:32:05.2420313Z   /api/v1/knowledge/items/{item_id}/passages
+2026-10-14T03:32:05.2420492Z   /api/v1/knowledge/items/{item_id}/promotion
+2026-10-14T03:32:05.2420673Z   /api/v1/knowledge/items/{item_id}/public
+2026-10-14T03:32:05.2420844Z   /api/v1/knowledge/items/{item_id}/steward
+2026-10-14T03:32:05.2421029Z   /api/v1/knowledge/items/{item_id}/verification
+2026-10-14T03:32:05.2421212Z   /api/v1/knowledge/items/{item_id}/versions
+2026-10-14T03:32:05.2421370Z   /api/v1/knowledge/links
+2026-10-14T03:32:05.2421504Z   /api/v1/knowledge/solutions
+2026-10-14T03:32:05.2421677Z   /api/v1/knowledge/solutions/{solution_id}/decision
+2026-10-14T03:32:05.2421845Z   /api/v1/knowledge/tasks
+2026-10-14T03:32:05.2421993Z   /api/v1/knowledge/tasks/{task_id}/done
+2026-10-14T03:32:05.2422148Z   /api/v1/knowledge/uploads
+2026-10-14T03:32:05.2422298Z   /api/v1/knowledge/uploads/options
+2026-10-14T03:32:05.2422463Z   /api/v1/knowledge/uploads/queued
+2026-10-14T03:32:05.2422632Z   /api/v1/knowledge/uploads/queued/{ticket}
+2026-10-14T03:32:05.2422802Z   /api/v1/knowledge/verifications
+2026-10-14T03:32:05.2422962Z   /api/v1/learning/{memory_id}/promote
+2026-10-14T03:32:05.2423111Z   /api/v1/logs
+2026-10-14T03:32:05.2423225Z   /api/v1/logs/export
+2026-10-14T03:32:05.2423348Z   /api/v1/me
+2026-10-14T03:32:05.2423462Z   /api/v1/me/accounts
+2026-10-14T03:32:05.2423606Z   /api/v1/me/accounts/{connector}/consent
+2026-10-14T03:32:05.2423761Z   /api/v1/me/agent-requests
+2026-10-14T03:32:05.2423907Z   /api/v1/me/agents/requestable
+2026-10-14T03:32:05.2424064Z   /api/v1/me/agents/{agent_id}/request
+2026-10-14T03:32:05.2424210Z   /api/v1/me/artifacts
+2026-10-14T03:32:05.2424359Z   /api/v1/me/artifacts/{artifact_id}/share
+2026-10-14T03:32:05.2424533Z   /api/v1/me/artifacts/{artifact_id}/unshare
+2026-10-14T03:32:05.2424690Z   /api/v1/me/channels
+2026-10-14T03:32:05.2424825Z   /api/v1/me/channels/{name}/code
+2026-10-14T03:32:05.2425074Z   /api/v1/me/channels/{name}/unbind
+2026-10-14T03:32:05.2425218Z   /api/v1/me/devices
+2026-10-14T03:32:05.2425349Z   /api/v1/me/devices/end
+2026-10-14T03:32:05.2425484Z   /api/v1/me/learning/undo
+2026-10-14T03:32:05.2425616Z   /api/v1/me/memory/edit
+2026-10-14T03:32:05.2425749Z   /api/v1/me/memory/forget
+2026-10-14T03:32:05.2425891Z   /api/v1/me/memory/forget-all
+2026-10-14T03:32:05.2426031Z   /api/v1/me/preferences
+2026-10-14T03:32:05.2426173Z   /api/v1/me/preferences/learning
+2026-10-14T03:32:05.2426338Z   /api/v1/me/preferences/quiet-hours
+2026-10-14T03:32:05.2426498Z   /api/v1/me/preferences/reach
+2026-10-14T03:32:05.2426632Z   /api/v1/me/reads
+2026-10-14T03:32:05.2426755Z   /api/v1/me/referrals
+2026-10-14T03:32:05.2426902Z   /api/v1/me/referrals/{referral_id}/handled
+2026-10-14T03:32:05.2427056Z   /api/v1/me/shared
+2026-10-14T03:32:05.2427199Z   /api/v1/me/shared/{artifact_id}/download
+2026-10-14T03:32:05.2427350Z   /api/v1/me/shares
+2026-10-14T03:32:05.2427472Z   /api/v1/me/stored
+2026-10-14T03:32:05.2427593Z   /api/v1/me/workspace
+2026-10-14T03:32:05.2427718Z   /api/v1/models/prices
+2026-10-14T03:32:05.2427848Z   /api/v1/models/profile
+2026-10-14T03:32:05.2427981Z   /api/v1/models/providers
+2026-10-14T03:32:05.2428130Z   /api/v1/models/providers-register
+2026-10-14T03:32:05.2428298Z   /api/v1/models/providers/{provider}
+2026-10-14T03:32:05.2428469Z   /api/v1/models/providers/{provider}/check
+2026-10-14T03:32:05.2428718Z   /api/v1/models/providers/{provider}/retire
+2026-10-14T03:32:05.2428893Z   /api/v1/models/providers/{provider}/stats
+2026-10-14T03:32:05.2429069Z   /api/v1/models/providers/{provider}/terms
+2026-10-14T03:32:05.2429223Z   /api/v1/models/residency
+2026-10-14T03:32:05.2429386Z   /api/v1/models/residency/{constraint_id}/retire
+2026-10-14T03:32:05.2429555Z   /api/v1/models/tiers/{tier}
+2026-10-14T03:32:05.2429708Z   /api/v1/models/tiers/{tier}/reset
+2026-10-14T03:32:05.2429853Z   /api/v1/notifications
+2026-10-14T03:32:05.2430002Z   /api/v1/notifications/notices/{kind}
+2026-10-14T03:32:05.2430306Z   /api/v1/notifications/relay
+2026-10-14T03:32:05.2430771Z   /api/v1/notifications/relay/password
+2026-10-14T03:32:05.2431297Z   /api/v1/notifications/relay/removal
+2026-10-14T03:32:05.2431698Z   /api/v1/notifications/relay/test
+2026-10-14T03:32:05.2432054Z   /api/v1/operate/models
+2026-10-14T03:32:05.2432321Z   /api/v1/operate/runs
+2026-10-14T03:32:05.2432559Z   /api/v1/operations/interrupted
+2026-10-14T03:32:05.2432817Z   /api/v1/quality/annotations
+2026-10-14T03:32:05.2442732Z   /api/v1/quality/candidates
+2026-10-14T03:32:05.2443034Z   /api/v1/quality/candidates/{candidate_id}/decision
+2026-10-14T03:32:05.2443299Z   /api/v1/quality/flags
+2026-10-14T03:32:05.2443525Z   /api/v1/quality/flags/{flag_id}/case
+2026-10-14T03:32:05.2443760Z   /api/v1/quality/sample
+2026-10-14T03:32:05.2443954Z   /api/v1/records/{entity}
+2026-10-14T03:32:05.2444104Z   /api/v1/records/{entity}/access
+2026-10-14T03:32:05.2444254Z   /api/v1/report/adoption
+2026-10-14T03:32:05.2444393Z   /api/v1/report/quality
+2026-10-14T03:32:05.2444528Z   /api/v1/report/questions
+2026-10-14T03:32:05.2444680Z   /api/v1/report/service-levels
+2026-10-14T03:32:05.2444827Z   /api/v1/report/spend
+2026-10-14T03:32:05.2444975Z   /api/v1/report/spend/cost-per-answer
+2026-10-14T03:32:05.2445137Z   /api/v1/report/spend/shapes
+2026-10-14T03:32:05.2445282Z   /api/v1/report/spend/stops
+2026-10-14T03:32:05.2445456Z   /api/v1/report/usage
+2026-10-14T03:32:05.2445589Z   /api/v1/requirements/checks
+2026-10-14T03:32:05.2445732Z   /api/v1/resolution/review
+2026-10-14T03:32:05.2445889Z   /api/v1/resolution/review/{item_id}
+2026-10-14T03:32:05.2446066Z   /api/v1/resolution/review/{item_id}/decision
+2026-10-14T03:32:05.2446238Z   /api/v1/resolution/weights
+2026-10-14T03:32:05.2446395Z   /api/v1/resolution/weights/promote
+2026-10-14T03:32:05.2446551Z   /api/v1/retrievals/signal
+2026-10-14T03:32:05.2446704Z   /api/v1/retrievals/{event_id}/uses
+2026-10-14T03:32:05.2446860Z   /api/v1/routing/changes
+2026-10-14T03:32:05.2447266Z   /api/v1/routing/export
+2026-10-14T03:32:05.2447413Z   /api/v1/routing/golden-questions
+2026-10-14T03:32:05.2447592Z   /api/v1/routing/golden-questions/askers
+2026-10-14T03:32:05.2447791Z   /api/v1/routing/golden-questions/{question_id}/retire
+2026-10-14T03:32:05.2447972Z   /api/v1/routing/rungs
+2026-10-14T03:32:05.2448113Z   /api/v1/routing/rungs/{rung_id}
+2026-10-14T03:32:05.2448280Z   /api/v1/routing/rungs/{rung_id}/move
+2026-10-14T03:32:05.2448445Z   /api/v1/routing/rungs/{rung_id}/retire
+2026-10-14T03:32:05.2448598Z   /api/v1/rules
+2026-10-14T03:32:05.2448860Z   /api/v1/rules/test
+2026-10-14T03:32:05.2449005Z   /api/v1/rules/{rule_id}/retire
+2026-10-14T03:32:05.2449149Z   /api/v1/sign-in/status
+2026-10-14T03:32:05.2449278Z   /api/v1/sign-ins
+2026-10-14T03:32:05.2449401Z   /api/v1/skills
+2026-10-14T03:32:05.2449522Z   /api/v1/skills/drafts
+2026-10-14T03:32:05.2449656Z   /api/v1/skills/imports
+2026-10-14T03:32:05.2449787Z   /api/v1/skills/library
+2026-10-14T03:32:05.2449921Z   /api/v1/skills/procedures
+2026-10-14T03:32:05.2450079Z   /api/v1/skills/{digest}/assignments
+2026-10-14T03:32:05.2450246Z   /api/v1/skills/{digest}/categories
+2026-10-14T03:32:05.2450409Z   /api/v1/skills/{digest}/detachments
+2026-10-14T03:32:05.2450570Z   /api/v1/skills/{digest}/export
+2026-10-14T03:32:05.2450728Z   /api/v1/skills/{digest}/rehearsals
+2026-10-14T03:32:05.2450892Z   /api/v1/skills/{digest}/reinstatement
+2026-10-14T03:32:05.2451059Z   /api/v1/skills/{digest}/retirement
+2026-10-14T03:32:05.2451217Z   /api/v1/skills/{digest}/review
+2026-10-14T03:32:05.2451377Z   /api/v1/skills/{digest}/versions
+2026-10-14T03:32:05.2451539Z   /api/v1/stewardship/self-grants
+2026-10-14T03:32:05.2451685Z   /api/v1/storage
+2026-10-14T03:32:05.2451804Z   /api/v1/threads
+2026-10-14T03:32:05.2451931Z   /api/v1/threads/attachments
+2026-10-14T03:32:05.2452074Z   /api/v1/threads/search
+2026-10-14T03:32:05.2452207Z   /api/v1/threads/{thread_id}
+2026-10-14T03:32:05.2452371Z   /api/v1/threads/{thread_id}/corrections
+2026-10-14T03:32:05.2452541Z   /api/v1/threads/{thread_id}/export
+2026-10-14T03:32:05.2452688Z   /api/v1/tools
+2026-10-14T03:32:05.2452809Z   /api/v1/tools/{name}/switch
+2026-10-14T03:32:05.2453064Z   /api/v1/traces/{trace_id}/read
+2026-10-14T03:32:05.2453204Z   /api/v1/vault
+2026-10-14T03:32:05.2453325Z   /api/v1/webhooks
+2026-10-14T03:32:05.2453462Z   /api/v1/webhooks/subscribers
+2026-10-14T03:32:05.2453681Z   /api/v1/webhooks/subscribers/{subscriber_id}/deliveries/{handle}/replay
+2026-10-14T03:32:05.2453928Z   /api/v1/webhooks/subscribers/{subscriber_id}/secret
+2026-10-14T03:32:05.2454143Z   /api/v1/webhooks/subscribers/{subscriber_id}/switch-off
+2026-10-14T03:32:05.2454362Z   /api/v1/webhooks/subscribers/{subscriber_id}/switch-on
+2026-10-14T03:32:05.2454532Z   /api/v1/welcome
+2026-10-14T03:32:05.2454660Z   /api/v1/widget/questions
+2026-10-14T03:32:05.2454795Z   /api/v1/widget/sessions
+2026-10-14T03:32:06.6465388Z 
+2026-10-14T03:32:06.6465962Z > brain-console@0.1.0 api:types
+2026-10-14T03:32:06.6466633Z > openapi-typescript src/api/generated/openapi.internal.json --output src/api/generated/schema.ts
+2026-10-14T03:32:06.6467045Z 
+2026-10-14T03:32:06.9705882Z ✨ openapi-typescript 7.6.1
+2026-10-14T03:32:07.6324087Z 🚀 src/api/generated/openapi.internal.json → src/api/generated/schema.ts [663.2ms]
+2026-10-14T03:32:07.6708477Z ##[group]Run npm run typecheck
+2026-10-14T03:32:07.6708885Z npm run typecheck
+2026-10-14T03:32:07.6759219Z shell: /usr/bin/bash -e {0}
+2026-10-14T03:32:07.6759363Z env:
+2026-10-14T03:32:07.6759477Z   UV_VERSION: 0.12.9
+2026-10-14T03:32:07.6759631Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-10-14T03:32:07.6759806Z ##[endgroup]
+2026-10-14T03:32:07.7368912Z 
+2026-10-14T03:32:07.7369336Z > brain-console@0.1.0 typecheck
+2026-10-14T03:32:07.7369572Z > tsc --noEmit
+2026-10-14T03:32:07.7369652Z 
+2026-10-14T03:32:16.3321160Z ##[group]Run npm run check:boundaries
+2026-10-14T03:32:16.3321471Z npm run check:boundaries
+2026-10-14T03:32:16.3373493Z shell: /usr/bin/bash -e {0}
+2026-10-14T03:32:16.3373814Z env:
+2026-10-14T03:32:16.3373926Z   UV_VERSION: 0.12.9
+2026-10-14T03:32:16.3374089Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-10-14T03:32:16.3374267Z ##[endgroup]
+2026-10-14T03:32:16.5044593Z 
+2026-10-14T03:32:16.5045003Z > brain-console@0.1.0 check:boundaries
+2026-10-14T03:32:16.5045261Z > node scripts/check-boundaries.mjs
+2026-10-14T03:32:16.5045375Z 
+2026-10-14T03:32:16.7443938Z check-boundaries: clean
+2026-10-14T03:32:16.7723026Z ##[group]Run npm run test -- --run
+2026-10-14T03:32:16.7723332Z npm run test -- --run
+2026-10-14T03:32:16.7776443Z shell: /usr/bin/bash -e {0}
+2026-10-14T03:32:16.7776592Z env:
+2026-10-14T03:32:16.7776702Z   UV_VERSION: 0.12.9
+2026-10-14T03:32:16.7776864Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+2026-10-14T03:32:16.7777040Z ##[endgroup]
+2026-10-14T03:32:16.9392308Z 
+2026-10-14T03:32:16.9392716Z > brain-console@0.1.0 test
+2026-10-14T03:32:16.9393041Z > vitest run --run
+2026-10-14T03:32:16.9393173Z 
+2026-10-14T03:32:17.1283530Z 
+2026-10-14T03:32:17.1285666Z  RUN  v4.1.11 /home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console
+2026-10-14T03:32:17.1286218Z 
+2026-10-14T03:32:20.9890688Z stderr | tests/operations-pages.test.tsx > Background jobs > each job is named in words with its state and last run, and no identifier or principal id is text
+2026-10-14T03:32:20.9921228Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:32:20.9922444Z 
+2026-10-14T03:32:21.0029688Z stderr | tests/agent-page.test.tsx > where the page is reachable > the bare address opens the Dashboard, and each view is a link to its own address
+2026-10-14T03:32:21.0032158Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:32:21.0035106Z 
+2026-10-14T03:32:21.0036277Z stderr | tests/people-access-pages.test.tsx > the People list > it lists every person the directory sent, grant or none, by name, in the order sent
+2026-10-14T03:32:21.0038452Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:32:21.0039785Z 
+2026-10-14T03:32:25.9295815Z  ✓ tests/operations-pages.test.tsx (32 tests) 6971ms
+2026-10-14T03:32:25.9297234Z      ✓ each job is named in words with its state and last run, and no identifier or principal id is text  2053ms
+2026-10-14T03:32:25.9298406Z      ✓ with nothing set aside the section says so, and a failed read draws no section  319ms
+2026-10-14T03:32:25.9299737Z      ✓ pausing is confirmed with what stops being kept true, sent once from the dialog, and the list is asked again  591ms
+2026-10-14T03:32:25.9300922Z      ✓ controls follow the API's two presentation facts, and resume survives the switch being off  309ms
+2026-10-14T03:32:27.7301440Z stderr | tests/connectors-page.test.tsx > the list > every source is a row with its status, and a connected one its index size in ids
+2026-10-14T03:32:27.7310728Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:32:27.7329309Z 
+2026-10-14T03:32:28.0172839Z  ✓ tests/agent-page.test.tsx (35 tests) 8212ms
+2026-10-14T03:32:28.0180506Z      ✓ the bare address opens the Dashboard, and each view is a link to its own address  1489ms
+2026-10-14T03:32:28.0214314Z      ✓ an address naming a section this reader cannot open lands where the bare address does  536ms
+2026-10-14T03:32:28.0215346Z      ✓ the page and its stylesheet are not in the first response, and the page reaches both  1106ms
+2026-10-14T03:32:28.0216302Z      ✓ a count or a capability the API sends reaches nothing on the page  371ms
+2026-10-14T03:32:28.0217310Z      ✓ a chat the bot is in is installed and an install taken out, each through a confirmation that sends the chat it named  396ms
+2026-10-14T03:32:28.0218429Z      ✓ a reader the groups route refuses is shown no card, and an agent in no chat says how one is offered  335ms
+2026-10-14T03:32:29.8109956Z stderr | tests/classification-page.test.tsx > what the console asks for > the console sends no query parameter, because the route declares none
+2026-10-14T03:32:29.8111120Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:32:29.8111658Z 
+2026-10-14T03:32:30.1160261Z  ✓ tests/people-access-pages.test.tsx (50 tests) 11029ms
+2026-10-14T03:32:30.1200733Z      ✓ it lists every person the directory sent, grant or none, by name, in the order sent  1862ms
+2026-10-14T03:32:30.1201844Z      ✓ a count sent beside the people reaches nothing on the page, and a withheld figure is an empty cell  319ms
+2026-10-14T03:32:30.1220387Z      ✓ a reader the API offers adding is given a form that says its format, sends nothing blank, and posts only declared keys  474ms
+2026-10-14T03:32:30.1222031Z      ✓ with a staff list read, the sentence to pass on is under the list with a Copy button, and without one it is not  306ms
+2026-10-14T03:32:30.1223510Z      ✓ selecting people offers one grant to all of them, asked first with each named, and only the confirmation sends  385ms
+2026-10-14T03:32:30.1224866Z      ✓ where departments are managed on People, selected people are moved together, asked first, and nowhere else is it offered  593ms
+2026-10-14T03:32:30.1226222Z      ✓ Add work email is offered only where the API says, sends only a shaped address, and joins after asking  342ms
+2026-10-14T03:32:30.1227525Z      ✓ a nomination waiting for the reader is confirmed or declined from its drawer, and the reader's own say their state  316ms
+2026-10-14T03:32:32.0191195Z stderr | tests/approvals-page.test.tsx > an approval card on a phone > a long unbroken value breaks inside its card and the artefact keeps its own lines
+2026-10-14T03:32:32.0193714Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:32:32.0195046Z 
+2026-10-14T03:32:32.1775948Z Not implemented: navigation to another Document
+2026-10-14T03:32:32.5834278Z  ✓ tests/classification-page.test.tsx (33 tests) 3269ms
+2026-10-14T03:32:32.5851070Z      ✓ the console sends no query parameter, because the route declares none  545ms
+2026-10-14T03:32:32.5852869Z      ✓ hiding the editor changes nothing about what the API is asked  367ms
+2026-10-14T03:32:33.3282439Z  ✓ tests/connectors-page.test.tsx (33 tests) 6188ms
+2026-10-14T03:32:33.3284477Z      ✓ every source is a row with its status, and a connected one its index size in ids  614ms
+2026-10-14T03:32:33.3285706Z      ✓ connecting says what each field takes, refuses a blank before asking, and sends the key once  574ms
+2026-10-14T03:32:33.3309687Z      ✓ a source connected at the server shows its steps and no form  313ms
+2026-10-14T03:32:33.3330072Z      ✓ closing the flow keeps the step and the settings typed, and never the key  312ms
+2026-10-14T03:32:33.3389906Z      ✓ disconnecting from a row is confirmed in the API's words, and keeping it sends nothing  334ms
+2026-10-14T03:32:33.3409892Z      ✓ the dashboard draws the stats route's figures and never nought for one it did not send  325ms
+2026-10-14T03:32:34.4470944Z stderr | tests/knowledge-page.test.tsx > the Knowledge list > it draws each document by title with its department, reach, steward's name, review and state
+2026-10-14T03:32:34.4500921Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:32:34.4529266Z 
+2026-10-14T03:32:35.2149641Z stderr | tests/ask-page.test.tsx > asking a question > a question is asked and its answer is read, with what it stands on above it
+2026-10-14T03:32:35.2152151Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:32:35.2153690Z 
+2026-10-14T03:32:35.7527320Z  ✓ tests/approvals-page.test.tsx (27 tests) 4180ms
+2026-10-14T03:32:35.7528850Z      ✓ a long unbroken value breaks inside its card and the artefact keeps its own lines  510ms
+2026-10-14T03:32:35.7533010Z      ✓ the approvals sheet arrives with the page and is not in the first response  801ms
+2026-10-14T03:32:36.0991116Z stderr | tests/knowledge-page.test.tsx > the forms > adding a file says which types and sizes it takes before anything is sent, and a blank one sends nothing
+2026-10-14T03:32:36.0993591Z ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+2026-10-14T03:32:36.0999244Z 
+2026-10-14T03:32:37.0170989Z  ✓ tests/knowledge-page.test.tsx (29 tests) 3111ms
+2026-10-14T03:32:37.0172443Z      ✓ it draws each document by title with its department, reach, steward's name, review and state  628ms
+2026-10-14T03:32:37.0173739Z      ✓ ticked documents are verified with one review date, after a confirmation, as one request of each id  435ms
+2026-10-14T03:32:37.5313103Z stderr | tests/skills-page.test.tsx > what the Skills module asks for and sends > the list asks the library route with parameters it declares and a page size it answers
+2026-10-14T03:32:37.5331768Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:32:37.5359278Z 
+2026-10-14T03:32:37.7130639Z  ✓ tests/ask-page.test.tsx (30 tests) 2922ms
+2026-10-14T03:32:37.7132125Z      ✓ a question is asked and its answer is read, with what it stands on above it  480ms
+2026-10-14T03:32:37.7190780Z      ✓ a refusal is the lane's own sentence, drawn by the code that draws an answer  329ms
+2026-10-14T03:32:38.7454136Z stderr | tests/first-run.test.tsx > before anything is asked > a person with no session is sent to sign in and brought back to first run
+2026-10-14T03:32:38.7482418Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:32:38.7489474Z 
+2026-10-14T03:32:39.5245798Z stderr | tests/models-module.test.tsx > the providers > each provider is a compact card by the name a person knows, with its status, key, last test and acts
+2026-10-14T03:32:39.5261979Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:32:39.5299032Z 
+2026-10-14T03:32:41.3488115Z  ✓ tests/skills-page.test.tsx (25 tests) 4344ms
+2026-10-14T03:32:41.3489773Z      ✓ the list asks the library route with parameters it declares and a page size it answers  579ms
+2026-10-14T03:32:41.3491279Z      ✓ adding is offered only to a reader who may add, says its format first and posts a checked paste  401ms
+2026-10-14T03:32:41.3492502Z      ✓ the Add and Edit forms say, under the SKILL.md field, where example tasks go  317ms
+2026-10-14T03:32:41.7518435Z  ✓ tests/first-run.test.tsx (23 tests) 3782ms
+2026-10-14T03:32:41.7519897Z      ✓ a setup still being sent, one that cannot reach the API and one the API failed are three different sentences  362ms
+2026-10-14T03:32:42.3951216Z  ✓ tests/auth-session.test.ts (35 tests) 133ms
+2026-10-14T03:32:42.4845526Z  ✓ tests/models-module.test.tsx (20 tests) 3421ms
+2026-10-14T03:32:42.4893692Z      ✓ each provider is a compact card by the name a person knows, with its status, key, last test and acts  515ms
+2026-10-14T03:32:42.4901624Z      ✓ a step pressed on the Models page opens its editor on the Routing page, and the menu there offers Edit alone  434ms
+2026-10-14T03:32:42.4904489Z      ✓ pressing a step opens its editor in a drawer at its own address, and its menu does not  316ms
+2026-10-14T03:32:42.4905681Z      ✓ a step is moved and retired only from a confirmation, and a held change says why and the way through  307ms
+2026-10-14T03:32:43.8450879Z stderr | tests/lark-connect.test.tsx > the flow > shows one step at a time with its picture, and Back and Next keep what was typed
+2026-10-14T03:32:43.8472081Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:32:43.8473128Z 
+2026-10-14T03:32:45.4075883Z  ✓ tests/destructive-confirmed.test.ts (4 tests) 2402ms
+2026-10-14T03:32:45.4090251Z      ✓ every write the control files spell is one the reading found, so the rules below read a real list  1689ms
+2026-10-14T03:32:45.4091401Z      ✓ every confirmation names what it asks about, says what will happen, and offers a way out  707ms
+2026-10-14T03:32:46.8882007Z  ✓ tests/lark-connect.test.tsx (15 tests) 3271ms
+2026-10-14T03:32:46.8883241Z      ✓ shows one step at a time with its picture, and Back and Next keep what was typed  671ms
+2026-10-14T03:32:46.8884563Z      ✓ a missing permission sends the administrator to the permissions step with its picture, then the release  353ms
+2026-10-14T03:32:46.8885725Z      ✓ the card replaces Connect Lark, says what is on and when it was tested, and offers adding a use  433ms
+2026-10-14T03:32:47.2550644Z stderr | tests/agent-drafts-pages.test.tsx > New agent > starting from scratch is confirmed, sends an empty start and lands on the draft
+2026-10-14T03:32:47.2553295Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:32:47.2554642Z 
+2026-10-14T03:32:48.5493495Z stderr | tests/records-page.test.tsx > what the console asks for > the entity in the address is the entity asked for
+2026-10-14T03:32:48.5495709Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:32:48.5496766Z 
+2026-10-14T03:32:49.4740934Z stderr | tests/agent-drafts-pages.test.tsx > one draft > on the Write step a missing display name is said in plain words, beside the field, and nothing is sent
+2026-10-14T03:32:49.4769647Z Form validation failed [
+2026-10-14T03:32:49.4799277Z   {
+2026-10-14T03:32:49.4829761Z     name: 'required',
+2026-10-14T03:32:49.4859666Z     property: '.identity.display_name',
+2026-10-14T03:32:49.4889513Z     message: 'Enter the display name.',
+2026-10-14T03:32:49.4919546Z     params: { missingProperty: 'display_name' },
+2026-10-14T03:32:49.4926132Z     stack: 'Enter the display name.',
+2026-10-14T03:32:49.4949442Z     schemaPath: '#/properties/identity/required',
+2026-10-14T03:32:49.4968568Z     title: 'Display name'
+2026-10-14T03:32:49.4969320Z   }
+2026-10-14T03:32:49.4969669Z ]
+2026-10-14T03:32:49.4969927Z 
+2026-10-14T03:32:50.0635481Z  ✓ tests/records-page.test.tsx (27 tests) 2316ms
+2026-10-14T03:32:50.0658090Z      ✓ the entity in the address is the entity asked for  517ms
+2026-10-14T03:32:51.4893157Z  ✓ tests/agent-drafts-pages.test.tsx (20 tests) 4613ms
+2026-10-14T03:32:51.4894977Z      ✓ starting from scratch is confirmed, sends an empty start and lands on the draft  716ms
+2026-10-14T03:32:51.4896512Z      ✓ a section saved is confirmed and sends the whole draft with it merged in, from the version shown  324ms
+2026-10-14T03:32:51.4897727Z      ✓ on the Write step every list's Add button is found by its name, and a tool added is saved with the draft  485ms
+2026-10-14T03:32:51.4898921Z      ✓ Edit as a draft on an agent's page is confirmed and starts a draft of that agent  355ms
+2026-10-14T03:32:51.4900016Z      ✓ Approvals lists the publishes waiting for the reader, and nothing for a reader the API refuses  479ms
+2026-10-14T03:32:51.6140776Z stderr | tests/channels-page.test.tsx > the Channels list > each channel reads by name with its status, secret, health, bound people and last activity, and no id
+2026-10-14T03:32:51.6143008Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:32:51.6199070Z 
+2026-10-14T03:32:53.5401941Z  ✓ tests/channels-page.test.tsx (15 tests) 2310ms
+2026-10-14T03:32:53.5430329Z      ✓ each channel reads by name with its status, secret, health, bound people and last activity, and no id  470ms
+2026-10-14T03:32:54.7543678Z stderr | tests/install-pages.test.tsx > this install > every fact the API sent reaches the screen with its source beside it
+2026-10-14T03:32:54.7545868Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:32:54.7548263Z ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+2026-10-14T03:32:54.7549510Z 
+2026-10-14T03:32:55.2514453Z stderr | tests/validated-before-write.test.tsx > a form that writes is judged before it sends > the question form cannot be pressed while the question is empty
+2026-10-14T03:32:55.2517730Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:32:55.2520151Z 
+2026-10-14T03:32:55.6832369Z  ✓ tests/install-pages.test.tsx (23 tests) 994ms
+2026-10-14T03:32:55.6835983Z      ✓ every install screen is a native link in the shell, in the menu or in its module's tabs  663ms
+2026-10-14T03:32:56.8836631Z stderr | tests/schema-form.test.tsx > what a generated form does build > the form's own buttons and messages are the console's, not the library's
+2026-10-14T03:32:56.8837435Z Form validation failed [
+2026-10-14T03:32:56.8837678Z   {
+2026-10-14T03:32:56.8837940Z     name: 'required',
+2026-10-14T03:32:56.8838234Z     property: 'name',
+2026-10-14T03:32:56.8838568Z     message: 'Enter the name.',
+2026-10-14T03:32:56.8839113Z     params: { missingProperty: 'name' },
+2026-10-14T03:32:56.8839996Z     stack: 'Enter the name.',
+2026-10-14T03:32:56.8840313Z     schemaPath: '#/required',
+2026-10-14T03:32:56.8840591Z     title: 'Name'
+2026-10-14T03:32:56.8840819Z   },
+2026-10-14T03:32:56.8840983Z   {
+2026-10-14T03:32:56.8841209Z     name: 'required',
+2026-10-14T03:32:56.8841514Z     property: 'contract_value',
+2026-10-14T03:32:56.8842059Z     message: 'Enter the contract value.',
+2026-10-14T03:32:56.8842488Z     params: { missingProperty: 'contract_value' },
+2026-10-14T03:32:56.8842896Z     stack: 'Enter the contract value.',
+2026-10-14T03:32:56.8843235Z     schemaPath: '#/required',
+2026-10-14T03:32:56.8843548Z     title: 'Contract value'
+2026-10-14T03:32:56.8843782Z   }
+2026-10-14T03:32:56.8843948Z ]
+2026-10-14T03:32:56.8844045Z 
+2026-10-14T03:32:57.1537499Z stderr | tests/schema-form.test.tsx > a generated form drawn from the kit > a field says what it accepts before anything is submitted, and a refusal says what to do
+2026-10-14T03:32:57.1539748Z Form validation failed [
+2026-10-14T03:32:57.1540169Z   {
+2026-10-14T03:32:57.1540526Z     name: 'required',
+2026-10-14T03:32:57.1540934Z     property: 'name',
+2026-10-14T03:32:57.1541409Z     message: 'Enter the display name.',
+2026-10-14T03:32:57.1541925Z     params: { missingProperty: 'name' },
+2026-10-14T03:32:57.1542465Z     stack: 'Enter the display name.',
+2026-10-14T03:32:57.1542931Z     schemaPath: '#/required',
+2026-10-14T03:32:57.1543396Z     title: 'Display name'
+2026-10-14T03:32:57.1543801Z   },
+2026-10-14T03:32:57.1544096Z   {
+2026-10-14T03:32:57.1544435Z     name: 'pattern',
+2026-10-14T03:32:57.1544834Z     property: '.code',
+2026-10-14T03:32:57.1545401Z     message: 'This is not in the form described above.',
+2026-10-14T03:32:57.1545948Z     params: { pattern: '^[a-z]+$' },
+2026-10-14T03:32:57.1546495Z     stack: 'Code: This is not in the form described above.',
+2026-10-14T03:32:57.1547095Z     schemaPath: '#/properties/code/pattern',
+2026-10-14T03:32:57.1547537Z     title: 'Code'
+2026-10-14T03:32:57.1547863Z   },
+2026-10-14T03:32:57.1548130Z   {
+2026-10-14T03:32:57.1548480Z     name: 'minimum',
+2026-10-14T03:32:57.1549088Z     property: '.count',
+2026-10-14T03:32:57.1549511Z     message: 'Enter 1 or more.',
+2026-10-14T03:32:57.1550029Z     params: { comparison: '>=', limit: 1 },
+2026-10-14T03:32:57.1550598Z     stack: 'Count: Enter 1 or more.',
+2026-10-14T03:32:57.1551102Z     schemaPath: '#/properties/count/minimum',
+2026-10-14T03:32:57.1551564Z     title: 'Count'
+2026-10-14T03:32:57.1551888Z   }
+2026-10-14T03:32:57.1552205Z ]
+2026-10-14T03:32:57.1552536Z Form validation failed [
+2026-10-14T03:32:57.1552863Z   {
+2026-10-14T03:32:57.1553216Z     name: 'maxLength',
+2026-10-14T03:32:57.1553638Z     property: '.name',
+2026-10-14T03:32:57.1554180Z     message: 'Use at most 5 characters.',
+2026-10-14T03:32:57.1554937Z     params: { limit: 5 },
+2026-10-14T03:32:57.1555520Z     stack: 'Display name: Use at most 5 characters.',
+2026-10-14T03:32:57.1556321Z     schemaPath: '#/properties/name/maxLength',
+2026-10-14T03:32:57.1589953Z     title: 'Display name'
+2026-10-14T03:32:57.1591091Z  ✓ tests/schema-form.test.tsx (23 tests) 397ms
+2026-10-14T03:32:57.1591578Z   },
+2026-10-14T03:32:57.1591925Z   {
+2026-10-14T03:32:57.1592287Z     name: 'pattern',
+2026-10-14T03:32:57.1592680Z     property: '.code',
+2026-10-14T03:32:57.1593184Z     message: 'This is not in the form described above.',
+2026-10-14T03:32:57.1593696Z     params: { pattern: '^[a-z]+$' },
+2026-10-14T03:32:57.1594296Z     stack: 'Code: This is not in the form described above.',
+2026-10-14T03:32:57.1595260Z     schemaPath: '#/properties/code/pattern',
+2026-10-14T03:32:57.1595713Z     title: 'Code'
+2026-10-14T03:32:57.1596072Z   },
+2026-10-14T03:32:57.1596355Z   {
+2026-10-14T03:32:57.1596701Z     name: 'minimum',
+2026-10-14T03:32:57.1597105Z     property: '.count',
+2026-10-14T03:32:57.1597700Z     message: 'Enter 1 or more.',
+2026-10-14T03:32:57.1598226Z     params: { comparison: '>=', limit: 1 },
+2026-10-14T03:32:57.1598857Z     stack: 'Count: Enter 1 or more.',
+2026-10-14T03:32:57.1599364Z     schemaPath: '#/properties/count/minimum',
+2026-10-14T03:32:57.1599838Z     title: 'Count'
+2026-10-14T03:32:57.1600172Z   }
+2026-10-14T03:32:57.1600459Z ]
+2026-10-14T03:32:57.1600726Z 
+2026-10-14T03:32:57.8421487Z stderr | tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/classification/ClassificationPage.tsx form 0, submitted blank, sends no write and says what to fill in
+2026-10-14T03:32:57.8423141Z Form validation failed [
+2026-10-14T03:32:57.8423515Z   {
+2026-10-14T03:32:57.8423852Z     name: 'required',
+2026-10-14T03:32:57.8424276Z     property: 'required_capability',
+2026-10-14T03:32:57.8424787Z     message: 'Enter the required_capability.',
+2026-10-14T03:32:57.8425368Z     params: { missingProperty: 'required_capability' },
+2026-10-14T03:32:57.8425908Z     stack: 'Enter the required_capability.',
+2026-10-14T03:32:57.8426369Z     schemaPath: '#/required',
+2026-10-14T03:32:57.8426809Z     title: 'required_capability'
+2026-10-14T03:32:57.8427165Z   },
+2026-10-14T03:32:57.8427431Z   {
+2026-10-14T03:32:57.8427766Z     name: 'required',
+2026-10-14T03:32:57.8428174Z     property: 'classification',
+2026-10-14T03:32:57.8428782Z     message: 'Choose the classification.',
+2026-10-14T03:32:57.8429234Z     params: { missingProperty: 'classification' },
+2026-10-14T03:32:57.8443510Z     stack: 'Choose the classification.',
+2026-10-14T03:32:57.8449624Z     schemaPath: '#/required',
+2026-10-14T03:32:57.8455699Z     title: 'classification'
+2026-10-14T03:32:57.8456103Z   },
+2026-10-14T03:32:57.8456397Z   {
+2026-10-14T03:32:57.8456778Z     name: 'maxItems',
+2026-10-14T03:32:57.8457195Z     property: '.derived_from',
+2026-10-14T03:32:57.8457634Z     message: 'Add no more than 0.',
+2026-10-14T03:32:57.8458075Z     params: { limit: 0 },
+2026-10-14T03:32:57.8458532Z     stack: 'derived_from: Add no more than 0.',
+2026-10-14T03:32:57.8459246Z     schemaPath: '#/properties/derived_from/maxItems',
+2026-10-14T03:32:57.8459733Z     title: 'derived_from'
+2026-10-14T03:32:57.8460074Z   },
+2026-10-14T03:32:57.8460347Z   {
+2026-10-14T03:32:57.8460669Z     name: 'type',
+2026-10-14T03:32:57.8461084Z     property: '.derived_from.0',
+2026-10-14T03:32:57.8461590Z     message: 'Enter the this answer, or remove it.',
+2026-10-14T03:32:57.8462202Z     params: { type: 'string' },
+2026-10-14T03:32:57.8462762Z     stack: 'Enter the this answer, or remove it.',
+2026-10-14T03:32:57.8463330Z     schemaPath: '#/properties/derived_from/items/type',
+2026-10-14T03:32:57.8463868Z     title: ''
+2026-10-14T03:32:57.8464191Z   }
+2026-10-14T03:32:57.8464478Z ]
+2026-10-14T03:32:57.8464767Z 
+2026-10-14T03:32:58.0836628Z stderr | tests/validated-before-write.test.tsx > a form that writes is judged before it sends > src/pages/classification/ClassificationPage.tsx form 0, submitted blank, sends no write and says what to fill in
+2026-10-14T03:32:58.0837967Z Form validation failed [
+2026-10-14T03:32:58.0838256Z   {
+2026-10-14T03:32:58.0838507Z     name: 'minLength',
+2026-10-14T03:32:58.0839418Z     property: '.entity',
+2026-10-14T03:32:58.0839803Z     message: 'Enter the entity.',
+2026-10-14T03:32:58.0840152Z     params: { limit: 1 },
+2026-10-14T03:32:58.0840493Z     stack: 'Enter the entity.',
+2026-10-14T03:32:58.0840881Z     schemaPath: '#/properties/entity/minLength',
+2026-10-14T03:32:58.0859592Z     title: 'Entity'
+2026-10-14T03:32:58.0859968Z   }
+2026-10-14T03:32:58.0860634Z ]
+2026-10-14T03:32:58.0860966Z 
+2026-10-14T03:32:58.4194280Z stderr | tests/report-dashboards.test.tsx > every Report page > /usage offers the three periods, and choosing one asks for that window
+2026-10-14T03:32:58.4200398Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:32:58.4201629Z 
+2026-10-14T03:33:00.6427149Z stderr | tests/long-lists.test.tsx > long lists > / offers what the table says it offers, and is excused for the rest
+2026-10-14T03:33:00.6441204Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:00.6469400Z 
+2026-10-14T03:33:01.1011444Z stderr | tests/long-lists.test.tsx > long lists > /access-requests offers what the table says it offers, and is excused for the rest
+2026-10-14T03:33:01.1049928Z In HTML, <p> cannot be a descendant of <p>.
+2026-10-14T03:33:01.1063479Z This will cause a hydration error.
+2026-10-14T03:33:01.1063940Z 
+2026-10-14T03:33:01.1064173Z   ...
+2026-10-14T03:33:01.1064531Z     <Suspense fallback={<p>}>
+2026-10-14T03:33:01.1064949Z       <Outlet>
+2026-10-14T03:33:01.1065469Z         <RenderedRoute match={{params:{}, ...}} routeContext={{outlet:null, ...}}>
+2026-10-14T03:33:01.1066020Z           <AccessRequestsPage>
+2026-10-14T03:33:01.1066688Z             <ListPage crumbs={[...]} title="Access req..." lede="Requests o..." primary={<Button>} notice={<Fragment>} ...>
+2026-10-14T03:33:01.1067417Z               <div data-slot="list-page" className="flex min-w...">
+2026-10-14T03:33:01.1067852Z                 <PageHeader>
+2026-10-14T03:33:01.1068199Z                 <section>
+2026-10-14T03:33:01.1068530Z                 <Note>
+2026-10-14T03:33:01.1069078Z                 <HandedToAPersonSection>
+2026-10-14T03:33:01.1069554Z                   <SectionCard title="Questions ..." lede={<Note>}>
+2026-10-14T03:33:01.1070435Z                     <section data-slot="section-card" aria-labelledby="«rf»" id={undefined} className="flex min-w...">
+2026-10-14T03:33:01.1071094Z                       <div className="flex items...">
+2026-10-14T03:33:01.1071564Z                         <div className="min-w-0">
+2026-10-14T03:33:01.1071981Z                           <h2>
+2026-10-14T03:33:01.1072515Z >                         <p className="m-0 mt-0.5 text-[12.5px] leading-snug text-dim">
+2026-10-14T03:33:01.1073001Z                             <Note>
+2026-10-14T03:33:01.1073395Z >                             <p
+2026-10-14T03:33:01.1073823Z >                               data-slot="note"
+2026-10-14T03:33:01.1074268Z >                               data-kind="info"
+2026-10-14T03:33:01.1074905Z >                               className="m-0 flex items-start gap-1.5 text-[12px] leading-relaxed text-dim"
+2026-10-14T03:33:01.1075452Z >                             >
+2026-10-14T03:33:01.1075804Z                       ...
+2026-10-14T03:33:01.1076144Z                 ...
+2026-10-14T03:33:01.1076459Z             ...
+2026-10-14T03:33:01.1076696Z 
+2026-10-14T03:33:01.1076962Z <p> cannot contain a nested <p>.
+2026-10-14T03:33:01.1077383Z See this log for the ancestor stack trace.
+2026-10-14T03:33:01.1078134Z 
+2026-10-14T03:33:01.2083832Z  ✓ tests/report-dashboards.test.tsx (27 tests) 3133ms
+2026-10-14T03:33:01.2084358Z      ✓ /usage offers the three periods, and choosing one asks for that window  447ms
+2026-10-14T03:33:02.4243585Z stderr | tests/staff-sources-page.test.tsx > what the page shows > it reads its six answers on arrival and never the trial, which waits for a press
+2026-10-14T03:33:02.4245940Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:02.4247067Z 
+2026-10-14T03:33:04.2206898Z  ✓ tests/validated-before-write.test.tsx (33 tests) 11379ms
+2026-10-14T03:33:04.2207834Z      ✓ every form in a file that also holds a write is opened here or judged elsewhere with a reason  1484ms
+2026-10-14T03:33:04.2208336Z      ✓ the question form cannot be pressed while the question is empty  564ms
+2026-10-14T03:33:04.2209673Z      ✓ src/pages/connectors/CustomConnectorsPage.tsx form 0, submitted blank, sends no write and says what to fill in  369ms
+2026-10-14T03:33:04.2210733Z      ✓ src/pages/MyWorkspace.tsx form 0 behind Edit, submitted blank, sends no write and says what to fill in  310ms
+2026-10-14T03:33:04.2211680Z      ✓ src/pages/audit/TracePage.tsx form 0, submitted blank, sends no write and says what to fill in  522ms
+2026-10-14T03:33:04.2212705Z      ✓ src/pages/classification/ClassificationPage.tsx form 0, submitted blank, sends no write and says what to fill in  340ms
+2026-10-14T03:33:04.2213770Z      ✓ src/components/AgentModelPin.tsx form 3, submitted blank, sends no write and says what to fill in  601ms
+2026-10-14T03:33:04.2214763Z      ✓ src/pages/agents/AgentCapabilities.tsx form 2, submitted blank, sends no write and says what to fill in  332ms
+2026-10-14T03:33:04.2215773Z      ✓ src/pages/channels/ChannelProfile.tsx form 0, submitted blank, sends no write and says what to fill in  491ms
+2026-10-14T03:33:05.2922853Z  ✓ tests/trace-graph.test.tsx (25 tests) 198ms
+2026-10-14T03:33:06.5870788Z stderr | tests/agents-page.test.tsx > the list > it draws the agents the API returned, in the order it returned them, as links to their pages
+2026-10-14T03:33:06.5900815Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:06.5902572Z 
+2026-10-14T03:33:09.0085989Z  ✓ tests/agents-page.test.tsx (20 tests) 2797ms
+2026-10-14T03:33:09.0087124Z      ✓ it draws the agents the API returned, in the order it returned them, as links to their pages  361ms
+2026-10-14T03:33:09.0087735Z      ✓ switching an agent off asks the lifecycle route, confirms by name and sends the state it showed  329ms
+2026-10-14T03:33:09.0088598Z      ✓ a name on the list opens the agent, and the agent's trail leads back to the list  388ms
+2026-10-14T03:33:10.1255303Z stderr | tests/learning-memory-pages.test.tsx > the Learning page > the week's marks are drawn as the API counted them, and not at all when it sent none
+2026-10-14T03:33:10.1257874Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:10.1259226Z 
+2026-10-14T03:33:11.6549504Z  ✓ tests/learning-memory-pages.test.tsx (22 tests) 1839ms
+2026-10-14T03:33:11.6570106Z      ✓ the week's marks are drawn as the API counted them, and not at all when it sent none  413ms
+2026-10-14T03:33:12.5446917Z stderr | tests/resolution-review-page.test.tsx > what the Possible duplicates screen draws > a pair by its two names and where each came from, why it is here in words, and its evidence
+2026-10-14T03:33:12.5449789Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:12.5451021Z 
+2026-10-14T03:33:13.1767204Z  ✓ tests/resolution-review-page.test.tsx (18 tests) 675ms
+2026-10-14T03:33:14.6117008Z stderr | tests/department-console.test.tsx > the menu a department is given > a department's answer is drawn as sent, then the reader's own work, and nothing about the server
+2026-10-14T03:33:14.6119743Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:14.6121962Z ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+2026-10-14T03:33:14.6122876Z 
+2026-10-14T03:33:15.3330688Z  ✓ tests/staff-sources-page.test.tsx (19 tests) 13279ms
+2026-10-14T03:33:15.3350028Z      ✓ it reads its six answers on arrival and never the trial, which waits for a press  417ms
+2026-10-14T03:33:15.3351182Z      ✓ a trial press asks the worker once, says it waits, and reads the runs again once the worker has read  5114ms
+2026-10-14T03:33:15.3352294Z      ✓ a press is confirmed, asks the worker once, and says what the run did once it has run  5186ms
+2026-10-14T03:33:15.3353224Z      ✓ save waits for a test, save and apply are each confirmed, and the secret is never drawn  307ms
+2026-10-14T03:33:16.4930493Z  ✓ tests/department-console.test.tsx (17 tests) 2022ms
+2026-10-14T03:33:16.8347365Z  ✓ tests/server-paging.test.tsx (25 tests) 698ms
+2026-10-14T03:33:17.7835418Z stderr | tests/page-kit.test.tsx > page header > the trail links every step but the last, which is the page itself, and the actions sit beside the title
+2026-10-14T03:33:17.7837739Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:17.7840174Z ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+2026-10-14T03:33:17.7841759Z 
+2026-10-14T03:33:18.2670565Z  ✓ tests/page-kit.test.tsx (21 tests) 826ms
+2026-10-14T03:33:18.5336587Z stderr | tests/agent-figures.test.tsx > the header's role line > it says what the agent is for, its department, its steward and its template by name and version
+2026-10-14T03:33:18.5339427Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:18.5340743Z 
+2026-10-14T03:33:19.5330901Z stderr | tests/compliance-page.test.tsx > sensitive topics > each topic names its person by name or says nobody, with the tally and both served sentences
+2026-10-14T03:33:19.5333131Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:19.5359035Z 
+2026-10-14T03:33:20.9138863Z  ✓ tests/compliance-page.test.tsx (19 tests) 1624ms
+2026-10-14T03:33:20.9210944Z      ✓ naming a person says what it takes, refuses a blank one, and is confirmed with whom it replaces before the PUT  445ms
+2026-10-14T03:33:21.3261641Z  ✓ tests/long-lists.test.tsx (98 tests) 26325ms
+2026-10-14T03:33:21.3267251Z      ✓ every list the API says can be cut off is measured here, and nothing else is  4643ms
+2026-10-14T03:33:21.3268434Z      ✓ / offers what the table says it offers, and is excused for the rest  775ms
+2026-10-14T03:33:21.3269690Z      ✓ /access-requests offers what the table says it offers, and is excused for the rest  397ms
+2026-10-14T03:33:21.3270741Z      ✓ /adoption offers what the table says it offers, and is excused for the rest  428ms
+2026-10-14T03:33:21.3271783Z      ✓ /agents/:agentId offers what the table says it offers, and is excused for the rest  647ms
+2026-10-14T03:33:21.3272849Z      ✓ /agents/:agentId/:tab offers what the table says it offers, and is excused for the rest  372ms
+2026-10-14T03:33:21.3273895Z      ✓ /channels/:name offers what the table says it offers, and is excused for the rest  811ms
+2026-10-14T03:33:21.3274918Z      ✓ /department offers what the table says it offers, and is excused for the rest  337ms
+2026-10-14T03:33:21.3275912Z      ✓ /jobs/:name offers what the table says it offers, and is excused for the rest  605ms
+2026-10-14T03:33:21.3276868Z      ✓ /library offers what the table says it offers, and is excused for the rest  305ms
+2026-10-14T03:33:21.3277822Z      ✓ /routing/:rungId offers what the table says it offers, and is excused for the rest  389ms
+2026-10-14T03:33:21.3315432Z      ✓ /skills/:name offers what the table says it offers, and is excused for the rest  472ms
+2026-10-14T03:33:21.3316561Z      ✓ /skills/:name/:view offers what the table says it offers, and is excused for the rest  358ms
+2026-10-14T03:33:21.4660576Z  ✓ tests/agent-figures.test.tsx (18 tests) 3425ms
+2026-10-14T03:33:21.4700892Z      ✓ it says what the agent is for, its department, its steward and its template by name and version  593ms
+2026-10-14T03:33:21.4702213Z      ✓ a section the API's strip holds and this page draws is listed at its own address  334ms
+2026-10-14T03:33:22.5831737Z stderr | tests/audit-page.test.tsx > what the Audit log asks for > every parameter the pages send is one the route declares, the subject's page included
+2026-10-14T03:33:22.5835629Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:22.5837100Z 
+2026-10-14T03:33:22.7220200Z stderr | tests/agent-knowledge.test.tsx > adding from the Knowledge section > a web page is sent to the agent's own address with the rule's department already chosen, and the answer says the agent draws on it
+2026-10-14T03:33:22.7222941Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:22.7224280Z 
+2026-10-14T03:33:23.5709197Z  ✓ tests/audit-page.test.tsx (16 tests) 1105ms
+2026-10-14T03:33:23.9981006Z stderr | tests/phone-width.test.tsx > every registered page at a phone's width > /access-requests puts a visible Menu button first, before the page, and nothing of the menu beside it
+2026-10-14T03:33:24.0020301Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:24.0049054Z 
+2026-10-14T03:33:24.0743404Z stderr | tests/phone-width.test.tsx > every registered page at a phone's width > /access-requests puts a visible Menu button first, before the page, and nothing of the menu beside it
+2026-10-14T03:33:24.0782450Z In HTML, <p> cannot be a descendant of <p>.
+2026-10-14T03:33:24.0850308Z This will cause a hydration error.
+2026-10-14T03:33:24.0889099Z 
+2026-10-14T03:33:24.0938979Z   ...
+2026-10-14T03:33:24.0949731Z     <Suspense fallback={<p>}>
+2026-10-14T03:33:24.0960514Z       <Outlet>
+2026-10-14T03:33:24.0989807Z         <RenderedRoute match={{params:{}, ...}} routeContext={{outlet:null, ...}}>
+2026-10-14T03:33:24.0990484Z           <AccessRequestsPage>
+2026-10-14T03:33:24.0991212Z             <ListPage crumbs={[...]} title="Access req..." lede="Requests o..." primary={<Button>} notice={<Fragment>} ...>
+2026-10-14T03:33:24.0991966Z               <div data-slot="list-page" className="flex min-w...">
+2026-10-14T03:33:24.0992464Z                 <PageHeader>
+2026-10-14T03:33:24.0992836Z                 <section>
+2026-10-14T03:33:24.0993182Z                 <Note>
+2026-10-14T03:33:24.0993580Z                 <HandedToAPersonSection>
+2026-10-14T03:33:24.0994029Z                   <SectionCard title="Questions ..." lede={<Note>}>
+2026-10-14T03:33:24.0995026Z                     <section data-slot="section-card" aria-labelledby="«ra»" id={undefined} className="flex min-w...">
+2026-10-14T03:33:24.0995702Z                       <div className="flex items...">
+2026-10-14T03:33:24.0996157Z                         <div className="min-w-0">
+2026-10-14T03:33:24.0996574Z                           <h2>
+2026-10-14T03:33:24.0997084Z >                         <p className="m-0 mt-0.5 text-[12.5px] leading-snug text-dim">
+2026-10-14T03:33:24.0998103Z                             <Note>
+2026-10-14T03:33:24.0998510Z >                             <p
+2026-10-14T03:33:24.0999098Z >                               data-slot="note"
+2026-10-14T03:33:24.0999562Z >                               data-kind="info"
+2026-10-14T03:33:24.1000228Z >                               className="m-0 flex items-start gap-1.5 text-[12px] leading-relaxed text-dim"
+2026-10-14T03:33:24.1001026Z >                             >
+2026-10-14T03:33:24.1001398Z                       ...
+2026-10-14T03:33:24.1001735Z                 ...
+2026-10-14T03:33:24.1028873Z             ...
+2026-10-14T03:33:24.1029201Z 
+2026-10-14T03:33:24.1029489Z <p> cannot contain a nested <p>.
+2026-10-14T03:33:24.1029929Z See this log for the ancestor stack trace.
+2026-10-14T03:33:24.1030245Z 
+2026-10-14T03:33:24.8920973Z stderr | tests/review-pages.test.tsx > access review > a row reads as the holder's name, what they hold and who granted it, and no principal id is printed
+2026-10-14T03:33:24.8958420Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:24.8959762Z 
+2026-10-14T03:33:25.3693049Z  ✓ tests/agent-knowledge.test.tsx (18 tests) 3142ms
+2026-10-14T03:33:25.3696338Z      ✓ a web page is sent to the agent's own address with the rule's department already chosen, and the answer says the agent draws on it  681ms
+2026-10-14T03:33:25.3697843Z      ✓ a file is sent raw to the agent's own address, and an item outside the rule says why and offers the draft  437ms
+2026-10-14T03:33:25.8240173Z Not implemented: navigation to another Document
+2026-10-14T03:33:26.3382861Z  ✓ tests/review-pages.test.tsx (11 tests) 1530ms
+2026-10-14T03:33:26.3412884Z      ✓ removing is confirmed in the API's words, sends the three declared keys, and the list is asked again  393ms
+2026-10-14T03:33:26.7090917Z stderr | tests/retention-page.test.tsx > releasing and withdrawing the sweep > a release is confirmed with the report's counts and the API's sentence, then sent
+2026-10-14T03:33:26.7093563Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:26.7094815Z 
+2026-10-14T03:33:28.0225207Z stderr | tests/overview-page.test.tsx > what the Overview draws > the figures are KPI tiles, and Needs you and Recent activity are each a headed card
+2026-10-14T03:33:28.0241016Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:28.0269507Z 
+2026-10-14T03:33:28.0387941Z  ✓ tests/retention-page.test.tsx (17 tests) 1515ms
+2026-10-14T03:33:28.0400375Z      ✓ a release is confirmed with the report's counts and the API's sentence, then sent  336ms
+2026-10-14T03:33:29.6205606Z stderr | tests/automation-gallery.test.tsx > the gallery on the Automations tab > every template the API sent is drawn in its order, with its schedule and what it offers this reader
+2026-10-14T03:33:29.6231393Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:29.6239499Z 
+2026-10-14T03:33:30.1734229Z  ✓ tests/overview-page.test.tsx (19 tests) 2677ms
+2026-10-14T03:33:30.1760898Z      ✓ the figures are KPI tiles, and Needs you and Recent activity are each a headed card  633ms
+2026-10-14T03:33:30.1780295Z      ✓ the health strip draws the halts the API sent, none only over a state it read, and never why  406ms
+2026-10-14T03:33:30.9121210Z  ✓ tests/automation-gallery.test.tsx (9 tests) 1991ms
+2026-10-14T03:33:30.9147793Z      ✓ the gallery is asked for when its section is first opened and never for moving between the agent's views  309ms
+2026-10-14T03:33:32.2130427Z  ✓ tests/tailwind-foundation.test.ts (14 tests) 924ms
+2026-10-14T03:33:32.2131276Z      ✓ no class name an old page uses comes out as a utility, whatever Tailwind reads  339ms
+2026-10-14T03:33:32.5453197Z stderr | tests/ask-citations.test.tsx > citations on the Ask screen > a record citation is a link to its rows, with how fresh the read was
+2026-10-14T03:33:32.5455239Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:32.5456221Z 
+2026-10-14T03:33:33.4167794Z  ✓ tests/ask-citations.test.tsx (16 tests) 1317ms
+2026-10-14T03:33:33.4168847Z      ✓ a record citation is a link to its rows, with how fresh the read was  479ms
+2026-10-14T03:33:33.7203616Z stderr | tests/approvals-phone.test.tsx > the frame an approval opens in, on a phone > on a phone the menu is a drawer behind a Menu button, so the page starts under the header
+2026-10-14T03:33:33.7206005Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:33.7207318Z 
+2026-10-14T03:33:34.4771547Z stderr | tests/settings-page.test.tsx > what the Settings screen draws > each value with where it came from, a missing identity value said as not set, and identifiers only in Advanced
+2026-10-14T03:33:34.4774048Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:34.4775212Z 
+2026-10-14T03:33:34.7661246Z  ✓ tests/approvals-phone.test.tsx (8 tests) 1449ms
+2026-10-14T03:33:34.7662530Z      ✓ on a phone the menu is a drawer behind a Menu button, so the page starts under the header  475ms
+2026-10-14T03:33:34.7667040Z      ✓ a confirmed decision puts focus on the sentence saying so, in the queue and on a card opened from a link  329ms
+2026-10-14T03:33:35.1537282Z  ✓ tests/settings-page.test.tsx (11 tests) 725ms
+2026-10-14T03:33:36.7349812Z stderr | tests/skip-to-answer.test.tsx > the skip-to-answer control > once an answer is drawn, the first tab stop past the form is the control, ahead of what the answer stands on
+2026-10-14T03:33:36.7355435Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:36.7356749Z 
+2026-10-14T03:33:37.7811951Z  ✓ tests/procedure-canvas.test.tsx (13 tests) 1773ms
+2026-10-14T03:33:37.7830353Z      ✓ React Flow is imported in one file, handed no change handler anywhere, and the procedure draws through it  1341ms
+2026-10-14T03:33:37.8679257Z  ✓ tests/skip-to-answer.test.tsx (10 tests) 1662ms
+2026-10-14T03:33:37.8707574Z      ✓ once an answer is drawn, the first tab stop past the form is the control, ahead of what the answer stands on  720ms
+2026-10-14T03:33:39.3002810Z stderr | tests/ask-conversations.test.tsx > a conversation on Ask > a follow-up continues the thread the answer was kept in, and a new conversation sends none
+2026-10-14T03:33:39.3011694Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:39.3023009Z 
+2026-10-14T03:33:39.5082184Z stderr | tests/webhooks-page.test.tsx > the Webhooks list > a subscriber reads as where it is told, what about, its state and secret, and its registrar is no id
+2026-10-14T03:33:39.5087643Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:39.5088974Z 
+2026-10-14T03:33:40.4543226Z  ✓ tests/ask-conversations.test.tsx (14 tests) 1544ms
+2026-10-14T03:33:40.4580463Z      ✓ a follow-up continues the thread the answer was kept in, and a new conversation sends none  447ms
+2026-10-14T03:33:40.8427975Z  ✓ tests/webhooks-page.test.tsx (12 tests) 1793ms
+2026-10-14T03:33:40.8428864Z      ✓ a subscriber reads as where it is told, what about, its state and secret, and its registrar is no id  514ms
+2026-10-14T03:33:41.8435889Z stderr | tests/first-run-staff-list.test.tsx > reading the list before setup is sent > a spreadsheet is chosen, read, drawn as the people it adds, and kept out of the appointment
+2026-10-14T03:33:41.8437140Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:41.8437673Z 
+2026-10-14T03:33:42.0022918Z  ✓ tests/data-table.test.tsx (18 tests) 130ms
+2026-10-14T03:33:42.3200383Z  ✓ tests/first-run-staff-list.test.tsx (7 tests) 986ms
+2026-10-14T03:33:43.5162344Z stderr | tests/credentials-page.test.tsx > the list > every slot is drawn by name and kind with whether a value is held, when, and what outranks it, and never a path
+2026-10-14T03:33:43.5164807Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:43.5166658Z 
+2026-10-14T03:33:43.9229439Z stderr | tests/agent-capabilities.test.tsx > connectors > each connector is drawn with its own monogram, the row holds five and the rest open as the reader's own
+2026-10-14T03:33:43.9236392Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:43.9259854Z 
+2026-10-14T03:33:44.8641425Z  ✓ tests/credentials-page.test.tsx (9 tests) 1795ms
+2026-10-14T03:33:44.8671410Z      ✓ every slot is drawn by name and kind with whether a value is held, when, and what outranks it, and never a path  517ms
+2026-10-14T03:33:45.7078873Z  ✓ tests/agent-capabilities.test.tsx (11 tests) 2281ms
+2026-10-14T03:33:45.7079988Z      ✓ each connector is drawn with its own monogram, the row holds five and the rest open as the reader's own  522ms
+2026-10-14T03:33:45.7130545Z      ✓ an approved library skill is offered to attach, confirmed first, and an unreviewed one only as a link to its review  315ms
+2026-10-14T03:33:45.7159934Z      ✓ a run that would not start is the one sentence, and a refusal is the API's  306ms
+2026-10-14T03:33:47.2390861Z stderr | tests/manifest-form.test.tsx > a form generated from the manifest schema > the model's bound on a name is the bound the rendered form enforces
+2026-10-14T03:33:47.2429437Z Form validation failed [
+2026-10-14T03:33:47.2459056Z   {
+2026-10-14T03:33:47.2481219Z     name: 'maxLength',
+2026-10-14T03:33:47.2519329Z     property: '.identity.display_name',
+2026-10-14T03:33:47.2549284Z     message: 'Use at most 120 characters.',
+2026-10-14T03:33:47.2565728Z     params: { limit: 120 },
+2026-10-14T03:33:47.2589380Z     stack: 'Display name: Use at most 120 characters.',
+2026-10-14T03:33:47.2619375Z     schemaPath: '#/properties/identity/properties/display_name/maxLength',
+2026-10-14T03:33:47.2669252Z     title: 'Display name'
+2026-10-14T03:33:47.2709135Z   }
+2026-10-14T03:33:47.2729343Z ]
+2026-10-14T03:33:47.2760131Z 
+2026-10-14T03:33:48.5550643Z  ✓ tests/manifest-form.test.tsx (11 tests) 1526ms
+2026-10-14T03:33:48.5551628Z      ✓ every list has an Add button named for it, and each adds an entry to its own list  1005ms
+2026-10-14T03:33:50.4475721Z  ✓ tests/ui-structure.test.tsx (13 tests) 591ms
+2026-10-14T03:33:51.9399895Z stderr | tests/automation-authoring.test.tsx > New automation > an install that has not switched it on draws no control for it
+2026-10-14T03:33:51.9402093Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:51.9403276Z 
+2026-10-14T03:33:52.1561401Z  ❯ tests/console-audit.test.ts (8 tests | 1 failed) 5399ms
+2026-10-14T03:33:52.1566978Z      ✓ the areas are the standard's own bullets, in its order, and each is judged 2ms
+2026-10-14T03:33:52.1568291Z      × every table, installation value, route and address is claimed by an area or excused, and nothing else is 4855ms
+2026-10-14T03:33:52.1570074Z      ✓ every gap names a leaf the work breakdown holds or says why it is not one 4ms
+2026-10-14T03:33:52.1571387Z      ✓ every write a screen sends is mapped to the routes it reaches, and the mapping is built by the call's own function 130ms
+2026-10-14T03:33:52.1598489Z      ✓ every read made after an action is built by the function the console uses 26ms
+2026-10-14T03:33:52.1599722Z      ✓ every proof names a Python test that exists, and says truly whether it needs a database 82ms
+2026-10-14T03:33:52.1600786Z      ✓ docs/console-audit/ is what the code says today, file by file, and holds nothing else 157ms
+2026-10-14T03:33:52.1601793Z      ✓ the files carry every area and every write, so splitting them dropped nothing 142ms
+2026-10-14T03:33:52.6750488Z  ✓ tests/automation-authoring.test.tsx (9 tests) 1289ms
+2026-10-14T03:33:53.3620934Z stderr | tests/sessions-page.test.tsx > what the sessions page asks for > the listing sends only what the route declares, and the bulk bound is the route's
+2026-10-14T03:33:53.3651120Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:53.3708975Z 
+2026-10-14T03:33:54.2159161Z stderr | tests/notifications-page.test.tsx > the Notifications page > each notice says who is told and whether it is sent, a fixed one says always on, and people are names
+2026-10-14T03:33:54.2163478Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:54.2194287Z 
+2026-10-14T03:33:54.2772971Z  ✓ tests/sessions-page.test.tsx (8 tests) 981ms
+2026-10-14T03:33:54.2774381Z      ✓ ending one is confirmed in the API's words, keeping it sends nothing, and confirming sends the one declared key  301ms
+2026-10-14T03:33:55.9173731Z  ✓ tests/notifications-page.test.tsx (10 tests) 2194ms
+2026-10-14T03:33:55.9174451Z      ✓ each notice says who is told and whether it is sent, a fixed one says always on, and people are names  574ms
+2026-10-14T03:33:55.9175040Z      ✓ a password is refused blank beside its field, confirmed when typed, sent once and gone from the page  405ms
+2026-10-14T03:33:56.0851665Z stderr | tests/automations-page.test.tsx > the list > every automation sent is a row with its agent, whom it runs as and its state, and no id
+2026-10-14T03:33:56.0865109Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:56.0866346Z 
+2026-10-14T03:33:57.4917354Z  ✓ tests/automations-page.test.tsx (11 tests) 1975ms
+2026-10-14T03:33:57.4959018Z      ✓ every automation sent is a row with its agent, whom it runs as and its state, and no id  524ms
+2026-10-14T03:33:57.4960276Z      ✓ only the changes the API offers are drawn, and a pause is sent only once it is confirmed  353ms
+2026-10-14T03:33:57.5880484Z  ✓ tests/ui-overlays.test.tsx (10 tests) 626ms
+2026-10-14T03:33:58.6543954Z stderr | tests/requirement-checks-page.test.tsx > the requirement checks page > where the register and each area stand, and one area's requirements with their proof and evidence
+2026-10-14T03:33:58.6570581Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:33:58.6577078Z 
+2026-10-14T03:33:59.3853072Z  ✓ tests/requirement-checks-page.test.tsx (7 tests) 779ms
+2026-10-14T03:33:59.5730658Z  ✓ tests/phone-width.test.tsx (256 tests) 36529ms
+2026-10-14T03:33:59.5741858Z      ✓ /agent-templates/:templateId puts a visible Menu button first, before the page, and nothing of the menu beside it  402ms
+2026-10-14T03:33:59.5743133Z      ✓ /agents/drafts/:draftId puts a visible Menu button first, before the page, and nothing of the menu beside it  501ms
+2026-10-14T03:33:59.5744199Z      ✓ /audit/trace puts a visible Menu button first, before the page, and nothing of the menu beside it  383ms
+2026-10-14T03:33:59.5745367Z      ✓ /automations/:automationId puts a visible Menu button first, before the page, and nothing of the menu beside it  414ms
+2026-10-14T03:33:59.5746468Z      ✓ /channels/:name puts a visible Menu button first, before the page, and nothing of the menu beside it  400ms
+2026-10-14T03:33:59.5747541Z      ✓ /classification puts a visible Menu button first, before the page, and nothing of the menu beside it  370ms
+2026-10-14T03:33:59.5748774Z      ✓ /connectors/:connector puts a visible Menu button first, before the page, and nothing of the menu beside it  428ms
+2026-10-14T03:33:59.5749846Z      ✓ /jobs/:name puts a visible Menu button first, before the page, and nothing of the menu beside it  403ms
+2026-10-14T03:33:59.5750849Z      ✓ /people puts a visible Menu button first, before the page, and nothing of the menu beside it  422ms
+2026-10-14T03:33:59.5751860Z      ✓ /routing puts a visible Menu button first, before the page, and nothing of the menu beside it  434ms
+2026-10-14T03:33:59.5752883Z      ✓ /routing/:rungId puts a visible Menu button first, before the page, and nothing of the menu beside it  358ms
+2026-10-14T03:33:59.5753946Z      ✓ /service-accounts/:clientId puts a visible Menu button first, before the page, and nothing of the menu beside it  411ms
+2026-10-14T03:33:59.5755019Z      ✓ /skills/:name puts a visible Menu button first, before the page, and nothing of the menu beside it  399ms
+2026-10-14T03:33:59.5756055Z      ✓ /tools/:name puts a visible Menu button first, before the page, and nothing of the menu beside it  376ms
+2026-10-14T03:33:59.5759388Z      ✓ /webhooks/:id puts a visible Menu button first, before the page, and nothing of the menu beside it  404ms
+2026-10-14T03:33:59.5760318Z      ✓ /agents/:agentId/:tab lets every value the API sent break inside the screen  379ms
+2026-10-14T03:33:59.5761317Z      ✓ /retention/erasures/:requestId lets every value the API sent break inside the screen  446ms
+2026-10-14T03:33:59.5789167Z  ✓ tests/status-primitives.test.tsx (15 tests) 947ms
+2026-10-14T03:33:59.5790149Z      ✓ a tone is never computed from data outside the module that owns the table  813ms
+2026-10-14T03:34:00.6101307Z stderr | tests/sign-in-links-page.test.tsx > what the links page asks for > the listing and both writes send only what their routes declare
+2026-10-14T03:34:00.6133782Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:00.6149145Z 
+2026-10-14T03:34:01.2182737Z stderr | tests/agent-memory.test.tsx > the Memory section > it draws what is remembered as text, stated apart from inferred, apart from what it keeps about you
+2026-10-14T03:34:01.2253752Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:01.2254956Z 
+2026-10-14T03:34:01.2420590Z stderr | tests/agent-artifacts.test.tsx > the Artifacts section > it lists what was produced with who it was for, what fed it, how long it is kept, and the figures
+2026-10-14T03:34:01.2469881Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:01.2498244Z 
+2026-10-14T03:34:01.4189066Z  ✓ tests/sign-in-links-page.test.tsx (10 tests) 904ms
+2026-10-14T03:34:01.7716132Z Not implemented: navigation to another Document
+2026-10-14T03:34:02.6002055Z  ✓ tests/agent-memory.test.tsx (8 tests) 1780ms
+2026-10-14T03:34:02.6003488Z      ✓ it draws what is remembered as text, stated apart from inferred, apart from what it keeps about you  486ms
+2026-10-14T03:34:02.6004658Z      ✓ a correction says its format, refuses a blank, and is sent only from its confirmation  313ms
+2026-10-14T03:34:02.7900603Z  ✓ tests/agent-artifacts.test.tsx (8 tests) 1982ms
+2026-10-14T03:34:02.7920183Z      ✓ it lists what was produced with who it was for, what fed it, how long it is kept, and the figures  548ms
+2026-10-14T03:34:02.7940027Z      ✓ an archive is offered only where the API said so and is sent from its confirmation  338ms
+2026-10-14T03:34:04.0403071Z stderr | tests/access-requests-page.test.tsx > the Access requests page > a department request is sent as the route declares it and the reply is drawn as sent
+2026-10-14T03:34:04.0430945Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:04.0458999Z 
+2026-10-14T03:34:04.4184929Z  ✓ tests/ui-rules.test.ts (9 tests) 1701ms
+2026-10-14T03:34:04.4230277Z      ✓ a badge's colour is written at the call site and never chosen from data  1111ms
+2026-10-14T03:34:04.7118514Z stderr | tests/access-requests-page.test.tsx > the Access requests page > a question handed to the reader shows who asked, the question, what was tried and what is needed
+2026-10-14T03:34:04.7119689Z In HTML, <p> cannot be a descendant of <p>.
+2026-10-14T03:34:04.7120026Z This will cause a hydration error.
+2026-10-14T03:34:04.7120194Z 
+2026-10-14T03:34:04.7120276Z   ...
+2026-10-14T03:34:04.7120959Z     <DataRoutes routes={[...]} future={{...}} state={{...}}>
+2026-10-14T03:34:04.7121342Z       <RenderErrorBoundary location={{pathname:"...", ...}} revalidation="idle" component={<DefaultErrorComponent>} ...>
+2026-10-14T03:34:04.7121729Z         <RenderedRoute match={{params:{}, ...}} routeContext={{outlet:null, ...}}>
+2026-10-14T03:34:04.7121977Z           <AccessRequestsPage>
+2026-10-14T03:34:04.7122293Z             <ListPage crumbs={[...]} title="Access req..." lede="Requests o..." primary={<Button>} notice={<Fragment>} ...>
+2026-10-14T03:34:04.7122640Z               <div data-slot="list-page" className="flex min-w...">
+2026-10-14T03:34:04.7122852Z                 <PageHeader>
+2026-10-14T03:34:04.7122999Z                 <section>
+2026-10-14T03:34:04.7123159Z                 <HandedToAPersonSection>
+2026-10-14T03:34:04.7123371Z                   <SectionCard title="Questions ..." lede={<Note>}>
+2026-10-14T03:34:04.7123815Z                     <section data-slot="section-card" aria-labelledby="«r2m»" id={undefined} className="flex min-w...">
+2026-10-14T03:34:04.7124148Z                       <div className="flex items...">
+2026-10-14T03:34:04.7124347Z                         <div className="min-w-0">
+2026-10-14T03:34:04.7124524Z                           <h2>
+2026-10-14T03:34:04.7124775Z >                         <p className="m-0 mt-0.5 text-[12.5px] leading-snug text-dim">
+2026-10-14T03:34:04.7124999Z                             <Note>
+2026-10-14T03:34:04.7125167Z >                             <p
+2026-10-14T03:34:04.7125348Z >                               data-slot="note"
+2026-10-14T03:34:04.7125551Z >                               data-kind="info"
+2026-10-14T03:34:04.7125855Z >                               className="m-0 flex items-start gap-1.5 text-[12px] leading-relaxed text-dim"
+2026-10-14T03:34:04.7126115Z >                             >
+2026-10-14T03:34:04.7126257Z                       ...
+2026-10-14T03:34:04.7126390Z                 ...
+2026-10-14T03:34:04.7126518Z             ...
+2026-10-14T03:34:04.7126591Z 
+2026-10-14T03:34:04.7126671Z <p> cannot contain a nested <p>.
+2026-10-14T03:34:04.7126922Z See this log for the ancestor stack trace.
+2026-10-14T03:34:04.7127036Z 
+2026-10-14T03:34:04.7162142Z stderr | tests/shell-navigation.test.tsx > the navigation > the navigation is identical for every session the API gives the same answer
+2026-10-14T03:34:04.7164346Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:04.7167095Z ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+2026-10-14T03:34:04.7168270Z 
+2026-10-14T03:34:04.8013182Z  ✓ tests/access-requests-page.test.tsx (12 tests) 867ms
+2026-10-14T03:34:05.9246958Z  ✓ tests/shell-navigation.test.tsx (9 tests) 1377ms
+2026-10-14T03:34:05.9269883Z      ✓ the navigation is identical for every session the API gives the same answer  359ms
+2026-10-14T03:34:06.2581522Z stderr | tests/service-accounts-page.test.tsx > the list > draws the reader's accounts by name, with no key handle, and each capability they cannot use marked
+2026-10-14T03:34:06.2584279Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:06.2585476Z 
+2026-10-14T03:34:06.4161725Z stderr | tests/second-factor.test.tsx > a failure that asks for a second factor > a screen refused for a sign-in with no second factor shows the API's sentence and a way to sign in again
+2026-10-14T03:34:06.4170850Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:06.4199217Z 
+2026-10-14T03:34:06.7912803Z  ✓ tests/api-errors.test.tsx (16 tests) 39ms
+2026-10-14T03:34:07.2621019Z  ✓ tests/second-factor.test.tsx (9 tests) 1268ms
+2026-10-14T03:34:07.2650433Z      ✓ a sign-in the API says needs a second factor gets a banner naming what is withheld and a way to sign in again  350ms
+2026-10-14T03:34:07.6600637Z  ✓ tests/service-accounts-page.test.tsx (8 tests) 1949ms
+2026-10-14T03:34:07.6630259Z      ✓ draws the reader's accounts by name, with no key handle, and each capability they cannot use marked  567ms
+2026-10-14T03:34:07.6640385Z      ✓ registering says what every field accepts first, refuses blanks beside them, and sends no owner  476ms
+2026-10-14T03:34:07.9964058Z stderr | tests/my-workspace-page.test.tsx > what the workspace asks for > the request names nobody, because the route declares nothing that could
+2026-10-14T03:34:07.9967263Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:07.9968441Z 
+2026-10-14T03:34:08.6221567Z  ✓ tests/my-workspace-page.test.tsx (7 tests) 684ms
+2026-10-14T03:34:09.0512126Z  ✓ tests/ui-controls.test.tsx (11 tests) 355ms
+2026-10-14T03:34:09.2800296Z stderr | tests/company-pages.test.tsx > Everything > draws the rows the API sent, by the words each is known by, and asks with no filter
+2026-10-14T03:34:09.2803280Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:09.2804531Z 
+2026-10-14T03:34:10.2195492Z stderr | tests/agent-leash.test.tsx > the leash block > a rung is changed from the form only through its confirmation, which says a rise is judged
+2026-10-14T03:34:10.2198846Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:10.2200197Z 
+2026-10-14T03:34:10.6825417Z stderr | tests/agent-automations.test.tsx > the installed automations on the Automations tab > each automation is drawn with what it runs as, when, its last run, and only the controls the API offered
+2026-10-14T03:34:10.6850513Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:10.6851891Z 
+2026-10-14T03:34:11.2653556Z  ✓ tests/agent-automations.test.tsx (4 tests) 1313ms
+2026-10-14T03:34:11.2656452Z      ✓ each automation is drawn with what it runs as, when, its last run, and only the controls the API offered  574ms
+2026-10-14T03:34:11.3058920Z  ✓ tests/agent-leash.test.tsx (7 tests) 1555ms
+2026-10-14T03:34:11.3084017Z      ✓ a rung is changed from the form only through its confirmation, which says a rise is judged  732ms
+2026-10-14T03:34:11.5010302Z  ✓ tests/company-pages.test.tsx (13 tests) 2720ms
+2026-10-14T03:34:11.5030122Z      ✓ draws the rows the API sent, by the words each is known by, and asks with no filter  619ms
+2026-10-14T03:34:11.5031676Z      ✓ the search and the order are sent to the API, and the estate, whose route takes neither, draws neither  329ms
+2026-10-14T03:34:11.5032904Z      ✓ a company budget in force is drawn beside the spend, and the form is offered only to a reader who may set it  381ms
+2026-10-14T03:34:12.6349137Z stderr | tests/field-problems.test.tsx > a hand-built form > a validation refusal draws each problem beside its own input and lists the rest under the notice
+2026-10-14T03:34:12.6351440Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:12.6352493Z 
+2026-10-14T03:34:12.9356200Z  ✓ tests/field-problems.test.tsx (5 tests) 365ms
+2026-10-14T03:34:13.0684605Z stderr | tests/coauthor-panel.test.tsx > the co-author on the Write step > a blank request says what is needed and sends nothing, and a request is confirmed with where the words go
+2026-10-14T03:34:13.0710730Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:13.0769069Z 
+2026-10-14T03:34:13.1811040Z stderr | tests/agent-upgrade.test.tsx > a newer version on the Profile > it draws the three columns of a conflict and what else changes, marking what only the publisher sets
+2026-10-14T03:34:13.1840861Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:13.1852452Z 
+2026-10-14T03:34:14.7279874Z  ✓ tests/agent-upgrade.test.tsx (7 tests) 1993ms
+2026-10-14T03:34:14.7280748Z      ✓ it draws the three columns of a conflict and what else changes, marking what only the publisher sets  533ms
+2026-10-14T03:34:14.7281532Z      ✓ a version nobody has said no to is a badge in the header, and one somebody turned away is not  329ms
+2026-10-14T03:34:14.7282297Z      ✓ the upgrade waits until every conflict has an answer, says why, and sends the answers with what was drawn  413ms
+2026-10-14T03:34:14.7283429Z      ✓ an agent on the newest version, a declined one the reader may not act on, and one with no install draw no card  321ms
+2026-10-14T03:34:14.7341289Z stderr | tests/classification-upload.test.tsx > uploading a price list > the file goes to the table's own address as base64 and the table opens
+2026-10-14T03:34:14.7343869Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:14.7344985Z 
+2026-10-14T03:34:15.0608542Z  ✓ tests/coauthor-panel.test.tsx (6 tests) 2867ms
+2026-10-14T03:34:15.0610233Z      ✓ a blank request says what is needed and sends nothing, and a request is confirmed with where the words go  902ms
+2026-10-14T03:34:15.0610814Z      ✓ each change is drawn before and after and unticked, and what could not be proposed is said  480ms
+2026-10-14T03:34:15.0611386Z      ✓ taking sends the proposal as it was drawn with exactly the ticked paths, and only after a confirmation  478ms
+2026-10-14T03:34:15.2771361Z  ✓ tests/classification-upload.test.tsx (6 tests) 1014ms
+2026-10-14T03:34:15.2776434Z      ✓ the file goes to the table's own address as base64 and the table opens  615ms
+2026-10-14T03:34:15.9733374Z stderr | tests/connector-consent.test.tsx > the page the vendor sends the person back to > hands the answer over once, says what it came to and offers the source's page
+2026-10-14T03:34:15.9735531Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:15.9736481Z 
+2026-10-14T03:34:16.0744238Z  ✓ tests/connector-consent.test.tsx (10 tests) 448ms
+2026-10-14T03:34:16.4663164Z  ✓ tests/listing.test.tsx (8 tests) 541ms
+2026-10-14T03:34:16.7400226Z  ✓ tests/config.test.tsx (14 tests) 614ms
+2026-10-14T03:34:16.7433476Z      ✓ a misconfigured console names the setting on the screen  588ms
+2026-10-14T03:34:17.3418580Z  ✓ tests/theme.test.ts (12 tests) 28ms
+2026-10-14T03:34:17.6623435Z stderr | tests/data-steward-card.test.tsx > the data steward card > a reader the API refuses is shown no card, and an appointed steward is named with no control
+2026-10-14T03:34:17.6651128Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:17.6673501Z 
+2026-10-14T03:34:18.3400979Z stderr | tests/agent-templates.test.tsx > the catalogue > lists each template by name with where it came from, and no publisher id
+2026-10-14T03:34:18.3430961Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:18.3469188Z 
+2026-10-14T03:34:18.4531754Z  ✓ tests/data-steward-card.test.tsx (6 tests) 1652ms
+2026-10-14T03:34:18.4533229Z      ✓ a reader the API refuses is shown no card, and an appointed steward is named with no control  798ms
+2026-10-14T03:34:18.5223223Z stderr | tests/rules-page.test.tsx > what the Quick answers screen draws > a rule by its words, where it answers and what it answers with, and its id in Advanced alone
+2026-10-14T03:34:18.5226618Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:18.5227819Z 
+2026-10-14T03:34:19.1706152Z  ✓ tests/rules-page.test.tsx (7 tests) 934ms
+2026-10-14T03:34:19.1707238Z      ✓ a rule by its words, where it answers and what it answers with, and its id in Advanced alone  333ms
+2026-10-14T03:34:19.2532793Z  ✓ tests/agent-templates.test.tsx (7 tests) 1486ms
+2026-10-14T03:34:19.2610452Z      ✓ lists each template by name with where it came from, and no publisher id  609ms
+2026-10-14T03:34:19.2639834Z      ✓ installing sends the digest the page read, only from its confirmation, and opens the new agent  388ms
+2026-10-14T03:34:20.2267900Z stderr | tests/agent-tools.test.tsx > the tools block > a carried tool is detached only through its confirmation, which says runs stop being handed it
+2026-10-14T03:34:20.2270339Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:20.2302472Z 
+2026-10-14T03:34:20.3643517Z stderr | tests/tools-page.test.tsx > the list > every tool with its source, effect and status, and one sentence about what a switch is
+2026-10-14T03:34:20.3646871Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:20.3648108Z 
+2026-10-14T03:34:20.8160200Z  ✓ tests/tools-page.test.tsx (8 tests) 499ms
+2026-10-14T03:34:20.8677859Z stderr | tests/routing.test.tsx > addresses behind the guard > the root address renders the overview
+2026-10-14T03:34:20.8712167Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:20.8729330Z 
+2026-10-14T03:34:21.2369989Z  ✓ tests/agent-tools.test.tsx (6 tests) 1549ms
+2026-10-14T03:34:21.2371283Z      ✓ a carried tool is detached only through its confirmation, which says runs stop being handed it  812ms
+2026-10-14T03:34:22.3102626Z  ✓ tests/routing.test.tsx (10 tests) 2280ms
+2026-10-14T03:34:22.3123918Z      ✓ the root address renders the overview  471ms
+2026-10-14T03:34:22.3130328Z      ✓ every section in the navigation resolves to a page  591ms
+2026-10-14T03:34:22.3207960Z stderr | tests/plugins-panel.test.tsx > what the plugin panel draws > a recorded plugin with its state, its point, what it needs and that nothing is loaded
+2026-10-14T03:34:22.3231302Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:22.3253422Z 
+2026-10-14T03:34:22.3929546Z stderr | tests/stop.test.tsx > the Stop control in the header > one press stops everything for a reader whose stop reaches it, with no words and no confirmation
+2026-10-14T03:34:22.3941218Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:22.3942433Z 
+2026-10-14T03:34:22.5580549Z  ✓ tests/plugins-panel.test.tsx (8 tests) 469ms
+2026-10-14T03:34:23.2637503Z  ✓ tests/stop.test.tsx (6 tests) 1353ms
+2026-10-14T03:34:23.2638405Z      ✓ one press stops everything for a reader whose stop reaches it, with no words and no confirmation  562ms
+2026-10-14T03:34:23.2639500Z      ✓ a resume is refused without a reason, then confirmed, and says whose stop it lifted  361ms
+2026-10-14T03:34:23.3300874Z  ✓ tests/my-account-cards.test.tsx (4 tests) 168ms
+2026-10-14T03:34:23.4390578Z  ✓ tests/api-client.test.ts (9 tests) 45ms
+2026-10-14T03:34:24.8334569Z stderr | tests/model-prices.test.tsx > the prices card > each model is drawn with its price in whole currency and whether its calls are costed
+2026-10-14T03:34:24.8350842Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:24.8354974Z 
+2026-10-14T03:34:24.8950850Z stderr | tests/ask-attach.test.tsx > attaching a file on Ask > a file is added at the person's own level, named on the thread, listed, and asked about
+2026-10-14T03:34:24.8954507Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:24.8979189Z 
+2026-10-14T03:34:25.0797876Z stderr | tests/agent-conversations.test.tsx > the conversations section > each of the reader's threads shows who took part, its first question and how the run ended, a failed one saying so
+2026-10-14T03:34:25.0799549Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:25.0800542Z 
+2026-10-14T03:34:25.1532964Z  ✓ tests/model-prices.test.tsx (5 tests) 948ms
+2026-10-14T03:34:25.1550488Z      ✓ each model is drawn with its price in whole currency and whether its calls are costed  412ms
+2026-10-14T03:34:25.2144796Z  ✓ tests/ask-attach.test.tsx (3 tests) 723ms
+2026-10-14T03:34:25.2146009Z      ✓ a file is added at the person's own level, named on the thread, listed, and asked about  471ms
+2026-10-14T03:34:25.4330564Z  ✓ tests/agent-conversations.test.tsx (5 tests) 766ms
+2026-10-14T03:34:25.4340330Z      ✓ each of the reader's threads shows who took part, its first question and how the run ended, a failed one saying so  486ms
+2026-10-14T03:34:26.5570912Z stderr | tests/walk-findings.test.tsx > the Platform screens' two profiles > Capacity calls the install's size its install size, and a size that declares nothing says so
+2026-10-14T03:34:26.5610612Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:26.5611655Z 
+2026-10-14T03:34:26.5700307Z stderr | tests/prompts-page.test.tsx > what the Prompts screen draws > the system instructions with no control beside them, and an agent's saying whose they are with ids only in Advanced
+2026-10-14T03:34:26.5702358Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:26.5703264Z 
+2026-10-14T03:34:26.5729120Z  ✓ tests/walk-findings.test.tsx (9 tests) 229ms
+2026-10-14T03:34:26.8520492Z  ✓ tests/prompts-page.test.tsx (5 tests) 521ms
+2026-10-14T03:34:27.0217028Z stderr | tests/screen-states.test.tsx > loading, empty, unreachable and failed on every registered page > /auth/callback sends no request when it is opened
+2026-10-14T03:34:27.0250965Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:27.0252436Z 
+2026-10-14T03:34:27.3462267Z  ✓ tests/auth-pkce.test.ts (10 tests) 7ms
+2026-10-14T03:34:27.9041305Z stderr | tests/custom-connectors-page.test.tsx > the Add an API page > the form sends every field the route declares and draws a refused ceiling by its field
+2026-10-14T03:34:27.9043769Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:27.9044868Z 
+2026-10-14T03:34:28.3354946Z  ✓ tests/custom-connectors-page.test.tsx (5 tests) 497ms
+2026-10-14T03:34:28.4537713Z stderr | tests/features-page.test.tsx > what the Features screen draws > a feature with its sentences and that nobody has switched it, with its readers in Advanced
+2026-10-14T03:34:28.4540925Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:28.4542194Z 
+2026-10-14T03:34:28.6830503Z  ✓ tests/features-page.test.tsx (5 tests) 264ms
+2026-10-14T03:34:29.1020459Z  ✓ tests/auth-realm.test.ts (9 tests) 9ms
+2026-10-14T03:34:29.9364825Z stderr | tests/screen-states.test.tsx > loading, empty, unreachable and failed on every registered page > /access-requests says loading, empty, unreachable and failed in four different sentences
+2026-10-14T03:34:29.9366234Z In HTML, <p> cannot be a descendant of <p>.
+2026-10-14T03:34:29.9366911Z This will cause a hydration error.
+2026-10-14T03:34:29.9367206Z 
+2026-10-14T03:34:29.9367408Z   ...
+2026-10-14T03:34:29.9367731Z     <Suspense fallback={<p>}>
+2026-10-14T03:34:29.9368086Z       <Outlet>
+2026-10-14T03:34:29.9368558Z         <RenderedRoute match={{params:{}, ...}} routeContext={{outlet:null, ...}}>
+2026-10-14T03:34:29.9369263Z           <AccessRequestsPage>
+2026-10-14T03:34:29.9369912Z             <ListPage crumbs={[...]} title="Access req..." lede="Requests o..." primary={<Button>} notice={<Fragment>} ...>
+2026-10-14T03:34:29.9370641Z               <div data-slot="list-page" className="flex min-w...">
+2026-10-14T03:34:29.9371096Z                 <PageHeader>
+2026-10-14T03:34:29.9371437Z                 <section>
+2026-10-14T03:34:29.9371767Z                 <Note>
+2026-10-14T03:34:29.9372125Z                 <HandedToAPersonSection>
+2026-10-14T03:34:29.9372603Z                   <SectionCard title="Questions ..." lede={<Note>}>
+2026-10-14T03:34:29.9373481Z                     <section data-slot="section-card" aria-labelledby="«r26»" id={undefined} className="flex min-w...">
+2026-10-14T03:34:29.9374149Z                       <div className="flex items...">
+2026-10-14T03:34:29.9374571Z                         <div className="min-w-0">
+2026-10-14T03:34:29.9374979Z                           <h2>
+2026-10-14T03:34:29.9375505Z >                         <p className="m-0 mt-0.5 text-[12.5px] leading-snug text-dim">
+2026-10-14T03:34:29.9376008Z                             <Note>
+2026-10-14T03:34:29.9376407Z >                             <p
+2026-10-14T03:34:29.9376818Z >                               data-slot="note"
+2026-10-14T03:34:29.9377259Z >                               data-kind="info"
+2026-10-14T03:34:29.9377916Z >                               className="m-0 flex items-start gap-1.5 text-[12px] leading-relaxed text-dim"
+2026-10-14T03:34:29.9378487Z >                             >
+2026-10-14T03:34:29.9379116Z                       ...
+2026-10-14T03:34:29.9379448Z                 ...
+2026-10-14T03:34:29.9379755Z             ...
+2026-10-14T03:34:29.9379979Z 
+2026-10-14T03:34:29.9380223Z <p> cannot contain a nested <p>.
+2026-10-14T03:34:29.9380638Z See this log for the ancestor stack trace.
+2026-10-14T03:34:29.9380941Z 
+2026-10-14T03:34:29.9401993Z stderr | tests/trace-page.test.tsx > reading a run's trace > a finished run is read with its reason and each step is drawn by name, never its payload
+2026-10-14T03:34:29.9410680Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:29.9429522Z 
+2026-10-14T03:34:30.0700860Z  ✓ tests/trace-page.test.tsx (5 tests) 178ms
+2026-10-14T03:34:31.0207740Z  ✓ tests/design-tokens.test.ts (5 tests) 18ms
+2026-10-14T03:34:31.9777106Z  ✓ tests/bundle-split.test.ts (6 tests) 1767ms
+2026-10-14T03:34:31.9810565Z      ✓ no heavy component library is reachable from the entry without a dynamic import  832ms
+2026-10-14T03:34:31.9811666Z      ✓ the entry still reaches the shell, the overview and the one place that fetches  456ms
+2026-10-14T03:34:31.9813126Z      ✓ the walk follows the route registry's eager glob into every page's route file  450ms
+2026-10-14T03:34:32.5911589Z stderr | tests/provider-register.test.tsx > an agent's pinned model > the profile draws the order a question tries, and pins a model chosen from the matrix only from the confirmation
+2026-10-14T03:34:32.5941402Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:32.5960439Z 
+2026-10-14T03:34:32.7883571Z  ✓ tests/provider-register.test.tsx (2 tests) 849ms
+2026-10-14T03:34:32.7899872Z      ✓ the profile draws the order a question tries, and pins a model chosen from the matrix only from the confirmation  576ms
+2026-10-14T03:34:32.9061069Z stderr | tests/vault-page.test.tsx > what the secrets vault screen shows > each source's leases are counted by how they ended, with the shipping beside them
+2026-10-14T03:34:32.9063384Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:32.9089089Z 
+2026-10-14T03:34:32.9935765Z  ✓ tests/vault-page.test.tsx (3 tests) 127ms
+2026-10-14T03:34:33.6894831Z  ✓ tests/lock.test.tsx (5 tests) 57ms
+2026-10-14T03:34:34.3648611Z  ✓ tests/accent.test.ts (6 tests) 592ms
+2026-10-14T03:34:34.3686763Z      ✓ the served accent is on the root element before anything renders  581ms
+2026-10-14T03:34:34.5805222Z  ✓ tests/my-preferences.test.tsx (3 tests) 106ms
+2026-10-14T03:34:35.6420939Z stderr | tests/referrals-page.test.tsx > what has been referred to me > nothing referred is said in a sentence, not drawn as an empty table
+2026-10-14T03:34:35.6423747Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:35.6428524Z 
+2026-10-14T03:34:35.6721758Z stderr | tests/keyboard-access.test.tsx > getting round without a mouse > the first thing the tab key reaches is the skip link, and it goes somewhere
+2026-10-14T03:34:35.6724279Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:35.6726670Z ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+2026-10-14T03:34:35.6727689Z 
+2026-10-14T03:34:35.7099987Z  ✓ tests/keyboard-access.test.tsx (4 tests) 612ms
+2026-10-14T03:34:35.7100907Z      ✓ the first thing the tab key reaches is the skip link, and it goes somewhere  585ms
+2026-10-14T03:34:36.0138553Z  ✓ tests/referrals-page.test.tsx (3 tests) 417ms
+2026-10-14T03:34:37.0361344Z  ✓ tests/credential-field.test.tsx (4 tests) 155ms
+2026-10-14T03:34:37.0908573Z stderr | tests/group-rules-and-notices.test.tsx > the break-glass notices on the elevation screen > a standing super admin sees who took emergency access, who allowed it and until when
+2026-10-14T03:34:37.0911786Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:37.0913005Z 
+2026-10-14T03:34:37.2669265Z  ✓ tests/group-rules-and-notices.test.tsx (2 tests) 605ms
+2026-10-14T03:34:37.2670699Z      ✓ a standing super admin sees who took emergency access, who allowed it and until when  480ms
+2026-10-14T03:34:38.0383049Z stderr | tests/learning-undo-page.test.tsx > the digest's undo page > opening the link sends nothing, keeping it sends nothing, and confirming Undo posts that memory alone and shows what it did
+2026-10-14T03:34:38.0390325Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:38.0391560Z 
+2026-10-14T03:34:38.1975379Z  ✓ tests/learning-undo-page.test.tsx (2 tests) 213ms
+2026-10-14T03:34:39.1140876Z  ✓ tests/installable-shell.test.ts (5 tests) 7ms
+2026-10-14T03:34:39.1335520Z  ✓ tests/secret-inputs.test.ts (3 tests) 8ms
+2026-10-14T03:34:40.2500213Z  ✓ tests/agent-memory-kinds.test.tsx (3 tests) 217ms
+2026-10-14T03:34:40.5511646Z stderr | tests/global-search.test.tsx > the search box > a query of two characters asks, lists each module's hits with where to open them, and one character asks nothing
+2026-10-14T03:34:40.5515250Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:40.5516613Z 
+2026-10-14T03:34:40.9295315Z  ✓ tests/schema-form-door.test.ts (2 tests) 23ms
+2026-10-14T03:34:41.5993646Z  ✓ tests/global-search.test.tsx (3 tests) 1612ms
+2026-10-14T03:34:41.6038986Z      ✓ a query of two characters asks, lists each module's hits with where to open them, and one character asks nothing  1122ms
+2026-10-14T03:34:41.6057472Z      ✓ a search with nothing in it says so in one sentence, whatever the reason  366ms
+2026-10-14T03:34:42.4103973Z stderr | tests/staleness-banner.test.tsx > the frame's line about a copy that is behind > a page whose body says its copy is behind is given the sentence once, above the page
+2026-10-14T03:34:42.4128496Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:42.4159323Z 
+2026-10-14T03:34:42.4189664Z  ✓ tests/react-roots.test.tsx (3 tests) 16ms
+2026-10-14T03:34:42.6404734Z  ✓ tests/staleness-banner.test.tsx (2 tests) 906ms
+2026-10-14T03:34:42.6409949Z      ✓ a page whose body says its copy is behind is given the sentence once, above the page  747ms
+2026-10-14T03:34:43.5100856Z  ✓ tests/brand.test.tsx (3 tests) 5ms
+2026-10-14T03:34:43.9110753Z stderr | tests/ask-limited.test.tsx > a question asked past the window > says in the API's words when the person may ask again, with its reference
+2026-10-14T03:34:43.9170688Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:43.9198988Z 
+2026-10-14T03:34:43.9376369Z  ✓ tests/ask-limited.test.tsx (1 test) 479ms
+2026-10-14T03:34:43.9377125Z      ✓ says in the API's words when the person may ask again, with its reference  478ms
+2026-10-14T03:34:44.5384024Z  ✓ tests/public-marking.test.ts (4 tests) 61ms
+2026-10-14T03:34:45.6534393Z stderr | tests/screen-states-second.test.tsx > loading, empty, unreachable and failed on every registered page > /access_review says loading, empty, unreachable and failed in four different sentences
+2026-10-14T03:34:45.6536828Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:45.6538138Z 
+2026-10-14T03:34:46.0900510Z stderr | tests/screen-states-third.test.tsx > loading, empty, unreachable and failed on every registered page > /access_review/:kind/:rowId says loading, empty, unreachable and failed in four different sentences
+2026-10-14T03:34:46.0941094Z ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+2026-10-14T03:34:46.0945791Z 
+2026-10-14T03:34:49.3928225Z stderr | tests/screen-states-third.test.tsx > loading, empty, unreachable and failed on every registered page > /agents/drafts/:draftId says loading, empty, unreachable and failed in four different sentences
+2026-10-14T03:34:49.3929866Z UnreadableManifestForm [Error]: A builder form body carries its sections.
+2026-10-14T03:34:49.3930818Z     at readManifestForm (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/src/components/manifestSections.ts:104:11)
+2026-10-14T03:34:49.3932241Z     at /home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/src/pages/agents/DraftPage.tsx:400:61
+2026-10-14T03:34:49.3933325Z     at updateMemo (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/node_modules/react-dom/cjs/react-dom-client.development.js:6621:19)
+2026-10-14T03:34:49.3934591Z     at Object.useMemo (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/node_modules/react-dom/cjs/react-dom-client.development.js:23182:18)
+2026-10-14T03:34:49.3935872Z     at process.env.NODE_ENV.exports.useMemo (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/node_modules/react/cjs/react.development.js:1209:34)
+2026-10-14T03:34:49.3936993Z     at DraftAnswer (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/src/pages/agents/DraftPage.tsx:400:20)
+2026-10-14T03:34:49.3938209Z     at Object.react-stack-bottom-frame (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/node_modules/react-dom/cjs/react-dom-client.development.js:23863:20)
+2026-10-14T03:34:49.3939673Z     at renderWithHooks (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/node_modules/react-dom/cjs/react-dom-client.development.js:5529:22)
+2026-10-14T03:34:49.3941203Z     at updateFunctionComponent (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/node_modules/react-dom/cjs/react-dom-client.development.js:8897:19)
+2026-10-14T03:34:49.3942487Z     at beginWork (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/node_modules/react-dom/cjs/react-dom-client.development.js:10522:18) {
+2026-10-14T03:34:49.3943241Z   [stack]: [Getter/Setter],
+2026-10-14T03:34:49.3943694Z   [message]: 'A builder form body carries its sections.'
+2026-10-14T03:34:49.3944065Z }
+2026-10-14T03:34:49.3944169Z 
+2026-10-14T03:34:49.3944379Z The above error occurred in the <DraftAnswer> component.
+2026-10-14T03:34:49.3944598Z 
+2026-10-14T03:34:49.3945096Z React will try to recreate this component tree from scratch using the error boundary you provided, RenderErrorBoundary.
+2026-10-14T03:34:49.3945545Z 
+2026-10-14T03:34:49.3946043Z React Router caught the following error during render UnreadableManifestForm [Error]: A builder form body carries its sections.
+2026-10-14T03:34:49.3947523Z     at readManifestForm (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/src/components/manifestSections.ts:104:11)
+2026-10-14T03:34:49.3948387Z     at /home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/src/pages/agents/DraftPage.tsx:400:61
+2026-10-14T03:34:49.3949497Z     at updateMemo (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/node_modules/react-dom/cjs/react-dom-client.development.js:6621:19)
+2026-10-14T03:34:49.3950676Z     at Object.useMemo (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/node_modules/react-dom/cjs/react-dom-client.development.js:23182:18)
+2026-10-14T03:34:49.3951812Z     at process.env.NODE_ENV.exports.useMemo (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/node_modules/react/cjs/react.development.js:1209:34)
+2026-10-14T03:34:49.3952793Z     at DraftAnswer (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/src/pages/agents/DraftPage.tsx:400:20)
+2026-10-14T03:34:49.3953949Z     at Object.react-stack-bottom-frame (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/node_modules/react-dom/cjs/react-dom-client.development.js:23863:20)
+2026-10-14T03:34:49.3955213Z     at renderWithHooks (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/node_modules/react-dom/cjs/react-dom-client.development.js:5529:22)
+2026-10-14T03:34:49.3956453Z     at updateFunctionComponent (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/node_modules/react-dom/cjs/react-dom-client.development.js:8897:19)
+2026-10-14T03:34:49.3957818Z     at beginWork (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/node_modules/react-dom/cjs/react-dom-client.development.js:10522:18) {
+2026-10-14T03:34:49.3958455Z   componentStack: '\n' +
+2026-10-14T03:34:49.3959146Z     '    at DraftAnswer (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/src/pages/agents/DraftPage.tsx:485:24)\n' +
+2026-10-14T03:34:49.3959641Z     '    at div (<anonymous>)\n' +
+2026-10-14T03:34:49.3960193Z     '    at DraftPage (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/src/pages/agents/DraftPage.tsx:1275:22)\n' +
+2026-10-14T03:34:49.3960920Z     '    at AgentDraft (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/src/pages/AgentDraft.tsx:6:64)\n' +
+2026-10-14T03:34:49.3961776Z     '    at RenderedRoute (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/node_modules/react-router/dist/umd/react-router.development.js:535:7)\n' +
+2026-10-14T03:34:49.3962791Z     '    at Outlet (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/node_modules/react-router/dist/umd/react-router.development.js:1182:28)\n' +
+2026-10-14T03:34:49.3963452Z     '    at Suspense (<anonymous>)\n' +
+2026-10-14T03:34:49.3963906Z     '    at main (<anonymous>)\n' +
+2026-10-14T03:34:49.3964228Z     '    at div (<anonymous>)\n' +
+2026-10-14T03:34:49.3964533Z     '    at div (<anonymous>)\n' +
+2026-10-14T03:34:49.3965229Z     '    at SidebarProvider (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/src/components/ui/sidebar.tsx:57:3)\n' +
+2026-10-14T03:34:49.3966013Z     '    at Shell (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/src/layout/Shell.tsx:24:57)\n' +
+2026-10-14T03:34:49.3966811Z     '    at RequireSession (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/src/auth/RequireSession.tsx:7:27)\n' +
+2026-10-14T03:34:49.3967808Z     '    at RenderedRoute (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/node_modules/react-router/dist/umd/react-router.development.js:535:7)\n' +
+2026-10-14T03:34:49.3969253Z     '    at RenderErrorBoundary (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/node_modules/react-router/dist/umd/react-router.development.js:482:7)\n' +
+2026-10-14T03:34:49.3970371Z     '    at DataRoutes (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/node_modules/react-router-dom/dist/umd/react-router-dom.development.js:677:7)\n' +
+2026-10-14T03:34:49.3971492Z     '    at Router (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/node_modules/react-router/dist/umd/react-router.development.js:1203:17)\n' +
+2026-10-14T03:34:49.3972616Z     '    at RouterProvider (/home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0/console/node_modules/react-router-dom/dist/umd/react-router-dom.development.js:448:7)'
+2026-10-14T03:34:49.3973246Z }
+2026-10-14T03:34:49.3973343Z 
+2026-10-14T03:35:06.5396148Z  ✓ tests/screen-states.test.tsx (134 tests) 40488ms
+2026-10-14T03:35:06.5397131Z      ✓ every route the console registers is a case, and every page excused for asking nothing is named with a reason  328ms
+2026-10-14T03:35:06.5397743Z      ✓ /audit/trace sends no request when it is opened  430ms
+2026-10-14T03:35:06.5398303Z      ✓ /access-requests says loading, empty, unreachable and failed in four different sentences  888ms
+2026-10-14T03:35:06.5399117Z      ✓ /adoption says loading, empty, unreachable and failed in four different sentences  779ms
+2026-10-14T03:35:06.5399699Z      ✓ /agents says loading, empty, unreachable and failed in four different sentences  763ms
+2026-10-14T03:35:06.5400682Z      ✓ /agents/new says loading, empty, unreachable and failed in four different sentences  682ms
+2026-10-14T03:35:06.5401312Z      ✓ /agents/drafts/:draftId/:step says loading, empty, unreachable and failed in four different sentences  868ms
+2026-10-14T03:35:06.5402095Z      ✓ /artifacts says loading, empty, unreachable and failed in four different sentences  770ms
+2026-10-14T03:35:06.5402662Z      ✓ /audit says loading, empty, unreachable and failed in four different sentences  726ms
+2026-10-14T03:35:06.5403265Z      ✓ /automations says loading, empty, unreachable and failed in four different sentences  724ms
+2026-10-14T03:35:06.5403858Z      ✓ /capabilities says loading, empty, unreachable and failed in four different sentences  719ms
+2026-10-14T03:35:06.5404487Z      ✓ /channels/:name/:view says loading, empty, unreachable and failed in four different sentences  1086ms
+2026-10-14T03:35:06.5405105Z      ✓ /company/estate says loading, empty, unreachable and failed in four different sentences  770ms
+2026-10-14T03:35:06.5405701Z      ✓ /compliance says loading, empty, unreachable and failed in four different sentences  667ms
+2026-10-14T03:35:06.5406936Z      ✓ /connections says loading, empty, unreachable and failed in four different sentences  692ms
+2026-10-14T03:35:06.5408023Z      ✓ /connectors/:connector/:view says loading, empty, unreachable and failed in four different sentences  1109ms
+2026-10-14T03:35:06.5409272Z      ✓ /credentials says loading, empty, unreachable and failed in four different sentences  580ms
+2026-10-14T03:35:06.5410255Z      ✓ /department says loading, empty, unreachable and failed in four different sentences  699ms
+2026-10-14T03:35:06.5411224Z      ✓ /departments/:slug says loading, empty, unreachable and failed in four different sentences  703ms
+2026-10-14T03:35:06.5412193Z      ✓ /elevation says loading, empty, unreachable and failed in four different sentences  764ms
+2026-10-14T03:35:06.5413139Z      ✓ /features says loading, empty, unreachable and failed in four different sentences  652ms
+2026-10-14T03:35:06.5414055Z      ✓ /install says loading, empty, unreachable and failed in four different sentences  652ms
+2026-10-14T03:35:06.5414996Z      ✓ /jobs/:name/:view says loading, empty, unreachable and failed in four different sentences  1066ms
+2026-10-14T03:35:06.5415934Z      ✓ /library says loading, empty, unreachable and failed in four different sentences  646ms
+2026-10-14T03:35:06.5416854Z      ✓ /limits says loading, empty, unreachable and failed in four different sentences  632ms
+2026-10-14T03:35:06.5417821Z      ✓ /memory/:subject says loading, empty, unreachable and failed in four different sentences  625ms
+2026-10-14T03:35:06.5418913Z      ✓ /models/:provider says loading, empty, unreachable and failed in four different sentences  677ms
+2026-10-14T03:35:06.5419837Z      ✓ / says loading, empty, unreachable and failed in four different sentences  581ms
+2026-10-14T03:35:06.5420769Z      ✓ /people/:personId says loading, empty, unreachable and failed in four different sentences  634ms
+2026-10-14T03:35:06.5421725Z      ✓ /quality says loading, empty, unreachable and failed in four different sentences  523ms
+2026-10-14T03:35:06.5422889Z      ✓ /recovery says loading, empty, unreachable and failed in four different sentences  524ms
+2026-10-14T03:35:06.5423803Z      ✓ /retention says loading, empty, unreachable and failed in four different sentences  555ms
+2026-10-14T03:35:06.5424997Z      ✓ /retention/erasures/:requestId says loading, empty, unreachable and failed in four different sentences  553ms
+2026-10-14T03:35:06.5426026Z      ✓ /routing/:rungId says loading, empty, unreachable and failed in four different sentences  744ms
+2026-10-14T03:35:06.5426952Z      ✓ /scopes says loading, empty, unreachable and failed in four different sentences  591ms
+2026-10-14T03:35:06.5428103Z      ✓ /service-levels says loading, empty, unreachable and failed in four different sentences  545ms
+2026-10-14T03:35:06.5429252Z      ✓ /sign-in-links says loading, empty, unreachable and failed in four different sentences  573ms
+2026-10-14T03:35:06.5430230Z      ✓ /skills/:name/:view says loading, empty, unreachable and failed in four different sentences  907ms
+2026-10-14T03:35:06.5431185Z      ✓ /staff_sources says loading, empty, unreachable and failed in four different sentences  576ms
+2026-10-14T03:35:06.5432137Z      ✓ /subscribers says loading, empty, unreachable and failed in four different sentences  676ms
+2026-10-14T03:35:06.5433076Z      ✓ /updates says loading, empty, unreachable and failed in four different sentences  543ms
+2026-10-14T03:35:06.5433990Z      ✓ /webhooks says loading, empty, unreachable and failed in four different sentences  602ms
+2026-10-14T03:35:07.8987195Z  ✓ tests/startup.test.ts (2 tests) 670ms
+2026-10-14T03:35:07.8995431Z      ✓ the stored theme is applied before anything renders  573ms
+2026-10-14T03:35:08.6064200Z  ✓ tests/ask-welcome.test.tsx (4 tests) 32ms
+2026-10-14T03:35:09.2702527Z  ✓ tests/setup-draft.test.ts (5 tests) 4ms
+2026-10-14T03:35:10.5416571Z  ✓ tests/react-roots-entry.test.ts (1 test) 570ms
+2026-10-14T03:35:10.5444237Z    ✓ the console's entry point is counted when imported after a module reset  569ms
+2026-10-14T03:35:11.6026934Z  ✓ tests/agent-workflows-card.test.tsx (1 test) 21ms
+2026-10-14T03:35:17.5772893Z  ✓ tests/screen-states-second.test.tsx (120 tests) 32805ms
+2026-10-14T03:35:17.5773837Z      ✓ /access_review says loading, empty, unreachable and failed in four different sentences  1054ms
+2026-10-14T03:35:17.5774763Z      ✓ /agent-templates says loading, empty, unreachable and failed in four different sentences  628ms
+2026-10-14T03:35:17.5775683Z      ✓ /agents/:agentId says loading, empty, unreachable and failed in four different sentences  536ms
+2026-10-14T03:35:17.5776572Z      ✓ /agents/drafts says loading, empty, unreachable and failed in four different sentences  546ms
+2026-10-14T03:35:17.5777461Z      ✓ /approvals says loading, empty, unreachable and failed in four different sentences  619ms
+2026-10-14T03:35:17.5778306Z      ✓ /ask says loading, empty, unreachable and failed in four different sentences  443ms
+2026-10-14T03:35:17.5779908Z      ✓ /audit/subject/:kind/:id says loading, empty, unreachable and failed in four different sentences  589ms
+2026-10-14T03:35:17.5780857Z      ✓ /automations/:automationId says loading, empty, unreachable and failed in four different sentences  921ms
+2026-10-14T03:35:17.5781930Z      ✓ /channels says loading, empty, unreachable and failed in four different sentences  593ms
+2026-10-14T03:35:17.5782574Z      ✓ /classification/:entity says loading, empty, unreachable and failed in four different sentences  562ms
+2026-10-14T03:35:17.5783490Z      ✓ /company/activity says loading, empty, unreachable and failed in four different sentences  549ms
+2026-10-14T03:35:17.5784179Z      ✓ /compliance/:view says loading, empty, unreachable and failed in four different sentences  526ms
+2026-10-14T03:35:17.5784718Z      ✓ /connectors says loading, empty, unreachable and failed in four different sentences  570ms
+2026-10-14T03:35:17.5785254Z      ✓ /connectors/new-api says loading, empty, unreachable and failed in four different sentences  560ms
+2026-10-14T03:35:17.5785826Z      ✓ /credentials/:family/:name says loading, empty, unreachable and failed in four different sentences  577ms
+2026-10-14T03:35:17.5786383Z      ✓ /department/:view says loading, empty, unreachable and failed in four different sentences  493ms
+2026-10-14T03:35:17.5786932Z      ✓ /departments/:slug/:view says loading, empty, unreachable and failed in four different sentences  537ms
+2026-10-14T03:35:17.5787492Z      ✓ /elevation/:requestId says loading, empty, unreachable and failed in four different sentences  582ms
+2026-10-14T03:35:17.5788044Z      ✓ /import-export says loading, empty, unreachable and failed in four different sentences  560ms
+2026-10-14T03:35:17.5788564Z      ✓ /jobs says loading, empty, unreachable and failed in four different sentences  567ms
+2026-10-14T03:35:17.5789265Z      ✓ /learning says loading, empty, unreachable and failed in four different sentences  613ms
+2026-10-14T03:35:17.5789785Z      ✓ /library/:itemId says loading, empty, unreachable and failed in four different sentences  730ms
+2026-10-14T03:35:17.5790300Z      ✓ /logs says loading, empty, unreachable and failed in four different sentences  551ms
+2026-10-14T03:35:17.5790844Z      ✓ /memory/:subject/:view says loading, empty, unreachable and failed in four different sentences  511ms
+2026-10-14T03:35:17.5791420Z      ✓ /models/:provider/:view says loading, empty, unreachable and failed in four different sentences  587ms
+2026-10-14T03:35:17.5791950Z      ✓ /packs says loading, empty, unreachable and failed in four different sentences  524ms
+2026-10-14T03:35:17.5792492Z      ✓ /people/:personId/:view says loading, empty, unreachable and failed in four different sentences  595ms
+2026-10-14T03:35:17.5793029Z      ✓ /questions says loading, empty, unreachable and failed in four different sentences  524ms
+2026-10-14T03:35:17.5793538Z      ✓ /referrals says loading, empty, unreachable and failed in four different sentences  519ms
+2026-10-14T03:35:17.5794066Z      ✓ /retention/:view says loading, empty, unreachable and failed in four different sentences  513ms
+2026-10-14T03:35:17.5794948Z      ✓ /roles says loading, empty, unreachable and failed in four different sentences  588ms
+2026-10-14T03:35:17.5795574Z      ✓ /rules says loading, empty, unreachable and failed in four different sentences  514ms
+2026-10-14T03:35:17.5796191Z      ✓ /service-accounts says loading, empty, unreachable and failed in four different sentences  555ms
+2026-10-14T03:35:17.5796720Z      ✓ /sessions says loading, empty, unreachable and failed in four different sentences  564ms
+2026-10-14T03:35:17.5797222Z      ✓ /skills says loading, empty, unreachable and failed in four different sentences  533ms
+2026-10-14T03:35:17.5797725Z      ✓ /solutions says loading, empty, unreachable and failed in four different sentences  542ms
+2026-10-14T03:35:17.5798230Z      ✓ /stop says loading, empty, unreachable and failed in four different sentences  556ms
+2026-10-14T03:35:17.5798887Z      ✓ /tools says loading, empty, unreachable and failed in four different sentences  600ms
+2026-10-14T03:35:17.5799609Z      ✓ /usage says loading, empty, unreachable and failed in four different sentences  655ms
+2026-10-14T03:35:17.5800118Z      ✓ /webhooks/:id says loading, empty, unreachable and failed in four different sentences  925ms
+2026-10-14T03:35:20.6776039Z  ✓ tests/screen-states-third.test.tsx (120 tests) 35370ms
+2026-10-14T03:35:20.6777074Z      ✓ /access_review/:kind/:rowId says loading, empty, unreachable and failed in four different sentences  1065ms
+2026-10-14T03:35:20.6777957Z      ✓ /agent-templates/:templateId says loading, empty, unreachable and failed in four different sentences  1012ms
+2026-10-14T03:35:20.6778553Z      ✓ /agents/:agentId/:tab says loading, empty, unreachable and failed in four different sentences  625ms
+2026-10-14T03:35:20.6779664Z      ✓ /agents/drafts/:draftId says loading, empty, unreachable and failed in four different sentences  1005ms
+2026-10-14T03:35:20.6780252Z      ✓ /approvals/:suspensionId says loading, empty, unreachable and failed in four different sentences  485ms
+2026-10-14T03:35:20.6780829Z      ✓ /ask/documents/:documentId says loading, empty, unreachable and failed in four different sentences  576ms
+2026-10-14T03:35:20.6781408Z      ✓ /audit/subject/:kind/:id/:view says loading, empty, unreachable and failed in four different sentences  590ms
+2026-10-14T03:35:20.6782008Z      ✓ /automations/:automationId/:view says loading, empty, unreachable and failed in four different sentences  883ms
+2026-10-14T03:35:20.6782571Z      ✓ /channels/:name says loading, empty, unreachable and failed in four different sentences  909ms
+2026-10-14T03:35:20.6783150Z      ✓ /classification/:entity/:column says loading, empty, unreachable and failed in four different sentences  603ms
+2026-10-14T03:35:20.6783728Z      ✓ /company/consumption says loading, empty, unreachable and failed in four different sentences  554ms
+2026-10-14T03:35:20.6784302Z      ✓ /compliance/breaches/:caseId says loading, empty, unreachable and failed in four different sentences  550ms
+2026-10-14T03:35:20.6785181Z      ✓ /connectors/:connector says loading, empty, unreachable and failed in four different sentences  921ms
+2026-10-14T03:35:20.6786236Z      ✓ /corrections says loading, empty, unreachable and failed in four different sentences  647ms
+2026-10-14T03:35:20.6786802Z      ✓ /credentials/:family/:name/:view says loading, empty, unreachable and failed in four different sentences  567ms
+2026-10-14T03:35:20.6787473Z      ✓ /departments says loading, empty, unreachable and failed in four different sentences  590ms
+2026-10-14T03:35:20.6787990Z      ✓ /duplicates says loading, empty, unreachable and failed in four different sentences  659ms
+2026-10-14T03:35:20.6788507Z      ✓ /errors says loading, empty, unreachable and failed in four different sentences  625ms
+2026-10-14T03:35:20.6789093Z      ✓ /incidents says loading, empty, unreachable and failed in four different sentences  549ms
+2026-10-14T03:35:20.6789617Z      ✓ /jobs/:name says loading, empty, unreachable and failed in four different sentences  878ms
+2026-10-14T03:35:20.6790138Z      ✓ /learning/:view says loading, empty, unreachable and failed in four different sentences  532ms
+2026-10-14T03:35:20.6790689Z      ✓ /library/:itemId/:view says loading, empty, unreachable and failed in four different sentences  593ms
+2026-10-14T03:35:20.6791205Z      ✓ /me says loading, empty, unreachable and failed in four different sentences  529ms
+2026-10-14T03:35:20.6791785Z      ✓ /models says loading, empty, unreachable and failed in four different sentences  578ms
+2026-10-14T03:35:20.6792542Z      ✓ /notifications says loading, empty, unreachable and failed in four different sentences  547ms
+2026-10-14T03:35:20.6793450Z      ✓ /people says loading, empty, unreachable and failed in four different sentences  641ms
+2026-10-14T03:35:20.6794346Z      ✓ /prompts says loading, empty, unreachable and failed in four different sentences  558ms
+2026-10-14T03:35:20.6795266Z      ✓ /records/:entity says loading, empty, unreachable and failed in four different sentences  615ms
+2026-10-14T03:35:20.6796233Z      ✓ /requirement-checks says loading, empty, unreachable and failed in four different sentences  535ms
+2026-10-14T03:35:20.6797225Z      ✓ /retention/holds/:holdId says loading, empty, unreachable and failed in four different sentences  547ms
+2026-10-14T03:35:20.6798176Z      ✓ /routing says loading, empty, unreachable and failed in four different sentences  600ms
+2026-10-14T03:35:20.6799217Z      ✓ /runs says loading, empty, unreachable and failed in four different sentences  570ms
+2026-10-14T03:35:20.6800178Z      ✓ /service-accounts/:clientId says loading, empty, unreachable and failed in four different sentences  924ms
+2026-10-14T03:35:20.6801151Z      ✓ /settings says loading, empty, unreachable and failed in four different sentences  610ms
+2026-10-14T03:35:20.6802054Z      ✓ /skills/:name says loading, empty, unreachable and failed in four different sentences  954ms
+2026-10-14T03:35:20.6802953Z      ✓ /spend says loading, empty, unreachable and failed in four different sentences  656ms
+2026-10-14T03:35:20.6803827Z      ✓ /storage says loading, empty, unreachable and failed in four different sentences  600ms
+2026-10-14T03:35:20.6804947Z      ✓ /tools/:name says loading, empty, unreachable and failed in four different sentences  976ms
+2026-10-14T03:35:20.6805836Z      ✓ /vault says loading, empty, unreachable and failed in four different sentences  508ms
+2026-10-14T03:35:20.6806898Z      ✓ /webhooks/:id/:view says loading, empty, unreachable and failed in four different sentences  805ms
+2026-10-14T03:35:20.6824838Z 
+2026-10-14T03:35:20.6825302Z ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+2026-10-14T03:35:20.6825471Z 
+2026-10-14T03:35:20.6827187Z  FAIL  tests/console-audit.test.ts > the console audit > every table, installation value, route and address is claimed by an area or excused, and nothing else is
+2026-10-14T03:35:20.6831324Z AssertionError: expected { …(4) } to deeply equal { unclaimedTables: [], …(3) }
+2026-10-14T03:35:20.6831543Z 
+2026-10-14T03:35:20.6831625Z - Expected
+2026-10-14T03:35:20.6831780Z + Received
+2026-10-14T03:35:20.6831855Z 
+2026-10-14T03:35:20.6831918Z   {
+2026-10-14T03:35:20.6832205Z     "unclaimedRoutes": [],
+2026-10-14T03:35:20.6832460Z     "unclaimedScreens": [],
+2026-10-14T03:35:20.6832652Z -   "unclaimedTables": [],
+2026-10-14T03:35:20.6832843Z +   "unclaimedTables": [
+2026-10-14T03:35:20.6833045Z +     "agent.skill_personal",
+2026-10-14T03:35:20.6833208Z +   ],
+2026-10-14T03:35:20.6833369Z     "unclaimedValues": [],
+2026-10-14T03:35:20.6833522Z   }
+2026-10-14T03:35:20.6833586Z 
+2026-10-14T03:35:20.6833764Z  ❯ tests/console-audit.test.ts:191:85
+2026-10-14T03:35:20.6874716Z     189|     const unclaimedRoutes = measured.routes.filter((one) => !excused.h…
+2026-10-14T03:35:20.6875397Z     190|     const unclaimedScreens = measured.screens.filter((one) => !excused…
+2026-10-14T03:35:20.6876031Z     191|     expect({ unclaimedTables, unclaimedValues, unclaimedRoutes, unclai…
+2026-10-14T03:35:20.6876629Z        |                                                                                     ^
+2026-10-14T03:35:20.6877119Z     192|       unclaimedTables: [],
+2026-10-14T03:35:20.6877564Z     193|       unclaimedValues: [],
+2026-10-14T03:35:20.6877797Z 
+2026-10-14T03:35:20.6878035Z ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+2026-10-14T03:35:20.6878224Z 
+2026-10-14T03:35:20.6879844Z 
+2026-10-14T03:35:20.6889304Z  Test Files  1 failed | 132 passed (133)
+2026-10-14T03:35:20.6898407Z       Tests  1 failed | 2242 passed | 1 expected fail (2244)
+2026-10-14T03:35:20.6899250Z    Start at  03:32:17
+2026-10-14T03:35:20.6900236Z    Duration  183.54s (transform 10.23s, setup 15.77s, import 46.33s, tests 383.01s, environment 77.52s)
+2026-10-14T03:35:20.6901686Z 
+2026-10-14T03:35:20.6926816Z 
+2026-10-14T03:35:20.6951233Z ##[error]AssertionError: expected { …(4) } to deeply equal { unclaimedTables: [], …(3) }
+
+- Expected
++ Received
+
+  {
+    "unclaimedRoutes": [],
+    "unclaimedScreens": [],
+-   "unclaimedTables": [],
++   "unclaimedTables": [
++     "agent.skill_personal",
++   ],
+    "unclaimedValues": [],
+  }
+
+ ❯ tests/console-audit.test.ts:191:85
+
+
+2026-10-14T03:35:20.8286726Z ##[error]Process completed with exit code 1.
+2026-10-14T03:35:20.8372691Z Post job cleanup.
+2026-10-14T03:35:20.8911061Z [command]/usr/bin/git version
+2026-10-14T03:35:20.8953272Z git version 2.55.0
+2026-10-14T03:35:20.8970078Z Temporarily overriding HOME='/home/runner/work/_temp/2bc02428-2524-40be-ab6f-c96abc6d02f0' before making global git config changes
+2026-10-14T03:35:20.8970714Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-14T03:35:20.8974773Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Verz-OS-v2.0/Verz-OS-v2.0
+2026-10-14T03:35:20.9003508Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-14T03:35:20.9032472Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-14T03:35:20.9224954Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-14T03:35:20.9252940Z http.https://github.com/.extraheader
+2026-10-14T03:35:20.9260988Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-10-14T03:35:20.9289634Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-14T03:35:20.9483711Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-14T03:35:20.9514698Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-14T03:35:20.9806876Z Cleaning up orphan processes
+2026-10-14T03:35:21.0008301Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4, astral-sh/setup-uv@v5. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
