@@ -16,7 +16,11 @@
  * What was removed from the old page: the period as a drop-down of four including a year (now the
  * three every Report page offers), and the lede explaining both figures.
  *
- * Task ids: M27.7.17, M27.8.6, M27.16.1, M27.16.3
+ * **The coverage statement is its own read and its own section** (`AdoptionCoverage.tsx`): what is
+ * connected for each department the reader may read usage for, drawn above the list and absent while
+ * the install has it switched off.
+ *
+ * Task ids: M27.7.17, M27.8.6, M27.16.1, M27.16.3, M34.1.2.1, M34.1.2.2, M34.1.2.3
  */
 
 import { useState } from "react";
@@ -51,6 +55,7 @@ import {
   type AdoptionLineRow,
 } from "../adoptionQuery";
 import { readUsage, usageApiPath, type UsageBody } from "../usageQuery";
+import { AdoptionCoverage } from "./AdoptionCoverage";
 import { USAGE_AND_COST } from "./UsagePage";
 import {
   BarList,
@@ -258,6 +263,7 @@ export function AdoptionPage() {
       {usageBody === null || usageBody.departments === null || usage.busy || usage.failure !== null ? null : (
         <Departments lines={usageBody.departments} />
       )}
+      <AdoptionCoverage />
       <SectionCard title={LIST_HEADING}>
         <div className="flex min-w-0 flex-col gap-3">
           <ListToolbar label={FILTERS_LABEL} listing={listing} choices={ADOPTION_FILTERS} sorts={ADOPTION_SORTS} />
