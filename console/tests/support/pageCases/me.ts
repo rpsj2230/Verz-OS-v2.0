@@ -126,6 +126,26 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         accounts: [{ connector: "xero", label: UNBROKEN, connected: false, told: "" }],
         told: UNBROKEN,
       },
+      "/api/v1/me/skills": {
+        skills: [
+          {
+            digest: UNBROKEN,
+            name: UNBROKEN,
+            version: "1.0.0",
+            origin: "repository",
+            location: UNBROKEN,
+            review: "pending",
+            offered: false,
+            offered_at: null,
+            made_at: "2019-03-01T09:00:00Z",
+            standing: UNBROKEN,
+            may_offer: true,
+          },
+        ],
+        more: false,
+        may_add: true,
+        unavailable: "",
+      },
     },
   },
   // The undo a weekly learning digest links. It asks nothing until Undo is confirmed, and draws the

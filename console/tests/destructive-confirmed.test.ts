@@ -349,6 +349,14 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Records that somebody asked for an agent they cannot run, once for each person and agent, and " +
     "grants nothing: the lead is told once and decides, which " +
     "tests/unit/test_acceptance_checks_member_agent_request.py holds.",
+  "src/components/MySkills.tsx MY_SKILLS_API_PATH":
+    "Keeps a skill the person wrote or pasted as theirs alone, undecided: nothing is ended or " +
+    "replaced, nobody else can see it, nothing runs it, and offering it is a separate confirmed " +
+    "press, which tests/unit/test_acceptance_checks_personal_skills.py holds.",
+  "src/components/MySkills.tsx IMPORT_MY_SKILL_API_PATH":
+    "Fetches a skill from an address or a repository the install's host list admits and keeps it as " +
+    "the person's alone, undecided: nothing is ended or replaced and nothing runs it, which " +
+    "tests/unit/test_acceptance_checks_personal_skills.py holds for the add and the switch.",
   "src/components/MyChannels.tsx myCodeApiPath(row.channel)":
     "Asking for a code binds nothing: the code is shown to the person who asked and does nothing " +
     "until they send it from their own chat. It ends only an older code of theirs for that channel " +
