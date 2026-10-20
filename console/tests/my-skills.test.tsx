@@ -171,6 +171,20 @@ describe("a person's own skills", () => {
     expect(field.getAttribute("aria-describedby")).toBe(said.id);
   });
 
+  test("a blank address says what to fill in, tied to the field the same way", async () => {
+    // What breaks if this is deleted: the association holds for the written skill and not for the
+    // other two ways in, so a person using a screen reader is told nothing about the field.
+    const { container, sent } = await mount();
+    fireEvent.change(container.querySelector("select") as HTMLSelectElement, { target: { value: "address" } });
+    fireEvent.click(buttonNamed(container, ADD_LABEL));
+    expect(sent).toEqual([]);
+    const field = container.querySelector('input[type="text"]') as HTMLInputElement;
+    const said = container.querySelector('[role="alert"]') as HTMLElement;
+    expect(said.textContent).toBe(whatToFill({ ...EMPTY_DRAFT, way: "address" }));
+    expect(field.getAttribute("aria-invalid")).toBe("true");
+    expect(field.getAttribute("aria-describedby")).toBe(said.id);
+  });
+
   test("with the switch off the form is replaced by the sentence the API sent", async () => {
     // What breaks if this is deleted: a form offered that can only be refused, or a card that
     // hides the skills the person already has.
