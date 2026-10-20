@@ -1785,9 +1785,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M19.1.1": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): browsing/sandbox.py:sandbox_for and sandbox_gaps build and re-check the gVisor (runsc) bodies; launcher.py creates and removes them; docker-compose.browser.yml deploys browser-launcher (opt-in, health = runsc present). Nothing calls the launcher; no body ever sent to a daemon. NEXT: Build the worker-side driver (compile an envelope, send wire start_fields to browser-launcher:7300, relay the run, call session_store.start/end and recording.write; launcher.py and recording.py say 'not built'), run ops/browser/REHEARSAL.md on a runsc host, then write a check reading launcher health and a labelled run's runtime.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-20 on browsing/sandbox.py and launcher.py (triage 2026-10-13 class 2): the launcher can rehearse a run (Launcher.rehearse): it makes the run's network, proxy and runner as a real run would, reads the Docker daemon's own description of them (browsing/inspection.py), removes them and counts what is left, starting no browser. The install check a_browser_sandbox_is_made_for_one_run_and_removed_with_it holds that description to the product's own expectations and reports NOT RUN, in one sentence, while browser runs are off or no launcher answers. This leaf: a gVisor container per run, named and labelled with the run id; the check requires the runner to report runtime runsc and two runs to get different names. INSTALL PROOF STEPS: 1. On the Features page switch on 'Let agents run a browser'. 2. Compose the browser overlay (docker-compose.browser.yml) on a host with gVisor as ops/browser/REHEARSAL.md sections 1 to 3 say, and confirm the browser-launcher container is healthy. 3. On the Install page press Run now and read the row a_browser_sandbox_is_made_for_one_run_and_removed_with_it: it must say Passed. NOT PROVED UNTIL a host with gVisor has run it.",
+    updated: "2026-10-20",
   },
   "M19.1.2": {
     status: "IN PROGRESS",
@@ -1805,14 +1805,14 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M19.1.5": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): sandbox.py declares a read-only root, tmpfs home/tmp/shm charged to the memory cap and no volumes (sandbox_gaps refuses one); launcher.py teardown removes the set; test_browsing_sandbox.py and test_browsing_launcher.py. Bodies never sent to a daemon. NEXT: Write a check that builds sandbox_for(...), requires sandbox_gaps()==() and a mutated body refused; the live half waits on the driver and REHEARSAL.md.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-20 on browsing/sandbox.py and launcher.py (triage 2026-10-13 class 2): the launcher can rehearse a run (Launcher.rehearse): it makes the run's network, proxy and runner as a real run would, reads the Docker daemon's own description of them (browsing/inspection.py), removes them and counts what is left, starting no browser. The install check a_browser_sandbox_is_made_for_one_run_and_removed_with_it holds that description to the product's own expectations and reports NOT RUN, in one sentence, while browser runs are off or no launcher answers. This leaf: a read-only root with only tmpfs writable and no bind or volume, destroyed with the run; the check requires the daemon to report exactly the declared tmpfs and nothing left behind. INSTALL PROOF STEPS: 1. On the Features page switch on 'Let agents run a browser'. 2. Compose the browser overlay (docker-compose.browser.yml) on a host with gVisor as ops/browser/REHEARSAL.md sections 1 to 3 say, and confirm the browser-launcher container is healthy. 3. On the Install page press Run now and read the row a_browser_sandbox_is_made_for_one_run_and_removed_with_it: it must say Passed. NOT PROVED UNTIL a host with gVisor has run it.",
+    updated: "2026-10-20",
   },
   "M19.1.6": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): sandbox.py gives each run an internal network named from the run id with the egress proxy as the only other member (egress_network_body); launcher.py removes it at teardown; test_browsing_sandbox.py, test_browsing_deployment.py. Never created on a daemon. NEXT: Static half as M19.1.5; live half is REHEARSAL.md plus the missing driver.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-20 on browsing/sandbox.py and launcher.py (triage 2026-10-13 class 2): the launcher can rehearse a run (Launcher.rehearse): it makes the run's network, proxy and runner as a real run would, reads the Docker daemon's own description of them (browsing/inspection.py), removes them and counts what is left, starting no browser. The install check a_browser_sandbox_is_made_for_one_run_and_removed_with_it holds that description to the product's own expectations and reports NOT RUN, in one sentence, while browser runs are off or no launcher answers. This leaf: a network of its own per run; the check requires the daemon to report it internal and the runner on no other network. INSTALL PROOF STEPS: 1. On the Features page switch on 'Let agents run a browser'. 2. Compose the browser overlay (docker-compose.browser.yml) on a host with gVisor as ops/browser/REHEARSAL.md sections 1 to 3 say, and confirm the browser-launcher container is healthy. 3. On the Install page press Run now and read the row a_browser_sandbox_is_made_for_one_run_and_removed_with_it: it must say Passed. NOT PROVED UNTIL a host with gVisor has run it.",
+    updated: "2026-10-20",
   },
   "M19.2.1": {
     status: "READY FOR TESTING",
@@ -1855,9 +1855,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M19.3.5": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): sandbox.py makes a mitmproxy container (EGRESS_IMAGE mitmproxy 11.1.3, unverified against a registry) the only member with a route out; egress_addon.py is the addon; test_browsing_sandbox.py covers its decisions. The proxy has never been started. NEXT: Pull and pin the proxy image, rehearse per REHEARSAL.md, then a check that a runner cannot reach an undeclared host.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-20 on browsing/sandbox.py and launcher.py (triage 2026-10-13 class 2): the launcher can rehearse a run (Launcher.rehearse): it makes the run's network, proxy and runner as a real run would, reads the Docker daemon's own description of them (browsing/inspection.py), removes them and counts what is left, starting no browser. The install check a_browser_sandbox_is_made_for_one_run_and_removed_with_it holds that description to the product's own expectations and reports NOT RUN, in one sentence, while browser runs are off or no launcher answers. This leaf: the proxy is the only route out; the check requires the proxy on exactly the run's network and the shared egress network and the runner on neither the shared one. Whether the proxy refuses an undeclared host is proved by the live read run, not by this check. INSTALL PROOF STEPS: 1. On the Features page switch on 'Let agents run a browser'. 2. Compose the browser overlay (docker-compose.browser.yml) on a host with gVisor as ops/browser/REHEARSAL.md sections 1 to 3 say, and confirm the browser-launcher container is healthy. 3. On the Install page press Run now and read the row a_browser_sandbox_is_made_for_one_run_and_removed_with_it: it must say Passed. NOT PROVED UNTIL a host with gVisor has run it.",
+    updated: "2026-10-20",
   },
   "M19.3.6": {
     status: "IN PROGRESS",
@@ -1925,9 +1925,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M19.6.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): sandbox.py:Caps sets memory (swap equal), pids and CPU quota for runner and proxy and refuses tmpfs sizes that leave no memory floor; test_browsing_sandbox.py, test_browsing_sessions.py. Figures are marked judgements; bodies never sent to a daemon. NEXT: Static check on sandbox_gaps with caps; measure real figures in the REHEARSAL.md run.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-20 on browsing/sandbox.py and launcher.py (triage 2026-10-13 class 2): the launcher can rehearse a run (Launcher.rehearse): it makes the run's network, proxy and runner as a real run would, reads the Docker daemon's own description of them (browsing/inspection.py), removes them and counts what is left, starting no browser. The install check a_browser_sandbox_is_made_for_one_run_and_removed_with_it holds that description to the product's own expectations and reports NOT RUN, in one sentence, while browser runs are off or no launcher answers. This leaf: memory, processor and process caps per session; the check requires the daemon to report the caps the product sets, which are judgements not yet measured under a real page. INSTALL PROOF STEPS: 1. On the Features page switch on 'Let agents run a browser'. 2. Compose the browser overlay (docker-compose.browser.yml) on a host with gVisor as ops/browser/REHEARSAL.md sections 1 to 3 say, and confirm the browser-launcher container is healthy. 3. On the Install page press Run now and read the row a_browser_sandbox_is_made_for_one_run_and_removed_with_it: it must say Passed. NOT PROVED UNTIL a host with gVisor has run it.",
+    updated: "2026-10-20",
   },
   "M19.6.5": {
     status: "IN PROGRESS",
@@ -2255,9 +2255,9 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.10.2": {
-    status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in agent_routes, components/kit/ConfirmDialog.tsx, components/kit/DetailPage.tsx +50 more; NOT wired: components/kit/index.ts, components/ui/badge.tsx, components/ui/card.tsx +8 more. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M13/wire-agent-upgrade, no PR; +23 more",
-    updated: "2026-10-06",
+    status: "READY FOR TESTING",
+    why: "BUILT AND TESTED: the toast region is mounted once, in the shell, and a Note of kind done announces its sentence in it while the page keeps its own line (console/tests/done-notes-announce.test.tsx), which gives the thirty-eight places that say a write took effect the toast without an edit to each. The other named parts were already drawn by the pages: sidebar, header, breadcrumbs, list page, detail page, tabs, drawer, empty, loading and failed states, bulk bar and the write-once secret field. Install proof: switch a feature on or off under Features and read the message that appears at the corner of the screen as well as the line on the page.",
+    updated: "2026-10-20",
   },
   "M27.11.1": {
     status: "OPEN",
@@ -2559,10 +2559,15 @@ const PROGRESS = {
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (app, console.entity_stats, console_stats_routes +6 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #154's branch M21/record-usage-for-stats (may be replayed already); closed PR #167's branch M38/migration-train-0118-0138-0139 (may be replayed already); closed PR #209's branch M39/w3-agent-workspace (may be replayed already); +5 more",
     updated: "2026-10-06",
   },
+  "M27.15.12": {
+    status: "READY FOR TESTING",
+    why: "BUILT AND TESTED: the Requirement checks screen names M27.15.12 as the leaf the Console area is checked for, and an install check passes only when every requirement of the register's Console area has a newest check recorded by a person that passed. Install proof, which only you can give: open Requirement checks, choose the Console area, open each requirement on its page, and record passed or failed with a sentence about what you did.",
+    updated: "2026-10-20",
+  },
   "M27.16.1": {
-    status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in access_request_routes, audit_routes, automations_routes +255 more; NOT wired: pages/AccessReview.route.tsx, pages/AgentTemplate.route.tsx, pages/AgentTemplate.tsx +36 more. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; branch M16/w3-learning-tables, no PR; branch M27/webhook-switch-on-and-replay, no PR; +28 more",
-    updated: "2026-10-06",
+    status: "READY FOR TESTING",
+    why: "BUILT AND TESTED: docs/console-pages.json lists the 42 primary pages (the 41 menu entries and the page of one agent) and console/tests/console-pages.test.ts holds its statement that each is built on the page kit against the source (all 42 are). /build/pages lists which pages are rebuilt, with what each still lacks. Install proof: open /build/pages after the next deploy and read the list; it says how many pages are rebuilt and names what each of the others waits on.",
+    updated: "2026-10-20",
   },
   "M27.2.1": {
     status: "OPEN",
@@ -2843,6 +2848,11 @@ const PROGRESS = {
     status: "OPEN",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_operations_console); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
+  },
+  "M27.9.8": {
+    status: "READY FOR TESTING",
+    why: "BUILT AND TESTED in the repository (no install step): the stale statements named in the console plan's W0.7 are corrected where they were still wrong, each behavioural one with a test: the schema count in brain.db (a test now reads the number it states), the stop-control sentence the runs route serves, the usage screen's account of what is measured, and the embedding queue's, chunk store's and streaming's statements about callers and routes that now exist. Proved by the Unit tests job.",
+    updated: "2026-10-20",
   },
   "M27.9.9": {
     status: "OPEN",
@@ -5043,6 +5053,16 @@ const PROGRESS = {
     status: "READY FOR TESTING",
     why: "Built on branch M27/console-lists-wizards-buttons. Prove it on the install. (1) Open Agents (or People, Skills, Connectors): the toolbar ends in Saved filters. Type a search, choose a filter, open Saved filters, give it a name and Save. Clear the search, reopen Saved filters and press the name: the list narrows to the same question. Reload the page and it is still there; sign in as somebody else and it is not. Audit and Logs have the same control beside their filters. (2) Every list table has Columns (hide one and it goes), Export (downloads a file of the rows shown, in the columns shown), a tick box on every row (Export selected appears), and a small panel button on each row that opens a drawer showing every column, including hidden ones. People, Sessions, Access review and the Library also offer an act on the ticked rows. (3) No list shows a total, a page count or an of N anywhere.",
     updated: "2026-10-14",
+  },
+  "M27.16.4": {
+    status: "READY FOR TESTING",
+    why: "BUILT AND TESTED: docs/screens.html draws a screen for every primary page, screens 15 to 45 being the thirty-one that had none (wireframes drawn from the built pages, example values in place of data) beside the fourteen designs it began with, and the agent page keeps screen 14. tests/unit/test_console_pages.py fails when a page has no screen, names a screen that is not drawn, or has a walk-through recorded before it has a screen. Install proof: open /build/screens and /build/pages; every page on the list links to a screen.",
+    updated: "2026-10-20",
+  },
+  "M27.16.5": {
+    status: "READY FOR TESTING",
+    why: "BUILT, and it waits on you: a page counts as rebuilt on /build/pages only when a walk-through of it has passed on your install, and every row starts without one, so the count of rebuilt pages is nought. To record one, open the page on your install, find it as its screen draws it, and set that row's walked in docs/console-pages.json to the day and the release it passed on. The register refuses a walk-through for a page that is not on the shared parts or has no screen.",
+    updated: "2026-10-20",
   },
   "M12.3.5": {
     status: "READY FOR TESTING",

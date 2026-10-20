@@ -36,7 +36,12 @@ import { getTheme, subscribeToTheme } from "../../theme/theme";
 export const TOAST_REGION_LABEL = "Messages";
 
 function Toaster(props: ToasterProps) {
-  const theme = useSyncExternalStore(subscribeToTheme, getTheme, getTheme);
+  const chosen = useSyncExternalStore(subscribeToTheme, getTheme, getTheme);
+  // "System" is sonner's to resolve with `matchMedia`, which a browser has and an environment
+  // without one (a test's document) does not. The region is mounted in the shell now, so every
+  // render of the shell reaches it, and a missing `matchMedia` must be light rather than a fault
+  // in the page the toast was meant to serve.
+  const theme = chosen === "system" && typeof window.matchMedia !== "function" ? "light" : chosen;
   return (
     <Sonner
       theme={theme}

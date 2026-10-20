@@ -1,10 +1,10 @@
-"""The install acceptance checks for four areas' "demonstrated on an install by a person" leaves.
+"""The install acceptance checks for five areas' "demonstrated on an install by a person" leaves.
 
-Four leaves ask the same sentence of four areas of `docs/requirements/register.json`: every
-permissions (M1.8.8), departments (M2.3.2), models (M5.6.5) and observability (M24.3.6) requirement
-"is demonstrated on an install by a person, and each check is recorded against the requirement it
-proves". The record is `ops.requirement_check`, which the Requirement checks screen appends to, and
-this module reads it.
+Five leaves ask the same sentence of five areas of `docs/requirements/register.json`: every
+permissions (M1.8.8), departments (M2.3.2), models (M5.6.5), observability (M24.3.6) and console
+(M27.15.12) requirement "is demonstrated on an install by a person, and each check is recorded
+against the requirement it proves". The record is `ops.requirement_check`, which the Requirement
+checks screen appends to, and this module reads it.
 
 **A person's demonstration cannot be made by a check, and the check does not pretend to.** What a
 check can read is the install's own record of what people saw: the newest check recorded against
@@ -28,7 +28,12 @@ over the check's session, so what is read is what the screen would show an admin
 check is one area, because the four leaves close separately and one area's failure must not hold
 another's closed.
 
-Task ids: M1.8.8, M2.3.2, M5.6.5, M24.3.6
+**The console's area is the register's `Console` area and no other.** The register also holds
+console requirements filed under the area they concern (a skills row from a console screenshot
+is `Skills`), and those are demonstrated by their own area's leaf. Counting them here as well
+would make this leaf wait on twenty areas' demonstrations to close on the console's own.
+
+Task ids: M1.8.8, M2.3.2, M5.6.5, M24.3.6, M27.15.12
 """
 
 from __future__ import annotations
@@ -50,6 +55,7 @@ AREAS: Final[dict[str, str]] = {
     "Departments": "M2.3.2",
     "Models": "M5.6.5",
     "Observability": "M24.3.6",
+    "Console": "M27.15.12",
 }
 
 # ------------------------------------------------------------------ written-down reasons
@@ -180,6 +186,27 @@ async def every_observability_requirement_is_shown_working_by_a_person(h: Harnes
         raise CheckFailedError(
             "an observability requirement's newest recorded check is a failure and no person "
             "has passed it since"
+        )
+    if standing.unchecked:
+        raise CheckNotRunError(SOME_REQUIREMENT_HAS_NO_RECORDED_CHECK)
+
+
+# ------------------------------------------------------------------------ M27.15.12 the console
+@check(
+    leaves=("M27.15.12",),
+    sentence=(
+        "Every console requirement in the register has, on this install's Requirement checks, a "
+        "newest check recorded by a person that passed: none is unchecked and none is failing."
+    ),
+)
+async def every_console_requirement_is_shown_working_by_a_person(h: Harness) -> None:
+    standing = await standing_of(h, "Console")
+    if not standing.registered:
+        raise CheckNotRunError(THIS_RELEASE_CARRIES_NO_REGISTER)
+    if standing.failed:
+        raise CheckFailedError(
+            "a console requirement's newest recorded check is a failure and no person has "
+            "passed it since"
         )
     if standing.unchecked:
         raise CheckNotRunError(SOME_REQUIREMENT_HAS_NO_RECORDED_CHECK)
