@@ -34,6 +34,7 @@ const API = "/api/v1";
 const ESTATE = `${API}/company/estate`;
 const ACTIVITY = `${API}/company/activity`;
 const CONSUMPTION = `${API}/company/consumption`;
+const DEPARTMENT_BUDGETS = `${API}/company/budget/departments`;
 
 interface Mounted {
   readonly root: () => Element;
@@ -59,6 +60,10 @@ async function pageAt(address: string, answers: Readonly<Record<string, unknown>
       }
       if (parsed.pathname === NAVIGATION_ADDRESS) {
         return json(COMPANY_CONSOLE);
+      }
+      if (parsed.pathname === DEPARTMENT_BUDGETS && !(parsed.pathname in answers)) {
+        // The section under the company's budget, answered with nothing to draw unless a test says.
+        return json({ currency: "SGD", lines: [], may_allocate: false });
       }
       return parsed.pathname in answers ? json(answers[parsed.pathname]) : null;
     },
@@ -246,7 +251,7 @@ describe("Consumption", () => {
     expect(page.text()).toContain("SGD 300.00");
     expect(page.text()).toContain(NO_CEILING);
     expect(page.text()).not.toContain(INCOMPLETE);
-    expect(page.asked).toEqual([`${CONSUMPTION}?days=30`]);
+    expect(page.asked).toEqual([`${CONSUMPTION}?days=30`, `${DEPARTMENT_BUDGETS}`]);
   });
 
   test("a withheld figure is said to be withheld and no number is drawn, whatever else the body holds", async () => {

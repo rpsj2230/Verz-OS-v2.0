@@ -3,11 +3,12 @@
 - **Screens:** `/usage`, `/adoption`, `/spend`, `/questions`, `/quality`, `/service-levels`, `/me`, `/company/estate`, `/company/activity`, `/company/consumption`
 - **Tables:** `agent.artifact_share`, `agent.agent_request`, `auth.member_preference`, `ops.question_asked`, `ops.question_gap`, `ops.report_refresh`, `ops.spend_actual`, `obs.request_telemetry`, `ops.answer_flag`, `ops.regression_case`, `ops.quality_reading`, `ops.quality_annotation`, `ops.golden_score`, `ops.evaluation_candidate`, `ops.positive_example`, `ops.tier_decision`
 - **Installation values:** none
-- **Measured here:** 38 routes, 10 called by no screen; 8 write routes, 8 with all three proofs; 1 gaps.
+- **Measured here:** 43 routes, 14 called by no screen; 12 write routes, 12 with all three proofs; 1 gaps.
 
 | Route | Called by |
 | --- | --- |
 | `GET /api/v1/company/activity` | `/company/activity` |
+| `GET /api/v1/company/budget/departments` | `/company/consumption` |
 | `GET /api/v1/company/consumption` | `/company/consumption` |
 | `GET /api/v1/company/estate` | `/company/estate` |
 | `GET /api/v1/me/agent-requests` | **no screen** |
@@ -33,6 +34,8 @@
 | `GET /api/v1/report/spend/shapes` | `/spend` |
 | `GET /api/v1/report/spend/stops` | `/spend` |
 | `GET /api/v1/report/usage` | `/adoption`, `/department`, `/usage` |
+| `POST /api/v1/company/budget/departments/transfer` | **no screen** |
+| `POST /api/v1/departments/{department}/budget/allowances` | **no screen** |
 | `POST /api/v1/me/agents/{agent_id}/request` | `/me` |
 | `POST /api/v1/me/artifacts/{artifact_id}/share` | `/me` |
 | `POST /api/v1/me/artifacts/{artifact_id}/unshare` | `/me` |
@@ -45,6 +48,8 @@
 | `POST /api/v1/quality/flags` | **no screen** |
 | `POST /api/v1/quality/flags/{flag_id}/case` | **no screen** |
 | `PUT /api/v1/company/budget` | **no screen** |
+| `PUT /api/v1/company/budget/departments` | **no screen** |
+| `PUT /api/v1/departments/{department}/budget/run-ceiling` | **no screen** |
 
 - **Gap.** Flagging an answer, annotating a day's sample and deciding a candidate have no screen: the Quality screen draws the canary run and not the findings. Recorded: brain.quality_routes serves each as a door and no page presses them yet (M28.3.1, M28.3.3, M28.4.1); a captured case, a golden score and an example are stored and read by the install checks only.
 
@@ -52,6 +57,8 @@
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
+| `POST /api/v1/company/budget/departments/transfer` | **no screen** | `test_a_department_is_funded_moved_ceilinged_and_given_allowances_on_the_database` in `tests/unit/test_department_budget_routes.py` (database, in CI) | `test_a_department_is_funded_moved_ceilinged_and_given_allowances_on_the_database` in `tests/unit/test_department_budget_routes.py` (database, in CI) | `test_moving_company_money_needs_the_authority_over_everything_and_reads_nothing` in `tests/unit/test_department_budget_routes.py` |
+| `POST /api/v1/departments/{department}/budget/allowances` | **no screen** | `test_a_department_is_funded_moved_ceilinged_and_given_allowances_on_the_database` in `tests/unit/test_department_budget_routes.py` (database, in CI) | `test_a_department_is_funded_moved_ceilinged_and_given_allowances_on_the_database` in `tests/unit/test_department_budget_routes.py` (database, in CI) | `test_another_departments_ceiling_is_refused_in_the_words_a_stranger_gets` in `tests/unit/test_department_budget_routes.py` |
 | `POST /api/v1/me/agents/{agent_id}/request` | `/me` | `test_the_request_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_agent_request.py` (database, in CI) | Not applicable: A request changes nobody's access; what a department decides is written where audiences are changed. | `test_a_lead_told_every_time_fails_the_check` in `tests/unit/test_acceptance_checks_member_agent_request.py` (database, in CI) |
 | `POST /api/v1/me/artifacts/{artifact_id}/share` | `/me` | `test_the_share_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_share.py` (database, in CI) | Not applicable: A share changes nobody's access; opening what was shared is written down as the read it is. | `test_a_share_with_somebody_who_cannot_open_it_fails_the_check` in `tests/unit/test_acceptance_checks_member_share.py` (database, in CI) |
 | `POST /api/v1/me/artifacts/{artifact_id}/unshare` | `/me` | `test_the_share_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_share.py` (database, in CI) | Not applicable: Taking a share back changes nobody's access; it only removes a row that admitted nobody. | `test_the_share_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_share.py` (database, in CI) |
@@ -60,3 +67,5 @@
 | `POST /api/v1/me/preferences/quiet-hours` | `/me` | `test_every_member_preference_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_preferences.py` (database, in CI) | Not applicable: A person's own setting about being reached changes nobody's access and is not written to the ledger. | `test_a_digest_sent_inside_quiet_hours_fails_the_held_digest_check` in `tests/unit/test_acceptance_checks_member_preferences.py` (database, in CI) |
 | `POST /api/v1/me/preferences/reach` | `/me` | `test_every_member_preference_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_preferences.py` (database, in CI) | Not applicable: A person's own setting about being reached changes nobody's access and is not written to the ledger. | `test_a_card_sent_to_an_approver_who_chose_the_console_fails_the_approval_check` in `tests/unit/test_acceptance_checks_member_preferences.py` (database, in CI) |
 | `PUT /api/v1/company/budget` | **no screen** | `test_setting_the_companys_budget_twice_writes_two_versions_and_two_ledger_entries` in `tests/unit/test_company_budget_route.py` (database, in CI) | `test_setting_the_companys_budget_twice_writes_two_versions_and_two_ledger_entries` in `tests/unit/test_company_budget_route.py` (database, in CI) | `test_setting_the_companys_budget_is_refused_in_words_naming_the_role_and_never_to_a_stranger` in `tests/unit/test_company_routes.py` |
+| `PUT /api/v1/company/budget/departments` | **no screen** | `test_a_department_is_funded_moved_ceilinged_and_given_allowances_on_the_database` in `tests/unit/test_department_budget_routes.py` (database, in CI) | `test_a_department_is_funded_moved_ceilinged_and_given_allowances_on_the_database` in `tests/unit/test_department_budget_routes.py` (database, in CI) | `test_moving_company_money_needs_the_authority_over_everything_and_reads_nothing` in `tests/unit/test_department_budget_routes.py` |
+| `PUT /api/v1/departments/{department}/budget/run-ceiling` | **no screen** | `test_a_department_is_funded_moved_ceilinged_and_given_allowances_on_the_database` in `tests/unit/test_department_budget_routes.py` (database, in CI) | `test_a_department_is_funded_moved_ceilinged_and_given_allowances_on_the_database` in `tests/unit/test_department_budget_routes.py` (database, in CI) | `test_another_departments_ceiling_is_refused_in_the_words_a_stranger_gets` in `tests/unit/test_department_budget_routes.py` |

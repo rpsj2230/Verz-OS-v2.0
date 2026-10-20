@@ -75,7 +75,7 @@ import structlog
 from fastapi import APIRouter, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -336,13 +336,40 @@ COMPANY_BUDGET_PATH: Final = "/company/budget"
 COMPANY_BUDGET_KEY: Final = (BudgetLevel.COMPANY, COMPANY_ID, BudgetPeriod.MONTH)
 
 
+#: Where the company's budget warns by default: seventy and ninety per cent of the ceiling, which is
+#: what the owner's requirement for it says (ARC-B-125). `brain.ops.budgets.DEFAULT_ALERT_FRACTIONS`
+#: is a tuning seed at three quarters and nine tenths that nothing on an install reads, and this
+#: is the figure a budget set from the console carries. Both strictly below one, as `BudgetRow`
+#: requires.
+COMPANY_ALERT_FRACTIONS: Final[tuple[float, ...]] = (0.7, 0.9)
+
+#: The most thresholds one budget may warn at. A handful is a warning and a dozen is noise.
+MOST_ALERT_FRACTIONS: Final = 5
+
+
 class CompanyBudgetAsked(BaseModel):
-    """A new monthly ceiling for the company, in the install's minor units, and why."""
+    """A new monthly ceiling for the company, in the install's minor units, and why.
+
+    `alert_fractions` are the shares of the ceiling at which the budget's administrators are told,
+    strictly increasing and strictly between nothing and the ceiling. Left out, the budget keeps the
+    ones it has, and the first version of one with none warns at `COMPANY_ALERT_FRACTIONS`.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     ceiling_minor: Annotated[int, Field(ge=1, le=MAX_COMPANY_CEILING_MINOR)]
     reason: Annotated[str, Field(min_length=1, max_length=200)]
+    alert_fractions: tuple[float, ...] | None = Field(default=None, max_length=MOST_ALERT_FRACTIONS)
+
+    @model_validator(mode="after")
+    def _alerts_are_warnings(self) -> CompanyBudgetAsked:
+        previous = 0.0
+        for fraction in self.alert_fractions or ():
+            if not previous < fraction < 1.0:
+                msg = "alert fractions must rise and stay below the ceiling itself"
+                raise ValueError(msg)
+            previous = fraction
+        return self
 
 
 class CompanyBudgetView(BaseModel):
@@ -354,6 +381,8 @@ class CompanyBudgetView(BaseModel):
     currency: str
     version: int
     effective_from: datetime
+    #: The shares of the ceiling at which the budget's administrators are told.
+    alert_fractions: list[float] = Field(default_factory=list)
 
 
 async def company_ceiling(session: AsyncSession, now: datetime) -> int | None:
@@ -760,6 +789,7 @@ async def set_company_budget(
                     author=asked.caller.principal.id,
                     effective_from=asked.now,
                     reason=body.reason,
+                    alert_fractions=body.alert_fractions or COMPANY_ALERT_FRACTIONS,
                 )
                 if current is None
                 else current.superseded_by(
@@ -767,6 +797,9 @@ async def set_company_budget(
                     author=asked.caller.principal.id,
                     effective_from=asked.now,
                     reason=body.reason,
+                    alert_fractions=body.alert_fractions
+                    or current.alert_fractions
+                    or COMPANY_ALERT_FRACTIONS,
                 )
             )
         except BudgetError:
@@ -781,4 +814,5 @@ async def set_company_budget(
         currency=code,
         version=row.version,
         effective_from=row.effective_from,
+        alert_fractions=list(row.alert_fractions),
     )

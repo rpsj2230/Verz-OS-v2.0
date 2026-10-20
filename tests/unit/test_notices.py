@@ -58,8 +58,9 @@ def test_a_notice_said_to_be_sent_names_a_sender_that_asks_the_switch_about_it()
     its asker is told it expired by a loop the application starts (M8.3.4), each person's week
     of learning is told by another (M16.5.1), and an automation's steward is told that it was
     paused for failing by a third (M39.6.2.3), and whoever holds the operations alert is told that
-    a mechanism has not run by a fourth (M17.7.2), all five because the channel's secret is the
-    application's and not the worker's.
+    a mechanism has not run by a fourth (M17.7.2), and whoever administers a budget is told that
+    it is nearing its ceiling or has run out by a fifth (M21.1.1, M21.2.5), all six because the
+    channel's secret is the application's and not the worker's.
 
     Delete this and a sender added for a notice can skip the switch, so the screen offers to stop
     something the switch never reaches."""
@@ -70,6 +71,8 @@ def test_a_notice_said_to_be_sent_names_a_sender_that_asks_the_switch_about_it()
     assert [one.kind for one in sent] == [
         NoticeKind.REVERIFICATION_REQUEST,
         NoticeKind.DENIAL_PATTERN,
+        NoticeKind.BUDGET_STOPPED,
+        NoticeKind.BUDGET_NEARING,
         NoticeKind.HANDED_TO_A_PERSON,
         NoticeKind.QUESTION_NOT_PICKED_UP,
         NoticeKind.LEARNING_DIGEST,
@@ -149,6 +152,15 @@ def test_a_notice_said_to_be_sent_names_a_sender_that_asks_the_switch_about_it()
         and node.func.id == "keep_telling_overdue_controls"
     ]
     assert lateness, "nothing starts the loop that tells the holders of a mechanism not running"
+    # The administrators of a budget are told by a fifth, behind its own feature switch.
+    budgets = [
+        node
+        for node in ast.walk(ast.parse(inspect.getsource(application)))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "keep_telling_budget_administrators"
+    ]
+    assert budgets, "nothing starts the loop that tells a budget's administrators"
 
 
 def test_a_notice_said_to_be_unsent_has_a_composer_nothing_the_schedule_starts_calls() -> None:

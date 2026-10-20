@@ -35,6 +35,16 @@ export const CONSUMPTION_API_PATH = "/company/consumption";
 /** Where the company's monthly budget is set, under the API base. */
 export const COMPANY_BUDGET_API_PATH = "/company/budget";
 
+/** Where the departments' shares of it are read and set, and where money moves between them. */
+export const DEPARTMENT_BUDGETS_API_PATH = "/company/budget/departments";
+export const DEPARTMENT_TRANSFER_API_PATH = "/company/budget/departments/transfer";
+
+/** A department's per-run ceiling and its people's allowances, by the department's slug. */
+export const departmentRunCeilingPath = (department: string): string =>
+  `/departments/${encodeURIComponent(department)}/budget/run-ceiling`;
+export const departmentAllowancesPath = (department: string): string =>
+  `/departments/${encodeURIComponent(department)}/budget/allowances`;
+
 /** The console addresses. */
 export const ESTATE_PATH = "/company/estate";
 export const ACTIVITY_PATH = "/company/activity";
@@ -197,5 +207,45 @@ export function readConsumption(payload: unknown): Consumption | null {
     ceilingSet: body.ceiling_set === true,
     ceilingMinor: typeof body.ceiling_minor === "number" ? body.ceiling_minor : null,
     maySetBudget: body.may_set_budget === true,
+  };
+}
+
+export type DepartmentBudgetsBody = components["schemas"]["DepartmentBudgetsView"];
+
+/** One department's lines as the screen draws them. A figure the department has none of is null. */
+export interface DepartmentBudgetLine {
+  readonly department: string;
+  readonly monthlyMinor: number | null;
+  readonly runCeilingMinor: number | null;
+}
+
+/** What the department budgets section may draw. No total over lines it was not sent. */
+export interface DepartmentBudgets {
+  readonly currency: string;
+  readonly lines: readonly DepartmentBudgetLine[];
+  /** Whether this reader holds the authority over everything, so allocating and moving are offered. */
+  readonly mayAllocate: boolean;
+  /** What the company's budget leaves unshared, sent only to a reader who may allocate, or null. */
+  readonly unallocatedMinor: number | null;
+}
+
+/** The department budgets, or null when the body is not them. */
+export function readDepartmentBudgets(payload: unknown): DepartmentBudgets | null {
+  if (typeof payload !== "object" || payload === null) {
+    return null;
+  }
+  const body = payload as Partial<DepartmentBudgetsBody>;
+  if (!Array.isArray(body.lines) || typeof body.may_allocate !== "boolean") {
+    return null;
+  }
+  return {
+    currency: typeof body.currency === "string" ? body.currency : "",
+    lines: body.lines.map((one) => ({
+      department: one.department,
+      monthlyMinor: typeof one.monthly_minor === "number" ? one.monthly_minor : null,
+      runCeilingMinor: typeof one.run_ceiling_minor === "number" ? one.run_ceiling_minor : null,
+    })),
+    mayAllocate: body.may_allocate,
+    unallocatedMinor: typeof body.unallocated_minor === "number" ? body.unallocated_minor : null,
   };
 }

@@ -108,3 +108,62 @@ def test_setting_the_companys_budget_twice_writes_two_versions_and_two_ledger_en
         ("u_admin", "month"),
     ]
     assert all(not one.trace_id.startswith("tx.") for one in ledgered)
+
+
+def test_a_budget_set_from_the_console_warns_where_the_owner_asked_and_keeps_its_warnings(
+    database: str,
+) -> None:
+    """The first version of the company's budget carries the warnings at seventy and ninety per
+    cent that the owner's requirement names, a second version with none given keeps them, and one
+    that names its own replaces them. Delete this and the budget the console writes has warning
+    fractions nothing ever sets, which is how the thresholds were stored and fired by nothing."""
+
+    async def three(client: httpx.AsyncClient) -> list[Any]:
+        path = f"{API_PREFIX}{COMPANY_BUDGET_PATH}"
+        first = await client.put(path, json=BODY, headers=headers("u_admin"))
+        second = await client.put(
+            path, json={**BODY, "ceiling_minor": 2_000_000}, headers=headers("u_admin")
+        )
+        third = await client.put(
+            path,
+            json={**BODY, "ceiling_minor": 3_000_000, "alert_fractions": [0.5, 0.8]},
+            headers=headers("u_admin"),
+        )
+        return [first, second, third]
+
+    first, second, third = pressed(database, three)
+    assert [one.json()["alert_fractions"] for one in (first, second, third)] == [
+        [0.7, 0.9],
+        [0.7, 0.9],
+        [0.5, 0.8],
+    ]
+    stored = sql(
+        database,
+        "SELECT version, alert_fractions FROM ops.budget_version"
+        " WHERE level = 'company' AND period = 'month' ORDER BY version",
+    )
+    assert [(one[0], [float(x) for x in one[1]]) for one in stored] == [
+        (1, [0.7, 0.9]),
+        (2, [0.7, 0.9]),
+        (3, [0.5, 0.8]),
+    ]
+
+
+def test_warning_fractions_that_do_not_rise_or_reach_the_ceiling_are_refused(
+    database: str,
+) -> None:
+    """A fraction at the ceiling, one that does not rise and one past it are each a 422 and write
+    nothing. Delete this and a warning that fires at the instant of the refusal, which tells nobody
+    anything, can be stored as if it were an early one."""
+
+    async def bad(client: httpx.AsyncClient) -> list[Any]:
+        path = f"{API_PREFIX}{COMPANY_BUDGET_PATH}"
+        return [
+            await client.put(
+                path, json={**BODY, "alert_fractions": fractions}, headers=headers("u_admin")
+            )
+            for fractions in ([1.0], [0.9, 0.5], [0.5, 1.2], [0.0, 0.5], [0.1] * 6)
+        ]
+
+    assert [one.status_code for one in pressed(database, bad)] == [422] * 5
+    assert sql(database, "SELECT count(*) FROM ops.budget_version")[0][0] == 0

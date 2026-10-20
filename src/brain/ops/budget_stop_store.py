@@ -44,7 +44,13 @@ question will cost before it costs it and offers a cheaper tier first, which cha
 is routed. What the owner chose is a stop once a budget is used up, which is judged on what was
 actually spent and needs no estimate. The ladder stays for when routing asks for it.
 
-Task ids: M27.12.5, M27.7.15
+**A person is told which budget stopped them only behind `named_budget_refusal`, which ships off
+(M21.2.6).** The owner's requirement says the person is told which budget and who can raise it, and
+the sentence above deliberately names neither; which of the two stands is needs-rupash item 224.
+Behind the switch, `brain.console.spend_view.told_about` decides who may be told, and a person who
+may not be gets the same sentence as ever. See `named_refusal`.
+
+Task ids: M27.12.5, M27.7.15, M21.2.6
 """
 
 from __future__ import annotations
@@ -60,6 +66,7 @@ from sqlalchemy import func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from brain.core.entitlement import EntitlementSet
 from brain.core.scope import Scope
 from brain.ops.budget_stop import (
     BUDGET_AUTHORITY,
@@ -366,17 +373,55 @@ async def judged(
     return enforce
 
 
+async def named_refusal_is_on(session: AsyncSession) -> bool:
+    """Whether `named_budget_refusal` is switched on. Off when nobody has said otherwise."""
+    from brain.ops.features import is_on
+    from brain.ops.features_declared.named_budget_refusal import NAMED_BUDGET_REFUSAL
+
+    return await is_on(session, NAMED_BUDGET_REFUSAL)
+
+
+async def named_refusal(
+    session: AsyncSession,
+    asker: Asker,
+    *,
+    at: datetime,
+    zone: ZoneInfo,
+    reach: EntitlementSet,
+) -> str | None:
+    """The sentence naming the budget that stops this asker, when they may be told which, or None.
+
+    The stop is found again from the ceilings and the recorded stops the question has just been
+    judged against, so it is the one `judged` refused for, and
+    `brain.console.spend_view.told_about` decides who may be told what it was. The sentence
+    everybody else keeps is `THE_ASKER_IS_TOLD_A_SPENDING_LIMIT_AND_NOTHING_ABOUT_IT`.
+    """
+    from brain.console.spend_view import StopRow, told_about
+
+    allowances = await allowances_for(session, asker, at=at, zone=zone)
+    recorded = await recorded_stops(session, [one.row.key for one in allowances], at=at)
+    stop = stopped(allowances, [one for one, kept in recorded if kept], at=at)
+    if stop is None:
+        return None
+    department = stop.subject if stop.level is BudgetLevel.DEPARTMENT else asker.department
+    told = told_about(StopRow(stop=stop, department=department or "company"), reach, now=at)
+    return told.message if told.names_the_budget else None
+
+
 async def budget_refusal_for(
     sessions: async_sessionmaker[AsyncSession] | None,
     asker: Asker,
     *,
     at: datetime,
     trace_id: str,
+    reach: EntitlementSet | None = None,
 ) -> str | None:
     """The sentence a question stopped by a budget is answered with, or None to answer it.
 
     Reads `budget_enforcement` and judges in one transaction. Never raises: see
-    `BUDGET_ENFORCEMENT_FAILS_SAFE_FOR_THE_ASKER`.
+    `BUDGET_ENFORCEMENT_FAILS_SAFE_FOR_THE_ASKER`. With `reach` given and `named_budget_refusal`
+    on, a person who may be told which budget stopped them is, and the failure of that read leaves
+    them the plain sentence.
     """
     from brain.locale import time_zone
     from brain.ops.features import BUDGET_ENFORCEMENT, is_on
@@ -390,8 +435,13 @@ async def budget_refusal_for(
             stops = await judged(
                 session, asker, at=at, zone=zone, enforce=enforce, trace_id=trace_id
             )
+            named = None
+            if stops and reach is not None and await named_refusal_is_on(session):
+                named = await named_refusal(session, asker, at=at, zone=zone, reach=reach)
     except Exception as failed:
         # Broad on purpose: whatever stopped the budget being judged, the question is answered.
         log.warning("budget not judged", error=type(failed).__name__)
         return None
-    return SPENDING_LIMIT_REACHED if stops else None
+    if not stops:
+        return None
+    return named or SPENDING_LIMIT_REACHED
