@@ -1,0 +1,9 @@
+On 2026-10-14 the owner ran six tests on the install with reserved test people and reported each one successful: after Sync now every active person on the staff list is on People with their employment status and type; a reserved person's sign-in account is made with no email and Forgot password sets their password and second factor; a reserved person marked as left has their session ended and sign-in refused after the next sync; with departments managed on People a person who was moved stays where they were put; the first administrator's work email joins the person the staff list made for it; and a real person asked a real question on Ask and was answered. The acceptance checks for these tasks passed against accounts and a roster the check made itself, so the proof sweep held them until the install showed it with real people, which is what this is.
+
+The evidence rows are in docs/tracker-audit-2026-09-28.md and say plainly that the owner's report is in conversation and is not yet recorded on Requirement checks. The smoke test (M38.2.1.4) is an act and no commit can close it, so it is recorded as an evidence row only and stays open on the checklist.
+
+Closes: M1.6.13, M1.6.16, M1.6.17, M1.6.18, M1.6.19
+Closes: M1.10.1, M1.10.3, M1.10.4, M1.10.5
+Proved-on-install: the owner ran the tests on the install on 2026-10-14 with reserved people (sync fills People, account made with no email and Forgot password sets password and second factor, a leaver's session ended and sign-in refused on the next sync, departments managed on People stay put, work email joins the staff list's person) and reported each successful; evidence rows in docs/tracker-audit-2026-09-28.md
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
