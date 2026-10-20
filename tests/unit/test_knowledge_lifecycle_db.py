@@ -63,6 +63,9 @@ SUPER = "u_wide"
 #: Adds documents to finance, as a member of web: the department a person belongs to is the
 #: token directory's (`tests.unit.test_agent_routes.DEPARTMENTS`) and not where they add.
 FINANCE_ADMIN = "u_prefix"
+#: Reads finance's documents and holds none of a passage's fields, so the redactor leaves nothing of
+#: the text to show: a read that was shown nothing is not a read to write down (M27.15.1).
+FINANCE_BLIND = "u_admin_only"
 TABLES: tuple[str, ...] = ("know.steward_task", "know.solution")
 
 #: The field grants a passage is read under, as a pack assignment grants them.
@@ -93,6 +96,7 @@ GRANTS: dict[str, tuple[Grant, ...]] = {
         *_in("finance", KNOWLEDGE_READ.value, *PASSAGE_FIELDS),
     ),
     FINANCE_ADMIN: _in("finance", KNOWLEDGE_UPLOAD.value, KNOWLEDGE_READ.value, *PASSAGE_FIELDS),
+    FINANCE_BLIND: _in("finance", KNOWLEDGE_READ.value),
 }
 
 V1 = LINE.join(["# Site handover", "", "Sign the TEALOLD list before leaving."]).encode()
@@ -771,6 +775,7 @@ def test_opening_the_text_of_another_departments_document_leaves_an_entry_naming
                 "across": await client.get(there, headers=headers(SUPER)),
                 "again": await client.get(there, headers=headers(SUPER)),
                 "inside": await client.get(there, headers=headers(FINANCE_READER)),
+                "blind": await client.get(there, headers=headers(FINANCE_BLIND)),
                 "turned_away": await client.get(there, headers=headers(WEB_READER)),
                 "invented": await client.get(
                     api("/knowledge/items/upload.nothing_here/passages"),
@@ -788,6 +793,8 @@ def test_opening_the_text_of_another_departments_document_leaves_an_entry_naming
 
     assert said["across"].status_code == said["again"].status_code == 200
     assert said["inside"].status_code == 200
+    # Shown nothing of the text, so not a read: the sibling of the two entries below.
+    assert said["blind"].status_code == 200 and said["blind"].json()["passages"] == []
     assert any("TEALOLD" in one["text"] for one in said["across"].json()["passages"])
     assert said["turned_away"].status_code == said["invented"].status_code == 404
     assert without_trace(said["turned_away"].json()) == without_trace(said["invented"].json())
