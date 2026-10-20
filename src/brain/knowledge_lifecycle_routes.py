@@ -194,6 +194,7 @@ from brain.member_library import (
     request_promotion,
 )
 from brain.ops.queue import Job
+from brain.ops.sensitive_read_store import is_another_departments, record_document_opening
 from brain.routing_routes import sessions_of
 
 log = structlog.get_logger()
@@ -923,6 +924,25 @@ async def version_text(
                     text=str(kept[0]["document"]),
                 )
             )
+    # Written once the text is in hand and before it is handed over, and only for text that was
+    # shown: a document opened across the departments' line leaves an entry naming it and the
+    # reader (M27.15.1), and a failure to write it fails the opening. See
+    # `brain.ops.sensitive_read_store.record_document_opening`.
+    factory = sessions_of(request)
+    if (
+        shown
+        and factory is not None
+        and is_another_departments(
+            target.visibility.department, asked.caller.principal.primary_department
+        )
+    ):
+        await record_document_opening(
+            factory,
+            reader_id=asked.caller.principal.id,
+            document_id=target.item_id,
+            ent_hash=asked.reach.ent_hash(),
+            trace_id=trace_of_request(),
+        )
     return PassagesView(
         item_id=target.item_id,
         title=target.title or target.item_id,

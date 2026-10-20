@@ -64,16 +64,22 @@ def reader_holding(*values: str, principal_id: str = "u_subject") -> Entitlement
 
 
 # ------------------------------------------------------------------ the declared set
-def test_the_written_down_set_is_personnel_a_salary_and_an_artifact_download_only() -> None:
+def test_the_written_down_set_is_personnel_a_salary_a_download_and_a_cross_department_opening() -> None:
     """The whole of Option A, pinned. Item 45 says personnel records and anything carrying a
-    salary, and nothing else; the difference between that and Option B is this tuple.
+    salary, and the owner added an artifact download (M27.15.42) and the text of a document opened
+    in another department (M27.15.1); the difference between that and Option B is this tuple.
 
     Delete this and the set can grow by one convenient entry at a time with nothing failing,
     which is precisely how a narrow read log becomes a log of every read of every row. The
     argument per entry is asserted too, because an entry nobody can weigh is one that gets
     added without being weighed."""
-    assert {one.name for one in WRITTEN_DOWN} == {"personnel", "salary", "artifact_download"}
-    assert len(WRITTEN_DOWN) == 3
+    assert {one.name for one in WRITTEN_DOWN} == {
+        "personnel",
+        "salary",
+        "artifact_download",
+        "document_opened_in_another_department",
+    }
+    assert len(WRITTEN_DOWN) == 4
     for one in WRITTEN_DOWN:
         assert one.because.strip(), one.name
         assert len(one.because) > 100, one.name
