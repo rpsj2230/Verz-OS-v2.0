@@ -1,0 +1,93 @@
+The console's fonts and licences are checked on what is built, and each reference screen records what was adapted and refused
+
+Three console leaves that each had a guard over the sources and none over what
+ships, built together because they share one fault: a rule that reads the input
+and says nothing about the output.
+
+M27.15.75, fonts. The existing test read the theme's tokens and `@import` lines,
+which proves what the developer wrote. A bundler rewrites addresses, inlines
+small files and copies a dependency's stylesheet in, so a hosted font could
+appear in the output with that test green. `brain.ops.bundle_audit` reads the
+build: every address in the entry document and every stylesheet must be the
+install's own and a file the bundle carries, a script may not name a host that
+exists to serve fonts, a bundle must carry a font, and every font family needs
+its section in the notice file. One rule serves three callers: CI runs it over
+`console/dist` after the build, the install runs it over the bundle its image
+carries (acceptance check `the_console_names_no_font_host_and_serves_every_font_it_ships`,
+which also asks the install's own route for each font), and the unit tests run it
+over fabricated bundles, good and bad. Scripts get the narrow rule because a
+library may carry a URL for any reason; the proof that no request leaves the
+install stays the browser harness's, which now records font requests across the
+whole session, because `reset` cleared the one page that fetches a font before it
+was judged (that e2e edit is not run here: it needs the Keycloak stack).
+
+Two things the audit found that were product faults. The Open Font Licence asks
+that its notice travels with the fonts, and the image carried none (the README
+said so and left it). `scripts/font-licences.mjs` now writes `font-licences.txt`
+into the bundle from each `@fontsource` dependency's own LICENSE and stops the
+build on a package with none or another licence. And `console_static` served every
+bundle file with whatever the machine's mime table guessed and no cache header,
+though its own docstring said hashed files may be cached for ever: fonts now carry
+the type the product names for them and files under `assets/` carry
+`public, max-age=31536000, immutable`.
+
+Rejected: a `font-src 'self'` content security policy, which would make the
+browser itself refuse a font host. It is stronger, and it changes the header a
+closed leaf (M27.15.81) pinned in two test files and the e2e harness, which I
+cannot run; recorded here as the next step rather than done blind.
+
+M27.15.79, licences. `npm_locked` dropped every package npm marks `dev`: 240 of
+the console lock's 387 packages were never judged under a leaf that says every
+dependency. They are read now, flagged build-only, and judged by the same list.
+Three are outside it (argparse Python-2.0, caniuse-lite CC-BY-4.0, a nested
+lru-cache BlueOak-1.0.0); they wait on the owner by name and by licence in
+`BUILD_ONLY_AWAITING_THE_OWNER` and are printed on every run, and any other build-only
+package outside the list is refused, which is the day a copyleft test runner is
+added. A console package with no licence in the lock is refused (the automation
+piece's lock keeps its note: two of its packages carry none). Build-only packages
+are exempt from the archived and age rules only, because nothing they contain
+ships. The allowed list is pinned whole in a test so it cannot widen to make the
+audit pass. needs-rupash 236 asks the owner about the three.
+
+M27.15.83, reference screens. `docs/reference-screens/index.json` records, for each
+console page the screenshots cover, what was adapted and what was refused, and
+`console/tests/reference-screens.test.ts` holds it from both sides: a covered page
+needs a record, a record needs a route (the route table reader moved out of
+console-audit into `support/routeTable.ts` so there is one), a record's
+requirements must come from its own screenshots in the register, and the two
+rejections the design keeps are asserted on the pages' syntax trees, never on the
+sentence the page says about itself: no switch, checkbox or toggle in the learning
+sections or named for learning anywhere, no control in the Computer use card, the
+browsing card describes a sealed browser, and no console or API address for
+operating a computer. The screenshots themselves are not in the repository and
+never were: they sit in the owner's workspace and this session could not read them
+(needs-rupash 237), so the leaf is recorded as blocked on that and not ready.
+Records are written only from what the register's rows, the page docstrings and the
+design say; a screen the console has no page for yet says so rather than getting a
+record. The Profile record says plainly that a connector is not yet added in place
+the way a skill is (M27.11.12).
+
+Mutation, by hand for the console guards and with `brain.ops.mutation` for the
+Python ones, every row against the named test:
+- dependency policy: 8 of 8 caught (dev read as shipped, dev dropped again, console
+  lock stops refusing a missing licence, waiting under any licence, nothing waiting,
+  a shipped package may wait, liveness applied to build-only twice)
+- bundle audit, serving and install check: 34 of 34 caught. The first run had three
+  survivors: a `#` guard that the scheme pattern made redundant (removed), and two
+  clauses of the served-type comparison one of which was implied by the other
+  (simplified, and a test added that makes the server answer a font as text)
+- reference screens and font notices: 22 mutations in the console files caught (16 and 6),
+  every file restored byte-identically (md5 checked)
+
+Not done: the nightly browser workflow was not run (e2e needs Keycloak and the
+product image), the whole-suite real-database test is reported separately, and
+shadcn/ui's MIT notice is still not carried in the image.
+
+Reused: console/tests/support/typescript.ts (parser), console-audit's route table
+reader (moved, not copied), brain.console_static's fallback route (served as the
+check's transport), the localisation check's shape for a bundle check,
+dependency_policy's OWNER_ALLOWED pattern, the existing fonts test and the
+Dependency audit job. Replaced: npm_locked skipping dev packages, because it
+contradicted the leaf.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
