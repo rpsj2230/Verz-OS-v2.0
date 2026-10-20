@@ -86,6 +86,7 @@ from brain.ops.recovery import (
     CheckRun,
     Coverage,
     Drill,
+    KeyHolder,
     Method,
     RecoveryError,
     Verification,
@@ -264,6 +265,22 @@ def backup_from(document: Mapping[str, Any], *, where: str) -> Backup:
         msg = f"{where}: backup_id is {type(backup_id).__name__} and an identifier is a string"
         raise ManifestError(msg)
 
+    # Optional, because a manifest written before the taker declared them is still a manifest, and
+    # present values are refused unless they are exactly what the taker writes: `_flag` for the
+    # reason it gives about a string that is merely truthy.
+    off_host = (
+        _flag(document["off_host"], field="off_host", where=where)
+        if "off_host" in document
+        else None
+    )
+    key_held_by: KeyHolder | None = None
+    if "key_held_by" in document:
+        try:
+            key_held_by = KeyHolder(document["key_held_by"])
+        except ValueError as exc:
+            msg = f"{where}: key_held_by: {exc}"
+            raise ManifestError(msg) from exc
+
     try:
         return Backup(
             backup_id=backup_id,
@@ -276,6 +293,8 @@ def backup_from(document: Mapping[str, Any], *, where: str) -> Backup:
                 document["recoverable_to"], field="recoverable_to", where=where
             ),
             size_bytes=size,
+            off_host=off_host,
+            key_held_by=key_held_by,
         )
     except RecoveryError as exc:
         msg = f"{where}: {exc}"

@@ -155,7 +155,7 @@ from typing import Final, Protocol, cast
 
 import structlog
 from fastapi import APIRouter, Request
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -203,10 +203,12 @@ from brain.ops.backup_manifest import DRILL_SUFFIX, MANIFEST_SUFFIX, read_drills
 from brain.ops.capacity_ledger import LedgerUnreadableError
 from brain.ops.deployment_history import History, history_from, recorded
 from brain.ops.features import RELEASE_CHECK, is_on
+from brain.ops.features_declared.backup_drill_requests import BACKUP_DRILL_REQUESTS
 from brain.ops.install_from_empty import read_plan
 from brain.ops.limit_store import UNREACHABLE_POLICY, Availability, WindowsUnreadableError
 from brain.ops.limits import DeclaredWindow, Limit, LimiterState, ceilings, declared_windows
-from brain.ops.recovery import DRILL_INTERVAL_DAYS
+from brain.ops.recovery import DRILL_INTERVAL_DAYS, placement_findings
+from brain.ops.rehearsal_request import Pending, pending_in
 from brain.ops.release_manifest import read_manifest
 from brain.ops.reliability import recovery_objective
 from brain.ops.retention import BACKUP_RETENTION_DAYS
@@ -419,6 +421,20 @@ NO_CONTROL_HERE_RUNS_A_REHEARSAL: Final = (
     "checks it still refuses what it should. It is done on the server by hand, following the "
     "restore drill page in the install documentation that came with this release. Its record is "
     "written beside the copy it read, and that record is what this screen reads."
+)
+
+
+#: The sentence under the rehearsal card when asking for one is switched on (M30.3.9).
+#:
+#: It says what the press does and, as carefully, what it does not: a request is left for the
+#: server's own service, which starts the rehearsal, so the press cannot say one has started.
+A_PRESS_ASKS_THE_SERVER_AND_DOES_NOT_START_ANYTHING: Final = (
+    "Start a rehearsal leaves a request for your server, which loads your newest copy into a "
+    "scratch database beside your containers, checks the schema is complete, asks it a question "
+    "you know the answer to and checks it still refuses what it should. Nothing this system "
+    "runs can start a container, so the press asks and does not say a rehearsal has started: "
+    "the server's own drill service starts it within about ten minutes, if it is set up, and "
+    "its record is written beside the copy it read. That record is what this screen reads."
 )
 
 
@@ -805,9 +821,18 @@ class RehearsalView(BaseModel):
     manifest_ends: str
     record_ends: str
     no_control_here: str
+    #: Whether this install has the control that asks the server for a rehearsal switched on. A
+    #: field, so the card draws the control by what the server says and a browser guesses nothing.
+    can_request: bool = False
+    #: A request waiting for the server, if one is, and when it was made if its body says. A
+    #: waiting request with no time is `request_waiting` with `requested_at` empty.
+    request_waiting: bool = False
+    requested_at: datetime | None = None
 
 
-def rehearsal_view(profile: str) -> RehearsalView:
+def rehearsal_view(
+    profile: str, *, can_request: bool = False, waiting: Pending | None = None
+) -> RehearsalView:
     """The rehearsal card for one profile. Refuses a profile nothing promises an objective for."""
     return RehearsalView(
         every_days=DRILL_INTERVAL_DAYS,
@@ -815,7 +840,14 @@ def rehearsal_view(profile: str) -> RehearsalView:
         promised_recovery_seconds=recovery_objective(profile).rto_seconds,
         manifest_ends=MANIFEST_SUFFIX,
         record_ends=DRILL_SUFFIX,
-        no_control_here=NO_CONTROL_HERE_RUNS_A_REHEARSAL,
+        no_control_here=(
+            A_PRESS_ASKS_THE_SERVER_AND_DOES_NOT_START_ANYTHING
+            if can_request
+            else NO_CONTROL_HERE_RUNS_A_REHEARSAL
+        ),
+        can_request=can_request,
+        request_waiting=waiting is not None,
+        requested_at=None if waiting is None else waiting.at,
     )
 
 
@@ -835,6 +867,10 @@ class RecoveryView(BaseModel):
     unread: str = ""
     #: How a rehearsal is done and what it is judged against. Set by the route on both shapes.
     rehearsal: RehearsalView | None = None
+    #: Where the newest copies are kept and who can read them, judged by
+    #: `brain.ops.recovery.destination_gaps` from what each copy's manifest declares. Empty when
+    #: nothing is wrong, and when nothing has been copied, which the panel already says.
+    placement: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _exactly_one(self) -> RecoveryView:
@@ -1552,7 +1588,19 @@ async def recovery(request: Request, asked: Asked) -> RecoveryView:
     against. See `NO_CONTROL_HERE_RUNS_A_REHEARSAL`.
     """
     _permitted(asked.reach, "recovery", asked.now)
-    rehearsal = rehearsal_view(settings_of(request).profile)
+    profile = settings_of(request).profile
+    found = getattr(request.app.state, "db_sessions", None)
+    factory = found if isinstance(found, async_sessionmaker) else None
+    # Read after the capability, so a refused caller cannot make this server look. A switch that
+    # cannot be read is off: the screen is still true and says a rehearsal is done on the server.
+    can_request = False
+    if factory is not None:
+        try:
+            async with factory() as session:
+                can_request = await is_on(session, BACKUP_DRILL_REQUESTS)
+        except SQLAlchemyError as error:
+            log.warning("rehearsal switch not read", error=type(error).__name__)
+    rehearsal = rehearsal_view(profile, can_request=can_request)
     objects = backup_objects_of(request)
     if objects is None:
         return RecoveryView(
@@ -1572,7 +1620,9 @@ async def recovery(request: Request, asked: Asked) -> RecoveryView:
         )
     backups, bad_manifests = read_manifests(listing)
     verifications, bad_drills = read_drills(listing)
+    rehearsal = rehearsal_view(profile, can_request=can_request, waiting=pending_in(listing))
     return RecoveryView(
+        placement=list(placement_findings(backups)),
         panel=recovery_panel_view(
             recovery_panel(
                 backups=backups,
