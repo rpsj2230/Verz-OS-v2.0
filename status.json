@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-20T05:06:29.093118+00:00",
-  "commit": "60e11846",
-  "commit_subject": "A browser sandbox is rehearsed on the host and held to what the Docker daemon says it made, behind the browser_runs switch (M19.1.1, M19.1.5, M19.1.6, M19.3.5, M19.6.4) (#638)",
+  "generated_at": "2026-10-20T05:50:44.859579+00:00",
+  "commit": "3e9134dc",
+  "commit_subject": "The console's pages have a register: which are rebuilt, which screen each was drawn to, and the toast region is mounted (#639)",
   "total": 1626,
   "done": 1159,
   "percent": 71.3,
-  "built": 1320,
-  "built_percent": 81.2,
-  "built_unproven": 161,
+  "built": 1326,
+  "built_percent": 81.5,
+  "built_unproven": 167,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -82,7 +82,9 @@
     "M26.2.4",
     "M26.2.6",
     "M26.3.2",
+    "M27.10.2",
     "M27.11.10",
+    "M27.15.12",
     "M27.15.19",
     "M27.15.50",
     "M27.15.52",
@@ -93,10 +95,14 @@
     "M27.15.71",
     "M27.15.72",
     "M27.15.79",
+    "M27.16.1",
     "M27.16.2",
     "M27.16.3",
+    "M27.16.4",
+    "M27.16.5",
     "M27.7.23",
     "M27.7.26",
+    "M27.9.8",
     "M28.5.2",
     "M29.3.1",
     "M3.7.2",
@@ -227,13 +233,13 @@
       "done": 473,
       "percent": 79.0,
       "in_progress": 7,
-      "ready_for_testing": 53,
+      "ready_for_testing": 59,
       "blocked": 4,
-      "open": 62,
+      "open": 56,
       "acts": 1,
       "decided": 56,
-      "built": 528,
-      "built_percent": 88.1
+      "built": 534,
+      "built_percent": 89.1
     },
     {
       "wave": 4,
@@ -560,7 +566,7 @@
       "done": 163,
       "acts": 0,
       "decided": 22,
-      "built": 178
+      "built": 184
     },
     {
       "module": "M28",
@@ -2903,10 +2909,15 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit.ledger, audit.record); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #163's branch M27/console-models-routing (may be replayed already)",
       "updated": "2026-10-06"
     },
+    "M27.9.8": {
+      "status": "READY FOR TESTING",
+      "why": "BUILT AND TESTED in the repository (no install step): the stale statements named in the console plan's W0.7 are corrected where they were still wrong, each behavioural one with a test: the schema count in brain.db (a test now reads the number it states), the stop-control sentence the runs route serves, the usage screen's account of what is measured, and the embedding queue's, chunk store's and streaming's statements about callers and routes that now exist. Proved by the Unit tests job.",
+      "updated": "2026-10-20"
+    },
     "M27.10.2": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in agent_routes, components/kit/ConfirmDialog.tsx, components/kit/DetailPage.tsx +50 more; NOT wired: components/kit/index.ts, components/ui/badge.tsx, components/ui/card.tsx +8 more. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M13/wire-agent-upgrade, no PR; +23 more",
-      "updated": "2026-10-06"
+      "status": "READY FOR TESTING",
+      "why": "BUILT AND TESTED: the toast region is mounted once, in the shell, and a Note of kind done announces its sentence in it while the page keeps its own line (console/tests/done-notes-announce.test.tsx), which gives the thirty-eight places that say a write took effect the toast without an edit to each. The other named parts were already drawn by the pages: sidebar, header, breadcrumbs, list page, detail page, tabs, drawer, empty, loading and failed states, bulk bar and the write-once secret field. Install proof: switch a feature on or off under Features and read the message that appears at the corner of the screen as well as the line on the page.",
+      "updated": "2026-10-20"
     },
     "M27.11.2": {
       "status": "OPEN",
@@ -2937,6 +2948,11 @@
       "status": "BLOCKED",
       "why": "Waits on needs-rupash item 235: nothing the product runs can start the container a backup drill needs, so a Start button would reach nothing, which item 44 and docs/admin-console.md refuse. The item names three ways to make it real and recommends one.",
       "updated": "2026-10-14"
+    },
+    "M27.15.12": {
+      "status": "READY FOR TESTING",
+      "why": "BUILT AND TESTED: the Requirement checks screen names M27.15.12 as the leaf the Console area is checked for, and an install check passes only when every requirement of the register's Console area has a newest check recorded by a person that passed. Install proof, which only you can give: open Requirement checks, choose the Console area, open each requirement on its page, and record passed or failed with a sentence about what you did.",
+      "updated": "2026-10-20"
     },
     "M27.15.19": {
       "status": "READY FOR TESTING",
@@ -3024,9 +3040,9 @@
       "updated": "2026-10-14"
     },
     "M27.16.1": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in access_request_routes, audit_routes, automations_routes +255 more; NOT wired: pages/AccessReview.route.tsx, pages/AgentTemplate.route.tsx, pages/AgentTemplate.tsx +36 more. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; branch M16/w3-learning-tables, no PR; branch M27/webhook-switch-on-and-replay, no PR; +28 more",
-      "updated": "2026-10-06"
+      "status": "READY FOR TESTING",
+      "why": "BUILT AND TESTED: docs/console-pages.json lists the 42 primary pages (the 41 menu entries and the page of one agent) and console/tests/console-pages.test.ts holds its statement that each is built on the page kit against the source (all 42 are). /build/pages lists which pages are rebuilt, with what each still lacks. Install proof: open /build/pages after the next deploy and read the list; it says how many pages are rebuilt and names what each of the others waits on.",
+      "updated": "2026-10-20"
     },
     "M27.16.2": {
       "status": "READY FOR TESTING",
@@ -3037,6 +3053,16 @@
       "status": "READY FOR TESTING",
       "why": "Built on branch M27/console-lists-wizards-buttons. Prove it on the install. (1) Open Agents (or People, Skills, Connectors): the toolbar ends in Saved filters. Type a search, choose a filter, open Saved filters, give it a name and Save. Clear the search, reopen Saved filters and press the name: the list narrows to the same question. Reload the page and it is still there; sign in as somebody else and it is not. Audit and Logs have the same control beside their filters. (2) Every list table has Columns (hide one and it goes), Export (downloads a file of the rows shown, in the columns shown), a tick box on every row (Export selected appears), and a small panel button on each row that opens a drawer showing every column, including hidden ones. People, Sessions, Access review and the Library also offer an act on the ticked rows. (3) No list shows a total, a page count or an of N anywhere.",
       "updated": "2026-10-14"
+    },
+    "M27.16.4": {
+      "status": "READY FOR TESTING",
+      "why": "BUILT AND TESTED: docs/screens.html draws a screen for every primary page, screens 15 to 45 being the thirty-one that had none (wireframes drawn from the built pages, example values in place of data) beside the fourteen designs it began with, and the agent page keeps screen 14. tests/unit/test_console_pages.py fails when a page has no screen, names a screen that is not drawn, or has a walk-through recorded before it has a screen. Install proof: open /build/screens and /build/pages; every page on the list links to a screen.",
+      "updated": "2026-10-20"
+    },
+    "M27.16.5": {
+      "status": "READY FOR TESTING",
+      "why": "BUILT, and it waits on you: a page counts as rebuilt on /build/pages only when a walk-through of it has passed on your install, and every row starts without one, so the count of rebuilt pages is nought. To record one, open the page on your install, find it as its screen draws it, and set that row's walked in docs/console-pages.json to the day and the release it passed on. The register refuses a walk-through for a page that is not on the shared parts or has no screen.",
+      "updated": "2026-10-20"
     },
     "M28.5.2": {
       "status": "READY FOR TESTING",
