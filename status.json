@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-20T04:33:10.892469+00:00",
-  "commit": "ff1a7d23",
-  "commit_subject": "2 more tasks are proved on the install by the newest complete acceptance run",
+  "generated_at": "2026-10-20T05:06:29.093118+00:00",
+  "commit": "60e11846",
+  "commit_subject": "A browser sandbox is rehearsed on the host and held to what the Docker daemon says it made, behind the browser_runs switch (M19.1.1, M19.1.5, M19.1.6, M19.3.5, M19.6.4) (#638)",
   "total": 1626,
-  "done": 1154,
-  "percent": 71.0,
-  "built": 1315,
-  "built_percent": 80.9,
+  "done": 1159,
+  "percent": 71.3,
+  "built": 1320,
+  "built_percent": 81.2,
   "built_unproven": 161,
   "built_task_ids": [
     "M1.1.8",
@@ -254,16 +254,16 @@
       "wave": 5,
       "name": "Hands, delivery, go-live",
       "total": 217,
-      "done": 76,
-      "percent": 35.0,
-      "in_progress": 89,
+      "done": 81,
+      "percent": 37.3,
+      "in_progress": 84,
       "ready_for_testing": 21,
       "blocked": 19,
       "open": 12,
       "acts": 42,
       "decided": 18,
-      "built": 97,
-      "built_percent": 44.7
+      "built": 102,
+      "built_percent": 47.0
     },
     {
       "wave": 6,
@@ -477,10 +477,10 @@
       "name": "Browser and computer use",
       "wave": 5,
       "total": 47,
-      "done": 9,
+      "done": 14,
       "acts": 0,
       "decided": 1,
-      "built": 9
+      "built": 14
     },
     {
       "module": "M20",
@@ -1095,14 +1095,19 @@
     "M18.4.1",
     "M18.4.2",
     "M18.4.3",
+    "M19.1.1",
+    "M19.1.5",
+    "M19.1.6",
     "M19.2.1",
     "M19.2.2",
     "M19.2.3",
+    "M19.3.5",
     "M19.5.1",
     "M19.5.3",
     "M19.5.4",
     "M19.6.2",
     "M19.6.3",
+    "M19.6.4",
     "M19.9.3",
     "M2.1.1",
     "M2.1.5",
@@ -2488,11 +2493,6 @@
       "why": "TRIAGE 2026-10-13 class 4 (unbuilt): Not built: fanout.Verdict has only SINGLE_LOOP and PARALLEL, and nothing says SINGLE_LOOP for a coordinator means running specialists in sequence rather than the coordinator doing their work. No orchestrator exists to hold the rule (register OWN2-5).",
       "updated": "2026-10-13"
     },
-    "M19.1.1": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): browsing/sandbox.py:sandbox_for and sandbox_gaps build and re-check the gVisor (runsc) bodies; launcher.py creates and removes them; docker-compose.browser.yml deploys browser-launcher (opt-in, health = runsc present). Nothing calls the launcher; no body ever sent to a daemon. NEXT: Build the worker-side driver (compile an envelope, send wire start_fields to browser-launcher:7300, relay the run, call session_store.start/end and recording.write; launcher.py and recording.py say 'not built'), run ops/browser/REHEARSAL.md on a runsc host, then write a check reading launcher health and a labelled run's runtime.",
-      "updated": "2026-10-13"
-    },
     "M19.1.2": {
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 2 (partly built): ops/browser/Dockerfile and playwright_browser.py (Playwright, Chromium) are the runner image and entry; browsing/runner.py:drive is what it calls. Playwright is not a repo dependency, no workflow builds the -browser image (release.yml builds only the app image), never run. NEXT: Add a release job that builds and signs the '-browser' image, run REHEARSAL.md sections 1 to 3, then a check that a run's runner reports chromium and playwright versions.",
@@ -2506,16 +2506,6 @@
     "M19.1.4": {
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 2 (partly built): browsing/observation.py:Snapshot has no picture field; wire.snapshot_from_accessibility builds it from the accessibility tree and playwright_browser.py supplies the tree; test_browsing_targets.py. Never run in a browser; no control-plane caller consumes snapshots. NEXT: After the driver exists, check a read-only run returns a tree snapshot and no image field; observation.vision_gaps() is the static half to name now.",
-      "updated": "2026-10-13"
-    },
-    "M19.1.5": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): sandbox.py declares a read-only root, tmpfs home/tmp/shm charged to the memory cap and no volumes (sandbox_gaps refuses one); launcher.py teardown removes the set; test_browsing_sandbox.py and test_browsing_launcher.py. Bodies never sent to a daemon. NEXT: Write a check that builds sandbox_for(...), requires sandbox_gaps()==() and a mutated body refused; the live half waits on the driver and REHEARSAL.md.",
-      "updated": "2026-10-13"
-    },
-    "M19.1.6": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): sandbox.py gives each run an internal network named from the run id with the egress proxy as the only other member (egress_network_body); launcher.py removes it at teardown; test_browsing_sandbox.py, test_browsing_deployment.py. Never created on a daemon. NEXT: Static half as M19.1.5; live half is REHEARSAL.md plus the missing driver.",
       "updated": "2026-10-13"
     },
     "M19.2.4": {
@@ -2541,11 +2531,6 @@
     "M19.3.4": {
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 2 (partly built): enforcer.authorise holds the envelope's verbs and per-verb counts in Spend and refuses an undeclared write verb or an extra use; test_browsing_enforcer.py. Used by runner.py only; no run has happened. NEXT: As M19.3.3: needs the driver; static half can call authorise over a sealed sample envelope.",
-      "updated": "2026-10-13"
-    },
-    "M19.3.5": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): sandbox.py makes a mitmproxy container (EGRESS_IMAGE mitmproxy 11.1.3, unverified against a registry) the only member with a route out; egress_addon.py is the addon; test_browsing_sandbox.py covers its decisions. The proxy has never been started. NEXT: Pull and pin the proxy image, rehearse per REHEARSAL.md, then a check that a runner cannot reach an undeclared host.",
       "updated": "2026-10-13"
     },
     "M19.3.6": {
@@ -2586,11 +2571,6 @@
     "M19.5.5": {
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 2 (partly built): verification.py:read_back and read_back_plan define the out-of-band read through ReadBackPort; test_browsing_verification.py. No ReadBackPort implementation exists and grading.verification_gaps says no target declares a read_back tool. NEXT: Implement a ReadBackPort that reads through the gate (a connector or tool), declare read_back on a registered surface, and call it from verify_run.",
-      "updated": "2026-10-13"
-    },
-    "M19.6.4": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): sandbox.py:Caps sets memory (swap equal), pids and CPU quota for runner and proxy and refuses tmpfs sizes that leave no memory floor; test_browsing_sandbox.py, test_browsing_sessions.py. Figures are marked judgements; bodies never sent to a daemon. NEXT: Static check on sandbox_gaps with caps; measure real figures in the REHEARSAL.md run.",
       "updated": "2026-10-13"
     },
     "M19.6.5": {
@@ -4051,11 +4031,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 2,
+  "closed_today": 7,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "60e1184",
+      "at": "2026-10-20T04:49:21+00:00",
+      "subject": "A browser sandbox is rehearsed on the host and held to what the Docker daemon says it made, behind the browser_runs switch (M19.1.1, M19.1.5, M19.1.6, M19.3.5, M19.6.4) (#638)",
+      "closed": "M19.1.1,M19.1.5,M19.1.6,M19.3.5,M19.6.4"
+    },
     {
       "sha": "ff1a7d2",
       "at": "2026-10-20T04:24:05+00:00",
@@ -4169,12 +4155,6 @@
       "at": "2026-10-05T21:27:28+00:00",
       "subject": "Fifty-one tasks close on the install's own acceptance runs after the evening's deploys (#394)",
       "closed": "M10.7.2,M11.1.4,M11.2.4,M11.5.2,M11.8.5,M15.4.2,M16.3.4,M16.3.5,M16.3.6,M16.4.2,M16.5.3,M16.5.4,M16.6.8,M16.7.13,M16.7.4,M16.7.5,M22.1.1,M27.7.21,M32.2.1.3,M32.2.2.1,M33.3.1.4,M39.4.1.1,M39.4.1.2,M39.4.1.3,M39.4.1.4,M39.4.1.5,M39.4.2.1,M39.4.2.2,M39.4.2.4,M39.6.1.1,M39.6.1.2,M39.6.1.3,M39.6.1.4,M39.6.1.5,M39.6.2.1,M39.6.2.2,M39.6.2.4,M6.1.1,M6.1.2,M6.1.4,M6.1.6,M6.3.1,M6.3.2,M6.3.3,M6.3.4,M6.3.5,M6.4.2,M6.4.3,M6.4.4,M6.5.2,M7.7.2"
-    },
-    {
-      "sha": "42088d9",
-      "at": "2026-10-05T17:31:59+00:00",
-      "subject": "A run's trace is read and drawn on a page under the Audit log, so the trace graph is no longer a component nothing renders (#359)",
-      "closed": "M32.2.2.3"
     }
   ]
 }
