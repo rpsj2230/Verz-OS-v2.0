@@ -66,10 +66,10 @@ there rather than on the parse worker's condition because a slot is a slot: any 
 draining the queue may be handed an embedding batch. Since 2026-09-17 the rest of the ingest
 leg has callers too. `brain.knowledge.chunk_store` writes `know.chunk`, builds `embed_job` when
 it writes a document's chunks, and applies every `EmbeddingWrite` the worker's run returns;
-`brain.ops.inference_client` implements `EmbeddingService`. What still has no caller is
-`rebuild_job`: nothing constructs a rebuild, which is `brain.knowledge.embedding`'s command and
-not this leaf. `brain.knowledge.embed.wiring_gaps` is the list of what is still missing, held to
-the source by a test, and it is the place to look rather than this paragraph.
+`brain.ops.inference_client` implements `EmbeddingService`. `rebuild_job` is
+constructed by `brain.knowledge.reembed`, which pages a rebuild and queues the windows.
+`brain.knowledge.embed.wiring_gaps` is the list of what is still missing, held to the source by
+a test, and it is the place to look rather than this paragraph.
 
 The driver's own name is deliberately not written here, and that is not squeamishness:
 `tests/unit/test_queue.py` fails the build when any module outside `brain.ops.queue` names an
@@ -664,9 +664,8 @@ def rebuild_job(*, plan: RebuildPlan, cursor: RebuildCursor) -> Job | None:
     resumption is made in one place: a cursor rebuilding towards one model under a plan naming
     another leaves the corpus holding both, plus whatever it started on.
 
-    Nothing calls this yet, and since M32.4.1.1 that is no longer because there is nowhere to
-    send it: there is a driver, a worker draining a queue, and since 2026-09-17 a registered
-    task for the ingest job beside it. Nothing constructs a rebuild.
+    `brain.knowledge.reembed` calls this: it builds the first page of a rebuild and the next one
+    from the cursor a finished page returns, and the worker drains the queue they are sent to.
     """
     batch = next_batch(plan=plan, cursor=cursor)
     if batch.is_finished:

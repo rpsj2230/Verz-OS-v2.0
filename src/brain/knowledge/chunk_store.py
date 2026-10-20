@@ -37,8 +37,8 @@ before the rows are committed can be fetched before they are visible, and the wo
 nothing in its window and fail. The price is stated: a process that dies between the commit and
 the enqueue leaves a document written and unembedded, found by text search and not by vector,
 and nothing records it. That is the ingest leg's outage response in
-`embed_policy.OUTAGE_POLICY` arriving by another route, and the repair is a rebuild, which is
-`brain.knowledge.embedding`'s command and has no caller either.
+`embed_policy.OUTAGE_POLICY` arriving by another route, and the repair is a rebuild, which
+`brain.knowledge.reembed` carries out page by page.
 
 **The worker holds no transaction while the server is thinking.** The window is read in one
 transaction, the batches are sent with none open, and the writes are applied in a second

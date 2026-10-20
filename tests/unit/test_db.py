@@ -1,6 +1,6 @@
 """Database metadata and connection-string handling.
 
-Task ids: M0.3.2, M0.3.7, M31.2.1.1
+Task ids: M0.3.2, M0.3.7, M31.2.1.1, M27.9.8
 """
 
 from __future__ import annotations
@@ -311,3 +311,34 @@ def test_no_production_module_hands_psycopg_a_url() -> None:
         if path.name != "db.py" and "libpq_url(" in path.read_text(encoding="utf-8")
     ]
     assert offenders == []
+
+
+def test_the_comment_above_the_schemas_counts_them() -> None:
+    """The comment says how many namespaces there are, and the number is checked against the
+    dictionary under it. It said nine for the ten that `chat` made, and a reader sizing the
+    database from it was wrong by one. Delete this and the sentence drifts from the code again
+    the next time a schema is added."""
+    import re
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[2] / "src" / "brain" / "db.py").read_text(
+        encoding="utf-8"
+    )
+    stated = re.search(r"^#: The (\w+) namespaces\.", source, re.MULTILINE)
+    assert stated is not None
+    words = [
+        "zero",
+        "one",
+        "two",
+        "three",
+        "four",
+        "five",
+        "six",
+        "seven",
+        "eight",
+        "nine",
+        "ten",
+        "eleven",
+        "twelve",
+    ]
+    assert words.index(stated.group(1)) == len(SCHEMAS)

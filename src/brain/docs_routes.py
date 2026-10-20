@@ -145,6 +145,25 @@ async def screens() -> FileResponse | HTMLResponse:
     return _doc("screens.html")
 
 
+@router.get("/build/pages", response_class=HTMLResponse, tags=["docs"])
+def console_pages() -> HTMLResponse:
+    """Which console pages are rebuilt (M27.16.1), and what each one still lacks (M27.16.4, M27.16.5).
+
+    Read from `docs/console-pages.json`, which the image carries, and rendered by the markdown
+    page the decisions use. A register that is absent or unreadable is a 404 saying so rather
+    than an empty list, because a page listing no pages would read as a console with nothing
+    left to rebuild.
+    """
+    from brain.console_pages import PAGES_IN_DOCS, RegisterError, load_pages, pages_page
+
+    path = DOCS / PAGES_IN_DOCS
+    try:
+        register = load_pages(path)
+    except RegisterError:
+        return HTMLResponse(f"<h1>{PAGES_IN_DOCS.name} not published</h1>", status_code=404)
+    return _markdown_page(pages_page(register), "Console pages")
+
+
 def _read_wbs() -> dict[str, Any] | None:
     """The work breakdown baked into the image, or None when this build carries none."""
     from brain.status import load_wbs
@@ -418,6 +437,7 @@ commit {s.get("commit", "?")}{shipped}</div>
 <a class="btn" href="/build/waves">Wave reports</a>
 <a class="btn" href="/build/architecture">Architecture</a>
 <a class="btn" href="/build/screens">Key screens</a>
+<a class="btn" href="/build/pages">Console pages</a>
 <a class="btn" href="/build/needs-rupash">Needs you ({needs})</a>
 <a class="btn" href="/api/status.json">status.json</a>
 <h3 style="font-family:{SANS};font-size:15px;margin:30px 0 6px">Recently closed</h3>
@@ -551,6 +571,7 @@ becomes the real screen when its wave lands, so a link you save today keeps work
 <tr><td><a href="/build/waves">/build/waves</a></td><td>Wave reports</td><td><span class="tag on">live</span></td></tr>
 <tr><td><a href="/build/architecture">/build/architecture</a></td><td>Architecture</td><td><span class="tag on">live</span></td></tr>
 <tr><td><a href="/build/screens">/build/screens</a></td><td>Key screens (designs)</td><td><span class="tag on">live</span></td></tr>
+<tr><td><a href="/build/pages">/build/pages</a></td><td>Console pages rebuilt</td><td><span class="tag on">live</span></td></tr>
 <tr><td><a href="/build/needs-rupash">/build/needs-rupash</a></td><td>Decisions waiting on you</td><td><span class="tag on">live</span></td></tr>
 </tbody></table>
 <p class="n">{s.get("done", 0)} of {s.get("total", 0)} tasks built &middot; {s.get("percent", 0)}% &middot; commit {s.get("commit", "?")}<br>
