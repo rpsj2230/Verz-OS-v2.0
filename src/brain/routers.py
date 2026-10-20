@@ -370,6 +370,11 @@ from brain.member_self_routes import router as member_self_router
 # See `brain.member_share_routes`.
 from brain.member_share_routes import router as member_share_router
 
+# What a person pastes from the old system, checked by the migration package before anything is done
+# with it: skills, exported items, memory files and agents' availability. Keeps nothing. See
+# `brain.migration_convert_routes`.
+from brain.migration_convert_routes import router as migration_convert_router
+
 # Running a migration from another system, kept and checked: what the old system holds and what
 # happens to each of it, the comparison period and the cutover, behind `admin:install_setting` over
 # everything and the `migration_workspace` switch. Reaches nothing of the old system. See

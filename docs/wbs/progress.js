@@ -3526,23 +3526,23 @@ const PROGRESS = {
   },
   "M37.1.2.1": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): carry.py: Export record and export_gaps(agreed, exports) check what arrived against the agreed catalogue (tested). The exporter itself is a plugin that does not exist (src/brain/plugins has contract/points only); nothing calls carry. NEXT: define the exporter plugin point in brain.plugins, then route carry.export_gaps from a migration page; check names the leaf once an export can be handed over",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT: POST /migration/carry compares a pasted export with the agreed register in both directions (carry.export_gaps) and names what is promised and not delivered. NOT BUILT: the exporter itself, which is a plugin that does not exist (brain.plugins has contract and points only), so the export is pasted by the person who surveyed the old system. NEXT: define the exporter plugin point.",
+    updated: "2026-10-20",
   },
   "M37.1.2.2": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): carry.py: reparse_plan() and carried_vectors() refuse to reuse vectors and name each re-parse from original-bytes digest (tested). No caller feeds the ingest pipeline from reparse_plan; nothing imports carry. NEXT: call carry.reparse_plan from a migration route that queues knowledge ingest for each Reparse; then check names the leaf",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT: POST /migration/carry returns the plan to read every export again from its original bytes and names every vector as discarded (carry.reparse_plan, carried_vectors); there is no field for a vector. NOT BUILT: queueing the knowledge pipeline from that plan, which needs the original bytes held somewhere. NEXT: a store for the exported bytes and a call from the plan into ingest.",
+    updated: "2026-10-20",
   },
   "M37.1.2.3": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): carry.py: EntitySeed (no access field) and seed_gaps() report name collisions via resolution.normalise_name (tested). Nothing writes a seed into the entity registry and nothing imports carry. NEXT: wire seed_gaps then a registry-seeding route using the brain.resolution entity write path; then check",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT: POST /migration/carry reports seeds that collapse to one name and names a name the matcher will not match on (carry.seed_gaps). NOT BUILT: writing an approved seed into the entity registry through the resolution write path. NEXT: a registry-seeding route using brain.resolution after a person approves each seed.",
+    updated: "2026-10-20",
   },
   "M37.1.2.4": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): carry.py: archive(agreed, imports) returns an Archive with searchable empty by construction (tested). No store holds an archive and nothing calls it. NEXT: persist Archive in a migration table behind a route, never into knowledge search; then check that an archived conversation is not retrievable",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT: POST /migration/carry returns every catalogued conversation as archived, the ones kept for a stated reason by a named person, and an empty searchable list by construction (carry.archive). NOT BUILT: persisting the archive. NEXT: keep it in a migration record, never in knowledge search.",
+    updated: "2026-10-20",
   },
   "M37.1.3.1": {
     status: "IN PROGRESS",
@@ -3580,9 +3580,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M37.2.2.2": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): migration/skills.py: proposed_description() strips the 'Use the X skill to' preamble and router_descriptions() lists the rest (tested). Skill import route POST /skills/imports (skill_routes.py) does not call it; nothing imports migration.skills. NEXT: call proposed_description/router_descriptions from the skills import path in skill_routes.py (or console/skill_library.read_package) as a draft shown to the reviewer; then check",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: POST /migration/skills/convert returns each pasted skill's description with the router preamble stripped as a draft for the reviewer, and lists the ones still written at a router. PROOF ON THE INSTALL: switch Keep a migration on under Features, paste a skill whose description begins Use the X skill to, and read the draft back. The check pasted_skills_are_converted_and_nothing_is_imported passes.",
+    updated: "2026-10-20",
   },
   "M37.2.2.3": {
     status: "READY FOR TESTING",
@@ -3591,13 +3591,13 @@ const PROGRESS = {
   },
   "M37.2.2.4": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): migration/skills.py: BehaviourCheck and unproven() name skills with no real task run and answers that changed (tested). No store, route or caller; needs both systems to run the same task, which is person-run. NEXT: build a store and route for BehaviourCheck records and show unproven() on the skill review page; the comparison itself needs a person with the old system",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT: the same route takes the real-task checks a person recorded and names every skill no task was run through and every one whose answer changed (skills.unproven). NOT BUILT: running the same task on both systems, which needs a person with the old system, and keeping the checks. NEXT: a store for behaviour checks shown on the skill review page.",
+    updated: "2026-10-20",
   },
   "M37.2.2.5": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): migration/skills.py: to_retire(skills, now, after_days=90) lists skills not invoked in ninety days (tested). Retirement exists as POST /skills/{digest}/retirement and per-skill last_used in console_stats_routes, but nothing calls to_retire. NEXT: call to_retire over the imported foreign skill list from the migration page (needs last_invoked_at from the export) and route each to /skills/{digest}/retirement",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: POST /migration/skills/convert lists the pasted skills not invoked in ninety days and those never recorded as invoked, as ones to leave behind (skills.to_retire); retiring one is the existing retirement route. PROOF ON THE INSTALL: paste a skill with a last-invoked date a year old; it is listed. The check pasted_skills_are_converted_and_nothing_is_imported passes.",
+    updated: "2026-10-20",
   },
   "M37.2.3.1": {
     status: "READY FOR TESTING",
@@ -3615,19 +3615,19 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M37.2.3.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): agents/model.py has AgentAudience and AgentAuthority as separate fields, so the native model keeps availability and entitlement apart. The foreign mapping migration.rebuild.audience_for (refuses an unmapped availability) is unwired and takes a per-company mapping. NEXT: wire audience_for into a migration rebuild route that takes the person's mapping; native separation can be checked now by installing an agent and reading audience and authority separately",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: POST /migration/audience maps each pasted agent's availability to who may see it here from the mapping the person gives, names the agents whose availability nobody mapped and never defaults one, and leaves what the agent may reach to its authority. PROOF ON THE INSTALL: paste two agents with one availability unmapped; the unmapped one is named. The check availability_is_mapped_and_never_defaulted passes.",
+    updated: "2026-10-20",
   },
   "M37.2.4.2": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): migration/learning.py: ForeignMemory and re_derive() build a proposal through memory.tiers.propose and refuse session, promoted and gated changes (tested). Nothing imports migration.learning; the proposal queue exists (agent_memory_routes.py). NEXT: wire re_derive into a migration route that files each Derivation into the existing memory proposal queue; then check",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT: POST /migration/learning re-derives each conclusion a person drew from an old memory file through the ordinary tier rules and returns the derivations (learning.re_derive). NOT BUILT: filing each derivation into the memory proposal queue, which would put a proposal in front of a reviewer. NEXT: a call from the route into agent_memory_routes' queue behind its own switch.",
+    updated: "2026-10-20",
   },
   "M37.2.4.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): migration/learning.py: re_derive() refuses any change in CHANGES_WHAT_ANYBODY_MAY_SEE (tested). No caller outside the package, so nothing is discarded in practice. NEXT: same wiring as M37.2.4.2; check asserts a scope-widening derivation is refused by the route",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: the same route refuses, by name and in the package's words, any conclusion that would change who may see what, without stopping the others. PROOF ON THE INSTALL: paste a memory file with a preference and a scope-widening conclusion; only the preference is derived. The check a_conclusion_is_re_derived_and_a_widening_is_refused passes.",
+    updated: "2026-10-20",
   },
   "M37.2.4.4": {
     status: "IN PROGRESS",

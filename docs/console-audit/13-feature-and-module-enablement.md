@@ -3,7 +3,7 @@
 - **Screens:** `/features`
 - **Tables:** `ops.fanout_gate`, `ops.migration_record`, `ops.plugin_install`, `ops.plugin_version`
 - **Installation values:** none
-- **Measured here:** 17 routes, 3 called by no screen; 10 write routes, 1 with all three proofs; 6 gaps.
+- **Measured here:** 21 routes, 7 called by no screen; 10 write routes, 1 with all three proofs; 6 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -19,7 +19,11 @@
 | `POST /api/v1/install/plugins/{plugin_id}/remove` | `/features` |
 | `POST /api/v1/install/plugins/{plugin_id}/rollback` | **no screen** |
 | `POST /api/v1/install/plugins/{plugin_id}/upgrade` | **no screen** |
+| `POST /api/v1/migration/audience` | **no screen** |
+| `POST /api/v1/migration/carry` | **no screen** |
 | `POST /api/v1/migration/cutover/complete` | `/features` |
+| `POST /api/v1/migration/learning` | **no screen** |
+| `POST /api/v1/migration/skills/convert` | **no screen** |
 | `POST /api/v1/orchestration/weighed-plans` | `/features` |
 | `PUT /api/v1/migration/cutover` | `/features` |
 | `PUT /api/v1/migration/parallel` | `/features` |
