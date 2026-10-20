@@ -278,6 +278,10 @@ class Through:
 THROUGH: Final[Mapping[str, Through]] = MappingProxyType(
     {
         "chat.message": Through(parent="chat.conversation", key="conversation_id", parent_key="id"),
+        # A person saying one of their answers was wrong is theirs through the conversation. `0124`.
+        "chat.correction": Through(
+            parent="chat.conversation", key="conversation_id", parent_key="id"
+        ),
         # A key is a person's through the account it speaks for. `0095`.
         "auth.api_key": Through(
             parent="auth.service_account", key="client_id", parent_key="client_id"
