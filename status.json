@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-21T08:09:54.563544+00:00",
-  "commit": "593313e2",
-  "commit_subject": "A person can keep a personal project of their own threads and files, and each recent conversation says its state (M40.7.7, M40.7.6) (#657)",
+  "generated_at": "2026-10-21T08:42:10.421136+00:00",
+  "commit": "86f410a1",
+  "commit_subject": "Browser recordings are removed when due and held while a hold names them; limits and the halt are shown on the install (M19.6.5, M19.6.6, M19.9.9, M19.9.11) (#663)",
   "total": 1626,
-  "done": 1184,
-  "percent": 72.8,
-  "built": 1369,
-  "built_percent": 84.2,
+  "done": 1188,
+  "percent": 73.1,
+  "built": 1373,
+  "built_percent": 84.4,
   "built_unproven": 185,
   "built_task_ids": [
     "M1.1.8",
@@ -278,16 +278,16 @@
       "wave": 5,
       "name": "Hands, delivery, go-live",
       "total": 217,
-      "done": 88,
-      "percent": 40.6,
-      "in_progress": 65,
+      "done": 92,
+      "percent": 42.4,
+      "in_progress": 61,
       "ready_for_testing": 33,
       "blocked": 19,
       "open": 12,
       "acts": 42,
       "decided": 18,
-      "built": 121,
-      "built_percent": 55.8
+      "built": 125,
+      "built_percent": 57.6
     },
     {
       "wave": 6,
@@ -501,10 +501,10 @@
       "name": "Browser and computer use",
       "wave": 5,
       "total": 47,
-      "done": 14,
+      "done": 18,
       "acts": 0,
       "decided": 1,
-      "built": 14
+      "built": 18
     },
     {
       "module": "M20",
@@ -1141,7 +1141,11 @@
     "M19.6.2",
     "M19.6.3",
     "M19.6.4",
+    "M19.6.5",
+    "M19.6.6",
+    "M19.9.11",
     "M19.9.3",
+    "M19.9.9",
     "M2.1.1",
     "M2.1.5",
     "M2.2.1",
@@ -2577,16 +2581,6 @@
       "why": "TRIAGE 2026-10-13 class 2 (partly built): verification.py:read_back and read_back_plan define the out-of-band read through ReadBackPort; test_browsing_verification.py. No ReadBackPort implementation exists and grading.verification_gaps says no target declares a read_back tool. NEXT: Implement a ReadBackPort that reads through the gate (a connector or tool), declare read_back on a registered surface, and call it from verify_run.",
       "updated": "2026-10-13"
     },
-    "M19.6.5": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): sessions.py:may_start consults ops.admission.decide so a halt refuses a new session; enforcer.stopped_now stops a running one at safe points; tests in test_browsing_enforcer.py, test_browsing_sessions.py. brain.ops.halt is live but no run exists to stop and no worker calls may_start. NEXT: Call may_start in the driver and enforcer.stopped_now in the relay loop; a check can then halt and see a start refused with RefusalKind.HALTED.",
-      "updated": "2026-10-13"
-    },
-    "M19.6.6": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): browsing/recording.py has record, write, transcript_digest, recording_gaps and remove_expired (window = ops.retention.RECORDING_RETENTION_DAYS, holds kept, undated keys counted); test_browsing_recording.py. Docstring: no worker calls record/write, no scheduled caller of remove_expired, nothing written to the object store. NEXT: Hand an S3Backend (ops/object_store.py) to recording.write at run end in the driver and add a remove_expired job to ops/schedule_runner.py.",
-      "updated": "2026-10-13"
-    },
     "M19.6.7": {
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 3 (built, not wired): browsing/skill_gate.py:load_gaps and may_load refuse a browser skill when a registered API tool exists unless an Exemption names an approver and expiry (max 90 days); test_browsing_sessions.py. No skill import or load path imports skill_gate. NEXT: Call may_load from the skill import/pin path (tools/skills.py, ops/skill_store.py) with the target registry and an exemption source; exemption storage is also missing.",
@@ -2647,19 +2641,9 @@
       "why": "TRIAGE 2026-10-13 class 2 (partly built): grading.build_rubric and verification.verify_run exist and are tested; grading.verification_gaps states no judge is built and no target declares a read_back tool. Nothing scores a real run. NEXT: Build the judge and the read-back port, call verify_run at run end, then a check that scores a recorded run against its prior rubric.",
       "updated": "2026-10-13"
     },
-    "M19.9.9": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): sessions.may_start (global admission budget) and concurrency.may_open (domain, agent) decide with reasons; concurrency docstring: the counter that records sessions as they start and end is not built, and nothing calls either decision. NEXT: Build the counter from browser_session rows (session_store.start/end), call both decisions from the driver, then a check that fills a limit and sees a refusal naming it.",
-      "updated": "2026-10-13"
-    },
     "M19.9.10": {
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 2 (partly built): compile_envelope, approval, credentials.resolve and enforcer exist as separate tested modules but no code joins them for a run; no vault credential binding source for browser targets exists; no run has happened. NEXT: Needs the driver plus Bindings backed by the vault; then a check that approves one write envelope and shows the credential absent from plan, trace and recording.",
-      "updated": "2026-10-13"
-    },
-    "M19.9.11": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): recording.write and remove_expired are built and tested, with the recordings bucket in ops/storage.py and RECORDING_RETENTION_DAYS; no caller writes a recording at run end and no scheduled job calls remove_expired. NEXT: Call recording.write in the driver and register a scheduled remove_expired in ops/schedule_runner.py (holds from the legal hold store); then a check that writes, ages and sweeps.",
       "updated": "2026-10-13"
     },
     "M20.4.5": {
@@ -4035,11 +4019,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 18,
+  "closed_today": 22,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "86f410a",
+      "at": "2026-10-21T08:11:09+00:00",
+      "subject": "Browser recordings are removed when due and held while a hold names them; limits and the halt are shown on the install (M19.6.5, M19.6.6, M19.9.9, M19.9.11) (#663)",
+      "closed": "M19.6.5,M19.6.6,M19.9.11,M19.9.9"
+    },
     {
       "sha": "593313e",
       "at": "2026-10-21T07:50:18+00:00",
@@ -4153,12 +4143,6 @@
       "at": "2026-10-14T09:01:43+00:00",
       "subject": "Nine Wave 1 tasks are proved on the install by the owner's own tests",
       "closed": "M1.10.1,M1.10.3,M1.10.4,M1.10.5,M1.6.13,M1.6.16,M1.6.17,M1.6.18,M1.6.19"
-    },
-    {
-      "sha": "157ca5b",
-      "at": "2026-10-14T08:52:11+00:00",
-      "subject": "An automation can start when a connected source reports a changed record, and a webhook is refused (M17.4.1, needs-rupash 223 option B) (#597)",
-      "closed": "M17.4.1"
     }
   ]
 }
