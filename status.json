@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-21T05:35:22.432487+00:00",
-  "commit": "0ff490c8",
-  "commit_subject": "Stored workflows: versioned steps, assigned to agents, run through the gate, behind a switch that ships off (M17) (#647)",
+  "generated_at": "2026-10-21T05:52:20.088109+00:00",
+  "commit": "fc30e2ad",
+  "commit_subject": "8 more tasks are proved on the install by the newest complete acceptance run",
   "total": 1626,
-  "done": 1168,
-  "percent": 71.8,
-  "built": 1354,
-  "built_percent": 83.3,
-  "built_unproven": 186,
+  "done": 1176,
+  "percent": 72.3,
+  "built": 1361,
+  "built_percent": 83.7,
+  "built_unproven": 185,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -110,7 +110,6 @@
     "M29.3.1",
     "M3.7.2",
     "M30.3.10",
-    "M30.3.11",
     "M30.3.3",
     "M30.3.4",
     "M30.3.6",
@@ -264,25 +263,25 @@
       "wave": 4,
       "name": "Doing, lifecycle, extensions",
       "total": 232,
-      "done": 106,
-      "percent": 45.7,
-      "in_progress": 73,
+      "done": 113,
+      "percent": 48.7,
+      "in_progress": 66,
       "ready_for_testing": 32,
       "blocked": 16,
       "open": 5,
       "acts": 0,
       "decided": 23,
-      "built": 137,
-      "built_percent": 59.1
+      "built": 144,
+      "built_percent": 62.1
     },
     {
       "wave": 5,
       "name": "Hands, delivery, go-live",
       "total": 217,
-      "done": 87,
-      "percent": 40.1,
+      "done": 88,
+      "percent": 40.6,
       "in_progress": 65,
-      "ready_for_testing": 34,
+      "ready_for_testing": 33,
       "blocked": 19,
       "open": 12,
       "acts": 42,
@@ -492,10 +491,10 @@
       "name": "Multi-agent execution",
       "wave": 4,
       "total": 21,
-      "done": 11,
+      "done": 18,
       "acts": 0,
       "decided": 1,
-      "built": 11
+      "built": 18
     },
     {
       "module": "M19",
@@ -612,7 +611,7 @@
       "name": "Hosting, delivery and recovery",
       "wave": 5,
       "total": 36,
-      "done": 13,
+      "done": 14,
       "acts": 1,
       "decided": 10,
       "built": 22
@@ -1111,7 +1110,9 @@
     "M17.5.3",
     "M17.7.5",
     "M17.7.9",
+    "M18.1.2",
     "M18.1.3",
+    "M18.1.4",
     "M18.2.1",
     "M18.2.2",
     "M18.2.3",
@@ -1119,9 +1120,14 @@
     "M18.3.1",
     "M18.3.2",
     "M18.3.3",
+    "M18.3.4",
+    "M18.3.5",
     "M18.4.1",
     "M18.4.2",
     "M18.4.3",
+    "M18.5.2",
+    "M18.5.3",
+    "M18.7.1",
     "M19.1.1",
     "M19.1.5",
     "M19.1.6",
@@ -1446,6 +1452,7 @@
     "M30.2.4",
     "M30.2.6",
     "M30.2.8",
+    "M30.3.11",
     "M30.3.5",
     "M30.4.1",
     "M30.4.6",
@@ -2467,37 +2474,7 @@
       "why": "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Person-run demonstration of every human approval requirement in the register, each recorded against its requirement; approval mechanics exist (approval_routes, cards, leash) but the walk is a person's on the install (register rows GAP2-02, GAP2-08, GAP2-20).",
       "updated": "2026-10-13"
     },
-    "M18.1.2": {
-      "status": "IN PROGRESS",
-      "why": "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
-      "updated": "2026-10-20"
-    },
-    "M18.1.4": {
-      "status": "IN PROGRESS",
-      "why": "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
-      "updated": "2026-10-20"
-    },
-    "M18.3.4": {
-      "status": "IN PROGRESS",
-      "why": "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
-      "updated": "2026-10-20"
-    },
-    "M18.3.5": {
-      "status": "IN PROGRESS",
-      "why": "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
-      "updated": "2026-10-20"
-    },
     "M18.5.1": {
-      "status": "IN PROGRESS",
-      "why": "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
-      "updated": "2026-10-20"
-    },
-    "M18.5.2": {
-      "status": "IN PROGRESS",
-      "why": "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
-      "updated": "2026-10-20"
-    },
-    "M18.5.3": {
       "status": "IN PROGRESS",
       "why": "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
       "updated": "2026-10-20"
@@ -2508,11 +2485,6 @@
       "updated": "2026-10-13"
     },
     "M18.6.2": {
-      "status": "IN PROGRESS",
-      "why": "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
-      "updated": "2026-10-20"
-    },
-    "M18.7.1": {
       "status": "IN PROGRESS",
       "why": "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
       "updated": "2026-10-20"
@@ -3211,11 +3183,6 @@
       "status": "READY FOR TESTING",
       "why": "TRIAGE 2026-10-13 class 3 (built, not wired): recovery.alerts() raises BACKUP_AGED against the profile RPO from real manifests (tested); schedule_runner Runner backup_exposure has needs= and no run, controls.backup_exposure is invoked_by NOTHING, and ops/notices BACKUP_EXPOSURE says no channel is chosen. Nothing calls alerts(). NEXT: give Runner backup_exposure a run that lists manifests with backup_manifest.read_manifests, calls recovery.alerts and sends the notice to the operations alert holder; channel may need an owner decision",
       "updated": "2026-10-13"
-    },
-    "M30.3.11": {
-      "status": "READY FOR TESTING",
-      "why": "BUILT: a rehearsal that did not verify is recorded by the drill service and is the first alert the existing report raises. PROOF ON THE INSTALL: the check a_rehearsal_that_did_not_verify_is_the_loudest_alert passes; to see it live, a failed record on the Recovery screen appears above a late copy.",
-      "updated": "2026-10-20"
     },
     "M30.4.2": {
       "status": "IN PROGRESS",
@@ -4100,11 +4067,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 2,
+  "closed_today": 10,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "fc30e2a",
+      "at": "2026-10-21T05:18:48+00:00",
+      "subject": "8 more tasks are proved on the install by the newest complete acceptance run",
+      "closed": "M18.1.2,M18.1.4,M18.3.4,M18.3.5,M18.5.2,M18.5.3,M18.7.1,M30.3.11"
+    },
     {
       "sha": "4b04ac9",
       "at": "2026-10-21T02:18:23+00:00",
@@ -4218,12 +4191,6 @@
       "at": "2026-10-06T17:14:23+00:00",
       "subject": "The browser harness proves two tabs refresh, no page leaks an internal name or another host, and a drawer works under the console's style policy (#451)",
       "closed": "M27.15.13,M27.15.53,M27.15.81,M27.15.82"
-    },
-    {
-      "sha": "4647570",
-      "at": "2026-10-06T08:11:27+00:00",
-      "subject": "A regression in the golden corpus blocks the merge, and a test keeps the three parts of that together (#454)",
-      "closed": "M28.1.4"
     }
   ]
 }
