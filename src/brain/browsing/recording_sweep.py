@@ -52,6 +52,8 @@ from brain.tables.retention import LegalHoldRow
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+    from brain.ops.object_store import ObjectStore
+
 
 @dataclass(frozen=True)
 class Under:
@@ -173,6 +175,20 @@ async def sweep(
     return Swept(found=found, removed=not report_only)
 
 
+def recordings_under(store: ObjectStore) -> Under | None:
+    """The backend recordings are written to and swept from, or None with no store connected.
+
+    One place for the prefix, so the run that writes a recording (`brain.browsing.read_tool`) and
+    the sweep that removes it when it is due cannot disagree about where it is.
+    """
+    from brain.ops.object_store import key_prefix
+
+    if store.backend is None:
+        return None
+    bucket = bucket_for(ObjectKind.BROWSER_RUN_RECORDING).name
+    return Under(store.backend, key_prefix(bucket, store.prefix))
+
+
 def run_recording_sweep_now(
     database_url: str,
     *,
@@ -187,14 +203,13 @@ def run_recording_sweep_now(
     The store is built the way the application builds it, from the worker's vault. One that is not
     connected is a sentence in the report and not a failure of the retention sweep it belongs to.
     """
-    from brain.ops.object_store import key_prefix, object_store_at_start
+    from brain.ops.object_store import object_store_at_start
     from brain.session import make_app_engine, make_session_factory
 
     store = object_store_at_start(vault_address, vault_token)
-    if store.backend is None:
+    backend = recordings_under(store)
+    if backend is None:
         return f"recordings: not swept, no object store is connected ({store.unconnected})"
-    bucket = bucket_for(ObjectKind.BROWSER_RUN_RECORDING).name
-    backend = Under(store.backend, key_prefix(bucket, store.prefix))
 
     async def run() -> str:
         engine = make_app_engine(database_url)

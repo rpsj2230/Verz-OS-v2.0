@@ -831,6 +831,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     # A desktop has never been started anywhere: the launcher makes no desktop sandbox, so the check
     # that describes one is never a pass and ends as not run on every install.
     assert outcomes.pop("a_desktop_application_runs_in_a_sandbox_with_no_way_out")[0] == NOT_RUN
+    # A read through the driver and the runner over a stand-in page passes its first half and then
+    # ends as not run, because no real page has been opened by a real browser on this install.
+    assert outcomes.pop("a_browser_read_returns_only_the_declared_fields")[0] == NOT_RUN
     # Nor the release check switched on, which no install ships with.
     assert (
         outcomes.pop("the_release_this_install_runs_says_what_changed_and_how_urgent")[0] == NOT_RUN
