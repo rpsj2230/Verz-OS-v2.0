@@ -120,7 +120,7 @@ def _planted(box: Any) -> tuple[Any, ...]:
     return (
         replace(box, network={**box.network, "Internal": False}),
         runner_with(body={**box.runner.body, "NetworkingConfig": {"EndpointsConfig": {"x": {}}}}),
-        with_env("HTTPS_PROXY=http://egress:3128"),
+        with_env("HTTPS_PROXY=proxied"),
         with_env("API_TOKEN=planted"),
         runner_with(
             body={**box.runner.body, "Cmd": ["/desktop_runner.py", "--command", "/bin/sh"]}
