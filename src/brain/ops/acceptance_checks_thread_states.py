@@ -247,9 +247,9 @@ async def each_recent_conversation_says_where_its_run_has_got_to(h: Harness) -> 
     on = await listed(ada)
     if on[ids["done"]].state != "done":
         # Ben's approval on ada's request is the only held action it could have read.
-        raise CheckFailedError(
-            READ_ANOTHERS_APPROVAL if on[ids["done"]].state else ANSWERED_NOT_DONE
-        )
+        if on[ids["done"]].state:
+            raise CheckFailedError(READ_ANOTHERS_APPROVAL)
+        raise CheckFailedError(ANSWERED_NOT_DONE)
     if on[ids["failed"]].state != "failed":
         raise CheckFailedError(FAILED_NOT_SHOWN)
     if "reading and asking" not in on[ids["failed"]].failed_step:
