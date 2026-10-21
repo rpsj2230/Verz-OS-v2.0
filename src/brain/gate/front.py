@@ -90,6 +90,9 @@ class Choosing:
     conversation_id: str | None = None
     #: The agent the person named, already resolved to an id. See `select_agent`.
     addressed: str | None = None
+    #: What each visible agent is for, in its own words, by agent id: handed over only when the
+    #: install has switched task routing on (M40.7.5). Empty otherwise. See `select_agent`.
+    profiles: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -181,6 +184,7 @@ def run_front_half(
         rules=choosing.rules,
         conversation_id=choosing.conversation_id,
         addressed=choosing.addressed,
+        profiles=choosing.profiles,
     )
     setup = agents[selection.agent_id]
 

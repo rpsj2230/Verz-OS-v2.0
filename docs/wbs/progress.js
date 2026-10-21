@@ -4176,8 +4176,8 @@ const PROGRESS = {
   },
   "M40.5.1.3": {
     status: "READY FOR TESTING",
-    why: "built: POST /me/accounts/{connector}/disconnect (member_accounts_routes) revokes at the vendor then removes the person's slot through ops/person_token_revoker.VaultTokenRevoker, in the order member.connections.disconnect requires; Google Workspace now declares its revocation endpoint; the application vault policy gains delete on a person's own slot only. Check: a_member_disconnects_their_account_and_the_vendor_is_told_first in ops/acceptance_checks_member_accounts.py, over a recording vendor and vault. NOT provable in CI: that the vendor stops honouring the token, and that the install's vault holds the new policy line (the release applies it). To prove on the install: after the release, connect your own Google account from My workspace, press Disconnect my Google account and confirm; the card must show Not connected, and at your Google account's third-party access page the install must no longer be listed.",
-    updated: "2026-10-20",
+    why: "built: POST /me/accounts/{connector}/disconnect (member_accounts_routes) revokes at the vendor then removes the person's slot through ops/person_token_revoker.VaultTokenRevoker, in the order member.connections.disconnect requires; Google Workspace now declares its revocation endpoint; the application vault policy gains delete on a person's own slot only. Check: a_member_disconnects_their_account_and_the_vendor_is_told_first in ops/acceptance_checks_member_accounts.py, over a recording vendor and vault. NOT provable in CI: that the vendor stops honouring the token, and that the install's vault holds the new policy line (the release applies it). To prove on the install: after the release, connect your own Google account from My workspace, press Disconnect my Google account and confirm; the card must show Not connected, and at your Google account's third-party access page the install must no longer be listed. 2026-10-21 THE INSTALL CHECK FAILED ON THE OWNER'S INSTALL (the check stopped on OperationalError, no traceback readable). Not proved: do not read this leaf as working until the install shows the check passing. The check's whole-database token scan is the likeliest cause (a statement timeout over large tables) and is replaced by a search of the tables a disconnect or a keep writes; each database step now fails with its own sentence, so the next failure names the step.",
+    updated: "2026-10-21",
   },
   "M40.5.1.4": {
     status: "READY FOR TESTING",
@@ -4640,9 +4640,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.7.2": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): Skills page shows 'Try it out' as UnavailableAction with 'Coming soon' (console/src/pages/skills/skillActions.ts tryOut). Rehearsal route exists for reviewers (skill_routes POST /skills/{digest}/rehearsals) but is not a conversation.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built (M40/ask-starting-points, behind the switch try_a_skill, which ships off): on the Skills page an approved skill's Try it out opens Ask with that skill to try (/ask?skill=<digest>). Ask asks GET /me/skills/{digest}/try whether it can be tried and names it, asks for an agent to run through, and sends the digest with the question for that question alone; the pin is built in memory from an approved, unchanged, unretired library row and never stored, the agent is assigned nothing, the answer cache is bypassed, and the skill is offered to the model only if every tool it names is within the run's reach (brain.api_routes.with_tried_skill, brain.gate.model_lane.skills_offered). It is the ordinary run, metered like any other. PRIOR WORK (2026-10-13 triage): the card showed 'Try it out' as an explanation of something coming soon; the rehearsal route is the reviewers' and is not a conversation. PROVE ON THE INSTALL: (1) as an administrator switch on 'Let a person try an approved skill from its card'; (2) open Skills, an approved skill, press Try it out: Ask opens saying 'Trying the skill <name>', with Talk to an agent chosen and the Ask button waiting for an agent; (3) choose an agent whose reach covers the skill's tools and ask: the answer is made with the skill's card shown to the model; (4) ask the next question without the skill: it is not carried; open the agent's Skills tab: the skill was not assigned; (5) open the address with a skill nobody approved: one sentence says it cannot be tried and the question goes as any other; (6) switch off: Try it out opens Ask with the same sentence.",
+    updated: "2026-10-21",
   },
   "M40.7.3": {
     status: "READY FOR TESTING",
@@ -4655,9 +4655,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.7.5": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Talk to an agent is built: Ask page agent picker (askQuery agent field, gate.select.select_agent, gate.roster). 'Start a task' as a distinct entry and gate routing a task to a callable agent is not: without an agent /answer uses the default agent at the person's own reach. NEXT: add a start-a-task entry on Ask posting without an agent, and a gate step choosing a callable agent from the roster; then a check",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built (M40/ask-starting-points, behind the switch task_routing, which ships off): Ask offers two starting points, Start a task and Talk to an agent (console/src/pages/AskStart.tsx). Start a task names no agent; with task routing on, the gate (brain.gate.select, stage 3, still no model call) matches the question to the one agent the person may call whose name and instruction share at least two distinct words with it, and answers at the person's own reach narrowed by that agent's ceiling; a tie, or nothing shared, falls through to the default as before, and an agent the person may not call is never read. PRIOR WORK (2026-10-13 triage): Talk to an agent, select_agent and the roster existed; the web route handed select_agent no rules, no bindings and no description of any agent, so a task always went to the default. PROVE ON THE INSTALL: (1) as an administrator open Features and switch on 'Send a task started with no agent to the agent whose purpose it matches'; (2) as a member who may call an agent whose instruction names a subject (for example 'domain renewals'), open Ask: 'Start a task' is chosen and no agent picker is drawn; (3) ask a question using two words from that instruction: in Audit, the request names that agent as selected, at the classifier stage; (4) ask an unrelated question: the default answers; (5) switch the feature off: the first question is answered by the default again; (6) choose Talk to an agent and pick one: it answers, as before.",
+    updated: "2026-10-21",
   },
   "M40.7.6": {
     status: "READY FOR TESTING",
@@ -4670,9 +4670,9 @@ const PROGRESS = {
     updated: "2026-10-20",
   },
   "M40.7.8": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No starter prompts: searched src and console for starter/suggested question, only Ask page exists. Inputs exist: agent skills (skill pins) and the knowledge reach.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built (M40/ask-starting-points, behind the switch agent_starter_prompts, which ships off): choosing an agent on Ask shows up to three starter prompts, the example tasks written in the Examples section of the approved skills pinned to that agent (brain.member_starters, GET /me/agents/{agent_id}/starters). A prompt is offered only when the skill would be offered to a run at this person's reach through this agent (every tool within E_run, brain.gate.model_lane.skills_offered) and every department's knowledge the skill needs is within that reach; nothing is said about what was left out, and an agent the person may not run answers as one that does not exist. PRIOR WORK (2026-10-13 triage): no starter prompts existed; the inputs, skill examples and the run's reach, did. PROVE ON THE INSTALL: (1) as an administrator switch on 'Offer three starter prompts when a person opens an agent'; (2) assign an approved skill whose SKILL.md has an Examples section to an agent; (3) as a member who may run the agent, open Ask, choose Talk to an agent and pick it: the example tasks appear under 'You could ask', at most three; pressing one fills the question box and asks nothing; (4) as a member whose access does not cover a tool the skill names: no prompts appear for that skill; (5) switch off: none appear.",
+    updated: "2026-10-21",
   },
   "M18.5.1": {
     status: "IN PROGRESS",

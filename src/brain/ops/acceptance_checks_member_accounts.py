@@ -18,6 +18,22 @@ their own token back.
 made for, as inherited and with no control, and to nobody else: a person in another department is
 listed nothing, and asking to disconnect it is the one refusal.
 
+**Why the token is looked for in the tables a disconnect and a keep write, and not in every table.**
+This check used to ask `brain.ops.index_audit.tables_holding`, which reads every row of every table
+as text, one statement each, under the statement timeout. The owner's install stopped the check on
+an `OperationalError` on 2026-10-21 with no traceback to read; a scan of that size outrunning the
+timeout on a table as large as the chunks, the trace or the ledger is the most likely cause and is
+not confirmed, and the per-step sentences below are there to confirm or refute it on the next run.
+The leaf's claim is that a disconnect leaves no token behind, and a token it leaves behind is in a
+place it wrote or its keep wrote, so the search is over exactly those
+(`WHERE_A_TOKEN_COULD_BE_LEFT`) and finishes in moments on any install. The claim is narrower than
+"no table anywhere", and the sentence says so; the whole-database canary scan is
+`brain.ops.index_audit`'s own job.
+
+**Each step that can fail on a database says which one it was.** A statement the install refused
+used to surface as the exception's type name alone. Each step now has its own sentence, so a failure
+on an install names the step without quoting a row.
+
 **What this does not prove**, and the report says so: that a real vendor stops honouring the token,
 and that the install's vault carries the application policy line that lets the slot be removed. Both
 need a person on an install (the Google steps on needs item 173 for the first).
@@ -63,6 +79,36 @@ A, B = RESERVED_DEPARTMENTS
 
 #: The made-up vendor's revocation address, under a name reserved for examples.
 VENDOR_REVOKE: Final = "https://identity.oauth-vendor.example/connect/revocation"
+
+#: The tables a disconnect or the keep of a token writes, which are the only places this check can
+#: honestly say a token was left behind. See the module docstring.
+WHERE_A_TOKEN_COULD_BE_LEFT: Final = (
+    "ops.credential_write",
+    "ops.connector_connection",
+    "ops.oauth_consent",
+    "ops.setting",
+    "obs.audit_entry",
+    "obs.request_telemetry",
+    "obs.trace_step",
+)
+
+#: What the check says when its database login cannot read every row, so the search could not look.
+THE_LOGIN_CANNOT_READ_EVERY_ROW: Final = (
+    "this run's database login cannot read every row, so the search for a left-behind token could "
+    "not look; the worker's run can"
+)
+
+#: One sentence for each step of the disconnect check that talks to the database and can be refused
+#: by it. A database error is named by the step it stopped, never by what it quoted.
+DB_STAND_UP: Final = "the database refused the step that connects a source for the run"
+DB_SET_UP_PEOPLE: Final = "the database refused the step that places the check's reserved people"
+DB_KEEP_THE_SLOT: Final = "the database refused the step that keeps a person's token for the run"
+DB_LIST: Final = "the database refused the step that lists a person's accounts"
+DB_REFUSED_DISCONNECT: Final = "the database refused a step of a disconnect that was to be refused"
+DB_FAILED_DISCONNECT: Final = "the database refused a step of a disconnect the vendor refused"
+DB_DISCONNECT: Final = "the database refused a step of the disconnect that was to go through"
+DB_RETIRE_GRANT: Final = "the database refused the step that withdraws a person's grant"
+DB_SEARCH: Final = "the database refused the step that looks for the token in the tables"
 
 #: What the check says where the install has Xero connected already.
 XERO_IS_CONNECTED_HERE_ALREADY: Final = (
@@ -112,6 +158,40 @@ async def _refused(call: Any) -> bool:
     except Absent:
         return True
     return False
+
+
+async def _held_in(h: Harness, needle: str) -> tuple[str, ...]:
+    """The tables of `WHERE_A_TOKEN_COULD_BE_LEFT` holding `needle` anywhere in a row.
+
+    As the worker's login inside the check's transaction, for `A_SEARCH_THAT_CANNOT_SEE_EVERY_ROW_
+    IS_NOT_RUN`, and bounded to a handful of tables so it ends inside the statement timeout on an
+    install with a year of data. A table this release does not have is skipped.
+    """
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from brain.ops.index_audit import _quoted, every_table, sees_every_row
+
+    async with AsyncSession(bind=h.connection, join_transaction_mode="create_savepoint") as session:
+        await session.execute(text("RESET ROLE"))
+        if not await sees_every_row(session):
+            raise CheckNotRunError(THE_LOGIN_CANNOT_READ_EVERY_ROW)
+        present = set(await every_table(session))
+        as_hex = needle.encode("utf-8").hex()
+        holding: list[str] = []
+        for qualified in WHERE_A_TOKEN_COULD_BE_LEFT:
+            if qualified not in present:
+                continue
+            schema, table = qualified.split(".", 1)
+            statement = text(
+                f"SELECT 1 FROM {_quoted(schema)}.{_quoted(table)} AS r "  # noqa: S608
+                "WHERE strpos(r::text, :needle) > 0 OR strpos(r::text, :as_hex) > 0 LIMIT 1"
+            )
+            found = await session.execute(statement, {"needle": needle, "as_hex": as_hex})
+            if found.first() is not None:
+                holding.append(qualified)
+        await session.commit()
+    return tuple(holding)
 
 
 async def _stand_up(
@@ -176,10 +256,12 @@ async def _stand_up(
         "this install's copy is removed, a vendor that refuses leaves the account connected, a "
         "colleague who never connected it is refused as if it did not exist, a person who has "
         "since left the department can still take their own token back, and no token is left in "
-        "a table."
+        "the tables a disconnect writes to."
     ),
 )
 async def a_member_disconnects_their_account_and_the_vendor_is_told_first(h: Harness) -> None:
+    from sqlalchemy.exc import DBAPIError
+
     from brain.connector_routes import my_accounts
     from brain.core.scope import Scope
     from brain.govern_routes import retire_grant
@@ -188,25 +270,33 @@ async def a_member_disconnects_their_account_and_the_vendor_is_told_first(h: Har
         NOT_DISCONNECTED,
         disconnect_my_account,
     )
-    from brain.ops.acceptance_checks_connectors import _search
     from brain.ops.credentials import connector_person_oauth_slot
 
     base = consented_personally()
     assert base.oauth is not None  # declared just above
     declared = replace(base, oauth=replace(base.oauth, revoke_url=VENDOR_REVOKE))
     source = declared.name
-    vendor, vault, c = await _stand_up(h, declared, department=A)
+    try:
+        vendor, vault, c = await _stand_up(h, declared, department=A)
+    except DBAPIError:
+        raise CheckFailedError(DB_STAND_UP) from None
     reader = ((PERSONAL_READER, Scope.department(A)),)
     ada, bea, cal = (h.principal(A, one) for one in ("ada", "bea", "cal"))
-    for person, grants in ((ada, reader), (bea, reader), (cal, ())):
-        await h.person(person, department=A, grants=grants)
+    try:
+        for person, grants in ((ada, reader), (bea, reader), (cal, ())):
+            await h.person(person, department=A, grants=grants)
+    except DBAPIError:
+        raise CheckFailedError(DB_SET_UP_PEOPLE) from None
 
     ada_token = f"refresh-{secrets.token_urlsafe(24)}"
     ada_slot = connector_person_oauth_slot(source, ada).path
     credentials = c.app.state.credentials
-    await credentials.keep(
-        connector_person_oauth_slot(source, ada), ada_token, actor=ada, trace_id=h.trace_id
-    )
+    try:
+        await credentials.keep(
+            connector_person_oauth_slot(source, ada), ada_token, actor=ada, trace_id=h.trace_id
+        )
+    except DBAPIError:
+        raise CheckFailedError(DB_KEEP_THE_SLOT) from None
     vendor.refresh[ada_token] = ada
 
     async def listed(who: str) -> list[Any]:
@@ -220,32 +310,50 @@ async def a_member_disconnects_their_account_and_the_vendor_is_told_first(h: Har
                 c.request("POST"), source, await c.asked(who, strong=False)
             )
 
-    mine = await listed(ada)
+    try:
+        mine = await listed(ada)
+        others = await listed(bea)
+    except DBAPIError:
+        raise CheckFailedError(DB_LIST) from None
     if [(one.provenance, one.disconnectable) for one in mine] != [("personal", True)]:
         raise CheckFailedError("an account whose token is kept was not offered a disconnect")
-    if any(one.disconnectable for one in await listed(bea)):
+    if any(one.disconnectable for one in others):
         raise CheckFailedError("an account nobody connected was offered a disconnect")
 
     # A colleague who never connected it, and a person with no reach to the source: one refusal.
-    for stranger in (bea, cal):
-        if not await _refused(disconnecting(stranger)):
-            raise CheckFailedError("somebody who never connected the account could disconnect it")
+    try:
+        for stranger in (bea, cal):
+            if not await _refused(disconnecting(stranger)):
+                raise CheckFailedError(
+                    "somebody who never connected the account could disconnect it"
+                )
+    except DBAPIError:
+        raise CheckFailedError(DB_REFUSED_DISCONNECT) from None
     if vendor.revocations or vault.removed:
         raise CheckFailedError("a refused disconnect touched the vendor or the vault")
 
     # A vendor that refuses leaves the account connected, in words that name no vendor error.
     vendor.refusing_revocation = True
-    refused = await disconnecting(ada)
+    try:
+        refused = await disconnecting(ada)
+        still = [one.disconnectable for one in await listed(ada)]
+    except DBAPIError:
+        raise CheckFailedError(DB_FAILED_DISCONNECT) from None
     if getattr(refused, "status_code", 0) != 503 or NOT_DISCONNECTED.encode() not in refused.body:
         raise CheckFailedError("a revocation the vendor refused was not told in words")
     if ada_slot not in vault.slots or vault.removed:
         raise CheckFailedError("a revocation the vendor refused still removed the token")
-    if [one.disconnectable for one in await listed(ada)] != [True]:
+    if still != [True]:
         raise CheckFailedError("a failed disconnect left the account unlisted")
 
     # Then it goes through: the vendor first, and this install's copy only after.
     vendor.refusing_revocation = False
-    done = await disconnecting(ada)
+    try:
+        done = await disconnecting(ada)
+        after = [(one.connected, one.disconnectable) for one in await listed(ada)]
+        again = await _refused(disconnecting(ada))
+    except DBAPIError:
+        raise CheckFailedError(DB_DISCONNECT) from None
     if getattr(done, "told", "") != DISCONNECTED_AND_REVOKED or not done.vendor_revoked:
         raise CheckFailedError("a disconnect did not say the vendor had been asked")
     if vendor.revocations != [ada_token]:
@@ -254,23 +362,38 @@ async def a_member_disconnects_their_account_and_the_vendor_is_told_first(h: Har
         raise CheckFailedError("the token was removed before the vendor was asked")
     if vault.removed != [ada_slot] or ada_slot in vault.slots:
         raise CheckFailedError("this install's copy of the token was not removed")
-    if [(one.connected, one.disconnectable) for one in await listed(ada)] != [(False, False)]:
+    if after != [(False, False)]:
         raise CheckFailedError("a disconnected account was still shown as connected")
-    if not await _refused(disconnecting(ada)):
+    if not again:
         raise CheckFailedError("a second disconnect found something to disconnect")
 
     # Somebody who has left the department keeps the way to take their own token back.
     away = connector_person_oauth_slot(source, bea)
     bea_token = f"refresh-{secrets.token_urlsafe(24)}"
-    await credentials.keep(away, bea_token, actor=bea, trace_id=h.trace_id)
+    try:
+        await credentials.keep(away, bea_token, actor=bea, trace_id=h.trace_id)
+    except DBAPIError:
+        raise CheckFailedError(DB_KEEP_THE_SLOT) from None
     vendor.refresh[bea_token] = bea
-    await h.execute(*h.attributed(), retire_grant(bea, PERSONAL_READER))
-    if await listed(bea):
+    try:
+        await h.execute(*h.attributed(), retire_grant(bea, PERSONAL_READER))
+    except DBAPIError:
+        raise CheckFailedError(DB_RETIRE_GRANT) from None
+    try:
+        still_listed = await listed(bea)
+        taken_back = await disconnecting(bea)
+    except DBAPIError:
+        raise CheckFailedError(DB_DISCONNECT) from None
+    if still_listed:
         raise CheckFailedError("a person without the reader capability was still listed the source")
-    if getattr(await disconnecting(bea), "vendor_revoked", False) is not True:
+    if getattr(taken_back, "vendor_revoked", False) is not True:
         raise CheckFailedError("a person who left the department could not take their token back")
-    if await _search(h, ada_token):
-        raise CheckFailedError("a person's token was found in a table")
+    try:
+        left_behind = await _held_in(h, ada_token)
+    except DBAPIError:
+        raise CheckFailedError(DB_SEARCH) from None
+    if left_behind:
+        raise CheckFailedError("a person's token was found in a table a disconnect writes to")
 
 
 @check(

@@ -936,6 +936,10 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         assert outcomes.pop(tool_check.name)[0] == NOT_RUN, tool_check.name
     # An agent's skill reaches a model too; `tests/unit/test_acceptance_skill_runs.py` runs it.
     assert outcomes.pop("an_agents_run_reads_its_assigned_skills_and_its_level")[0] == NOT_RUN
+    # A task routed by purpose and a skill tried for one question are answered by the stand-in too;
+    # `tests/unit/test_acceptance_checks_ask_starts.py` runs them with the hosted profile.
+    assert outcomes.pop("a_task_with_no_agent_goes_to_the_agent_it_matches")[0] == NOT_RUN
+    assert outcomes.pop("a_member_tries_an_approved_skill_for_one_question")[0] == NOT_RUN
     # So does the reuse of one skill by two agents; `tests/unit/test_acceptance_skill_reuse.py`.
     assert (
         outcomes.pop("a_skill_is_reused_by_two_agents_and_refused_where_unservable")[0] == NOT_RUN

@@ -49,11 +49,11 @@ import {
   skillAddress,
 } from "../src/pages/skillsQuery";
 import { fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
-import { apiDocument, declaredParameterSchema, declaredPropertyNames, declaredRequestBodySchema, declaredQueryParameters } from "./support/openapi";
+import { declaredParameterSchema, declaredPropertyNames, declaredRequestBodySchema, declaredQueryParameters } from "./support/openapi";
 import { backendEnumMembers, backendModelFields } from "./support/python";
 import { installRadixStubs } from "./support/radix";
 import { extractOne, readRepoFile } from "./support/repo";
-import { noRouteRetires, retiringPattern, sentenceFor } from "./support/explanations";
+import { sentenceFor } from "./support/explanations";
 
 const CONSOLE_ORIGIN = "https://console.test";
 const API = "/api/v1";
@@ -301,14 +301,6 @@ describe("what the Skills module asks for and sends", () => {
     expect(procedureProblem({ name: "Invoice.docx", size: MAX_PROCEDURE_BYTES })).toBeNull();
     expect(procedureProblem({ name: "Invoice.docx", size: MAX_PROCEDURE_BYTES + 1 })).not.toBeNull();
     expect(procedureProblem({ name: "Invoice.doc", size: 10 })).toContain(".doc");
-  });
-
-  test("no act the pages call coming soon has a route in the API document", () => {
-    // What breaks if this is deleted: "coming soon" said about an act that has arrived. The positive
-    // sibling is that the pattern matches the path it is written for.
-    const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
-    noRouteRetires(["skill.try_out"]);
-    expect(retiringPattern("skill.try_out").test("/api/v1/skills/{digest}/rehearsal")).toBe(true);
   });
 
   test("an address this module builds stays inside the console", () => {

@@ -195,6 +195,7 @@ from brain.gate.model_lane import (
     AgentRun,
     DocumentSearchTool,
     FollowUp,
+    LibraryRow,
     ModelLane,
     skills_offered,
 )
@@ -239,6 +240,8 @@ from brain.ops.connector_store import StoredConnections
 from brain.ops.connector_sync_store import SourceEpochs, StoredSourceEpochs
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
 from brain.ops.drive_passages import WithDrive, drive_passages_for
+from brain.ops.features_declared.task_routing import TASK_ROUTING
+from brain.ops.features_declared.try_a_skill import TRY_A_SKILL
 from brain.ops.google_workspace_live import workspace_passages_for
 from brain.ops.halt_store import Work, read_state, refusal_for, refusal_in
 from brain.ops.lark_base_index import LarkBaseUse, switched_on
@@ -923,6 +926,11 @@ class Question(BaseModel):
     #: that is not the asker's, is put away or does not exist brings nothing and says nothing of
     #: which. See `brain.project_context`.
     project: Annotated[str, StringConstraints(max_length=THREAD_ID_CHARS)] | None = None
+    #: The digest of an approved skill the person is trying for this question (M40.7.2), or None.
+    #: Offered to the agent that answers for this question alone, and only when the install has
+    #: switched trying on, the skill is approved and unchanged, and every tool it names is within
+    #: the run's reach. Anything else answers as if it were absent. See `agent_run_of`.
+    try_skill: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")] | None = None
 
 
 def row_readers(registry: ToolRegistry) -> dict[tuple[str, str], RowReader]:
@@ -1219,8 +1227,90 @@ def model_lane_of(state: Any) -> ModelLane | None:
 DEFAULT_AGENT: Final = "brain"
 
 
+async def task_routing_is_on(state: Any) -> bool:
+    """Whether a task started with no agent is matched to what each agent is for (M40.7.5).
+
+    Off on a process with no database or no row. Imported where it is asked because
+    `brain.ops.features` reads modules that import this one.
+    """
+    from brain.ops.features import is_on
+
+    held = getattr(state, "task_routing_on", None)
+    if isinstance(held, bool):
+        return held
+    sessions = getattr(state, "db_sessions", None)
+    if sessions is None:
+        return False
+    async with sessions() as session:
+        return await is_on(session, TASK_ROUTING)
+
+
+async def trying_a_skill_is_on(state: Any) -> bool:
+    """Whether a question may carry an approved skill to try (M40.7.2). Off with no row."""
+    from brain.ops.features import is_on
+
+    held = getattr(state, "trying_a_skill_on", None)
+    if isinstance(held, bool):
+        return held
+    sessions = getattr(state, "db_sessions", None)
+    if sessions is None:
+        return False
+    async with sessions() as session:
+        return await is_on(session, TRY_A_SKILL)
+
+
+def answer_is_not_cacheable(
+    ask: Question, *, referral: object | None, follow_up: object | None
+) -> bool:
+    """Whether this question is neither looked up in nor kept by the answer cache.
+
+    A referral, a question narrowed to kinds, one continuing a thread and one carrying a skill to
+    try each have an answer the cache's key does not describe: it has no kind, no thread and no
+    skill, so serving or keeping one would answer a different question with this one's words.
+    """
+    return referral is not None or bool(ask.kinds) or bool(ask.try_skill) or follow_up is not None
+
+
+def with_tried_skill(
+    pins: tuple[SkillPin, ...],
+    library: Sequence[LibraryRow],
+    trying: str,
+    *,
+    agent_id: str,
+    retired: frozenset[str] = frozenset(),
+) -> tuple[SkillPin, ...]:
+    """The pins with one more, for this question alone, when the skill tried is approved (M40.7.2).
+
+    A pin that is not stored: it is built here from a library row that is approved by a named
+    person and unchanged since, and never written, so the agent is not assigned the skill and the
+    next question does not carry it. A digest nobody approved, one that moved, and one the library
+    does not hold add nothing and say nothing, which is the answer for a skill that does not
+    exist. `skills_offered` still asks every tool the skill names of the run's reach.
+    """
+    if trying in retired:
+        return pins
+    tried = next((one for one in library if one.digest == trying and not one.moved), None)
+    if tried is None or not tried.imported.is_executable():
+        return pins
+    if any(one.digest == tried.digest for one in pins):
+        return pins
+    return (*pins, SkillPin(agent_id=agent_id, skill_name=tried.name, digest=tried.digest))
+
+
+async def task_profiles(state: Any, roster: AnswerRoster, *, named: bool) -> dict[str, str]:
+    """What each stored agent the person may call is for, in its own words, or nothing.
+
+    Nothing when the question names an agent (the person decided), when the roster holds no stored
+    agent, and when the install has not switched task routing on, so the common question reads no
+    switch at all.
+    """
+    if named or not roster.records or not await task_routing_is_on(state):
+        return {}
+    return {one.agent_id: f"{one.display_name} {one.persona}" for one in roster.records.values()}
+
+
 async def agent_run_of(
-    state: Any, agent: AgentRecord | None, registry: ToolRegistry
+    state: Any, agent: AgentRecord | None, registry: ToolRegistry, trying: str | None = None
 ) -> AgentRun | None:
     """The selected agent as its run carries it: its record, its skill pins and their library.
 
@@ -1241,7 +1331,13 @@ async def agent_run_of(
     async with sessions() as session:
         pairs = (await session.execute(installs_of([agent.agent_id]))).all()
     pins = tuple(pin for one, version in pairs for pin in pins_of(one, version, agent))
-    library = await StoredSkills(sessions).library() if pins else ()
+    library = await StoredSkills(sessions).library() if pins or trying else ()
+    if trying and await trying_a_skill_is_on(state):
+        # A version retired is refused to new agents, and a try is a new use of it.
+        from brain.console.skill_library import retired_digests
+
+        retired = retired_digests(await StoredSkills(sessions).retirements([trying]))
+        pins = with_tried_skill(pins, library, trying, agent_id=agent.agent_id, retired=retired)
     return AgentRun(record=agent, pins=pins, library=library, registry=registry)
 
 
@@ -2347,7 +2443,7 @@ async def answered_for(
     )
     caching = (
         None
-        if referral is not None or ask.kinds or follow_up is not None
+        if answer_is_not_cacheable(ask, referral=referral, follow_up=follow_up)
         else caching_of(
             request.app.state,
             policies,
@@ -2369,6 +2465,9 @@ async def answered_for(
                 visible_agents=roster.visible,
                 default_agent=DEFAULT_AGENT,
                 addressed=address.agent_id,
+                profiles=await task_profiles(
+                    request.app.state, roster, named=address.agent_id is not None
+                ),
             ),
             registry=registry.definitions(),
             now=asking.now,
@@ -2408,7 +2507,7 @@ async def answered_for(
         model = (
             model_lane_for(
                 request.app.state,
-                await agent_run_of(request.app.state, agent, registry),
+                await agent_run_of(request.app.state, agent, registry, ask.try_skill),
                 ask.kinds,
                 follow_up,
             )

@@ -27,7 +27,18 @@ selection is identical whichever it was, and the reason never repeats the name.
 request, and text inside a retrieved document could otherwise choose which agent, and
 therefore which tools, handle the question.
 
-Task ids: M3.6.2
+**A task started with no agent named is matched to what each agent is for (M40.7.5).** Stage 3
+also reads the words an agent was given, its name and its instruction, which are the agent's own
+statement of what it is for and are chosen by whoever built it. The question picks the visible
+agent it shares the most distinct words with, and only if it shares at least `MIN_SHARED_WORDS`
+and no other agent shares as many. A tie, or nothing shared, falls through to the fixed keywords
+and then the default, because two equally good guesses is nobody deciding. Rejected: asking a model
+which agent fits, for the reason this module gives about the classifier, and a tie broken on the
+agent id, which would make one agent win every question two of them fit and nobody could see why.
+It reads only agents already in `visible_agents`, so it can never choose one the person may not
+call, and it is handed the words by the caller rather than reading any store.
+
+Task ids: M3.6.2, M40.7.5
 """
 
 from __future__ import annotations
@@ -36,6 +47,7 @@ import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Final
 
 from brain.gate.context import Channel
 
@@ -110,6 +122,100 @@ def _visible(agent_id: str, visible_agents: frozenset[str]) -> bool:
     return agent_id in visible_agents
 
 
+#: The fewest distinct words an agent's description must share with a question to be chosen for
+#: it. One shared word is how "invoice" matches an agent that happens to mention invoices once.
+MIN_SHARED_WORDS: Final = 2
+
+#: Words too common to say what anything is for. A short list on purpose: a longer one is a
+#: second vocabulary to keep, and the length floor below already drops most small words.
+COMMON_WORDS: Final[frozenset[str]] = frozenset(
+    {
+        "about",
+        "after",
+        "again",
+        "also",
+        "answer",
+        "answers",
+        "because",
+        "been",
+        "before",
+        "could",
+        "does",
+        "each",
+        "from",
+        "have",
+        "help",
+        "into",
+        "just",
+        "like",
+        "make",
+        "more",
+        "much",
+        "need",
+        "only",
+        "other",
+        "please",
+        "should",
+        "some",
+        "such",
+        "than",
+        "that",
+        "their",
+        "them",
+        "then",
+        "there",
+        "these",
+        "they",
+        "this",
+        "what",
+        "when",
+        "where",
+        "which",
+        "will",
+        "with",
+        "would",
+        "your",
+    }
+)
+
+#: Words shorter than this say too little to match on.
+SHORTEST_WORD: Final = 4
+
+
+def _purpose_words(text: str) -> frozenset[str]:
+    """The distinct words of a text that can say what something is for."""
+    return frozenset(
+        word
+        for word in re.findall(r"[a-z0-9]+", text.lower())
+        if len(word) >= SHORTEST_WORD and word not in COMMON_WORDS
+    )
+
+
+def purpose_match(
+    question: str, profiles: Mapping[str, str], visible_agents: frozenset[str]
+) -> tuple[str, int] | None:
+    """The one visible agent whose words the question shares most, and how many, or None.
+
+    None when no agent shares `MIN_SHARED_WORDS`, and None when two share the same most: see the
+    module docstring. Only visible agents are read, so the result is never one the person may not
+    call, and nothing about the others is said.
+    """
+    asked = _purpose_words(question)
+    scored = sorted(
+        (
+            (len(asked & _purpose_words(text)), agent_id)
+            for agent_id, text in profiles.items()
+            if _visible(agent_id, visible_agents)
+        ),
+        key=lambda pair: (-pair[0], pair[1]),
+    )
+    if not scored or scored[0][0] < MIN_SHARED_WORDS:
+        return None
+    if len(scored) > 1 and scored[1][0] == scored[0][0]:
+        return None
+    return scored[0][1], scored[0][0]
+
+
 def select_agent(
     question: str,
     channel: Channel,
@@ -121,6 +227,7 @@ def select_agent(
     conversation_id: str | None = None,
     keywords: Mapping[str, tuple[str, ...]] = CLASSIFIER_KEYWORDS,
     addressed: str | None = None,
+    profiles: Mapping[str, str] | None = None,
 ) -> AgentSelection:
     """Pick an agent. Deterministic, and never a model call.
 
@@ -170,6 +277,16 @@ def select_agent(
             agent_id=rule.agent_id,
             stage=SelectionStage.RULE,
             reason=f"matched the rule {rule.pattern.pattern!r}",
+        )
+
+    # 3a. What each visible agent says it is for, when the caller handed those words over (M40.7.5).
+    matched = purpose_match(question, profiles or {}, visible_agents)
+    if matched is not None:
+        agent_id, shared = matched
+        return AgentSelection(
+            agent_id=agent_id,
+            stage=SelectionStage.CLASSIFIER,
+            reason=f"{shared} distinct word(s) of the question are what {agent_id} is for",
         )
 
     # 3. The cheap classifier. Sorted so the result does not depend on mapping order, and

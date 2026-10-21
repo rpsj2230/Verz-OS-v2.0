@@ -6,6 +6,65 @@ Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
 # Open
 
+## 258. May the release build and sign two more images, one for browser runs and one for desktop runs?
+
+**In plain terms:** tasks M19 let an agent drive a website in a locked box and, later, a desktop program. The
+box is a container image. Today the release builds and signs one image, the application's. The browser box and
+the desktop box have their own Dockerfiles (`ops/browser/Dockerfile`, `ops/desktop/Dockerfile`) and no pipeline
+builds them, so an install would have to build them by hand. Adding them touches the signed release, which
+every install's update goes through, so I have not changed it without asking.
+
+**Option A: build and sign both beside the application image,** each tagged with the application's tag plus
+`-browser` or `-desktop`, signed the same way. A company then gets all three from one release.
+
+**Option B: build and sign only the browser image now,** and add the desktop one when a desktop program has
+been run in a box on a host for the first time (it never has).
+
+**Option C: leave them for each install to build,** documented in the install guide.
+
+**My recommendation:** B. The browser box is used the day a company switches browser runs on; the desktop box
+has never been started, and a signed image nobody has run is a claim nobody has checked.
+
+**What I need from you:** reply "258: A", "258: B" or "258: C".
+
+## 259. Where may a password typed for a website be kept, so an agent can sign in to a site that has no login by token?
+
+**In plain terms:** tasks M19.4.1 to M19.4.3 let an agent sign in to a website for a person. The vault holds
+credentials the product can mint (it asks the vault to issue a short-lived one). A website password someone
+types is not one of those: the vault has no place for a secret that cannot be minted and then expires. Nothing
+is built for it, and the three tasks wait.
+
+**Option A: store the typed password in the vault as a plain secret,** readable only by the browser run that
+needs it and by nobody else, never shown again after it is saved. The run opens it at the start and the
+password is never given to the model.
+
+**Option B: do not store website passwords at all.** An agent may use a site only where it can sign in with a
+token or a session the person starts themselves each time.
+
+**My recommendation:** A for a company that needs agents on sites with no other way in; the rule that the model
+never sees the password stays. Choose B if you would rather the product held no website secret of any kind.
+
+**What I need from you:** reply "259: A" or "259: B".
+
+## 260. May the model gateway send a picture to a model, so a browser run's result can be judged by sight?
+
+**In plain terms:** tasks M19.5.2, M19.5.5 and M19.9.8 judge a browser run by looking at a screenshot. The
+gateway that every model call goes through carries text only. Sending a picture means a second kind of call
+through the same door, with the same ceilings, cost record and redaction, and a decision about whether a
+screenshot of a page may leave the install for a model provider at all (it can show anything the page showed).
+
+**Option A: add picture input to the gateway,** switched off, and only for the providers you name, with the
+screenshot redacted by the same rules as text before it leaves.
+
+**Option B: judge a run from the page's text and structure only,** and never send a picture. The three tasks
+are rewritten to say so.
+
+**My recommendation:** B. It keeps what leaves the install to text the product already redacts, and a run can
+still be judged from the page's structure. Choose A only if you want a picture judged and accept the cost and
+the exposure.
+
+**What I need from you:** reply "260: A" or "260: B".
+
 ## 257. May a knowledge owner be shown that a question found nothing, when the product keeps no text of any question?
 
 **In plain terms:** task M27.15.11 wants a knowledge owner to see where company knowledge is missing: a

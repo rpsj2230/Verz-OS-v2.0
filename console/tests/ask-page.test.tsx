@@ -414,7 +414,7 @@ describe("asking a question", () => {
     // What breaks if this is deleted: a query parameter or a path segment added later and
     // used by a console that already had somewhere to put a question. The route's own
     // document is read: the question, the optional agent the person picked, the optional kinds
-    // they narrowed it to (M7.6.1) and the optional thread it continues (M9.1.1) and the optional project it is asked inside (M40.7.7) are the body's
+    // they narrowed it to (M7.6.1) and the optional thread it continues (M9.1.1) the optional project it is asked inside (M40.7.7) and the optional approved skill it tries (M40.7.2) are the body's
     // only properties, no query parameter and no path parameter, and the bound the field holds
     // is the document's bound rather than a number copied here.
     expect(ANSWER_API_PATH).toBe("/answer");
@@ -424,6 +424,7 @@ describe("asking a question", () => {
       "project",
       "question",
       "thread",
+      "try_skill",
     ]);
     expect(declaredParameterNames(ANSWER_ROUTE, "post", "query")).toEqual([]);
     expect(declaredParameterNames(ANSWER_ROUTE, "post", "path")).toEqual([]);
@@ -728,6 +729,15 @@ describe("naming the agent that answers", () => {
     // agent, which the route has routed by since M3.9.8, or the picker's value never reaches
     // the body and every question goes to the router's choice.
     const { container, idp } = await askScreen(whole(answerFrames("An answer.")), roster);
+    // The picker is the second way to start (M40.7.5): talking to an agent, chosen beside the task.
+    const talk = await waitFor(() => {
+      const found = container.querySelector<HTMLInputElement>('input[name="ask-start"][value="agent"]');
+      if (!found) {
+        throw new Error("the start choice has not arrived");
+      }
+      return found;
+    });
+    fireEvent.click(talk);
     const picker = await waitFor(() => {
       const found = container.querySelector<HTMLSelectElement>("select#ask-agent");
       if (!found) {
