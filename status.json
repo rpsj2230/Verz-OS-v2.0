@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-21T07:44:44.676558+00:00",
-  "commit": "58e04c5d",
-  "commit_subject": "A person can ask for their data to be deleted, and the retention owner sees who has asked (M40.4.2.3, switch off, migration 0273) (#661)",
+  "generated_at": "2026-10-21T08:09:54.563544+00:00",
+  "commit": "593313e2",
+  "commit_subject": "A person can keep a personal project of their own threads and files, and each recent conversation says its state (M40.7.7, M40.7.6) (#657)",
   "total": 1626,
-  "done": 1182,
-  "percent": 72.7,
-  "built": 1367,
-  "built_percent": 84.1,
+  "done": 1184,
+  "percent": 72.8,
+  "built": 1369,
+  "built_percent": 84.2,
   "built_unproven": 185,
   "built_task_ids": [
     "M1.1.8",
@@ -263,16 +263,16 @@
       "wave": 4,
       "name": "Doing, lifecycle, extensions",
       "total": 232,
-      "done": 119,
-      "percent": 51.3,
-      "in_progress": 60,
+      "done": 121,
+      "percent": 52.2,
+      "in_progress": 59,
       "ready_for_testing": 32,
       "blocked": 16,
-      "open": 5,
+      "open": 4,
       "acts": 0,
       "decided": 23,
-      "built": 150,
-      "built_percent": 64.7
+      "built": 152,
+      "built_percent": 65.5
     },
     {
       "wave": 5,
@@ -711,10 +711,10 @@
       "name": "Member self-service application",
       "wave": 4,
       "total": 54,
-      "done": 32,
+      "done": 34,
       "acts": 0,
       "decided": 6,
-      "built": 39
+      "built": 41
     },
     {
       "module": "M41",
@@ -1791,6 +1791,8 @@
     "M40.6.1.1",
     "M40.6.1.3",
     "M40.6.1.4",
+    "M40.7.6",
+    "M40.7.7",
     "M41.1.1",
     "M41.1.2",
     "M41.1.3",
@@ -3840,16 +3842,6 @@
       "why": "TRIAGE 2026-10-13 class 2 (partly built): Talk to an agent is built: Ask page agent picker (askQuery agent field, gate.select.select_agent, gate.roster). 'Start a task' as a distinct entry and gate routing a task to a callable agent is not: without an agent /answer uses the default agent at the person's own reach. NEXT: add a start-a-task entry on Ask posting without an agent, and a gate step choosing a callable agent from the roster; then a check",
       "updated": "2026-10-13"
     },
-    "M40.7.6": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): Per-agent conversation list carries run state answered/declined/degraded/failed (console/agent_conversations.py, tables.chat.RunState). The member's own GET /threads has no state and nothing reads job or suspension records for running or waiting; no failed-step text. NEXT: extend ThreadSummaryView with state read from ops.jobs and gate.suspension_store plus the failing step",
-      "updated": "2026-10-13"
-    },
-    "M40.7.7": {
-      "status": "OPEN",
-      "why": "TRIAGE 2026-10-13 class 4 (unbuilt): No personal project: no table or route groups threads and files (searched tables, thread_routes, chat/). Attachments exist per thread only (thread_routes ATTACHMENTS_PATH).",
-      "updated": "2026-10-13"
-    },
     "M40.7.8": {
       "status": "OPEN",
       "why": "TRIAGE 2026-10-13 class 4 (unbuilt): No starter prompts: searched src and console for starter/suggested question, only Ask page exists. Inputs exist: agent skills (skill pins) and the knowledge reach.",
@@ -4043,11 +4035,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 16,
+  "closed_today": 18,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "593313e",
+      "at": "2026-10-21T07:50:18+00:00",
+      "subject": "A person can keep a personal project of their own threads and files, and each recent conversation says its state (M40.7.7, M40.7.6) (#657)",
+      "closed": "M40.7.6,M40.7.7"
+    },
     {
       "sha": "58e04c5",
       "at": "2026-10-21T06:48:05+00:00",
@@ -4161,12 +4159,6 @@
       "at": "2026-10-14T08:52:11+00:00",
       "subject": "An automation can start when a connected source reports a changed record, and a webhook is refused (M17.4.1, needs-rupash 223 option B) (#597)",
       "closed": "M17.4.1"
-    },
-    {
-      "sha": "7d24c19",
-      "at": "2026-10-13T08:53:00+00:00",
-      "subject": "33 tasks are proved on the install by two acceptance runs (#567)",
-      "closed": "M1.10.2,M12.3.1,M12.3.4,M13.5.18,M13.7.2,M13.7.4,M13.8.13,M13.8.2,M13.8.4,M14.2.6,M16.1.1,M16.2.1,M16.2.3,M16.3.1,M16.5.2,M16.6.4,M27.15.47,M27.8.13,M32.1.2.3,M32.2.1.4,M33.1.1.1,M33.1.1.2,M33.1.2.1,M33.1.2.3,M33.2.1.3,M33.2.1.4,M33.3.1.3,M39.1.2.2,M39.1.2.4,M39.2.3.2,M39.2.4.1,M39.2.4.2,M41.2.7"
     }
   ]
 }
