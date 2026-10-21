@@ -14,7 +14,7 @@
  * exported at `POST /api/v1/threads/{id}/export`, and the file saved is the document string the API
  * sent, byte for byte, because its digest is what the export's record holds.
  *
- * Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4, M16.6.5, M33.3.1.3
+ * Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4, M16.6.5, M33.3.1.3, M40.7.6
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -371,5 +371,70 @@ describe("a conversation on Ask", () => {
     expect(container.textContent).not.toContain(EXPORT_CONVERSATION);
     expect(container.textContent).not.toContain(WAS_IT_WRONG);
     expect(idp.calls.some((call) => new URL(call.url, ORIGIN).pathname.endsWith("/export"))).toBe(false);
+  });
+});
+
+describe("the state beside each conversation (M40.7.6)", () => {
+  const WITH_STATES = {
+    items: [
+      {
+        thread_id: THREAD,
+        title: "the quote that is held",
+        last_at: "2999-01-02T09:00:00+00:00",
+        last_channel: "console",
+        state: "waiting_for_approval",
+        state_words: "Waiting for approval",
+        failed_step: "",
+      },
+      {
+        thread_id: LARK_THREAD,
+        title: "the question that broke",
+        last_at: "2999-01-01T09:00:00+00:00",
+        last_channel: "console",
+        state: "failed",
+        state_words: "Failed",
+        failed_step: "It stopped while reading and asking.",
+      },
+      {
+        thread_id: "7a7a7a7a-1b4d-4e6f-8a9b-0c1d2e3f4a5b",
+        title: "an older one",
+        last_at: "2998-01-01T09:00:00+00:00",
+        last_channel: "console",
+        state: "",
+        state_words: "",
+        failed_step: "",
+      },
+    ],
+  };
+
+  test("each conversation says its state in the API's words, a failed one says where it stopped, and one with none says nothing", async () => {
+    // What breaks if this is deleted: the state is read and never drawn, a failed conversation does
+    // not say which step failed, or a conversation with no state is drawn with an empty label.
+    const { container } = await askScreen(WITH_STATES);
+    const list = await waitFor(() => {
+      const found = container.querySelector("ul.ask__threads");
+      if (found === null) {
+        throw new Error("the conversations have not arrived");
+      }
+      return found as HTMLElement;
+    });
+    const rows = [...list.querySelectorAll("li")];
+    expect(rows[0]?.textContent).toContain("Waiting for approval");
+    expect(rows[1]?.textContent).toContain("Failed");
+    expect(rows[1]?.textContent).toContain("It stopped while reading and asking.");
+    expect(rows[2]?.querySelector("strong")).toBeNull();
+    expect(rows[0]?.textContent).not.toContain("It stopped");
+  });
+
+  test("a list from an install with the switch off draws exactly what it drew before", async () => {
+    // The sibling: the API sending no state is no label and no empty space, so turning the switch
+    // off leaves the page as it was.
+    const { container } = await askScreen(LISTED);
+    await waitFor(() => {
+      if (container.querySelector("ul.ask__threads") === null) {
+        throw new Error("the conversations have not arrived");
+      }
+    });
+    expect(container.querySelectorAll("ul.ask__threads strong")).toHaveLength(0);
   });
 });
