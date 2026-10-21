@@ -113,6 +113,22 @@ Each of these is written from documentation and has not been observed:
 - A memory-hungry page against the 1280 MiB runner cap: the tab should crash or the container be
   killed, and the run should end with a reason on its last line.
 
+## 6a. The first read of a declared page, through the tool an agent calls
+
+The read tool (`browser.read_surface`, `brain.browsing.read_tool`) is registered whenever the install
+has a database, and answers nothing until `browser_runs` is on and the launcher is up. With both,
+declare a page of your own on the Features page (one surface, verbs `open` and `read`, one field),
+give a test person the browse grant narrowed to that website, and ask for the read as that person.
+
+- The result must hold the declared field and nothing else on the page. `fields_read` finds a field
+  in the accessibility tree as a node called `<field>: <value>`, or a node called `<field>` followed
+  by the node holding its value. **That rule has only been run over a stand-in tree.** If a real page
+  shows its fields another way (a table whose label is in a header row, a value in a `value`
+  attribute the wire does not carry), the result is empty and the rule is what changes.
+- The Audit page must show the session opening and closing as the person who asked, with a reach
+  that is not thirty-two zeros.
+- `docker ps` must show nothing left after the read.
+
 ## 7. What this rehearsal cannot close
 
 M19.6.6, the full session recording, needs the worker side of the channel, which is not built: the

@@ -49,7 +49,7 @@ from datetime import datetime
 from typing import Any, Final
 
 from sqlalchemy import select, text, update
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.browsing.autonomy import AutonomyError, SurfaceException, sign
 from brain.browsing.credentials import Binding, Bindings, CredentialError, SecretKind
@@ -399,6 +399,16 @@ async def load(session: AsyncSession) -> Loaded:
 async def registry_of(session: AsyncSession) -> TargetRegistry:
     """The targets this install declares, for a plan and for `website_check`."""
     return (await load(session)).registry()
+
+
+async def declared_registry(sessions: async_sessionmaker[AsyncSession]) -> TargetRegistry:
+    """The registry the install's database holds now, in a session of its own.
+
+    For a caller with a session factory and no session (the website check and the read tool at
+    their call), where `registry_of` is for one that has a transaction already.
+    """
+    async with sessions() as session:
+        return await registry_of(session)
 
 
 # ------------------------------------------------------------------ the grants

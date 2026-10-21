@@ -79,6 +79,9 @@ ACT_ON_SURFACE_CAPABILITY: Final = Capability(value="write:browser_surface")
 #: appearing in a list somebody reads.
 BROWSING_CAPABILITIES: Final[tuple[Capability, ...]] = (BROWSE_SURFACE, ACT_ON_SURFACE_CAPABILITY)
 
+#: The entity a browser tool returns, as `ToolDefinition.entity` and the field policy name it.
+BROWSER_SURFACE_OBJECT: Final = "browser_surface"
+
 #: The row field a browser credential and a browser approval are both narrowed on.
 TARGET_FIELD: Final = "browser_target"
 
@@ -105,6 +108,15 @@ class SessionError(Exception):
     """A browser session was asked for in terms nothing could admit."""
 
 
+class ReadRefusedError(Exception):
+    """A read of a declared page was not made, or did not end clean.
+
+    Here and not beside the code that raises it (`brain.browsing.read_tool`), so the website check
+    can catch it without importing the driver. The message is one of a few fixed sentences and
+    names no page, no target and no person.
+    """
+
+
 class SurfaceReading(Entity):
     """What one read of a declared surface returns.
 
@@ -117,6 +129,10 @@ class SurfaceReading(Entity):
     surface: str
     origin: str
     values: tuple[tuple[str, str], ...] = ()
+    #: The declared target the surface belongs to. A grant to read a browser surface is narrowed
+    #: on this field (`TARGET_FIELD`), and the redactor matches a grant's scope against the record's
+    #: own fields, so a record without it is withheld from everybody whose grant is narrowed.
+    browser_target: str = ""
 
 
 ACT_ON_SURFACE: Final = ToolDefinition(
@@ -125,7 +141,7 @@ ACT_ON_SURFACE: Final = ToolDefinition(
         "Click, type, submit or upload on one declared surface of a browsing target, within an "
         "envelope a person approved. Refused for any write the envelope did not approve."
     ),
-    entity="browser_surface",
+    entity=BROWSER_SURFACE_OBJECT,
     required_capability=ACT_ON_SURFACE_CAPABILITY.value,
     side_effect=SideEffect.SEND,
     identity_mode=IdentityMode.SERVICE,
@@ -139,7 +155,7 @@ READ_SURFACE: Final = ToolDefinition(
         "Read the declared fields from one declared surface of a browsing target. Opens and "
         "reads only; it cannot click, type, submit or upload."
     ),
-    entity="browser_surface",
+    entity=BROWSER_SURFACE_OBJECT,
     required_capability=BROWSE_SURFACE.value,
     side_effect=SideEffect.NONE,
     identity_mode=IdentityMode.SERVICE,

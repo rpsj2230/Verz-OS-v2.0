@@ -1991,8 +1991,8 @@ const PROGRESS = {
   },
   "M19.7.1": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): browsing/sessions.py defines READ_SURFACE (ToolDefinition), surface_scope and capability_gaps; ops/starter.py seeds BROWSE_SURFACE; test_browsing_sessions.py pins read-first ordering. No handler is registered, so no agent can run the tool (docstring: 'No handler is registered here'). NEXT: Register a handler in tools/startup.py that sends the read run to the driver; website_check's ReadOnlyBrowser seam is the same missing half.",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT 2026-10-21, not claimed. Built: browser.read_surface now has a handler (brain.browsing.read_tool) registered in tools/startup.build_registry whenever the install has a database; it reads only a surface that reads and cannot write, for a caller whose browse grant is narrowed to that website, and answers nothing in one answer for an undeclared website, no grant, a write surface, a switch that is off, no room, a halt or no launcher. StoredReadOnlyBrowser runs the read through driver.prepare_run and run_envelope and returns only the declared fields (fields_read); website_check now reads the declared websites at each call and reports a refused read as NOT_AVAILABLE; the session rows' ledger entries carry the asker's reach. Install check a_browser_read_returns_only_the_declared_fields (2306) runs the whole path over a stand-in page and then ends NOT_RUN on every install. NOT proved: no real browser has read a real page, and fields_read's rule for finding a value in a real accessibility tree is a judgement (ops/browser/REHEARSAL.md 6a). NEXT: build the -browser image in Release, run REHEARSAL.md on a runsc host, and read one page of your own.",
+    updated: "2026-10-21",
   },
   "M19.7.2": {
     status: "IN PROGRESS",
@@ -4726,8 +4726,8 @@ const PROGRESS = {
   },
   "M19.9.4": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): HTTP half is built and wired (tools/website_check.py, ops/website_probe.py). Missing: rendered-page read in the sandbox (launcher never called), portal login with a vault credential (credentials.resolve has no caller), recording kept under retention, target registration. NEXT: Depends on the driver, REHEARSAL.md proof and target storage; then one install check over a declared test site plus the HTTP check.",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT 2026-10-21, not claimed. The HTTP half (tools/website_check.py) is unchanged and the rendered-page half now has a worker behind it: website_check reads the declared websites at each call and hands a read-only surface to StoredReadOnlyBrowser (brain.browsing.read_tool), which keeps the recording under the install's prefix through the same function the retention sweep uses. Still missing: a portal login with a vault credential (credentials.resolve has no caller; needs owner decision on custody), the image and a real run. NEXT: the image, a rehearsal, then the login.",
+    updated: "2026-10-21",
   },
   "M19.9.5": {
     status: "IN PROGRESS",
@@ -4736,8 +4736,8 @@ const PROGRESS = {
   },
   "M19.9.6": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): docker-compose.browser.yml and launcher --check give a launcher whose health is gVisor present; agent browser tools are defined (sessions.READ_SURFACE) but no handler is registered, so no agent opens a page in the sandbox. Never run on a daemon. NEXT: Run the REHEARSAL.md first build on a runsc host, build the driver and register the read handler, then check an agent with the browse capability fetches one page.",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT 2026-10-21, not claimed. The read handler an agent with the browse capability calls now exists and is registered (brain.browsing.read_tool, see M19.7.1) and the whole path is exercised over a stand-in page by install check a_browser_read_returns_only_the_declared_fields, which ends NOT_RUN. Still missing: the -browser image built and released, the REHEARSAL.md first build on a runsc host, and one real page fetched in the sandbox. NEXT: those three, then ask an agent to read a declared page.",
+    updated: "2026-10-21",
   },
   "M19.9.7": {
     status: "READY FOR TESTING",

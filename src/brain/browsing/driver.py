@@ -222,17 +222,29 @@ class DatabaseLedger:
 
     sessions: async_sessionmaker[AsyncSession]
     asked_by: str
+    #: The asker's reach digest and the run's trace, which the trigger on `agent.browser_session`
+    #: reads for the ledger entry it appends. Empty, nothing is attributed and the entry carries the
+    #: unsupplied placeholders, which is what a caller with no reach (a test) gets and a run for a
+    #: person must not.
+    ent_hash: str = ""
+    trace_id: str = ""
 
     async def _as_asker(self, session: AsyncSession) -> None:
         from sqlalchemy import text
 
         from brain.gate.suspension_store import PRINCIPAL_SETTING
+        from brain.tables.audit import attributed_to
 
         await session.execute(
             text("SELECT set_config(:name, :value, true)").bindparams(
                 name=PRINCIPAL_SETTING, value=self.asked_by
             )
         )
+        if self.ent_hash:
+            for statement in attributed_to(
+                actor_id=self.asked_by, ent_hash=self.ent_hash, trace_id=self.trace_id
+            ):
+                await session.execute(statement)
 
     async def opened(self, *, run_id: str, trace_id: str, at: datetime) -> None:
         async with self.sessions() as session, session.begin():

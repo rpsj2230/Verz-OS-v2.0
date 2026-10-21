@@ -150,6 +150,7 @@ from collections.abc import Iterable, Mapping
 from typing import Final
 
 from brain import demo
+from brain.browsing.read_tool import ReadSurfaceTool, register_read_surface
 from brain.chat.attachments import attachment_definition, attachment_reader
 from brain.core.field_policy import FieldPolicy
 from brain.gate.caches import CachedEmbedding
@@ -351,6 +352,7 @@ def build_registry(
     caches: KnowledgeCaches | None = None,
     skills: SkillTools | None = None,
     documents: DocumentTools | None = None,
+    browser_reads: ReadSurfaceTool | None = None,
 ) -> ToolRegistry:
     """Every tool this application offers, checked and frozen (M12.1.5).
 
@@ -392,6 +394,10 @@ def build_registry(
     (`brain.tools.document_generation`, M12.3.5). Absent, it is not registered, for the reason the
     website check is not: it reads templates and keeps files, and a tool bound to neither would be
     in the catalogue and unable to answer.
+
+    `browser_reads` binds the tool that reads the declared fields of one declared page
+    (`brain.browsing.read_tool`, M19.7.1). Absent, it is not registered, for the reason the website
+    check is not: a read with no launcher behind it would be in the catalogue and unable to answer.
 
     Returns frozen. A caller receiving an unfrozen registry could register into it after the
     whole-registry checks had run, which is the same as not running them.
@@ -472,5 +478,10 @@ def build_registry(
     # (M12.3.5). Switched off until an administrator turns it on, and asked at every call.
     if documents is not None:
         register_document_generation(registry, documents)
+
+    # The read of one declared page, where the install has a database to read its targets from
+    # (M19.7.1). Asked of the browser switch at every call, and one answer when it is off.
+    if browser_reads is not None:
+        register_read_surface(registry, browser_reads)
 
     return registry.freeze()

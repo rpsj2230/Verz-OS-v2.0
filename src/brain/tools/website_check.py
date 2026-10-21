@@ -76,7 +76,7 @@ import structlog
 from pydantic import BaseModel, ConfigDict, Field
 
 from brain.browsing.planning import Goal, Plan, PlanRequest, plan
-from brain.browsing.sessions import BROWSE_SURFACE, TARGET_FIELD, SurfaceReading
+from brain.browsing.sessions import BROWSE_SURFACE, TARGET_FIELD, ReadRefusedError, SurfaceReading
 from brain.browsing.targets import Surface, Target, TargetRegistry, Verb
 from brain.channels.widget import normalise_origin
 from brain.core.entitlement import Capability, EntitlementSet
@@ -569,6 +569,9 @@ class WebsiteCheckTool:
     prober: Prober
     targets: TargetRegistry = field(default_factory=TargetRegistry)
     browser: ReadOnlyBrowser | None = None
+    #: Where the declared targets are read from at each call, when an install keeps them in its
+    #: database (`brain.browsing.declared.registry_of`). Absent, `targets` is the registry.
+    declared: Callable[[], Awaitable[TargetRegistry]] | None = None
 
     def definition(self) -> ToolDefinition:
         """What the catalogue describes to a model.
@@ -604,7 +607,8 @@ class WebsiteCheckTool:
             return BrowserUse.NOT_ASKED, ()
         if chain.end is not ChainEnd.ANSWERED:
             return BrowserUse.NO_PAGE, ()
-        found = read_only_surface(self.targets, origin_of(chain.last.url))
+        registry = self.targets if self.declared is None else await self.declared()
+        found = read_only_surface(registry, origin_of(chain.last.url))
         if self.browser is None or found is None:
             return BrowserUse.NOT_AVAILABLE, ()
         target, surface = found
@@ -616,9 +620,13 @@ class WebsiteCheckTool:
                 target=target.name,
                 surfaces=(surface.name,),
             ),
-            self.targets,
+            registry,
         )
-        reading = await self.browser.read(handed, target, entitlement=entitlement, now=now)
+        try:
+            reading = await self.browser.read(handed, target, entitlement=entitlement, now=now)
+        except ReadRefusedError:
+            # Every cause of a read not being made is the one word that already covers no browser.
+            return BrowserUse.NOT_AVAILABLE, ()
         return BrowserUse.OPENED, reading.values
 
     def handler(self) -> Callable[..., Awaitable[TypedResult[WebsiteCheck]]]:

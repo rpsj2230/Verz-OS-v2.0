@@ -35,6 +35,7 @@ from typing import Final
 
 from pydantic import BaseModel
 
+from brain.browsing.sessions import BROWSE_SURFACE, BROWSER_SURFACE_OBJECT, SurfaceReading
 from brain.core.entitlement import Capability
 from brain.core.field_policy import Classification, FieldPolicy, FieldRule
 from brain.tools.document_generation import (
@@ -88,6 +89,12 @@ OWN_RESULT_POLICIES: Final[Mapping[str, FieldPolicy]] = MappingProxyType(
             entity=WEBSITE_CHECK_OBJECT,
             capability=WEBSITE_CHECK_CAPABILITY.value,
             classification=Classification.INTERNAL,
+        ),
+        BROWSER_SURFACE_OBJECT: policy_over(
+            SurfaceReading,
+            entity=BROWSER_SURFACE_OBJECT,
+            capability=BROWSE_SURFACE.value,
+            classification=Classification.CONFIDENTIAL,
         ),
         SKILL_SCRIPT_OBJECT: policy_over(
             ScriptRun,

@@ -68,6 +68,9 @@ from brain.attribution import trace_of_request
 from brain.audit.ledger import TRACE_ID
 from brain.automation_paused_told import keep_telling_paused_stewards
 from brain.automation_routes import AutomationWiring
+from brain.browsing.declared import declared_registry
+from brain.browsing.read_tool import ReadSurfaceTool, StoredReadOnlyBrowser
+from brain.browsing.recording_sweep import recordings_under
 from brain.cache import (
     AsyncValkeyClient,
     NoEntitlementCache,
@@ -609,7 +612,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if live is not None:
         app.state.live_records = live
     # The website check over HTTPS, to the address each hop was checked at (M12.4.4).
+    # With a database, the rendered check and the browser tool read the install's declared websites
+    # at each call and run through the launcher (M19.7.1); without one there is nothing declared.
+    browser_reads = None
     website = WebsiteCheckTool(resolver=SystemResolver(), prober=HttpsProber())
+    if app.state.db_sessions:
+        read_browser = StoredReadOnlyBrowser(
+            sessions=app.state.db_sessions, backend=recordings_under(app.state.object_store)
+        )
+        declared_targets = partial(declared_registry, app.state.db_sessions)
+        website = WebsiteCheckTool(
+            resolver=SystemResolver(),
+            prober=HttpsProber(),
+            browser=read_browser,
+            declared=declared_targets,
+        )
+        browser_reads = ReadSurfaceTool(declared=declared_targets, browser=read_browser)
     # The tool that fills an approved template and keeps a Word file for the person asking
     # (M12.3.5): only where there is a database to read a template from and an artifact store to
     # keep the file in, and switched off until an administrator turns it on, which every call asks.
@@ -654,6 +672,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             caches=knowledge_caches,
             skills=skill_tools,
             documents=documents,
+            browser_reads=browser_reads,
         )
 
     app.state.build_tools = tools
