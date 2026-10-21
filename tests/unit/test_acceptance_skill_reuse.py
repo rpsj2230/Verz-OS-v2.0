@@ -90,8 +90,8 @@ def _no_pins(monkeypatch: pytest.MonkeyPatch) -> None:
 
     kept = api_routes.agent_run_of
 
-    async def pinless(state: Any, agent: Any, registry: Any) -> Any:
-        run = await kept(state, agent, registry)
+    async def pinless(state: Any, agent: Any, registry: Any, trying: Any = None) -> Any:
+        run = await kept(state, agent, registry, trying)
         return None if run is None else dataclasses.replace(run, pins=(), library=())
 
     monkeypatch.setattr(api_routes, "agent_run_of", pinless)
