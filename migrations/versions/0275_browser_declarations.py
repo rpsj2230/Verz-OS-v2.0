@@ -56,7 +56,7 @@ from sqlalchemy.dialects import postgresql
 revision = "0275"
 # Written over 0273, the head of main when it was written; #661 takes 0274, so the coordinator
 # re-points it when the migration train is built, as every migration landed in a train is.
-down_revision = "0273"
+down_revision = "0274"
 branch_labels = None
 depends_on = None
 
