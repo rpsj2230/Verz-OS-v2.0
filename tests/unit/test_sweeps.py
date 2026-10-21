@@ -1273,3 +1273,32 @@ def test_a_field_the_products_own_policy_requires_is_required_and_a_connectors_i
     required = sweeps.required_capabilities()
     assert "read:knowledge.section" in required
     assert "read:deal.amount" not in required
+
+
+def test_a_wildcard_over_a_group_is_not_a_claim_on_that_group() -> None:
+    """A subject saying `(M27.14.x, part)` names a group's leaves without claiming the group.
+
+    On 2026-10-21 exactly that subject was merged and turned `test_every_task_ids_line_...` red on
+    main (`M27.14` named but not a leaf), because both id patterns read the `M27.14` out of
+    `M27.14.x`. Main does not run this test on a merge, so it stayed red until a pull request
+    that merged it said so.
+
+    The positive half is the point of the second assertion: a real leaf, in the same sentence and
+    at the end of one, must still be read, or the pattern has been made to refuse everything.
+
+    Delete this and a wildcard in a commit subject goes back to claiming a group, which the status
+    page counts as closing it."""
+    subject = "Every module is proved in the browser (M27.14.x, part) and M27.14.1 is first."
+    assert sweeps.TASK_ID_RE.findall(subject) == ["M27.14.1"]
+    assert status_module.TASK_ID_RE.findall(subject) == ["M27.14.1"]
+    assert sweeps.TASK_ID_RE.findall("Closes: M12.2.4, M12.2.6.") == ["M12.2.4", "M12.2.6"]
+    assert status_module.TASK_ID_RE.pattern == sweeps.TASK_ID_RE.pattern
+
+
+def test_the_two_task_id_patterns_are_one_pattern() -> None:
+    """`brain.status` and `brain.ops.sweeps` each hold the task id pattern, and a reading that
+    differs between them is a claim counted by one and refused by the other.
+
+    Delete this and the next edit to one of them can leave the other behind, which is how the
+    wildcard in a subject reached main red."""
+    assert status_module.TASK_ID_RE.pattern == sweeps.TASK_ID_RE.pattern
