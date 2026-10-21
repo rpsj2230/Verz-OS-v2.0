@@ -304,7 +304,7 @@ def test_a_process_with_no_database_and_no_override_reads_the_switch_as_off() ->
     """With nothing on the application state and no database to ask, the switch is off: a feature
     ships off, and an absent row is off. Delete this and a process that cannot read its switch would
     let a member add skills, since every other test here sets the override."""
-    bare = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+    bare: Any = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
 
     assert run(lambda: member_skill_routes.personal_skills_are_on(bare)) is False
 
