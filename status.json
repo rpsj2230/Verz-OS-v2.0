@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-21T13:03:09.449087+00:00",
-  "commit": "4994950c",
-  "commit_subject": "The disconnect check's not-run sentence is its own literal, and the progress note says the install check failed (#671)",
+  "generated_at": "2026-10-21T14:37:20.679852+00:00",
+  "commit": "040ce923",
+  "commit_subject": "A personal agent following its owner when they move is shown on an install, and the roll-ups can now see it (#672)",
   "total": 1626,
   "done": 1212,
   "percent": 74.5,
-  "built": 1392,
-  "built_percent": 85.6,
-  "built_unproven": 180,
+  "built": 1393,
+  "built_percent": 85.7,
+  "built_unproven": 181,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -79,6 +79,7 @@
     "M26.1.2",
     "M26.1.3",
     "M26.2.1",
+    "M26.2.2",
     "M26.2.4",
     "M26.2.6",
     "M26.3.2",
@@ -260,14 +261,14 @@
       "total": 232,
       "done": 133,
       "percent": 57.3,
-      "in_progress": 48,
-      "ready_for_testing": 34,
+      "in_progress": 47,
+      "ready_for_testing": 35,
       "blocked": 15,
       "open": 2,
       "acts": 0,
       "decided": 23,
-      "built": 166,
-      "built_percent": 71.6
+      "built": 167,
+      "built_percent": 72.0
     },
     {
       "wave": 5,
@@ -569,7 +570,7 @@
       "done": 6,
       "acts": 0,
       "decided": 1,
-      "built": 13
+      "built": 14
     },
     {
       "module": "M27",
@@ -2766,9 +2767,9 @@
       "updated": "2026-10-13"
     },
     "M26.2.2": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): Personal agents follow the person by construction: E_run is the caller's reach intersected with the agent ceiling (gate.leash.decide), so a moved owner's agent reaches the new department. lifecycle.agents_following has no caller. Not verified that a personal agent's audience record updates on a move. NEXT: Check naming M26.2.2: move an owner, call their personal agent, assert old-department knowledge is not reached; fix the agent audience if it fails.",
-      "updated": "2026-10-13"
+      "status": "READY FOR TESTING",
+      "why": "built (M26/personal-agents-follow-the-owner): an install check, a_personal_agent_reaches_the_new_department_when_its_owner_moves, makes a member's personal agent, moves the member to another department through the staff sync's Starter pack step, and reads that the agent's record is the same row, that only its owner sees it before and after (a colleague who stayed never does), and that a run through it searches the new department's knowledge and none of the old one's, by the one intersection E_run(caller, agent). Nothing in the product changed: the leaf's note could not say the agent's audience record was verified, and now it is. PRIOR WORK (2026-10-13 triage): identity.lifecycle.agents_following states the rule; the check is the install's own demonstration of it. Not asked: an answer made through the agent, which needs a model (brain.ops.acceptance_checks_agent_reach asks that for an agent). PROVE ON THE INSTALL: (1) as a member in one department, make a personal agent (My workspace, with personal agents switched on); (2) ask it about a document only that department holds: it answers; (3) have an administrator move the member to another department (the staff list's department, or the person's page) and wait for the nightly sync or press Run now; (4) ask the same agent the same question: it no longer reaches that document, and a question about the new department's documents is answered; (5) a colleague who stayed in the old department still cannot find the agent. The install check does the same over reserved people and is not run until the Starter pack exists.",
+      "updated": "2026-10-21"
     },
     "M26.2.4": {
       "status": "READY FOR TESTING",
@@ -2782,7 +2783,7 @@
     },
     "M26.2.7": {
       "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Roll-up test leaf: tests/unit/test_lifecycle.py covers the pure module, but several clauses it covers (provision, delegations, welcome) are not wired, so a test of every item above has nothing end to end to run. 2026-10-20 ROLL-UP BUILT, NOT YET ABLE TO PASS: acceptance_checks_jml_roll_up.every_mover_leaf_is_shown_clause_by_clause_in_this_run reads the checks for M26.2.1 to M26.2.6 and is not run while any has none (M26.2.2 is on another branch and M26.2.5 has no install check). tests/unit/test_mover_end_to_end.py drives the staff run and asks the reach, cache key, memory, automation and knowledge rules of one mover on the state it leaves. A person runs the install checks; this closes when every clause check passes in one run.",
+      "why": "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Roll-up test leaf: tests/unit/test_lifecycle.py covers the pure module, but several clauses it covers (provision, delegations, welcome) are not wired, so a test of every item above has nothing end to end to run. 2026-10-20 ROLL-UP BUILT, NOT YET ABLE TO PASS: acceptance_checks_jml_roll_up.every_mover_leaf_is_shown_clause_by_clause_in_this_run reads the checks for M26.2.1 to M26.2.6 and is not run while any has none (M26.2.5 has no install check). tests/unit/test_mover_end_to_end.py drives the staff run and asks the reach, cache key, memory, automation and knowledge rules of one mover on the state it leaves. A person runs the install checks; this closes when every clause check passes in one run.",
       "updated": "2026-10-20"
     },
     "M26.3.2": {
@@ -2792,7 +2793,7 @@
     },
     "M26.4.1": {
       "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): Roll-up proof (a check can be written once clauses exist) across joiner, mover and leaver; clauses depend on unwired parts (delegations M26.2.3, personal knowledge disposition M26.3.4, ended grant mid-run, external person end date). NEXT: Waits on M26.2.3 and M26.3.4, then a person runs it and the checks are recorded. 2026-10-20 ROLL-UP BUILT, NOT YET ABLE TO PASS: acceptance_checks_jml_roll_up.joiner_mover_leaver_is_shown_clause_by_clause_in_this_run reads the clause checks and names any clause with none: a personal agent following its owner (M26.2.2, another branch), memories of the old reach (M26.2.5), a run stopping on a revoked grant (M13.8.2, has a check), an external person's end date (M1.8.1) and a service key stopping with its owner (M1.8.2), neither of which has a check, and an owned item a person can no longer reach leaving their workspace, which no leaf names. It stays not run, never passed, until each is shown.",
+      "why": "TRIAGE 2026-10-13 class 2 (partly built): Roll-up proof (a check can be written once clauses exist) across joiner, mover and leaver; clauses depend on unwired parts (delegations M26.2.3, personal knowledge disposition M26.3.4, ended grant mid-run, external person end date). NEXT: Waits on M26.2.3 and M26.3.4, then a person runs it and the checks are recorded. 2026-10-20 ROLL-UP BUILT, NOT YET ABLE TO PASS: acceptance_checks_jml_roll_up.joiner_mover_leaver_is_shown_clause_by_clause_in_this_run reads the clause checks and names any clause with none: a personal agent following its owner (M26.2.2, now checked), memories of the old reach (M26.2.5), a run stopping on a revoked grant (M13.8.2, has a check), an external person's end date (M1.8.1) and a service key stopping with its owner (M1.8.2), neither of which has a check, and an owned item a person can no longer reach leaving their workspace, which no leaf names. It stays not run, never passed, until each is shown.",
       "updated": "2026-10-20"
     },
     "M27.1.5": {
