@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-21T10:06:20.142641+00:00",
-  "commit": "44fe5d8d",
-  "commit_subject": "Websites for agents' browsers can be declared, exceptions and exemptions signed and taken back, and a browser skill is refused over an API (M19.2.4, M19.6.7, M19.7.3, M19.9.7) (#664)",
+  "generated_at": "2026-10-21T10:09:11.987343+00:00",
+  "commit": "c7effc85",
+  "commit_subject": "Three questions from the browser work are on the Needs you page: signed browser and desktop images, website passwords, and pictures to a model (#668)",
   "total": 1626,
   "done": 1197,
   "percent": 73.6,
