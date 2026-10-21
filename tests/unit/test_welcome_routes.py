@@ -13,7 +13,14 @@ from typing import Any
 from brain.core.entitlement import EntitlementSet, Grant
 from brain.core.scope import Scope
 from brain.identity.lifecycle import STARTER_PACK, WELCOME_QUESTIONS
-from brain.welcome_routes import WELCOME_PATH, WelcomeView, router, welcome
+from brain.welcome_routes import (
+    WELCOME_FROM_DATA_PATH,
+    WELCOME_PATH,
+    WelcomeView,
+    router,
+    welcome,
+    welcome_from_data,
+)
 
 #: Far from any wall clock, so no grant here can lapse while the suite runs.
 NOW = datetime(2999, 1, 1, tzinfo=UTC)
@@ -68,6 +75,28 @@ def test_the_route_is_one_read_and_carries_no_count() -> None:
     """One GET at the declared path whose answer holds the questions and nothing else. Delete
     this and a count of what was withheld can be added beside the list."""
     assert [(one.path, sorted(one.methods)) for one in router.routes] == [  # type: ignore[attr-defined]
-        (f"/api/v1{WELCOME_PATH}", ["GET"])
+        (f"/api/v1{WELCOME_PATH}", ["GET"]),
+        (f"/api/v1{WELCOME_FROM_DATA_PATH}", ["GET"]),
     ]
     assert set(WelcomeView.model_fields) == {"questions"}
+
+
+class _Untouched:
+    """A request that fails the test if the route reads anything from it."""
+
+    @property
+    def app(self) -> Any:
+        raise AssertionError("the route read the application before it knew the department")
+
+
+def test_a_department_that_is_not_a_slug_is_offered_no_question_from_data_and_nothing_is_read() -> (
+    None
+):
+    """A person with no department, or one that is not a slug, is answered with an empty list
+    before the switch, the connections or the index are read, the same answer as one who may ask
+    none of them. Delete this and either reads the database for a department no question can be
+    scoped to, or raises on the first screen a new person sees."""
+    reach = starter_in("finance")
+    for department in (None, "", "Not A Slug!"):
+        told = asyncio.run(welcome_from_data(_Untouched(), asked(department, reach)))  # type: ignore[arg-type]
+        assert told.questions == []

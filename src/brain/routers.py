@@ -40,6 +40,10 @@ from brain.acceptance_routes import router as acceptance_router
 # a request is delivered. See `brain.access_request_routes`.
 from brain.access_request_routes import router as access_request_router
 
+# What is connected for each department, the shopping list, and the first connector to suggest.
+# See `brain.adoption_coverage_routes`.
+from brain.adoption_coverage_routes import router as adoption_coverage_router
+
 # One agent's About tab, which reads the agent's automations and so cannot sit on the
 # workspace's router without an import cycle. The same audience and the same one 404.
 from brain.agent_about_routes import router as agent_about_router
