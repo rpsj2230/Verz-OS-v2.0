@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-21T05:03:06.616718+00:00",
-  "commit": "d0579efb",
-  "commit_subject": "A wildcard over a group in a commit subject is no longer read as a claim on that group (#655)",
+  "generated_at": "2026-10-21T05:35:22.432487+00:00",
+  "commit": "0ff490c8",
+  "commit_subject": "Stored workflows: versioned steps, assigned to agents, run through the gate, behind a switch that ships off (M17) (#647)",
   "total": 1626,
   "done": 1168,
   "percent": 71.8,
@@ -266,10 +266,10 @@
       "total": 232,
       "done": 106,
       "percent": 45.7,
-      "in_progress": 67,
+      "in_progress": 73,
       "ready_for_testing": 32,
       "blocked": 16,
-      "open": 11,
+      "open": 5,
       "acts": 0,
       "decided": 23,
       "built": 137,
@@ -2393,39 +2393,39 @@
       "updated": "2026-10-13"
     },
     "M17.6.1": {
-      "status": "OPEN",
-      "why": "TRIAGE 2026-10-13 class 4 (unbuilt): No workflow definition store: searched src for workflow, step data and versioned steps. Neighbours: builder/procedure.py (drawn procedure to SKILL.md, acyclic, MAX_STEPS), builder/draft_store (revisions), ops/automation.StepKind (canvas flows), automation_run store. Register rows OWN-63, OWN-64, OWN-75.",
-      "updated": "2026-10-13"
+      "status": "IN PROGRESS",
+      "why": "BUILT 2026-10-21, not yet proved on an install and no page draws it. brain.orchestration.workflow reads a stored, versioned definition (steps: tool, connector read, skill; named typed outputs; reads only earlier declared outputs; a condition over an output; parallel flag; retry and back-off; failure path stop, continue or handler). brain.orchestration.workflow_run runs it through a door, keeps statuses and words and no value, and says repeated failure; brain.workflow_routes writes, assigns and runs it (migration 0273, switch stored_workflows ships off) through call_piece at the asker's reach narrowed by the agent; install check acceptance_checks_workflow. Not built: a console page, a skill step's offered skills bound to the run, writes (the leash is empty so a step that changes something is stated as not offered), and the two-connector two-skill run of M17.6.8.",
+      "updated": "2026-10-20"
     },
     "M17.6.2": {
       "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): The door exists for canvas steps: automation_routes.tool_call runs one tool through the gate as the owner at flow_reach with the projected catalogue and redactor (acceptance_checks_automation, M32.6.2.2). Skill steps, a workflow runner and per-step leash and meter accounting are not built. NEXT: build the step executor calling the same gate path for tool, connector read and skill steps and recording each in spend",
-      "updated": "2026-10-13"
+      "why": "BUILT 2026-10-21, not yet proved on an install and no page draws it. brain.orchestration.workflow reads a stored, versioned definition (steps: tool, connector read, skill; named typed outputs; reads only earlier declared outputs; a condition over an output; parallel flag; retry and back-off; failure path stop, continue or handler). brain.orchestration.workflow_run runs it through a door, keeps statuses and words and no value, and says repeated failure; brain.workflow_routes writes, assigns and runs it (migration 0273, switch stored_workflows ships off) through call_piece at the asker's reach narrowed by the agent; install check acceptance_checks_workflow. Not built: a console page, a skill step's offered skills bound to the run, writes (the leash is empty so a step that changes something is stated as not offered), and the two-connector two-skill run of M17.6.8.",
+      "updated": "2026-10-20"
     },
     "M17.6.3": {
-      "status": "OPEN",
-      "why": "TRIAGE 2026-10-13 class 4 (unbuilt): No named, schema-checked step outputs: nothing in src models step outputs or a reads-only-earlier rule (searched workflow, outputs, schema near automation and builder).",
-      "updated": "2026-10-13"
+      "status": "IN PROGRESS",
+      "why": "BUILT 2026-10-21, not yet proved on an install and no page draws it. brain.orchestration.workflow reads a stored, versioned definition (steps: tool, connector read, skill; named typed outputs; reads only earlier declared outputs; a condition over an output; parallel flag; retry and back-off; failure path stop, continue or handler). brain.orchestration.workflow_run runs it through a door, keeps statuses and words and no value, and says repeated failure; brain.workflow_routes writes, assigns and runs it (migration 0273, switch stored_workflows ships off) through call_piece at the asker's reach narrowed by the agent; install check acceptance_checks_workflow. Not built: a console page, a skill step's offered skills bound to the run, writes (the leash is empty so a step that changes something is stated as not offered), and the two-connector two-skill run of M17.6.8.",
+      "updated": "2026-10-20"
     },
     "M17.6.4": {
-      "status": "OPEN",
-      "why": "TRIAGE 2026-10-13 class 4 (unbuilt): No step conditions or skipped-with-reason records. builder/procedure.py has a scope-predicate conditional for drawn skills, and ops/automation.StepKind has branch for the canvas, but neither records a skipped step.",
-      "updated": "2026-10-13"
+      "status": "IN PROGRESS",
+      "why": "BUILT 2026-10-21, not yet proved on an install and no page draws it. brain.orchestration.workflow reads a stored, versioned definition (steps: tool, connector read, skill; named typed outputs; reads only earlier declared outputs; a condition over an output; parallel flag; retry and back-off; failure path stop, continue or handler). brain.orchestration.workflow_run runs it through a door, keeps statuses and words and no value, and says repeated failure; brain.workflow_routes writes, assigns and runs it (migration 0273, switch stored_workflows ships off) through call_piece at the asker's reach narrowed by the agent; install check acceptance_checks_workflow. Not built: a console page, a skill step's offered skills bound to the run, writes (the leash is empty so a step that changes something is stated as not offered), and the two-connector two-skill run of M17.6.8.",
+      "updated": "2026-10-20"
     },
     "M17.6.5": {
-      "status": "OPEN",
-      "why": "TRIAGE 2026-10-13 class 4 (unbuilt): No parallel step support: searched for parallel and fan-in; orchestration/fanout.py is multi-agent fan-out with a budget, not workflow steps with a gap-recording join.",
-      "updated": "2026-10-13"
+      "status": "IN PROGRESS",
+      "why": "BUILT 2026-10-21, not yet proved on an install and no page draws it. brain.orchestration.workflow reads a stored, versioned definition (steps: tool, connector read, skill; named typed outputs; reads only earlier declared outputs; a condition over an output; parallel flag; retry and back-off; failure path stop, continue or handler). brain.orchestration.workflow_run runs it through a door, keeps statuses and words and no value, and says repeated failure; brain.workflow_routes writes, assigns and runs it (migration 0273, switch stored_workflows ships off) through call_piece at the asker's reach narrowed by the agent; install check acceptance_checks_workflow. Not built: a console page, a skill step's offered skills bound to the run, writes (the leash is empty so a step that changes something is stated as not offered), and the two-connector two-skill run of M17.6.8.",
+      "updated": "2026-10-20"
     },
     "M17.6.6": {
-      "status": "OPEN",
-      "why": "TRIAGE 2026-10-13 class 4 (unbuilt): No per-step retry limit or failure path. Reusable parts exist: jobs.next_attempt_at and retry_gaps (backoff), idempotency.issue_once (retry only through the key), outbox.plan_next; none is attached to workflow steps.",
-      "updated": "2026-10-13"
+      "status": "IN PROGRESS",
+      "why": "BUILT 2026-10-21, not yet proved on an install and no page draws it. brain.orchestration.workflow reads a stored, versioned definition (steps: tool, connector read, skill; named typed outputs; reads only earlier declared outputs; a condition over an output; parallel flag; retry and back-off; failure path stop, continue or handler). brain.orchestration.workflow_run runs it through a door, keeps statuses and words and no value, and says repeated failure; brain.workflow_routes writes, assigns and runs it (migration 0273, switch stored_workflows ships off) through call_piece at the asker's reach narrowed by the agent; install check acceptance_checks_workflow. Not built: a console page, a skill step's offered skills bound to the run, writes (the leash is empty so a step that changes something is stated as not offered), and the two-connector two-skill run of M17.6.8.",
+      "updated": "2026-10-20"
     },
     "M17.6.7": {
       "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): Automation runs emit automation.run_finished via the outbox (ops/automation_run); repeated failures pause with a notice (FAILURES_BEFORE_PAUSE, automation_paused_told). Missing: workflow and failed step named in the signal, and a learning candidate on repeated step failure. Payload fields not verified. NEXT: add workflow id and failing step to the event and open a learning candidate through knowledge/candidates after N failures of one step",
-      "updated": "2026-10-13"
+      "why": "BUILT 2026-10-21, not yet proved on an install and no page draws it. brain.orchestration.workflow reads a stored, versioned definition (steps: tool, connector read, skill; named typed outputs; reads only earlier declared outputs; a condition over an output; parallel flag; retry and back-off; failure path stop, continue or handler). brain.orchestration.workflow_run runs it through a door, keeps statuses and words and no value, and says repeated failure; brain.workflow_routes writes, assigns and runs it (migration 0273, switch stored_workflows ships off) through call_piece at the asker's reach narrowed by the agent; install check acceptance_checks_workflow. Not built: a console page, a skill step's offered skills bound to the run, writes (the leash is empty so a step that changes something is stated as not offered), and the two-connector two-skill run of M17.6.8.",
+      "updated": "2026-10-20"
     },
     "M17.6.8": {
       "status": "BLOCKED",
@@ -2458,9 +2458,9 @@
       "updated": "2026-10-14"
     },
     "M17.7.7": {
-      "status": "OPEN",
-      "why": "TRIAGE 2026-10-13 class 4 (unbuilt): No workflow assignment exists, so no refusal of an unassigned workflow through an agent; depends on M17.6.1's workflow data and an agent-workflow link in the agent manifest or install.",
-      "updated": "2026-10-13"
+      "status": "IN PROGRESS",
+      "why": "BUILT 2026-10-21, not yet proved on an install and no page draws it. brain.orchestration.workflow reads a stored, versioned definition (steps: tool, connector read, skill; named typed outputs; reads only earlier declared outputs; a condition over an output; parallel flag; retry and back-off; failure path stop, continue or handler). brain.orchestration.workflow_run runs it through a door, keeps statuses and words and no value, and says repeated failure; brain.workflow_routes writes, assigns and runs it (migration 0273, switch stored_workflows ships off) through call_piece at the asker's reach narrowed by the agent; install check acceptance_checks_workflow. Not built: a console page, a skill step's offered skills bound to the run, writes (the leash is empty so a step that changes something is stated as not offered), and the two-connector two-skill run of M17.6.8.",
+      "updated": "2026-10-20"
     },
     "M17.7.8": {
       "status": "BLOCKED",
