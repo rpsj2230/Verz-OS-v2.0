@@ -542,6 +542,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/connectors/{connector}/accept",
       "/api/v1/connectors/{connector}/steward",
       "/api/v1/console/connectors",
+      "/api/v1/console/connector-start",
       "/api/v1/console/incidents",
       "/api/v1/console/incidents/acknowledgement",
       "/api/v1/console/system-health",
@@ -1015,6 +1016,8 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
   "POST /api/v1/answer": "The answer lane behind Ask, which writes no row an administrator manages.",
   "GET /api/v1/welcome":
     "The starter questions a person is offered on their first visit to Ask, for their own department and kept to what they may ask; it reads nothing an administrator manages and writes nothing.",
+  "GET /api/v1/welcome/from-your-data":
+    "Up to three questions a person is offered on Ask about what their own department has connected, each naming where to check its answer and kept to the records they may read; it reads nothing an administrator manages and writes nothing.",
   "GET /api/v1/console/explanations/{act}":
     "The sentence that explains one act the console cannot offer, the same for every reader and read from the product's own registry (brain.console.explanations); it reads nothing an administrator manages and writes nothing, so no administrator manages a row of it.",
   "POST /api/v1/answer/mark":

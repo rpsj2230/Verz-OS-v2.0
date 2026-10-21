@@ -141,6 +141,8 @@ def test_every_declared_reader_asks_about_its_feature_and_nothing_else_asks() ->
         "brain.agent_audience_routes",
         "brain.project_context",
         "brain.thread_routes",
+        "brain.adoption_coverage_routes",
+        "brain.welcome_routes",
         "brain.coordination_routes",
         "brain.workflow_routes",
     }
@@ -291,6 +293,8 @@ def test_switching_a_feature_on_writes_its_row_and_the_next_read_sees_it(
         "model_server": False,
         "job_redrive": False,
         "agent_audience_extras": False,
+        "adoption_coverage": False,
+        "starter_questions_from_data": False,
         "multi_agent_coordination": False,
         "stored_workflows": False,
     }
