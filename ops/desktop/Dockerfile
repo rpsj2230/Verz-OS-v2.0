@@ -13,12 +13,14 @@
 #
 # Task ids: M19.8.1
 
-FROM ubuntu:24.04
+# The base is the one the application's own build already pins and the images page already records
+# (docs/install/images.md), which has Python 3.13 and so needs no interpreter of its own. Debian
+# bookworm carries girepository 1.0 only, so PyGObject is held below the release that moved to 2.0.
+FROM python:3.13-slim-bookworm
 
 COPY --from=ghcr.io/astral-sh/uv:0.12.9 /uv /bin/uv
 
 ENV DEBIAN_FRONTEND=noninteractive \
-    UV_PYTHON_INSTALL_DIR=/opt/python \
     UV_COMPILE_BYTECODE=1 \
     PATH="/opt/desktop-runner/.venv/bin:$PATH"
 
@@ -26,17 +28,17 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # and the dev packages are only what building PyGObject needs, removed again in the same layer.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        xvfb dbus dbus-x11 at-spi2-core gir1.2-atspi-2.0 libgirepository-2.0-0 \
-        gcc pkg-config libgirepository-2.0-dev libcairo2-dev python3-dev \
+        xvfb dbus dbus-x11 at-spi2-core gir1.2-atspi-2.0 libgirepository-1.0-1 \
+        gcc pkg-config libgirepository1.0-dev libcairo2-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 RUN uv venv --python 3.13 /opt/desktop-runner/.venv \
-    && VIRTUAL_ENV=/opt/desktop-runner/.venv uv pip install --no-cache . pygobject pillow \
+    && VIRTUAL_ENV=/opt/desktop-runner/.venv uv pip install --no-cache . "pygobject<3.51" pillow \
     && rm -rf /build \
-    && apt-get purge -y gcc pkg-config libgirepository-2.0-dev libcairo2-dev python3-dev \
+    && apt-get purge -y gcc pkg-config libgirepository1.0-dev libcairo2-dev \
     && apt-get autoremove -y
 
 RUN useradd --create-home --shell /usr/sbin/nologin desktop \
