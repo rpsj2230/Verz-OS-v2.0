@@ -47,7 +47,7 @@ authority and before the database, so a caller who may not open the screen learn
 The person a request is about is never looked up: that is the reference the request was filed
 under, and a name for somebody being erased is the one value this screen should not add.
 
-Task ids: M27.7.24, M27.16.1
+Task ids: M27.7.24, M27.16.1, M40.4.2.3
 """
 
 from __future__ import annotations
@@ -59,6 +59,7 @@ from typing import Final
 import structlog
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.exc import SQLAlchemyError
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked
@@ -77,6 +78,7 @@ from brain.console.screens import screen
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.ops.data_export_store import ExportLog, StoredExports, TakenExport
+from brain.ops.deletion_request_store import DeletionRequests, StoredDeletionRequests
 from brain.ops.erasure_store import (
     ErasureRecord,
     ErasureRecords,
@@ -424,6 +426,21 @@ def erasure_records_of(request: Request) -> ErasureRecords:
     return StoredErasures(sessions)
 
 
+def deletion_requests_of(request: Request) -> DeletionRequests:
+    """What `app.state.deletion_requests` holds, or the database, or one process fault.
+
+    The asks people made from their own page, which filing an erasure for the same person closes
+    (M40.4.2.3). See `brain.member_deletion_routes`.
+    """
+    found = getattr(request.app.state, "deletion_requests", None)
+    if isinstance(found, DeletionRequests):
+        return found
+    sessions = sessions_of(request)
+    if sessions is None:
+        raise Failed("no database on this process")
+    return StoredDeletionRequests(sessions)
+
+
 def export_log_of(request: Request) -> ExportLog:
     """What `app.state.export_log` holds, or the database, or one process fault."""
     found = getattr(request.app.state, "export_log", None)
@@ -459,6 +476,21 @@ def _refused_because(reason: str) -> Absent:
 
 
 router = APIRouter(prefix=API_PREFIX, tags=["govern"])
+
+
+async def _close_the_ask(request: Request, subject_id: str, request_id: str, asked: Asked) -> None:
+    """Mark the person's own ask, if they made one, as filed (M40.4.2.3).
+
+    After the erasure is queued and in a transaction of its own, so a failure here leaves a queued
+    erasure and an ask that still reads as waiting, which is a repeated prompt for an administrator
+    and not a lost erasure. Never raised: the erasure is filed whatever this does.
+    """
+    try:
+        await deletion_requests_of(request).decide(
+            subject_id, by=asked.reach.principal_id, erasure_request_id=request_id, at=asked.now
+        )
+    except SQLAlchemyError:
+        log.warning("a person's deletion ask was not closed", request=request_id)
 
 
 @router.get(
@@ -536,6 +568,7 @@ async def file_erasure(request: Request, body: ErasureBody, asked: Asked) -> Era
         )
     except ErasureRefusedError as refused:
         raise _refused_because(refused.reason) from None
+    await _close_the_ask(request, filed.subject_id, filed.request_id, asked)
     return ErasureFiled(
         request_id=filed.request_id, subject_id=filed.subject_id, requested_at=filed.requested_at
     )
