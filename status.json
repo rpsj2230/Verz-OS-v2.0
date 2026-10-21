@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-21T08:53:27.245031+00:00",
-  "commit": "7201a94b",
-  "commit_subject": "A person the staff sync moves has the automations that would now reach less paused (M26.2.3, switch off) (#659)",
+  "generated_at": "2026-10-21T09:03:17.709152+00:00",
+  "commit": "0b20066e",
+  "commit_subject": "A person can write, bring in and offer a skill of their own; a skill nobody offered is in no reading of the library (M40.3.2.1, M40.3.2.2, M40.3.2.3) (#656)",
   "total": 1626,
-  "done": 1189,
-  "percent": 73.1,
-  "built": 1374,
-  "built_percent": 84.5,
+  "done": 1192,
+  "percent": 73.3,
+  "built": 1377,
+  "built_percent": 84.7,
   "built_unproven": 185,
   "built_task_ids": [
     "M1.1.8",
@@ -263,16 +263,16 @@
       "wave": 4,
       "name": "Doing, lifecycle, extensions",
       "total": 232,
-      "done": 122,
-      "percent": 52.6,
-      "in_progress": 59,
+      "done": 125,
+      "percent": 53.9,
+      "in_progress": 56,
       "ready_for_testing": 32,
       "blocked": 15,
       "open": 4,
       "acts": 0,
       "decided": 23,
-      "built": 153,
-      "built_percent": 65.9
+      "built": 156,
+      "built_percent": 67.2
     },
     {
       "wave": 5,
@@ -711,10 +711,10 @@
       "name": "Member self-service application",
       "wave": 4,
       "total": 54,
-      "done": 34,
+      "done": 37,
       "acts": 0,
       "decided": 6,
-      "built": 41
+      "built": 44
     },
     {
       "module": "M41",
@@ -1780,6 +1780,9 @@
     "M40.3.1.1",
     "M40.3.1.4",
     "M40.3.1.5",
+    "M40.3.2.1",
+    "M40.3.2.2",
+    "M40.3.2.3",
     "M40.3.3.1",
     "M40.3.3.3",
     "M40.4.1.2",
@@ -3757,25 +3760,10 @@
       "why": "TRIAGE 2026-10-13 class 2 (partly built): member_library.authored_usage is built but uncalled and no source of per-item read counts exists: knowledge.retrieval_log deliberately stores no reference, and mine_routes says nothing counts reads (VERIFICATION_AND_USE_ARE_NOT_RECORDED). NEXT: decide where per-item read counts live (item-level counter conflicts with RetrievalEvent no-reference rule); then wire authored_usage to the knowledge card",
       "updated": "2026-10-13"
     },
-    "M40.3.2.1": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): member_library.my_skills/PersonalSkill/origin_of (source, version, review state) are built; only origin_of has callers (agent_routes). The skills library routes (skill_routes GET /skills/library) are the administrator's and show every skill, not a member's personal ones. NEXT: add GET /me/skills calling my_skills over ops.skill_store rows owned by the person",
-      "updated": "2026-10-13"
-    },
-    "M40.3.2.2": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): Import from repository at a commit, from a URL, pasted SKILL.md, zip and procedure files exist (skill_routes POST /skills, /skills/imports, /skills/procedures) but behind skill_library.may_add, an administrator's write. member_library.add_skill is called only from skill_routes/acceptance. No member-scoped personal import. NEXT: let a member add a personal skill: route calling add_skill at the person's own ownership, with a personal-state row",
-      "updated": "2026-10-13"
-    },
-    "M40.3.2.3": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): member_library.submit_for_review/Submission built, no caller. Skill review queue exists (POST /skills/{digest}/review, may_review) for administrators. NEXT: add POST /me/skills/{id}/submit calling submit_for_review and moving the row to the department's review queue in ops.skill_store",
-      "updated": "2026-10-13"
-    },
     "M40.3.2.4": {
       "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): member_library.attach_refusals (personal skill only for own agents until approved) has no caller. Admin side: skill_library.assignment refuses an unapproved skill via attach_skill/pin_skill, but no personal-skill state exists. NEXT: wire attach_refusals into skill_library.assignment and the personal agent builder once personal skills are stored",
-      "updated": "2026-10-13"
+      "why": "PARTLY BUILT (M40/member-personal-skills): a skill nobody offered is in no reading of the library (brain.ops.skill_store.library_of and one_skill carry one clause), so no administrator can list, review or assign it and no run can pin it; offered, it still needs a named person to approve the exact bytes before any agent can carry it. NOT BUILT, AND A QUESTION FOR THE OWNER: whether a person may run their own skill on their own personal agent BEFORE a reviewer has approved it (the leaf's words 'usable only by this person's own agents until approved'); today it is usable by no agent until approved, which is stronger than the leaf and narrower than it reads. member_library.attach_refusals stays unwired for that reason: its first refusal already forbids pinning an unapproved skill anywhere. The install check does not name this leaf for the same reason.",
+      "updated": "2026-10-20"
     },
     "M40.4.1.1": {
       "status": "READY FOR TESTING",
@@ -4015,11 +4003,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 23,
+  "closed_today": 26,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "0b20066",
+      "at": "2026-10-21T08:51:44+00:00",
+      "subject": "A person can write, bring in and offer a skill of their own; a skill nobody offered is in no reading of the library (M40.3.2.1, M40.3.2.2, M40.3.2.3) (#656)",
+      "closed": "M40.3.2.1,M40.3.2.2,M40.3.2.3"
+    },
     {
       "sha": "7201a94",
       "at": "2026-10-21T08:41:20+00:00",
@@ -4133,12 +4127,6 @@
       "at": "2026-10-14T13:10:11+00:00",
       "subject": "20 more tasks are proved on the install by the newest complete acceptance run",
       "closed": "M18.1.3,M18.2.1,M18.2.2,M18.2.3,M18.2.4,M18.4.1,M18.4.2,M18.4.3,M37.1.1.1,M37.1.1.2,M37.1.1.3,M37.1.3.2,M37.1.3.3,M37.1.4.1,M37.1.4.2,M37.1.4.3,M37.1.4.4,M37.7.5,M42.1.2,M42.5.2"
-    },
-    {
-      "sha": "b8d05b9",
-      "at": "2026-10-14T09:08:07+00:00",
-      "subject": "239 tasks are proved on the install by one complete acceptance run",
-      "closed": "M10.7.6,M10.7.7,M10.7.8,M11.9.16,M11.9.17,M12.2.8,M12.3.3,M12.4.10,M12.4.14,M12.4.4,M13.7.1,M13.7.7,M13.8.15,M13.8.17,M13.8.19,M13.9.1,M14.3.1,M14.7.1,M14.7.2,M14.8.1,M15.3.1,M16.2.2,M16.2.4,M16.3.2,M16.6.1,M16.6.7,M16.7.14,M16.7.3,M17.1.3,M17.2.2,M17.2.4,M17.2.5,M17.3.1,M17.3.2,M17.3.3,M17.3.4,M17.3.5,M17.4.2,M17.4.3,M17.4.4,M17.5.3,M17.7.9,M18.3.1,M18.3.2,M18.3.3,M19.2.1,M19.2.2,M19.2.3,M19.5.1,M19.5.3,M19.5.4,M19.6.2,M19.6.3,M19.9.3,M20.1.1,M20.4.2,M21.1.4,M21.1.5,M21.2.3,M21.3.1,M21.3.2,M21.3.3,M21.3.4,M21.3.5,M21.3.6,M22.2.2,M25.1.1,M25.1.2,M25.1.3,M25.1.5,M25.2.3,M25.3.1,M26.1.4,M26.3.1,M26.3.3,M26.3.4,M27.10.5,M27.11.15,M27.11.6,M27.11.9,M27.12.3,M27.12.4,M27.12.6,M27.12.8,M27.13.2,M27.13.6,M27.13.7,M27.15.14,M27.15.17,M27.15.18,M27.15.25,M27.15.27,M27.15.28,M27.15.29,M27.15.3,M27.15.30,M27.15.33,M27.15.37,M27.15.4,M27.15.40,M27.15.44,M27.15.45,M27.15.54,M27.15.6,M27.15.61,M27.2.5,M27.2.6,M27.2.7,M27.2.8,M27.3.11,M27.3.12,M27.5.5,M27.7.17,M27.7.20,M27.7.22,M27.7.25,M28.2.2,M28.2.4,M28.3.1,M28.3.2,M28.3.3,M28.4.1,M28.5.1,M28.5.3,M29.1.12,M29.1.2,M29.1.3,M29.1.4,M29.1.5,M29.1.7,M29.2.1,M29.2.2,M29.2.3,M29.2.6,M30.3.5,M30.4.6,M30.4.7,M30.5.2,M30.6.9,M32.3.1.3,M33.1.1.3,M33.2.2.4,M33.4.1.3,M33.5.1.3,M33.7.1.3,M33.8.3,M34.2.2.3,M34.3.1.1,M34.3.1.2,M34.3.2.1,M34.4.1,M35.1.1.3,M35.1.2.1,M35.1.2.2,M35.1.2.3,M35.3.2.1,M35.3.2.2,M35.4.5,M36.1.1.1,M36.1.1.4,M36.1.2.2,M36.1.3.2,M36.1.4.3,M36.2.1.1,M36.2.1.2,M36.2.4.2,M37.2.2.3,M37.2.3.1,M37.2.3.2,M37.2.3.3,M37.3.2.4,M39.1.1.1,M39.10.1,M39.10.2,M39.10.6,M39.11.1,M39.11.2,M39.2.3.5,M39.2.4.4,M39.7.1,M39.8.1,M39.9.1.1,M39.9.1.2,M39.9.1.4,M39.9.1.6,M39.9.1.8,M39.9.2.1,M39.9.2.2,M39.9.2.4,M39.9.2.5,M40.1.1.1,M40.1.1.2,M40.1.1.3,M40.1.1.5,M40.1.2.1,M40.1.2.2,M40.1.2.4,M40.2.1.1,M40.2.1.2,M40.2.1.4,M40.2.2.1,M40.2.2.4,M40.2.2.5,M40.3.1.1,M40.3.1.4,M40.3.1.5,M40.3.3.1,M40.3.3.3,M40.4.1.2,M40.4.1.4,M40.4.2.1,M40.4.2.4,M40.5.1.1,M40.5.1.2,M40.5.2.1,M40.5.2.2,M40.5.2.3,M40.5.2.4,M40.6.1.1,M40.6.1.3,M40.6.1.4,M42.1.1,M42.2.3,M42.2.8,M42.3.1,M42.3.2,M42.3.3,M42.3.6,M42.3.9,M42.5.1,M42.5.11,M42.5.15,M42.6.2,M42.6.3,M42.6.4,M6.2.3,M6.2.4,M6.2.5,M7.2.6"
     }
   ]
 }
