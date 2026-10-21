@@ -55,7 +55,7 @@ export function myDisconnectPath(name: string): string {
 }
 
 /** What `POST /me/accounts/{connector}/disconnect` answers. */
-export type MyDisconnected = components["schemas"]["DisconnectedView"];
+export type MyDisconnected = components["schemas"]["MemberAccountDisconnectedView"];
 
 /** The button that sends a person to the vendor for their own account. */
 export function connectMyAccountLabel(vendor: string): string {

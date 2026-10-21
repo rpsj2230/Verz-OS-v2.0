@@ -102,7 +102,7 @@ _RESPONSES: Final[dict[int | str, dict[str, object]]] = {
 }
 
 
-class DisconnectedView(BaseModel):
+class MemberAccountDisconnectedView(BaseModel):
     """What a disconnect did, in words. `vendor_revoked` is whether the vendor was asked."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -139,10 +139,10 @@ def revoker_of(request: Request, *, connector: str, principal_id: str) -> TokenR
     )
 
 
-@router.post(MY_DISCONNECT_PATH, response_model=DisconnectedView, responses=_RESPONSES)
+@router.post(MY_DISCONNECT_PATH, response_model=MemberAccountDisconnectedView, responses=_RESPONSES)
 async def disconnect_my_account(
     request: Request, connector: str, asked: Asked
-) -> DisconnectedView | JSONResponse:
+) -> MemberAccountDisconnectedView | JSONResponse:
     """Disconnect the asker's own account at a source: revoke it at the vendor, then remove it.
 
     Asked of the person themselves and of nobody on their behalf; the principal is the one the
@@ -182,7 +182,7 @@ async def disconnect_my_account(
         body = ErrorBody(message=NOT_DISCONNECTED)
         return JSONResponse(status_code=503, content=body.model_dump())
     asked_the_vendor = bool(consent.revoke_url)
-    return DisconnectedView(
+    return MemberAccountDisconnectedView(
         connector=connector,
         vendor_revoked=asked_the_vendor,
         told=DISCONNECTED_AND_REVOKED
