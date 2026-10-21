@@ -185,6 +185,7 @@ MIGRATION_MODEL_SERVER = VERSIONS / "0250_model_server.py"
 MIGRATION_MIGRATION_RECORD = VERSIONS / "0241_migration_record.py"
 MIGRATION_TEMPLATE_WITHDRAWAL = VERSIONS / "0261_template_withdrawal.py"
 MIGRATION_AGENT_COORDINATION = VERSIONS / "0272_agent_coordination.py"
+MIGRATION_MEMBER_DELETION = VERSIONS / "0274_member_deletion_request.py"
 MIGRATION_WORKFLOWS = VERSIONS / "0273_workflows.py"
 MIGRATION_BROWSER_DECLARATIONS = VERSIONS / "0275_browser_declarations.py"
 
@@ -549,6 +550,8 @@ AGENT_COORDINATION_TABLES: tuple[str, ...] = (
     "agent.agent_fanout",
     "ops.coordinated_run",
 )
+#: And the one 0274 adds: a person's ask that their data be deleted, until the retention owner acts.
+MEMBER_DELETION_TABLES: tuple[str, ...] = ("ops.deletion_request",)
 #: And the four 0273 adds: stored workflows, who they are assigned to and how each run went.
 #: And the two 0275 adds: what a person declared about a system a browser may be pointed at, and the
 #: permissions signed for it.
@@ -672,6 +675,7 @@ ALL_TABLES = (
     + MIGRATION_RECORD_TABLES
     + TEMPLATE_WITHDRAWAL_TABLES
     + AGENT_COORDINATION_TABLES
+    + MEMBER_DELETION_TABLES
     + WORKFLOW_TABLES
     + BROWSER_DECLARATION_TABLES
 )
@@ -1574,6 +1578,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert template_withdrawal.TABLES == TEMPLATE_WITHDRAWAL_TABLES
     agent_coordination = migration_module(MIGRATION_AGENT_COORDINATION)
     assert agent_coordination.TABLES == AGENT_COORDINATION_TABLES
+    member_deletion = migration_module(MIGRATION_MEMBER_DELETION)
+    assert member_deletion.TABLES == MEMBER_DELETION_TABLES
     workflows = migration_module(MIGRATION_WORKFLOWS)
     assert workflows.TABLES == WORKFLOW_TABLES
     browser_declarations = migration_module(MIGRATION_BROWSER_DECLARATIONS)
@@ -1708,6 +1714,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(migration_record.TABLES)
         + tuple(template_withdrawal.TABLES)
         + tuple(agent_coordination.TABLES)
+        + tuple(member_deletion.TABLES)
         + tuple(workflows.TABLES)
         + tuple(browser_declarations.TABLES)
     )
@@ -1821,6 +1828,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(migration_record.TABLES),
         set(template_withdrawal.TABLES),
         set(agent_coordination.TABLES),
+        set(member_deletion.TABLES),
         set(workflows.TABLES),
         set(browser_declarations.TABLES),
     )
