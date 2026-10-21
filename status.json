@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-21T01:48:33.697065+00:00",
-  "commit": "2d5f2e12",
-  "commit_subject": "What a person pastes from the old system is checked by the migration package: skills, exports, memory files, availability (M37.1.2, M37.2.2, M37.2.3.4, M37.2.4) (#643)",
+  "generated_at": "2026-10-21T01:52:07.238494+00:00",
+  "commit": "a8c2e6dd",
+  "commit_subject": "Two questions for the owner from the console package: a nothing-found question, and the first word of an answer (#651)",
   "total": 1626,
   "done": 1166,
   "percent": 71.7,
