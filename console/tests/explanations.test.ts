@@ -397,6 +397,7 @@ export const DISABLED_FOR: Readonly<Record<string, string>> = Object.freeze({
   "src/components/kit/WizardSteps.tsx::index === 0": DISABLED_BECAUSE.EDGE,
   "src/pages/agent-templates/TemplateTransfer.tsx::reading.unavailable !== \"\" && !reading.withdrawn": DISABLED_BECAUSE.EXPLAINED,
   "src/pages/AskDictation.tsx::disabled": DISABLED_BECAUSE.PASSED_ON,
+  "src/pages/AskProject.tsx::disabled": DISABLED_BECAUSE.PASSED_ON,
   "src/pages/FirstRun.tsx::at === 0": DISABLED_BECAUSE.EDGE,
   "src/pages/agents/AgentLeash.tsx::to === chosen.rung": DISABLED_BECAUSE.INCOMPLETE,
   "src/pages/agents/AutomationAuthoring.tsx::one.notOffered !== null": DISABLED_BECAUSE.EXPLAINED,

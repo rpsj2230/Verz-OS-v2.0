@@ -414,13 +414,14 @@ describe("asking a question", () => {
     // What breaks if this is deleted: a query parameter or a path segment added later and
     // used by a console that already had somewhere to put a question. The route's own
     // document is read: the question, the optional agent the person picked, the optional kinds
-    // they narrowed it to (M7.6.1) and the optional thread it continues (M9.1.1) are the body's
+    // they narrowed it to (M7.6.1) and the optional thread it continues (M9.1.1) and the optional project it is asked inside (M40.7.7) are the body's
     // only properties, no query parameter and no path parameter, and the bound the field holds
     // is the document's bound rather than a number copied here.
     expect(ANSWER_API_PATH).toBe("/answer");
     expect(declaredPropertyNames(declaredRequestBodySchema(ANSWER_ROUTE, "post"))).toEqual([
       "agent",
       "kinds",
+      "project",
       "question",
       "thread",
     ]);

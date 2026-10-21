@@ -38,7 +38,7 @@ is handed back, so there is no export without its record, and the ledger's `publ
 from `0053`'s trigger. What is exported is never more than the page shows: a reference the person
 can no longer read is not re-read for the file. See `AN_EXPORT_IS_THE_THREAD_AS_IT_IS_SHOWN_NOW`.
 
-Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4, M12.3.6, M33.3.1.3
+Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4, M12.3.6, M33.3.1.3, M40.7.6
 """
 
 from __future__ import annotations
@@ -51,13 +51,14 @@ from typing import Annotated, Final
 from fastapi import APIRouter, Path, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked
 from brain.attribution import trace_of_request
 from brain.chat.remember import threads_of
 from brain.chat.thread_store import CONSOLE_SURFACE, StoredThreads, surfaces
-from brain.chat.threads import Thread
+from brain.chat.threads import Thread, ThreadMessage
 from brain.chat.turns import CorrectionKind, Turn, TurnKind
 from brain.core.errors import Absent, Failed
 from brain.knowledge.candidate_store import propose
@@ -71,7 +72,11 @@ from brain.member_activity import (
     export_my_history,
     recent_threads,
 )
+from brain.member_task_state import WORDS, failed_step, state_of
 from brain.ops.data_export_store import StoredExports
+from brain.ops.features import is_on
+from brain.ops.features_declared.thread_states import THREAD_STATES
+from brain.ops.task_state_store import StoredTaskStates
 from brain.routing_routes import sessions_of
 from brain.tables.chat import MessageRole
 from brain.tables.data_export import ExportDataSet
@@ -118,7 +123,13 @@ router = APIRouter(prefix=API_PREFIX, tags=["threads"])
 
 
 class ThreadSummaryView(BaseModel):
-    """One thread in a list: its title, when it was last used and where. Nothing counted."""
+    """One thread in a list: its title, when it was last used and where. Nothing counted.
+
+    `state` is where the run behind the last answer has got to (M40.7.6): `running`,
+    `waiting_for_approval`, `done` or `failed`, or empty while the switch is off or when the thread
+    has no answer to ask about. `state_words` is the same in a person's words, and `failed_step` is
+    the phrase for the step a failed run stopped at, empty for any other state.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -126,6 +137,9 @@ class ThreadSummaryView(BaseModel):
     title: str
     last_at: datetime
     last_channel: str
+    state: str = ""
+    state_words: str = ""
+    failed_step: str = ""
 
 
 class ThreadsView(BaseModel):
@@ -207,7 +221,47 @@ def _store(request: Request) -> StoredThreads:
     return store
 
 
-def _listed(threads: tuple[Thread, ...], asked: Asked) -> ThreadsView:
+async def thread_states_are_on(sessions: async_sessionmaker[AsyncSession] | None) -> bool:
+    """Whether `thread_states` is switched on now. Off with no database or no row."""
+    if sessions is None:
+        return False
+    async with sessions() as session:
+        return await is_on(session, THREAD_STATES)
+
+
+def _latest_answer(thread: Thread) -> ThreadMessage | None:
+    """The newest answer on a thread that names the request that gave it, or None."""
+    answers = [one for one in thread.messages if one.role is MessageRole.ASSISTANT and one.trace_id]
+    return max(answers, key=lambda one: one.at) if answers else None
+
+
+async def _states_of(
+    request: Request, threads: tuple[Thread, ...], asked: Asked
+) -> dict[str, tuple[str, str, str]]:
+    """Each thread's state, the person's words for it and the failed step, by thread id.
+
+    Empty while the switch is off or the process has no database; a thread with no answer to ask
+    about is simply absent, and its row says nothing.
+    """
+    sessions = sessions_of(request)
+    if sessions is None or not await thread_states_are_on(sessions):
+        return {}
+    latest = {one.thread_id: _latest_answer(one) for one in threads}
+    answers = {
+        message.trace_id: message.run_state for message in latest.values() if message is not None
+    }
+    facts = await StoredTaskStates(sessions).facts(asked.caller.principal.id, answers, asked.now)
+    found: dict[str, tuple[str, str, str]] = {}
+    for thread_id, message in latest.items():
+        if message is None or message.trace_id not in facts:
+            continue
+        run = facts[message.trace_id]
+        state = state_of(run)
+        found[thread_id] = (state.value, WORDS[state], failed_step(run))
+    return found
+
+
+async def _listed(request: Request, threads: tuple[Thread, ...], asked: Asked) -> ThreadsView:
     recent = recent_threads(
         threads,
         principal_id=asked.caller.principal.id,
@@ -215,6 +269,7 @@ def _listed(threads: tuple[Thread, ...], asked: Asked) -> ThreadsView:
         audience_is_one_person=True,
         now=asked.now,
     )
+    states = await _states_of(request, threads, asked)
     return ThreadsView(
         items=[
             ThreadSummaryView(
@@ -222,6 +277,9 @@ def _listed(threads: tuple[Thread, ...], asked: Asked) -> ThreadsView:
                 title=one.title,
                 last_at=one.last_at,
                 last_channel=one.last_channel.value,
+                state=states.get(one.thread_id, ("", "", ""))[0],
+                state_words=states.get(one.thread_id, ("", "", ""))[1],
+                failed_step=states.get(one.thread_id, ("", "", ""))[2],
             )
             for one in recent
         ]
@@ -232,7 +290,7 @@ def _listed(threads: tuple[Thread, ...], asked: Asked) -> ThreadsView:
 async def my_threads(request: Request, asked: Asked) -> ThreadsView:
     """The caller's most recently used threads, wherever each was asked (M9.1.1, M9.1.2)."""
     threads = await _store(request).threads(asked.caller.principal.id)
-    return _listed(threads, asked)
+    return await _listed(request, threads, asked)
 
 
 @router.get(THREAD_SEARCH_PATH, response_model=ThreadsView, responses=COMMON_RESPONSES)
@@ -243,7 +301,7 @@ async def search_my_threads(
 ) -> ThreadsView:
     """The caller's threads whose questions hold every word asked, and nobody else's (M9.1.3)."""
     threads = await _store(request).search(asked.caller.principal.id, q)
-    return _listed(threads, asked)
+    return await _listed(request, threads, asked)
 
 
 async def _reopened(request: Request, asked: Asked, thread_id: str) -> ContinuedThread:
