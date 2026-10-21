@@ -144,7 +144,7 @@ class StepDoor(Protocol):
     @property
     def writes_offered(self) -> bool: ...
 
-    async def call(self, call: StepCall) -> StepResult: ...
+    async def carry_out(self, call: StepCall) -> StepResult: ...
 
 
 Sleep = Callable[[float], Awaitable[None]]
@@ -331,7 +331,7 @@ async def run_workflow(
         for attempt in range(1, attempts + 1):
             call = StepCall(run_id, step.id, step.kind, step.target, arguments, key, attempt)
             try:
-                result = await door.call(call)
+                result = await door.carry_out(call)
             except StepRefusedError:
                 fail(step, Cause.REFUSED, attempt, began)
                 return

@@ -131,7 +131,7 @@ class ScriptedDoor:
     def __init__(self, request: Any, asked: Any, record: AgentRecord) -> None:
         ScriptedDoor.built.append((request, asked, record))
 
-    async def call(self, call: StepCall) -> StepResult:
+    async def carry_out(self, call: StepCall) -> StepResult:
         ScriptedDoor.calls.append(call)
         given = ScriptedDoor.script[call.step_id]
         if isinstance(given, Exception):
@@ -436,7 +436,7 @@ def test_a_step_receives_only_the_asker_narrowed_by_the_agent() -> None:
     import asyncio
 
     door, tool, _ = _door_world(("read:price_list", "read:price_list.sku", "read:price_list.name"))
-    result = asyncio.run(door.call(_call(tool)))
+    result = asyncio.run(door.carry_out(_call(tool)))
     (record,) = result.records
     assert record["sku"] == "WEB-1" and record["name"] == "Hosting"
     assert "sell_price" not in record and "cost" not in record
@@ -451,10 +451,10 @@ def test_a_tool_the_agent_may_not_call_and_a_tool_that_does_not_exist_are_one_re
     errors = []
     for name in ("nothing.read_here", "price_list", "x" * 90):
         with pytest.raises(StepRefusedError) as raised:
-            asyncio.run(door.call(_call(name)))
+            asyncio.run(door.carry_out(_call(name)))
         errors.append(type(raised.value))
     assert len(set(errors)) == 1
-    assert asyncio.run(door.call(_call(tool))).records
+    assert asyncio.run(door.carry_out(_call(tool))).records
 
 
 def test_a_step_cannot_name_a_parameter_a_handler_takes_as_wiring() -> None:
@@ -463,7 +463,7 @@ def test_a_step_cannot_name_a_parameter_a_handler_takes_as_wiring() -> None:
 
     door, tool, _ = _door_world(("read:price_list", "read:price_list.sku"))
     with pytest.raises(StepRefusedError):
-        asyncio.run(door.call(_call(tool, {"entitlement": "everything"})))
+        asyncio.run(door.carry_out(_call(tool, {"entitlement": "everything"})))
 
 
 def test_the_door_offers_no_writes_until_a_held_action_has_been_shown_to_reach_a_person() -> None:

@@ -353,7 +353,7 @@ class GateDoor:
         self._record = record
         self._registry = registry
 
-    async def call(self, call: StepCall) -> StepResult:
+    async def carry_out(self, call: StepCall) -> StepResult:
         asked, record = self._asked, self._record
         try:
             step = PieceStep(tool=call.target, arguments=dict(call.arguments))

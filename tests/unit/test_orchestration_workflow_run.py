@@ -53,7 +53,7 @@ class Door:
     def writes_offered(self) -> bool:
         return self.writes
 
-    async def call(self, call: StepCall) -> StepResult:
+    async def carry_out(self, call: StepCall) -> StepResult:
         self.calls.append(call)
         self.running += 1
         self.most_at_once = max(self.most_at_once, self.running)
@@ -195,10 +195,10 @@ async def test_parallel_steps_start_together_and_the_join_waits_and_records_the_
     barrier = asyncio.Barrier(2)
 
     class Waiting(Door):
-        async def call(self, call: StepCall) -> StepResult:
+        async def carry_out(self, call: StepCall) -> StepResult:
             if call.step_id in ("a", "b"):
                 await asyncio.wait_for(barrier.wait(), timeout=2)
-            return await super().call(call)
+            return await super().carry_out(call)
 
     definition = _definition(
         _step("a", parallel=True, on_failure="continue"),

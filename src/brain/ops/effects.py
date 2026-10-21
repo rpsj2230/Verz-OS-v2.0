@@ -236,7 +236,7 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.workflow_routes:Workflows.runs": Repeat.READS,
         # A step of a workflow: the gate's own path for a tool call, which reads and leaves nothing
         # behind, a write being held for a person under a key of the action's digest.
-        "brain.orchestration.workflow_run:StepDoor.call": Repeat.NO_EFFECT_AT_THE_FAR_END,
+        "brain.orchestration.workflow_run:StepDoor.carry_out": Repeat.NO_EFFECT_AT_THE_FAR_END,
         # The model call that splits a request: work done elsewhere that leaves nothing behind.
         "brain.coordination_routes:PlannerCalls.complete": Repeat.NO_EFFECT_AT_THE_FAR_END,
         # A specialist's run is the agent loop: its reads leave nothing behind and any write it asks

@@ -441,13 +441,25 @@ async def a_workflow_runs_through_the_gate_and_one_trace_is_kept(h: Harness) -> 
         ).all()
     if any(value in repr(words) for value in ("120.00", "70.00", "50.00", *names)):
         raise CheckFailedError(THE_TRACE_HELD_A_VALUE)
-    signals = await _count(
-        h,
-        "SELECT count(*) FROM ops.outbox_event WHERE kind = 'automation.run_finished'"
-        " AND entity = 'workflow_run' AND attributes->>'workflow_id' = :w"
-        " AND attributes->>'agent_id' = :a AND attributes->>'failed_step' = 'refused'",
-        w=workflow,
-        a=agent,
+    async with h.sessions() as session:
+        told = (
+            (
+                await session.execute(
+                    text(
+                        "SELECT attributes FROM ops.outbox_event WHERE"
+                        " kind = 'automation.run_finished' AND entity = 'workflow_run'"
+                    ),
+                )
+            )
+            .scalars()
+            .all()
+        )
+    signals = sum(
+        1
+        for one in told
+        if one.get("workflow_id") == workflow
+        and one.get("agent_id") == agent
+        and one.get("failed_step") == "refused"
     )
     if signals != 3:
         raise CheckFailedError(NO_SIGNAL_WAS_SENT)
