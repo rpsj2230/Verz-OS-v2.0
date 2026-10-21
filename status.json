@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-21T14:37:20.679852+00:00",
-  "commit": "040ce923",
-  "commit_subject": "A personal agent following its owner when they move is shown on an install, and the roll-ups can now see it (#672)",
+  "generated_at": "2026-10-21T17:59:22.312289+00:00",
+  "commit": "42ad0832",
+  "commit_subject": "4 more tasks are proved on the install by the newest complete acceptance run",
   "total": 1626,
-  "done": 1212,
-  "percent": 74.5,
+  "done": 1216,
+  "percent": 74.8,
   "built": 1393,
   "built_percent": 85.7,
-  "built_unproven": 181,
+  "built_unproven": 177,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -79,7 +79,6 @@
     "M26.1.2",
     "M26.1.3",
     "M26.2.1",
-    "M26.2.2",
     "M26.2.4",
     "M26.2.6",
     "M26.3.2",
@@ -165,10 +164,7 @@
     "M40.4.1.1",
     "M40.5.1.3",
     "M40.7.1",
-    "M40.7.2",
     "M40.7.3",
-    "M40.7.5",
-    "M40.7.8",
     "M42.1.3",
     "M42.1.4",
     "M42.3.8",
@@ -259,10 +255,10 @@
       "wave": 4,
       "name": "Doing, lifecycle, extensions",
       "total": 232,
-      "done": 133,
-      "percent": 57.3,
+      "done": 137,
+      "percent": 59.1,
       "in_progress": 47,
-      "ready_for_testing": 35,
+      "ready_for_testing": 31,
       "blocked": 15,
       "open": 2,
       "acts": 0,
@@ -567,7 +563,7 @@
       "name": "Joiner, mover, leaver",
       "wave": 4,
       "total": 16,
-      "done": 6,
+      "done": 7,
       "acts": 0,
       "decided": 1,
       "built": 14
@@ -707,7 +703,7 @@
       "name": "Member self-service application",
       "wave": 4,
       "total": 54,
-      "done": 38,
+      "done": 41,
       "acts": 0,
       "decided": 6,
       "built": 47
@@ -1224,6 +1220,7 @@
     "M25.2.3",
     "M25.3.1",
     "M26.1.4",
+    "M26.2.2",
     "M26.2.3",
     "M26.3.1",
     "M26.3.3",
@@ -1815,8 +1812,11 @@
     "M40.6.1.1",
     "M40.6.1.3",
     "M40.6.1.4",
+    "M40.7.2",
+    "M40.7.5",
     "M40.7.6",
     "M40.7.7",
+    "M40.7.8",
     "M41.1.1",
     "M41.1.2",
     "M41.1.3",
@@ -2766,11 +2766,6 @@
       "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): Grants are read per request (gate.held_grants, disabled principal counts none) and the cache key carries the entitlement hash, so a move shows on the next request; existing check M6.5.2 (acceptance_checks_cache.py:116) shows a moved person is not served the old answer. lifecycle.Move is unwired. NEXT: Add M26.2.1 to the leaves of that M6.5.2 check, or write a check that moves a person and asks at once.",
       "updated": "2026-10-13"
     },
-    "M26.2.2": {
-      "status": "READY FOR TESTING",
-      "why": "built (M26/personal-agents-follow-the-owner): an install check, a_personal_agent_reaches_the_new_department_when_its_owner_moves, makes a member's personal agent, moves the member to another department through the staff sync's Starter pack step, and reads that the agent's record is the same row, that only its owner sees it before and after (a colleague who stayed never does), and that a run through it searches the new department's knowledge and none of the old one's, by the one intersection E_run(caller, agent). Nothing in the product changed: the leaf's note could not say the agent's audience record was verified, and now it is. PRIOR WORK (2026-10-13 triage): identity.lifecycle.agents_following states the rule; the check is the install's own demonstration of it. Not asked: an answer made through the agent, which needs a model (brain.ops.acceptance_checks_agent_reach asks that for an agent). PROVE ON THE INSTALL: (1) as a member in one department, make a personal agent (My workspace, with personal agents switched on); (2) ask it about a document only that department holds: it answers; (3) have an administrator move the member to another department (the staff list's department, or the person's page) and wait for the nightly sync or press Run now; (4) ask the same agent the same question: it no longer reaches that document, and a question about the new department's documents is answered; (5) a colleague who stayed in the old department still cannot find the agent. The install check does the same over reserved people and is not run until the Starter pack exists.",
-      "updated": "2026-10-21"
-    },
     "M26.2.4": {
       "status": "READY FOR TESTING",
       "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): Answer cache key includes the entitlement hash (gate.answer_cache, cache_key); check M6.5.2 shows a person who moved department was refused the cached answer (acceptance_checks_cache.py:196). Test test_answer_cache. NEXT: Add M26.2.4 to that check's leaves=(...).",
@@ -3706,11 +3701,6 @@
       "why": "built (M1/relay-to-sign-in): every release gives the sign-in realm the mail relay saved on Notifications, through the step that already signs in to Keycloak inside its container, writing only when the relay changed and leaving a realm with no relay alone; an install check compares the host the realm reported with the relay's. Not built: hiding Forgot password while no relay is set. Proved on the install when a release has run and a reserved person's Forgot password email arrives. PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_accounts, ops.sign_in_mail); open for proof on the install or a decision, not for code",
       "updated": "2026-09-30"
     },
-    "M40.7.2": {
-      "status": "READY FOR TESTING",
-      "why": "built (M40/ask-starting-points, behind the switch try_a_skill, which ships off): on the Skills page an approved skill's Try it out opens Ask with that skill to try (/ask?skill=<digest>). Ask asks GET /me/skills/{digest}/try whether it can be tried and names it, asks for an agent to run through, and sends the digest with the question for that question alone; the pin is built in memory from an approved, unchanged, unretired library row and never stored, the agent is assigned nothing, the answer cache is bypassed, and the skill is offered to the model only if every tool it names is within the run's reach (brain.api_routes.with_tried_skill, brain.gate.model_lane.skills_offered). It is the ordinary run, metered like any other. PRIOR WORK (2026-10-13 triage): the card showed 'Try it out' as an explanation of something coming soon; the rehearsal route is the reviewers' and is not a conversation. PROVE ON THE INSTALL: (1) as an administrator switch on 'Let a person try an approved skill from its card'; (2) open Skills, an approved skill, press Try it out: Ask opens saying 'Trying the skill <name>', with Talk to an agent chosen and the Ask button waiting for an agent; (3) choose an agent whose reach covers the skill's tools and ask: the answer is made with the skill's card shown to the model; (4) ask the next question without the skill: it is not carried; open the agent's Skills tab: the skill was not assigned; (5) open the address with a skill nobody approved: one sentence says it cannot be tried and the question goes as any other; (6) switch off: Try it out opens Ask with the same sentence.",
-      "updated": "2026-10-21"
-    },
     "M40.7.3": {
       "status": "READY FOR TESTING",
       "why": "built (M40/ask-dictation, owner decision 220 B, browser-side only): Ask has a Dictate your question button that uses the speech recognition built into the person's browser (console/src/pages/AskDictation.tsx, askDictationCore.ts); no server route, vendor or key, and nothing is sent to our side, which a test asserts on requests. The language is the browser's own, finished phrases are appended after what was typed and stay editable, a browser with none is told so in a sentence, a blocked microphone is told how to allow it, and listening stops when the question is sent and when the page is left. PRIOR WORK (2026-10-13 triage): Attach a file to the web composer is built (AskAttach.tsx, POST /threads/attachments, M12.3.6). Dictation is not: no speech tool is registered anywhere in src. NEXT: register a speech-to-text tool; superseded by 220 B (browser-side only). Not proved in a real browser: tests drive a fake recogniser. PROVE ON THE INSTALL: (1) open Ask in Chrome or Edge on a phone and on a laptop, sign in as a member; (2) press Dictate your question, allow the microphone when asked, say a short question, press the button again; the words appear in the question box after anything already typed, and can be edited; (3) block the microphone for the site and press the button: the page says how to allow it; (4) press Ask while listening: listening stops; (5) in Firefox the page says dictation is not available and typing still works; (6) with the browser's network panel open, nothing is requested to this server while dictating. Note for the owner: Chrome and Safari do the listening through their own vendors' services, which is the browser's doing and not ours; the page says nothing is sent to this server.",
@@ -3720,16 +3710,6 @@
       "status": "BLOCKED",
       "why": "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): A browser proof for a member who administers nothing: needs a member-only person signed in on the install and a person or headless-browser walk of Ask, /me, approvals, accounts, memory. Waits on the owner's install (person-run demonstration) and the earlier M40 leaves.",
       "updated": "2026-10-13"
-    },
-    "M40.7.5": {
-      "status": "READY FOR TESTING",
-      "why": "built (M40/ask-starting-points, behind the switch task_routing, which ships off): Ask offers two starting points, Start a task and Talk to an agent (console/src/pages/AskStart.tsx). Start a task names no agent; with task routing on, the gate (brain.gate.select, stage 3, still no model call) matches the question to the one agent the person may call whose name and instruction share at least two distinct words with it, and answers at the person's own reach narrowed by that agent's ceiling; a tie, or nothing shared, falls through to the default as before, and an agent the person may not call is never read. PRIOR WORK (2026-10-13 triage): Talk to an agent, select_agent and the roster existed; the web route handed select_agent no rules, no bindings and no description of any agent, so a task always went to the default. PROVE ON THE INSTALL: (1) as an administrator open Features and switch on 'Send a task started with no agent to the agent whose purpose it matches'; (2) as a member who may call an agent whose instruction names a subject (for example 'domain renewals'), open Ask: 'Start a task' is chosen and no agent picker is drawn; (3) ask a question using two words from that instruction: in Audit, the request names that agent as selected, at the classifier stage; (4) ask an unrelated question: the default answers; (5) switch the feature off: the first question is answered by the default again; (6) choose Talk to an agent and pick one: it answers, as before.",
-      "updated": "2026-10-21"
-    },
-    "M40.7.8": {
-      "status": "READY FOR TESTING",
-      "why": "built (M40/ask-starting-points, behind the switch agent_starter_prompts, which ships off): choosing an agent on Ask shows up to three starter prompts, the example tasks written in the Examples section of the approved skills pinned to that agent (brain.member_starters, GET /me/agents/{agent_id}/starters). A prompt is offered only when the skill would be offered to a run at this person's reach through this agent (every tool within E_run, brain.gate.model_lane.skills_offered) and every department's knowledge the skill needs is within that reach; nothing is said about what was left out, and an agent the person may not run answers as one that does not exist. PRIOR WORK (2026-10-13 triage): no starter prompts existed; the inputs, skill examples and the run's reach, did. PROVE ON THE INSTALL: (1) as an administrator switch on 'Offer three starter prompts when a person opens an agent'; (2) assign an approved skill whose SKILL.md has an Examples section to an agent; (3) as a member who may run the agent, open Ask, choose Talk to an agent and pick it: the example tasks appear under 'You could ask', at most three; pressing one fills the question box and asks nothing; (4) as a member whose access does not cover a tool the skill names: no prompts appear for that skill; (5) switch off: none appear.",
-      "updated": "2026-10-21"
     },
     "M42.1.3": {
       "status": "READY FOR TESTING",
@@ -3919,11 +3899,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 46,
+  "closed_today": 50,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "42ad083",
+      "at": "2026-10-21T17:57:59+00:00",
+      "subject": "4 more tasks are proved on the install by the newest complete acceptance run",
+      "closed": "M26.2.2,M40.7.2,M40.7.5,M40.7.8"
+    },
     {
       "sha": "b7d8922",
       "at": "2026-10-21T10:17:17+00:00",
@@ -4037,12 +4023,6 @@
       "at": "2026-10-19T06:22:52+00:00",
       "subject": "The peak load test is a command an operator can run on any install, safely, and its result is kept in the install's own database (M22.3.3) (#619)",
       "closed": "M22.3.3"
-    },
-    {
-      "sha": "73f7ba2",
-      "at": "2026-10-15T04:30:43+00:00",
-      "subject": "A task is proved on the install by the newest complete acceptance run: documents from approved templates",
-      "closed": "M12.3.5"
     }
   ]
 }
