@@ -140,6 +140,8 @@ DEPARTMENT_SETTING: Final = PERSONAL_DEPARTMENT_SETTING
 #: oauth2/web-server).
 AUTHORIZE_URL: Final = "https://accounts.google.com/o/oauth2/v2/auth"
 EXCHANGE_URL: Final = "https://oauth2.googleapis.com/token"
+#: Google's published endpoint for revoking a token, which a person's disconnect asks first.
+REVOKE_URL: Final = "https://oauth2.googleapis.com/revoke"
 
 GMAIL_SCOPE: Final = f"{GOOGLE_SCOPES_BASE_URL}gmail.readonly"
 CALENDAR_SCOPE: Final = f"{GOOGLE_SCOPES_BASE_URL}calendar.readonly"
@@ -553,6 +555,7 @@ CONSENT: Final = OAuthConsent(
     client_id_setting=CLIENT_ID_SETTING,
     kind=ConsentKind.PERSON,
     reader=READER,
+    revoke_url=REVOKE_URL,
     chosen_by=SERVICES_SETTING,
     scope_of_choice=tuple((one.value, SCOPE_OF[one]) for one in Service),
 )

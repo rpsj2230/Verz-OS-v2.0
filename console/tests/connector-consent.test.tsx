@@ -20,6 +20,12 @@ import * as client from "../src/api/client";
 import { CONSENT_LATER, ConnectSource, connectLabel } from "../src/components/ConnectSource";
 import { MyAccounts } from "../src/components/MyAccounts";
 import {
+  disconnectConsequence,
+  disconnectMyAccountLabel,
+  INHERITED_LABEL,
+  KEEP_IT,
+} from "../src/components/MyAccounts";
+import {
   CONSENT_CALLBACK_API_PATH,
   CONSENT_RETURN_PATH,
   MY_ACCOUNTS_API_PATH,
@@ -28,6 +34,7 @@ import {
   connectWithLabel,
   consentPath,
   myConsentPath,
+  myDisconnectPath,
   returnAddress,
   vendorAnswer,
 } from "../src/pages/connectors/consentAtVendor";
@@ -181,7 +188,7 @@ describe("a person's own account, connected from My workspace", () => {
     const listed = declaredPropertyNames(declaredResponseSchema(`/api/v1${MY_ACCOUNTS_API_PATH}`, "get"));
     expect(listed).toEqual(["accounts", "told"]);
     expect(backendModelFields(ROUTES, "MyAccountView")).toEqual(
-      expect.arrayContaining(["connector", "label", "connected", "told"]),
+      expect.arrayContaining(["connector", "label", "connected", "told", "provenance", "disconnectable"]),
     );
     const start = declaredRequestBodySchema("/api/v1/me/accounts/{connector}/consent", "post");
     expect(declaredPropertyNames(start)).toEqual(["return_address"]);
@@ -193,7 +200,16 @@ describe("a person's own account, connected from My workspace", () => {
       asked.push([path, options?.body]);
       if (path === MY_ACCOUNTS_API_PATH) {
         return ok({
-          accounts: [{ connector: "xero", label: "Xero", connected: false, told: "" }],
+          accounts: [
+            {
+              connector: "xero",
+              label: "Xero",
+              connected: false,
+              told: "",
+              provenance: "personal",
+              disconnectable: false,
+            },
+          ],
           told: "Read only for your own questions.",
         });
       }
@@ -219,6 +235,114 @@ describe("a person's own account, connected from My workspace", () => {
     render(<MyAccounts />);
     expect(await screen.findByText(/No source here is connected by each person/)).toBeTruthy();
     expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  test("a connection the department made is shown as inherited and has no control", async () => {
+    // What breaks if this is deleted: a department's connection is either left off the list, so the
+    // list of what the system reaches for a person is short, or offered a disconnect that would
+    // detach everybody in the department (M40.5.1.4).
+    vi.spyOn(client, "request").mockResolvedValue(
+      ok({
+        accounts: [
+          {
+            connector: "drive",
+            label: "Drive",
+            connected: true,
+            told: "DEPARTMENT-TOLD",
+            provenance: "department",
+            disconnectable: false,
+          },
+        ],
+        told: "Read only for your own questions.",
+      }),
+    );
+    render(<MyAccounts />);
+
+    expect(await screen.findByText(new RegExp(INHERITED_LABEL))).toBeTruthy();
+    expect(screen.getByText("DEPARTMENT-TOLD")).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  test("a connected account offers a disconnect that asks first and says what it does", async () => {
+    // What breaks if this is deleted: the token is revoked on one press with nothing said about
+    // what will happen, or the control is missing on an account whose token is kept (M40.5.1.3).
+    const asked: Array<[string, unknown]> = [];
+    vi.spyOn(client, "request").mockImplementation(async (path: string, options?: client.RequestOptions) => {
+      asked.push([path, options?.method]);
+      if (path === MY_ACCOUNTS_API_PATH) {
+        return ok({
+          accounts: [
+            {
+              connector: "xero",
+              label: "Xero",
+              connected: true,
+              told: "",
+              provenance: "personal",
+              disconnectable: true,
+            },
+          ],
+          told: "Read only for your own questions.",
+        });
+      }
+      return ok({ connector: "xero", vendor_revoked: true, told: "DISCONNECTED-TOLD" });
+    });
+    render(<MyAccounts />);
+
+    fireEvent.click(await screen.findByRole("button", { name: disconnectMyAccountLabel("Xero") }));
+    expect(screen.getByText(disconnectConsequence("Xero"))).toBeTruthy();
+    expect(asked.some(([path]) => path === myDisconnectPath("xero"))).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+    expect(await screen.findByText("DISCONNECTED-TOLD")).toBeTruthy();
+    expect(asked).toContainEqual([myDisconnectPath("xero"), "POST"]);
+  });
+
+  test("declining the question sends nothing", async () => {
+    // What breaks if this is deleted: Keep it connected still disconnects.
+    const spy = vi.spyOn(client, "request").mockResolvedValue(
+      ok({
+        accounts: [
+          {
+            connector: "xero",
+            label: "Xero",
+            connected: true,
+            told: "",
+            provenance: "personal",
+            disconnectable: true,
+          },
+        ],
+        told: "x",
+      }),
+    );
+    render(<MyAccounts />);
+
+    fireEvent.click(await screen.findByRole("button", { name: disconnectMyAccountLabel("Xero") }));
+    fireEvent.click(screen.getByRole("button", { name: KEEP_IT }));
+
+    expect(spy.mock.calls.every(([path]) => path === MY_ACCOUNTS_API_PATH)).toBe(true);
+  });
+
+  test("an account that is not connected has no disconnect control", async () => {
+    // What breaks if this is deleted: the control appears on an account with nothing to revoke.
+    vi.spyOn(client, "request").mockResolvedValue(
+      ok({
+        accounts: [
+          {
+            connector: "xero",
+            label: "Xero",
+            connected: false,
+            told: "",
+            provenance: "personal",
+            disconnectable: false,
+          },
+        ],
+        told: "x",
+      }),
+    );
+    render(<MyAccounts />);
+
+    await screen.findByRole("button", { name: connectMyAccountLabel("Xero") });
+    expect(screen.queryByRole("button", { name: disconnectMyAccountLabel("Xero") })).toBeNull();
   });
 
   test("the return page sends a person's own consent on to My workspace", async () => {

@@ -364,6 +364,10 @@ from brain.lark_sign_in_routes import router as lark_sign_in_router
 # paged, behind `admin:application_log` over everything. See `brain.log_routes`.
 from brain.log_routes import router as log_router
 
+# A member disconnecting their own account at a vendor, the vendor told first. Asked of the person
+# themselves. See `brain.member_accounts_routes`.
+from brain.member_accounts_routes import router as member_accounts_router
+
 # Asking for an agent you can see and cannot run. Gated on the member grant. See
 # `brain.member_agent_request_routes`.
 from brain.member_agent_request_routes import router as member_agent_request_router
@@ -379,6 +383,11 @@ from brain.member_self_routes import router as member_self_router
 # A member's artifacts handed to colleagues, and what was handed to them. Gated on the member grant.
 # See `brain.member_share_routes`.
 from brain.member_share_routes import router as member_share_router
+
+# What a person pastes from the old system, checked by the migration package before anything is done
+# with it: skills, exported items, memory files and agents' availability. Keeps nothing. See
+# `brain.migration_convert_routes`.
+from brain.migration_convert_routes import router as migration_convert_router
 
 # Running a migration from another system, kept and checked: what the old system holds and what
 # happens to each of it, the comparison period and the cutover, behind `admin:install_setting` over

@@ -108,6 +108,7 @@ def test_every_declared_reader_asks_about_its_feature_and_nothing_else_asks() ->
         "brain.staff_source_routes",
         "brain.resolution.merge_store",
         "brain.ops.budget_stop_store",
+        "brain.ops.acceptance_checks_model_spend",
         "brain.gate.suspension_store",
         "brain.ops.supervision_review",
         "brain.ops.shared_start",

@@ -204,6 +204,46 @@ const PROGRESS = {
     why: "Waits on needs-rupash item 235: nothing the product runs can start the container a backup drill needs, so a Start button would reach nothing, which item 44 and docs/admin-console.md refuse. The item names three ways to make it real and recommends one.",
     updated: "2026-10-14",
   },
+  "M27.14.1": {
+    status: "IN PROGRESS",
+    why: "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Home and People and access in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
+    updated: "2026-10-21",
+  },
+  "M27.14.2": {
+    status: "IN PROGRESS",
+    why: "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Agents and AI in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
+    updated: "2026-10-21",
+  },
+  "M27.14.3": {
+    status: "IN PROGRESS",
+    why: "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Knowledge and data in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
+    updated: "2026-10-21",
+  },
+  "M27.14.4": {
+    status: "IN PROGRESS",
+    why: "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Channels and notifications in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
+    updated: "2026-10-21",
+  },
+  "M27.14.5": {
+    status: "IN PROGRESS",
+    why: "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Operations in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
+    updated: "2026-10-21",
+  },
+  "M27.14.6": {
+    status: "IN PROGRESS",
+    why: "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Governance in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
+    updated: "2026-10-21",
+  },
+  "M27.14.7": {
+    status: "IN PROGRESS",
+    why: "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Reports in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
+    updated: "2026-10-21",
+  },
+  "M27.14.8": {
+    status: "IN PROGRESS",
+    why: "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Platform (company scope only) in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
+    updated: "2026-10-21",
+  },
   "M27.12.8": {
     status: "READY FOR TESTING",
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
@@ -1611,8 +1651,8 @@ const PROGRESS = {
   },
   "M17.1.4": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): ops/jobs.py models interrupt, CANCELLING/ABORTED/CANCELLED and DEFAULT_TIMEOUT_SECONDS (test_jobs) but nothing calls interrupt and no timeout is enforced in ops/worker.py or queue.py; jobs_routes offers pause/resume/run now only (NO_RUN_CAN_BE_STOPPED_FROM_HERE). NEXT: enforce a per-task timeout in the worker and add a cancel control calling jobs.interrupt over the driver's abort, then a check",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT 2026-10-21. Every task of ours now has a deadline (brain.ops.queue.TASK_DEADLINE_SECONDS, one heartbeat inside the staleness window): register_task cancels a task that overruns and fails the attempt with TaskDeadlineExceededError, and refuses a deadline of nothing or one past the window. Not built: a cancel control that calls jobs.interrupt over the driver's abort, which needs a screen listing the queue's jobs (M17.1.1).",
+    updated: "2026-10-20",
   },
   "M17.1.5": {
     status: "READY FOR TESTING",
@@ -2250,9 +2290,9 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.1.5": {
-    status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (gate.answer, gate.finish, models.metering +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #154's branch M21/record-usage-for-stats (may be replayed already); closed PR #167's branch M38/migration-train-0118-0138-0139 (may be replayed already); old backup branch recovery/from-windows-20260928-wt-w1-5b; +1 more",
-    updated: "2026-10-06",
+    status: "IN PROGRESS",
+    why: "15 of the 18 request fields are filled; three are declared unfillable in brain.ops.telemetry.UNFILLABLE_TODAY. Read on 2026-10-21: the policy epoch is already computed for the cache key (api_routes.policy_epoch_of) and could travel to the row; the tool latency could be read from the invoke step's time that stage_ms already records; time to first token cannot be measured because no model answer streams, and the only figure available is the time to the first frame, which the module refuses as a different measurement under this one's name. Nothing built yet. The first token is the question for the owner: record the first frame under its own name, or leave the field empty.",
+    updated: "2026-10-21",
   },
   "M27.1.6": {
     status: "OPEN",
@@ -2306,13 +2346,18 @@ const PROGRESS = {
   },
   "M27.11.2": {
     status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in console.govern, directory_routes, govern_routes +10 more; NOT wired: pages/People.tsx. MORE ELSEWHERE, read before building: closed PR #125's branch M27/people-grant-controls (may be replayed already); closed PR #169's branch M27/console-people-org (may be replayed already); closed PR #295's branch M1/departments-from (may be replayed already)",
-    updated: "2026-10-06",
+    why: "Built in the People pages: grant expiry, one grant to several people, pack assignment, disable and enable a person. Install checks cover a leaver's session, grants and automations (acceptance_checks_joiner_mover_leaver). No install check covers grant expiry, the bulk grant, the pack or reinstatement; the adoption plan and ownership transfer are agent routes not offered on the People page.",
+    updated: "2026-10-21",
   },
   "M27.11.3": {
     status: "OPEN",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (directory_routes, ops.acceptance_people_console, pages/Roles.tsx +12 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M33/role-nominations, no PR; closed PR #169's branch M27/console-people-org (may be replayed already)",
     updated: "2026-10-06",
+  },
+  "M27.11.4": {
+    status: "BLOCKED",
+    why: "Waits on needs-rupash item 188, point 2: the staff source and directory sync are managed from the console (built); the identity provider and the embedding size are read-only in Settings and the owner has not said whether to build the change or move it to the installer.",
+    updated: "2026-10-21",
   },
   "M27.11.5": {
     status: "OPEN",
@@ -2325,9 +2370,9 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.11.7": {
-    status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in agent_lifecycle_routes, agent_routes, agents.creation +8 more; NOT wired: pages/AgentTemplate.route.tsx, pages/AgentTemplate.tsx. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +9 more",
-    updated: "2026-10-06",
+    status: "READY FOR TESTING",
+    why: "BUILT: the Agent templates pages install a template from the gallery, withdraw a version and undo it, and save an agent as a template through the review that hoists every value out. Three install checks, each proving one clause on the install's own schema and routes, now name this leaf, so it closes when all three pass on the install's two newest runs: a built-in template installs as a disabled agent at Shadow (acceptance_checks_templates), an agent saved as a template is a draft only its author reads, reviewed with every value hoisted out and published once (acceptance_checks_templates_audience), and a withdrawn version is not offered while installed agents stay pinned (acceptance_checks_template_withdrawal). Install proof: open Agent templates, install one, withdraw a version with a reason and undo it.",
+    updated: "2026-10-21",
   },
   "M27.11.8": {
     status: "OPEN",
@@ -2360,9 +2405,9 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.12.5": {
-    status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (app, console.agent_profile, models.calls +11 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #154's branch M21/record-usage-for-stats (may be replayed already); closed PR #167's branch M38/migration-train-0118-0138-0139 (may be replayed already); closed PR #459's branch M21/budget-stops (may be replayed already)",
-    updated: "2026-10-06",
+    status: "READY FOR TESTING",
+    why: "Built and wired, and now followed end to end by the install check `a_model_call_is_costed_and_a_used_up_budget_stops_the_next`: a question answered by a priced stand-in model leaves one cost in its department equal to the tokens its request row recorded at the price set. To prove it on the install: open Install, run the checks, and read that check; the leaf closes when it passes on the install's two newest runs. It says it was not run, rather than failing, on an install with no currency set. Found on the way and fixed for every install: a question the checks ask was recorded with no trace on a budget stop, which the table refused, so the stop was silently not written.",
+    updated: "2026-10-21",
   },
   "M27.12.7": {
     status: "OPEN",
@@ -2409,6 +2454,11 @@ const PROGRESS = {
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.organisation, govern_people_routes, identity.organisation_store +5 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #126's branch M27/departments-page-writes (may be replayed already); closed PR #169's branch M27/console-people-org (may be replayed already); closed PR #241's branch M1/staff-sync-diagnostics (may be replayed already)",
     updated: "2026-10-06",
   },
+  "M27.15.23": {
+    status: "OPEN",
+    why: "Not built. The department page shows the lead, the people, the teams and the scopes; the lead history (gate.department_lead keeps ended rows), the agents addressed to the department and its knowledge coverage are not on it. Coverage today is read only by the department's head (department_view_routes) and would need a reading for an administrator of another department. Applying the staff source's organisation plan is built (ops.source_organisation) and has an install check.",
+    updated: "2026-10-21",
+  },
   "M27.15.24": {
     status: "OPEN",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in audit.ledger, audit.record, console.scoped_authority +6 more; NOT wired: pages/Packs.route.tsx. MORE ELSEWHERE, read before building: closed PR #169's branch M27/console-people-org (may be replayed already)",
@@ -2421,8 +2471,8 @@ const PROGRESS = {
   },
   "M27.15.26": {
     status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (service_account_routes, pages/ServiceAccounts.tsx, pages/service-accounts/AccountActs.tsx +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #124's branch M27/service-accounts-page (may be replayed already); closed PR #180's branch M27/console-platform (may be replayed already)",
-    updated: "2026-10-06",
+    why: "Not built: no route changes a service account after it is registered. Changing its end date needs an audit entry for the change, which is a trigger on auth.service_account and so a migration; the owner part waits on needs-rupash item 188, point 4. Under either answer the end date can change.",
+    updated: "2026-10-21",
   },
   "M27.15.27": {
     status: "READY FOR TESTING",
@@ -2471,8 +2521,8 @@ const PROGRESS = {
   },
   "M27.15.41": {
     status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (pages/classification/ClassificationPage.tsx); open for proof on the install or a decision, not for code",
-    updated: "2026-10-06",
+    why: "Partly: entity merges are approved or rejected from Possible duplicates and quick answers are listed. Not built: a classification applied only by a second person (CONA-39); today a mark is applied by the administrator who reviewed it, and nothing records a proposer.",
+    updated: "2026-10-21",
   },
   "M27.15.43": {
     status: "OPEN",
@@ -2564,6 +2614,11 @@ const PROGRESS = {
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (app, console.entity_stats, console_stats_routes +6 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #154's branch M21/record-usage-for-stats (may be replayed already); closed PR #167's branch M38/migration-train-0118-0138-0139 (may be replayed already); closed PR #209's branch M39/w3-agent-workspace (may be replayed already); +5 more",
     updated: "2026-10-06",
   },
+  "M27.15.11": {
+    status: "BLOCKED",
+    why: "Conflicts with a recorded design and needs the owner: the product keeps no text of an unanswered question (brain.adoption: a log of what people asked and did not get is a search history), so a knowledge owner can be shown a department and a source and never the question. Showing a nothing-found question only when the owner's reach covers the asker's and the owner's own search finds nothing needs either the text kept or a flag worked out at the moment of asking; neither is decided.",
+    updated: "2026-10-21",
+  },
   "M27.15.12": {
     status: "READY FOR TESTING",
     why: "BUILT AND TESTED: the Requirement checks screen names M27.15.12 as the leaf the Console area is checked for, and an install check passes only when every requirement of the register's Console area has a newest check recorded by a person that passed. Install proof, which only you can give: open Requirement checks, choose the Console area, open each requirement on its page, and record passed or failed with a sentence about what you did.",
@@ -2636,13 +2691,13 @@ const PROGRESS = {
   },
   "M27.5.2": {
     status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.reads); open for proof on the install or a decision, not for code",
-    updated: "2026-10-06",
+    why: "Read on 2026-10-21: console.reads.tagged and untagged_rows exist and are tested, and no console route builds its rows through them, because the reports built so far carry counts and names and no confidential field values. The leaf is true of the helper and unproven of any screen; it needs a screen that lists record fields to show it, and an install check on that screen.",
+    updated: "2026-10-21",
   },
   "M27.5.3": {
     status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.reads); open for proof on the install or a decision, not for code",
-    updated: "2026-10-06",
+    why: "Built and wired: console.reads.audience is the one intersect, called by the agent workspace capabilities. Held by unit tests that fail on a union and on a widening parameter. No install check names it yet.",
+    updated: "2026-10-21",
   },
   "M27.5.5": {
     status: "READY FOR TESTING",
@@ -2661,8 +2716,8 @@ const PROGRESS = {
   },
   "M27.5.9": {
     status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.screens); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-shell",
-    updated: "2026-10-06",
+    why: "Built: every registered screen carries the department and person axes (tests/unit/test_screens.py) and the department filter offers only what the reader reaches (install check on M27.5.8). No install check names this leaf.",
+    updated: "2026-10-21",
   },
   "M27.6.1": {
     status: "OPEN",
@@ -2695,9 +2750,9 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.7.15": {
-    status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.budget_stop_store, report_routes, tables.budget_stop +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #459's branch M21/budget-stops (may be replayed already)",
-    updated: "2026-10-06",
+    status: "READY FOR TESTING",
+    why: "Built and wired, and now followed end to end by the install check `a_model_call_is_costed_and_a_used_up_budget_stops_the_next`: a department whose daily ceiling is used up has a stop recorded for its next question, listed to a reader of that department's spend with whether the install enforced it, and shown to nobody in another department. The check reads the enforcement switch and never sets it, so it passes on an install with enforcement off (the stop is listed as not enforced) and on one with it on. To prove it on the install: open Install, run the checks and read that check; the leaf closes when it passes on the install's two newest runs.",
+    updated: "2026-10-21",
   },
   "M27.7.17": {
     status: "READY FOR TESTING",
@@ -2716,8 +2771,8 @@ const PROGRESS = {
   },
   "M27.7.2": {
     status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.staff_source_guide, ops.staff_connect, ops.staff_trial +8 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #180's branch M27/console-platform (may be replayed already); closed PR #241's branch M1/staff-sync-diagnostics (may be replayed already); closed PR #75's branch M1/staff-source-connect-leaver-stop (may be replayed already); +1 more",
-    updated: "2026-10-06",
+    why: "Built: the Staff sources page chooses a source, tests it before saving, and asks for a trial read the worker makes with nothing applied (ops.staff_connect, ops.staff_trial). The install proof needs the owner's own staff source; it is held with the other staff-list checks (needs-rupash 126).",
+    updated: "2026-10-21",
   },
   "M27.7.20": {
     status: "READY FOR TESTING",
@@ -2816,8 +2871,8 @@ const PROGRESS = {
   },
   "M27.8.17": {
     status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit.ledger, audit.record); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #163's branch M27/console-models-routing (may be replayed already)",
-    updated: "2026-10-06",
+    why: "The guard exists and is green in CI (console/tests/console-audit.test.ts). Its own report on 2026-10-21 lists write routes whose audit entry or behaviour has no named proof (docs/console-audit/*.md, rows marked None: staff source sync and trial, digest destination, install settings, model prices, profile, providers, tiers, residency, notices, relay, plugins, migration register, channel test, lark app, referrals). Each is a test to write; none is written.",
+    updated: "2026-10-21",
   },
   "M27.8.6": {
     status: "OPEN",
@@ -3541,23 +3596,23 @@ const PROGRESS = {
   },
   "M37.1.2.1": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): carry.py: Export record and export_gaps(agreed, exports) check what arrived against the agreed catalogue (tested). The exporter itself is a plugin that does not exist (src/brain/plugins has contract/points only); nothing calls carry. NEXT: define the exporter plugin point in brain.plugins, then route carry.export_gaps from a migration page; check names the leaf once an export can be handed over",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT: POST /migration/carry compares a pasted export with the agreed register in both directions (carry.export_gaps) and names what is promised and not delivered. NOT BUILT: the exporter itself, which is a plugin that does not exist (brain.plugins has contract and points only), so the export is pasted by the person who surveyed the old system. NEXT: define the exporter plugin point.",
+    updated: "2026-10-20",
   },
   "M37.1.2.2": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): carry.py: reparse_plan() and carried_vectors() refuse to reuse vectors and name each re-parse from original-bytes digest (tested). No caller feeds the ingest pipeline from reparse_plan; nothing imports carry. NEXT: call carry.reparse_plan from a migration route that queues knowledge ingest for each Reparse; then check names the leaf",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT: POST /migration/carry returns the plan to read every export again from its original bytes and names every vector as discarded (carry.reparse_plan, carried_vectors); there is no field for a vector. NOT BUILT: queueing the knowledge pipeline from that plan, which needs the original bytes held somewhere. NEXT: a store for the exported bytes and a call from the plan into ingest.",
+    updated: "2026-10-20",
   },
   "M37.1.2.3": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): carry.py: EntitySeed (no access field) and seed_gaps() report name collisions via resolution.normalise_name (tested). Nothing writes a seed into the entity registry and nothing imports carry. NEXT: wire seed_gaps then a registry-seeding route using the brain.resolution entity write path; then check",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT: POST /migration/carry reports seeds that collapse to one name and names a name the matcher will not match on (carry.seed_gaps). NOT BUILT: writing an approved seed into the entity registry through the resolution write path. NEXT: a registry-seeding route using brain.resolution after a person approves each seed.",
+    updated: "2026-10-20",
   },
   "M37.1.2.4": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): carry.py: archive(agreed, imports) returns an Archive with searchable empty by construction (tested). No store holds an archive and nothing calls it. NEXT: persist Archive in a migration table behind a route, never into knowledge search; then check that an archived conversation is not retrievable",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT: POST /migration/carry returns every catalogued conversation as archived, the ones kept for a stated reason by a named person, and an empty searchable list by construction (carry.archive). NOT BUILT: persisting the archive. NEXT: keep it in a migration record, never in knowledge search.",
+    updated: "2026-10-20",
   },
   "M37.1.3.1": {
     status: "IN PROGRESS",
@@ -3595,9 +3650,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M37.2.2.2": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): migration/skills.py: proposed_description() strips the 'Use the X skill to' preamble and router_descriptions() lists the rest (tested). Skill import route POST /skills/imports (skill_routes.py) does not call it; nothing imports migration.skills. NEXT: call proposed_description/router_descriptions from the skills import path in skill_routes.py (or console/skill_library.read_package) as a draft shown to the reviewer; then check",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: POST /migration/skills/convert returns each pasted skill's description with the router preamble stripped as a draft for the reviewer, and lists the ones still written at a router. PROOF ON THE INSTALL: switch Keep a migration on under Features, paste a skill whose description begins Use the X skill to, and read the draft back. The check pasted_skills_are_converted_and_nothing_is_imported passes.",
+    updated: "2026-10-20",
   },
   "M37.2.2.3": {
     status: "READY FOR TESTING",
@@ -3606,13 +3661,13 @@ const PROGRESS = {
   },
   "M37.2.2.4": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): migration/skills.py: BehaviourCheck and unproven() name skills with no real task run and answers that changed (tested). No store, route or caller; needs both systems to run the same task, which is person-run. NEXT: build a store and route for BehaviourCheck records and show unproven() on the skill review page; the comparison itself needs a person with the old system",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT: the same route takes the real-task checks a person recorded and names every skill no task was run through and every one whose answer changed (skills.unproven). NOT BUILT: running the same task on both systems, which needs a person with the old system, and keeping the checks. NEXT: a store for behaviour checks shown on the skill review page.",
+    updated: "2026-10-20",
   },
   "M37.2.2.5": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): migration/skills.py: to_retire(skills, now, after_days=90) lists skills not invoked in ninety days (tested). Retirement exists as POST /skills/{digest}/retirement and per-skill last_used in console_stats_routes, but nothing calls to_retire. NEXT: call to_retire over the imported foreign skill list from the migration page (needs last_invoked_at from the export) and route each to /skills/{digest}/retirement",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: POST /migration/skills/convert lists the pasted skills not invoked in ninety days and those never recorded as invoked, as ones to leave behind (skills.to_retire); retiring one is the existing retirement route. PROOF ON THE INSTALL: paste a skill with a last-invoked date a year old; it is listed. The check pasted_skills_are_converted_and_nothing_is_imported passes.",
+    updated: "2026-10-20",
   },
   "M37.2.3.1": {
     status: "READY FOR TESTING",
@@ -3630,19 +3685,19 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M37.2.3.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): agents/model.py has AgentAudience and AgentAuthority as separate fields, so the native model keeps availability and entitlement apart. The foreign mapping migration.rebuild.audience_for (refuses an unmapped availability) is unwired and takes a per-company mapping. NEXT: wire audience_for into a migration rebuild route that takes the person's mapping; native separation can be checked now by installing an agent and reading audience and authority separately",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: POST /migration/availability maps each pasted agent's availability to who may see it here from the mapping the person gives, names the agents whose availability nobody mapped and never defaults one, and leaves what the agent may reach to its authority. PROOF ON THE INSTALL: paste two agents with one availability unmapped; the unmapped one is named. The check availability_is_mapped_and_never_defaulted passes.",
+    updated: "2026-10-20",
   },
   "M37.2.4.2": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): migration/learning.py: ForeignMemory and re_derive() build a proposal through memory.tiers.propose and refuse session, promoted and gated changes (tested). Nothing imports migration.learning; the proposal queue exists (agent_memory_routes.py). NEXT: wire re_derive into a migration route that files each Derivation into the existing memory proposal queue; then check",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT: POST /migration/learning re-derives each conclusion a person drew from an old memory file through the ordinary tier rules and returns the derivations (learning.re_derive). NOT BUILT: filing each derivation into the memory proposal queue, which would put a proposal in front of a reviewer. NEXT: a call from the route into agent_memory_routes' queue behind its own switch.",
+    updated: "2026-10-20",
   },
   "M37.2.4.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): migration/learning.py: re_derive() refuses any change in CHANGES_WHAT_ANYBODY_MAY_SEE (tested). No caller outside the package, so nothing is discarded in practice. NEXT: same wiring as M37.2.4.2; check asserts a scope-widening derivation is refused by the route",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: the same route refuses, by name and in the package's words, any conclusion that would change who may see what, without stopping the others. PROOF ON THE INSTALL: paste a memory file with a preference and a scope-widening conclusion; only the preference is derived. The check a_conclusion_is_re_derived_and_a_widening_is_refused passes.",
+    updated: "2026-10-20",
   },
   "M37.2.4.4": {
     status: "READY FOR TESTING",
@@ -4080,9 +4135,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.4.1.1": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): MyWorkspace shows each learned statement with stated/inferred and confidence; the weekly digest (learning_told) names signal kinds as evidence. member_activity.learned_about_me (statement plus evidence) has no caller, so the page shows no evidence. NEXT: call learned_about_me from mine_routes and add evidence (signal kinds) to MineLearnedView",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: GET /me/workspace now calls member_activity.learned_about_me, so each learned line carries the evidence that produced it in the weekly message's words (mine_routes.evidence_by_memory over learning_told.SIGNAL_WORDS), a line the person wrote says so, and an inferred line with no record says no record was kept; MyWorkspace draws the evidence list. Tests: tests/unit/test_mine_routes.py, console/tests/my-workspace-page.test.tsx. To prove on the install: sign in, ask the same question twice in other words so a preference is inferred, open My workspace, and read the evidence under the inferred line; it must name what was noticed and nothing of any conversation.",
+    updated: "2026-10-20",
   },
   "M40.4.1.2": {
     status: "READY FOR TESTING",
@@ -4120,14 +4175,14 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.5.1.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): member.connections.disconnect (revoke first, refuse on failure) built but no TokenRevoker implementation exists and no route; MyAccounts.tsx has no disconnect control. Vault slot connector_person_oauth_slot exists to delete. NEXT: implement a vault-backed TokenRevoker (vendor revoke then slot delete), add DELETE /me/accounts/{connector}, then a check",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: POST /me/accounts/{connector}/disconnect (member_accounts_routes) revokes at the vendor then removes the person's slot through ops/person_token_revoker.VaultTokenRevoker, in the order member.connections.disconnect requires; Google Workspace now declares its revocation endpoint; the application vault policy gains delete on a person's own slot only. Check: a_member_disconnects_their_account_and_the_vendor_is_told_first in ops/acceptance_checks_member_accounts.py, over a recording vendor and vault. NOT provable in CI: that the vendor stops honouring the token, and that the install's vault holds the new policy line (the release applies it). To prove on the install: after the release, connect your own Google account from My workspace, press Disconnect my Google account and confirm; the card must show Not connected, and at your Google account's third-party access page the install must no longer be listed.",
+    updated: "2026-10-20",
   },
   "M40.5.1.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): member.connections.inherited/personally_connected built, no caller; /me/accounts lists only sources the person may connect, with no provenance field, so department-provided connections are not shown as inherited. NEXT: add provenance to MyAccountView from inherited() and render inherited ones without a disconnect control",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: GET /me/accounts lists a connected source that names the person's own department (and that each person does not consent to) with provenance department and no disconnect control, through member.connections.inherited; a person in another department is shown nothing. A department connection is defined here as a connected source naming a department the person holds a grant scoped to exactly (no separate department-connection object exists). Check: a_departments_connection_is_inherited_and_not_detachable in ops/acceptance_checks_member_accounts.py. To prove on the install: as a member of a department that has a source connected, open My workspace and read the Connected accounts card; the source must show as provided by the department with no button, and a member of another department must not see it.",
+    updated: "2026-10-20",
   },
   "M40.5.2.1": {
     status: "READY FOR TESTING",
@@ -4560,9 +4615,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M17.7.5": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): Gallery ships weekly_work_summary, unanswered_questions and source_freshness (console/automation_gallery BUILT_IN); no daily brief, no deal capture from group chats, no drafted email replies. Reuse: ops/digest_delivery (evening digest), channels/email, hubspot connector, automation_run.TASKS.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-21. Install proof: sign in as an administrator, open an agent, open its Automations tab and look at the gallery. Three new cards are listed: a daily brief, drafting customer records from deals in group chats, and drafting replies to emails waiting on you. Each says what starts it and which kinds of source it uses; the two that draft say who decides before anything takes effect, and the brief says none. Open Install on one: the confirmation shows the same. None of the three can be started yet and the tab says what each still needs.",
+    updated: "2026-10-20",
   },
   "M17.7.6": {
     status: "IN PROGRESS",
