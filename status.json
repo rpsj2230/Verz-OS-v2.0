@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-21T17:59:22.312289+00:00",
-  "commit": "42ad0832",
-  "commit_subject": "4 more tasks are proved on the install by the newest complete acceptance run",
+  "generated_at": "2026-10-21T19:16:07.925273+00:00",
+  "commit": "ea7aa433",
+  "commit_subject": "An agent can read the declared fields of a declared page, and the website check opens the browser for declared websites, switch off (M19.7.1, M19.9.6, M19.9.4 partly built) (#670)",
   "total": 1626,
-  "done": 1216,
-  "percent": 74.8,
-  "built": 1393,
-  "built_percent": 85.7,
+  "done": 1219,
+  "percent": 75.0,
+  "built": 1396,
+  "built_percent": 85.9,
   "built_unproven": 177,
   "built_task_ids": [
     "M1.1.8",
@@ -270,16 +270,16 @@
       "wave": 5,
       "name": "Hands, delivery, go-live",
       "total": 217,
-      "done": 101,
-      "percent": 46.5,
-      "in_progress": 57,
+      "done": 104,
+      "percent": 47.9,
+      "in_progress": 54,
       "ready_for_testing": 29,
       "blocked": 19,
       "open": 11,
       "acts": 42,
       "decided": 18,
-      "built": 130,
-      "built_percent": 59.9
+      "built": 133,
+      "built_percent": 61.3
     },
     {
       "wave": 6,
@@ -493,10 +493,10 @@
       "name": "Browser and computer use",
       "wave": 5,
       "total": 47,
-      "done": 23,
+      "done": 26,
       "acts": 0,
       "decided": 1,
-      "built": 23
+      "built": 26
     },
     {
       "module": "M20",
@@ -1144,10 +1144,13 @@
     "M19.6.5",
     "M19.6.6",
     "M19.6.7",
+    "M19.7.1",
     "M19.7.3",
     "M19.8.1",
     "M19.9.11",
     "M19.9.3",
+    "M19.9.4",
+    "M19.9.6",
     "M19.9.7",
     "M19.9.9",
     "M2.1.1",
@@ -2561,11 +2564,6 @@
       "why": "TRIAGE 2026-10-13 class 2 (partly built): verification.py:read_back and read_back_plan define the out-of-band read through ReadBackPort; test_browsing_verification.py. No ReadBackPort implementation exists and grading.verification_gaps says no target declares a read_back tool. NEXT: Implement a ReadBackPort that reads through the gate (a connector or tool), declare read_back on a registered surface, and call it from verify_run.",
       "updated": "2026-10-13"
     },
-    "M19.7.1": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): browsing/sessions.py defines READ_SURFACE (ToolDefinition), surface_scope and capability_gaps; ops/starter.py seeds BROWSE_SURFACE; test_browsing_sessions.py pins read-first ordering. No handler is registered, so no agent can run the tool (docstring: 'No handler is registered here'). NEXT: Register a handler in tools/startup.py that sends the read run to the driver; website_check's ReadOnlyBrowser seam is the same missing half.",
-      "updated": "2026-10-13"
-    },
     "M19.7.2": {
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 2 (partly built): sessions.py:ACT_ON_SURFACE is the one write tool; approval.py raises the envelope as a leash suspension, console/approvals.py renders its terms, envelope_store and enforcer.compile_policy bind it by digest; tests in test_browsing_approval.py, _enforcer.py, _sessions.py. No caller raises an approval or runs the write. NEXT: Call approval.raise_approval and approved in the driver start path; add a readable envelope diff to the approval card (none exists).",
@@ -2581,19 +2579,9 @@
       "why": "TRIAGE 2026-10-13 class 2 (partly built): Read-only website check exists and is wired (tools/website_check.py, app.py HttpsProber); envelope approval primitives exist (approval.py). No readable diff of an envelope on the card and no in-envelope or out-of-envelope run, so approve-once and ask-again cannot be shown. NEXT: Needs the driver plus an envelope diff in the approval card; then a check that runs a read, an approved write and a breach and records each.",
       "updated": "2026-10-13"
     },
-    "M19.9.4": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): HTTP half is built and wired (tools/website_check.py, ops/website_probe.py). Missing: rendered-page read in the sandbox (launcher never called), portal login with a vault credential (credentials.resolve has no caller), recording kept under retention, target registration. NEXT: Depends on the driver, REHEARSAL.md proof and target storage; then one install check over a declared test site plus the HTTP check.",
-      "updated": "2026-10-13"
-    },
     "M19.9.5": {
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 2 (partly built): Pieces exist (planning, envelope, approval, enforcer, grading, verification.read_back) but there is no driver, no judge, no ReadBackPort implementation and no target declares read_back; a form-filling run at Assisted cannot happen. NEXT: Needs the driver, judge and a ReadBackPort over a registered target; then a check that runs one approved form fill, a refused extra step and a read-back.",
-      "updated": "2026-10-13"
-    },
-    "M19.9.6": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): docker-compose.browser.yml and launcher --check give a launcher whose health is gVisor present; agent browser tools are defined (sessions.READ_SURFACE) but no handler is registered, so no agent opens a page in the sandbox. Never run on a daemon. NEXT: Run the REHEARSAL.md first build on a runsc host, build the driver and register the read handler, then check an agent with the browse capability fetches one page.",
       "updated": "2026-10-13"
     },
     "M19.9.8": {
@@ -3899,11 +3887,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 50,
+  "closed_today": 53,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "ea7aa43",
+      "at": "2026-10-21T19:06:43+00:00",
+      "subject": "An agent can read the declared fields of a declared page, and the website check opens the browser for declared websites, switch off (M19.7.1, M19.9.6, M19.9.4 partly built) (#670)",
+      "closed": "M19.7.1,M19.9.4,M19.9.6"
+    },
     {
       "sha": "42ad083",
       "at": "2026-10-21T17:57:59+00:00",
@@ -4017,12 +4011,6 @@
       "at": "2026-10-19T06:23:28+00:00",
       "subject": "The running automation canvas is proved sandboxed on the install (M32.6.1.1, M32.6.1.2, M32.6.1.4) (#620)",
       "closed": "M32.6.1.1,M32.6.1.2,M32.6.1.4"
-    },
-    {
-      "sha": "c76d392",
-      "at": "2026-10-19T06:22:52+00:00",
-      "subject": "The peak load test is a command an operator can run on any install, safely, and its result is kept in the install's own database (M22.3.3) (#619)",
-      "closed": "M22.3.3"
     }
   ]
 }
