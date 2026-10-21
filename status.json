@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-21T02:27:26.141546+00:00",
-  "commit": "c40ddf89",
-  "commit_subject": "Every module of the console is proved in the browser under the situations that need no write (M27.14.x, part) (#648)",
+  "generated_at": "2026-10-21T02:43:36.888223+00:00",
+  "commit": "b94f8d78",
+  "commit_subject": "Agent templates are proved on the install by three checks that already ran, and fourteen console leaves say what is true of them (#650)",
   "total": 1626,
-  "done": 1166,
-  "percent": 71.7,
-  "built": 1346,
-  "built_percent": 82.8,
-  "built_unproven": 180,
+  "done": 1168,
+  "percent": 71.8,
+  "built": 1349,
+  "built_percent": 83.0,
+  "built_unproven": 181,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -84,6 +84,7 @@
     "M26.3.2",
     "M27.10.2",
     "M27.11.10",
+    "M27.11.7",
     "M27.15.12",
     "M27.15.19",
     "M27.15.50",
@@ -245,29 +246,29 @@
       "total": 599,
       "done": 474,
       "percent": 79.1,
-      "in_progress": 15,
-      "ready_for_testing": 59,
-      "blocked": 4,
-      "open": 47,
+      "in_progress": 16,
+      "ready_for_testing": 60,
+      "blocked": 6,
+      "open": 43,
       "acts": 1,
       "decided": 56,
-      "built": 535,
-      "built_percent": 89.3
+      "built": 536,
+      "built_percent": 89.5
     },
     {
       "wave": 4,
       "name": "Doing, lifecycle, extensions",
       "total": 232,
-      "done": 104,
-      "percent": 44.8,
-      "in_progress": 71,
+      "done": 106,
+      "percent": 45.7,
+      "in_progress": 70,
       "ready_for_testing": 29,
       "blocked": 16,
-      "open": 12,
+      "open": 11,
       "acts": 0,
       "decided": 23,
-      "built": 132,
-      "built_percent": 56.9
+      "built": 134,
+      "built_percent": 57.8
     },
     {
       "wave": 5,
@@ -476,10 +477,10 @@
       "name": "Automation and the task lane",
       "wave": 4,
       "total": 41,
-      "done": 15,
+      "done": 17,
       "acts": 0,
       "decided": 0,
-      "built": 20
+      "built": 22
     },
     {
       "module": "M18",
@@ -579,7 +580,7 @@
       "done": 164,
       "acts": 0,
       "decided": 22,
-      "built": 185
+      "built": 186
     },
     {
       "module": "M28",
@@ -1089,6 +1090,7 @@
     "M16.7.5",
     "M16.7.6",
     "M17.1.3",
+    "M17.1.4",
     "M17.2.2",
     "M17.2.4",
     "M17.2.5",
@@ -1102,6 +1104,7 @@
     "M17.4.3",
     "M17.4.4",
     "M17.5.3",
+    "M17.7.5",
     "M17.7.9",
     "M18.1.3",
     "M18.2.1",
@@ -2349,11 +2352,6 @@
       "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): ops/queue.py enqueue_job, register_task, queue_app, run_shards; ops/worker.py drains a real queue (install_queue, run_shards); callers: knowledge_routes, knowledge_intake_routes, knowledge_lifecycle_routes, ingest_queue. Tests: test_control_task, test_jobs; ops/jobs.py says M17.1.2 is claimed in ops.queue. NEXT: write check naming M17.1.2 that enqueues a task through knowledge ingest (acceptance_ingest already uses queue_url_of) and sees the worker pick it up",
       "updated": "2026-10-13"
     },
-    "M17.1.4": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): ops/jobs.py models interrupt, CANCELLING/ABORTED/CANCELLED and DEFAULT_TIMEOUT_SECONDS (test_jobs) but nothing calls interrupt and no timeout is enforced in ops/worker.py or queue.py; jobs_routes offers pause/resume/run now only (NO_RUN_CAN_BE_STOPPED_FROM_HERE). NEXT: enforce a per-task timeout in the worker and add a cancel control calling jobs.interrupt over the driver's abort, then a check",
-      "updated": "2026-10-13"
-    },
     "M17.1.5": {
       "status": "READY FOR TESTING",
       "why": "TRIAGE 2026-10-13 class 3 (built, not wired): ops/jobs.py dead_letter_for, visible_dead_letters, DeadLetter (filtered, no count) are built; only dead_letter_summary has a consumer in console modules. No route or page lists dead letters: jobs_routes and operate_routes show scheduled controls and owed runs. NEXT: add GET /jobs/dead calling visible_dead_letters over driver rows in failed state and a Dead letters tab on the Jobs page",
@@ -2447,11 +2445,6 @@
     "M17.7.4": {
       "status": "BLOCKED",
       "why": "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Control-flow proof (parallel, conditional skip, retry through key, failure path, gap) needs M17.6.3 to M17.6.6 which are unbuilt.",
-      "updated": "2026-10-13"
-    },
-    "M17.7.5": {
-      "status": "OPEN",
-      "why": "TRIAGE 2026-10-13 class 4 (unbuilt): Gallery ships weekly_work_summary, unanswered_questions and source_freshness (console/automation_gallery BUILT_IN); no daily brief, no deal capture from group chats, no drafted email replies. Reuse: ops/digest_delivery (evening digest), channels/email, hubspot connector, automation_run.TASKS.",
       "updated": "2026-10-13"
     },
     "M17.7.6": {
@@ -2880,34 +2873,34 @@
       "updated": "2026-10-13"
     },
     "M27.1.5": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (gate.answer, gate.finish, models.metering +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #154's branch M21/record-usage-for-stats (may be replayed already); closed PR #167's branch M38/migration-train-0118-0138-0139 (may be replayed already); old backup branch recovery/from-windows-20260928-wt-w1-5b; +1 more",
-      "updated": "2026-10-06"
+      "status": "IN PROGRESS",
+      "why": "15 of the 18 request fields are filled; three are declared unfillable in brain.ops.telemetry.UNFILLABLE_TODAY. Read on 2026-10-21: the policy epoch is already computed for the cache key (api_routes.policy_epoch_of) and could travel to the row; the tool latency could be read from the invoke step's time that stage_ms already records; time to first token cannot be measured because no model answer streams, and the only figure available is the time to the first frame, which the module refuses as a different measurement under this one's name. Nothing built yet. The first token is the question for the owner: record the first frame under its own name, or leave the field empty.",
+      "updated": "2026-10-21"
     },
     "M27.5.2": {
       "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.reads); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
+      "why": "Read on 2026-10-21: console.reads.tagged and untagged_rows exist and are tested, and no console route builds its rows through them, because the reports built so far carry counts and names and no confidential field values. The leaf is true of the helper and unproven of any screen; it needs a screen that lists record fields to show it, and an install check on that screen.",
+      "updated": "2026-10-21"
     },
     "M27.5.3": {
       "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.reads); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
+      "why": "Built and wired: console.reads.audience is the one intersect, called by the agent workspace capabilities. Held by unit tests that fail on a union and on a widening parameter. No install check names it yet.",
+      "updated": "2026-10-21"
     },
     "M27.5.9": {
       "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.screens); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-shell",
-      "updated": "2026-10-06"
+      "why": "Built: every registered screen carries the department and person axes (tests/unit/test_screens.py) and the department filter offers only what the reader reaches (install check on M27.5.8). No install check names this leaf.",
+      "updated": "2026-10-21"
     },
     "M27.7.2": {
       "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.staff_source_guide, ops.staff_connect, ops.staff_trial +8 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #180's branch M27/console-platform (may be replayed already); closed PR #241's branch M1/staff-sync-diagnostics (may be replayed already); closed PR #75's branch M1/staff-source-connect-leaver-stop (may be replayed already); +1 more",
-      "updated": "2026-10-06"
+      "why": "Built: the Staff sources page chooses a source, tests it before saving, and asks for a trial read the worker makes with nothing applied (ops.staff_connect, ops.staff_trial). The install proof needs the owner's own staff source; it is held with the other staff-list checks (needs-rupash 126).",
+      "updated": "2026-10-21"
     },
     "M27.7.15": {
       "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.budget_stop_store, report_routes, tables.budget_stop +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #459's branch M21/budget-stops (may be replayed already)",
-      "updated": "2026-10-06"
+      "why": "Built: spend, department and person budgets are versioned and stops are listed with whether they were enforced (install checks M21.1.5 and M21.3.6 pass on the install). Enforcement ships off behind budget_enforcement by the owner's decision 169. No install check follows a real model call into a stop.",
+      "updated": "2026-10-21"
     },
     "M27.7.23": {
       "status": "READY FOR TESTING",
@@ -2926,8 +2919,8 @@
     },
     "M27.8.17": {
       "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit.ledger, audit.record); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #163's branch M27/console-models-routing (may be replayed already)",
-      "updated": "2026-10-06"
+      "why": "The guard exists and is green in CI (console/tests/console-audit.test.ts). Its own report on 2026-10-21 lists write routes whose audit entry or behaviour has no named proof (docs/console-audit/*.md, rows marked None: staff source sync and trial, digest destination, install settings, model prices, profile, providers, tiers, residency, notices, relay, plugins, migration register, channel test, lark app, referrals). Each is a test to write; none is written.",
+      "updated": "2026-10-21"
     },
     "M27.9.8": {
       "status": "READY FOR TESTING",
@@ -2941,13 +2934,18 @@
     },
     "M27.11.2": {
       "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in console.govern, directory_routes, govern_routes +10 more; NOT wired: pages/People.tsx. MORE ELSEWHERE, read before building: closed PR #125's branch M27/people-grant-controls (may be replayed already); closed PR #169's branch M27/console-people-org (may be replayed already); closed PR #295's branch M1/departments-from (may be replayed already)",
-      "updated": "2026-10-06"
+      "why": "Built in the People pages: grant expiry, one grant to several people, pack assignment, disable and enable a person. Install checks cover a leaver's session, grants and automations (acceptance_checks_joiner_mover_leaver). No install check covers grant expiry, the bulk grant, the pack or reinstatement; the adoption plan and ownership transfer are agent routes not offered on the People page.",
+      "updated": "2026-10-21"
+    },
+    "M27.11.4": {
+      "status": "BLOCKED",
+      "why": "Waits on needs-rupash item 188, point 2: the staff source and directory sync are managed from the console (built); the identity provider and the embedding size are read-only in Settings and the owner has not said whether to build the change or move it to the installer.",
+      "updated": "2026-10-21"
     },
     "M27.11.7": {
-      "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in agent_lifecycle_routes, agent_routes, agents.creation +8 more; NOT wired: pages/AgentTemplate.route.tsx, pages/AgentTemplate.tsx. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +9 more",
-      "updated": "2026-10-06"
+      "status": "READY FOR TESTING",
+      "why": "BUILT: the Agent templates pages install a template from the gallery, withdraw a version and undo it, and save an agent as a template through the review that hoists every value out. Three install checks, each proving one clause on the install's own schema and routes, now name this leaf, so it closes when all three pass on the install's two newest runs: a built-in template installs as a disabled agent at Shadow (acceptance_checks_templates), an agent saved as a template is a draft only its author reads, reviewed with every value hoisted out and published once (acceptance_checks_templates_audience), and a withdrawn version is not offered while installed agents stay pinned (acceptance_checks_template_withdrawal). Install proof: open Agent templates, install one, withdraw a version with a reason and undo it.",
+      "updated": "2026-10-21"
     },
     "M27.11.10": {
       "status": "READY FOR TESTING",
@@ -2956,8 +2954,8 @@
     },
     "M27.12.5": {
       "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (app, console.agent_profile, models.calls +11 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #154's branch M21/record-usage-for-stats (may be replayed already); closed PR #167's branch M38/migration-train-0118-0138-0139 (may be replayed already); closed PR #459's branch M21/budget-stops (may be replayed already)",
-      "updated": "2026-10-06"
+      "why": "Built: a finished request is costed from the provider's counts and the price list by ops.usage_store.UsageRecorder, and budgets and stops are as for M27.7.15. No install check follows a model call to its spend row; one would use the stand-in model the routing checks use.",
+      "updated": "2026-10-21"
     },
     "M27.13.3": {
       "status": "IN PROGRESS",
@@ -3009,6 +3007,11 @@
       "why": "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Platform (company scope only) in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
       "updated": "2026-10-21"
     },
+    "M27.15.11": {
+      "status": "BLOCKED",
+      "why": "Conflicts with a recorded design and needs the owner: the product keeps no text of an unanswered question (brain.adoption: a log of what people asked and did not get is a search history), so a knowledge owner can be shown a department and a source and never the question. Showing a nothing-found question only when the owner's reach covers the asker's and the owner's own search finds nothing needs either the text kept or a flag worked out at the moment of asking; neither is decided.",
+      "updated": "2026-10-21"
+    },
     "M27.15.12": {
       "status": "READY FOR TESTING",
       "why": "BUILT AND TESTED: the Requirement checks screen names M27.15.12 as the leaf the Console area is checked for, and an install check passes only when every requirement of the register's Console area has a newest check recorded by a person that passed. Install proof, which only you can give: open Requirement checks, choose the Console area, open each requirement on its page, and record passed or failed with a sentence about what you did.",
@@ -3019,15 +3022,20 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit.record, console.organisation, directory_routes +5 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #169's branch M27/console-people-org (may be replayed already)",
       "updated": "2026-10-06"
     },
+    "M27.15.23": {
+      "status": "OPEN",
+      "why": "Not built. The department page shows the lead, the people, the teams and the scopes; the lead history (gate.department_lead keeps ended rows), the agents addressed to the department and its knowledge coverage are not on it. Coverage today is read only by the department's head (department_view_routes) and would need a reading for an administrator of another department. Applying the staff source's organisation plan is built (ops.source_organisation) and has an install check.",
+      "updated": "2026-10-21"
+    },
     "M27.15.26": {
       "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (service_account_routes, pages/ServiceAccounts.tsx, pages/service-accounts/AccountActs.tsx +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #124's branch M27/service-accounts-page (may be replayed already); closed PR #180's branch M27/console-platform (may be replayed already)",
-      "updated": "2026-10-06"
+      "why": "Not built: no route changes a service account after it is registered. Changing its end date needs an audit entry for the change, which is a trigger on auth.service_account and so a migration; the owner part waits on needs-rupash item 188, point 4. Under either answer the end date can change.",
+      "updated": "2026-10-21"
     },
     "M27.15.41": {
       "status": "OPEN",
-      "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (pages/classification/ClassificationPage.tsx); open for proof on the install or a decision, not for code",
-      "updated": "2026-10-06"
+      "why": "Partly: entity merges are approved or rejected from Possible duplicates and quick answers are listed. Not built: a classification applied only by a second person (CONA-39); today a mark is applied by the administrator who reviewed it, and nothing records a proposer.",
+      "updated": "2026-10-21"
     },
     "M27.15.42": {
       "status": "READY FOR TESTING",
@@ -4087,11 +4095,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 0,
+  "closed_today": 2,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "4b04ac9",
+      "at": "2026-10-21T02:18:23+00:00",
+      "subject": "The gallery offers a daily brief, deal capture and drafted email replies, each declaring what starts it, what it uses and who decides; every task of ours has a deadline (M17.7.5, M17.1.4) (#649)",
+      "closed": "M17.1.4,M17.7.5"
+    },
     {
       "sha": "c40ddf8",
       "at": "2026-10-21T02:17:34+00:00",
@@ -4205,12 +4219,6 @@
       "at": "2026-10-06T17:14:23+00:00",
       "subject": "The browser harness proves two tabs refresh, no page leaks an internal name or another host, and a drawer works under the console's style policy (#451)",
       "closed": "M27.15.13,M27.15.53,M27.15.81,M27.15.82"
-    },
-    {
-      "sha": "4647570",
-      "at": "2026-10-06T08:11:27+00:00",
-      "subject": "A regression in the golden corpus blocks the merge, and a test keeps the three parts of that together (#454)",
-      "closed": "M28.1.4"
     }
   ]
 }
