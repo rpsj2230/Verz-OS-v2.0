@@ -27,7 +27,9 @@
  * sources and are now one row each and a line on the source's About view; and the trust paragraphs
  * repeated under the table for every connection, which are the source's Profile.
  *
- * Task ids: M27.11.9, M11.7.7, M27.16.1, M27.10.2, M27.15.8
+ * **While nothing is connected the page says which source to start with** (`ConnectorStart.tsx`, M34.1.1.1).
+ *
+ * Task ids: M27.11.9, M11.7.7, M27.16.1, M27.10.2, M27.15.8, M34.1.1.1
  */
 
 import { Cable, MoreHorizontal, Plus } from "lucide-react";
@@ -72,6 +74,7 @@ import {
 } from "./connectorSources";
 import { idsWords } from "./connectorStats";
 import { DriftPill, HealthPill, StatusPill } from "./pills";
+import { ConnectorStart } from "./ConnectorStart";
 import { LarkCard } from "./LarkCard";
 import { DisconnectDialog, LarkDialog, type OpenAct } from "./SourceActs";
 import { SourceFlow } from "./SourceFlow";
@@ -369,6 +372,9 @@ export function ConnectorsPage() {
               </div>
             )}
             {page === null || page.vault_told === "" ? null : <Explanation form="note" lead="not-yet" told={page.vault_told} />}
+            {listing.busy || listing.failure !== null ? null : (
+              <ConnectorStart connectedAny={rows.some((row) => row.status !== "not_connected")} />
+            )}
             {lark !== null && lark.connected ? (
               <LarkCard
                 guide={lark}

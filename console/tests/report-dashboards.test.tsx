@@ -25,6 +25,8 @@ import { NOT_IN_THE_DIRECTORY } from "../src/pages/usageQuery";
 import { usageSheets } from "../src/pages/reports/UsagePage";
 import { spendSheets, NO_COST_YET, NOT_BUILT } from "../src/pages/reports/SpendPage";
 import { MORE_DEPARTMENTS, NONE_QUIET } from "../src/pages/reports/AdoptionPage";
+import { COVERAGE_HEADING, SHOPPING_HEADING } from "../src/pages/reports/AdoptionCoverage";
+import { NOT_READ_YET } from "../src/pages/adoptionCoverageQuery";
 import { NOT_MEASURED, NO_LANES } from "../src/pages/reports/ServiceLevelsPage";
 import { CUT_OFF, FINDINGS_GO_TO_THE_ALERT, NO_RUN_IN_PERIOD } from "../src/pages/reports/QualityPage";
 import { SOURCE_NOT_NAMED } from "../src/pages/reports/QuestionsPage";
@@ -48,6 +50,10 @@ const API = "/api/v1";
 const USAGE = `${API}/report/usage`;
 const SPEND = `${API}/report/spend`;
 const ADOPTION = `${API}/report/adoption`;
+const COVERAGE = `${API}/report/coverage`;
+
+/** The coverage statement while the install has it switched off: nothing is drawn for it. */
+const COVERAGE_OFF = { switched_on: false, lines: [], shopping: [], note: "" };
 const LEVELS = `${API}/report/service-levels`;
 const QUALITY = `${API}/report/quality`;
 const QUESTIONS = `${API}/report/questions`;
@@ -467,6 +473,7 @@ describe("Adoption", () => {
         truncated: false,
       },
       [USAGE]: usageBody(),
+      [COVERAGE]: COVERAGE_OFF,
     });
 
     const rows = [...page.root.querySelectorAll("[data-slot='entity-table'] tbody tr")].map((row) =>
@@ -482,6 +489,64 @@ describe("Adoption", () => {
     expect(page.root.querySelector("ul[aria-label='Quiet departments']")?.textContent).toBe("web");
     expect(figure(page.root, "Quiet departments")).toBe("1");
     expect(page.text()).not.toContain(NONE_QUIET);
+  });
+
+  test("a department with nothing connected is a line that says so, and the page adds nothing up", async () => {
+    // What breaks if this is deleted: the not-connected lines are tidied away so the table shows
+    // only the departments something was connected for, or a total and a percentage arrive beside
+    // the list and a champion reads a progress bar.
+    const page = await reportAt("/adoption");
+
+    const table = [...page.root.querySelectorAll("[data-slot='entity-table']")].find((one) =>
+      one.textContent?.includes("Not connected"),
+    );
+    const cells = [...(table?.querySelectorAll("tbody tr") ?? [])].map((row) =>
+      [...row.querySelectorAll("td")].map((cell) => cell.textContent ?? ""),
+    );
+    expect(cells.map((row) => row.filter((cell) => cell === "Connected" || cell === "Not connected"))).toEqual([
+      ["Connected"],
+      ["Not connected"],
+    ]);
+    expect(page.text()).toContain("Authorise this source so the department can ask about it");
+    expect(page.text()).not.toMatch(/%|\d+ of \d+/);
+  });
+
+  test("a connected source that was never read says so and is not drawn as nought", async () => {
+    // What breaks if this is deleted: a connection whose first read has not finished shows 0
+    // records, which says the system looked and found nothing when it has not looked.
+    const page = await reportAt("/adoption", {
+      [COVERAGE]: {
+        switched_on: true,
+        lines: [
+          {
+            department: "support",
+            source: "freshdesk",
+            source_label: "Freshdesk",
+            state: "connected_no_records",
+            state_words: "Connected, no records yet",
+            records: null,
+            last_sync: null,
+          },
+        ],
+        shopping: [],
+        note: "",
+      },
+    });
+
+    const table = [...page.root.querySelectorAll("[data-slot='entity-table']")].find((one) =>
+      one.textContent?.includes("Connected, no records yet"),
+    );
+    expect(table?.textContent).toContain(NOT_READ_YET);
+    expect(table?.textContent).not.toMatch(/\b0\b/);
+  });
+
+  test("a coverage statement that is switched off draws no section and no sentence about it", async () => {
+    // What breaks if this is deleted: an install that has not switched coverage on is shown an
+    // empty card saying so, which tells every reader there is something to switch on.
+    const page = await reportAt("/adoption", { [COVERAGE]: COVERAGE_OFF });
+
+    expect(page.text()).not.toContain(COVERAGE_HEADING);
+    expect(page.text()).not.toContain(SHOPPING_HEADING);
   });
 
   test("a full page says there is more and never how many", async () => {
