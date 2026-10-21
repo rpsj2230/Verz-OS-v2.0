@@ -260,6 +260,11 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         # row to leave, so an erasure keeps it and reports it kept.
         "agent.artifact_share": "shared_by",
         "agent.agent_request": "requested_by",
+        # A person's ask that their data be deleted, until the retention owner files the erasure
+        # (`0273`): the person is the subject and the row is the record that they asked and which
+        # erasure it became. `0273` grants no way for a row to leave, so an erasure keeps these and
+        # reports them kept, which is what lets a certificate say the request existed (M40.4.2.3).
+        "ops.deletion_request": "subject_id",
         # A skill a person added for themselves and whether they offered it (`0232`). `0232` grants
         # no way for a row to leave, so an erasure keeps these and reports them kept: the skill is
         # in the library under its digest and a decision about it is not the person's to undo.
