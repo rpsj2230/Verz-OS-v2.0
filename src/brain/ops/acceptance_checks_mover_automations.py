@@ -48,6 +48,15 @@ NO_TASK_TO_AUTOMATE: Final = (
 )
 
 
+#: Said when the install has no Starter pack to give. Written out here rather than imported from
+#: the joiner check, because a reason a check raises has to be a literal in its own module.
+NO_STARTER_PACK_TO_GIVE: Final = (
+    "this install has no live Starter pack the staff sync can give, which the application writes "
+    "on its first start and an administrator may have retired, so what a joiner is given cannot "
+    "be asked here"
+)
+
+
 @check(
     leaves=("M26.2.3",),
     sentence=(
@@ -62,7 +71,6 @@ async def a_mover_s_automation_is_paused_and_a_stayer_s_is_not(h: Harness) -> No
     from brain.ops.acceptance_checks_accounts import _joined
     from brain.ops.acceptance_checks_agent_reach import _agent
     from brain.ops.acceptance_checks_joiner_mover_leaver import (
-        NO_STARTER_PACK_TO_GIVE,
         _give,
         _listed,
         _roster,

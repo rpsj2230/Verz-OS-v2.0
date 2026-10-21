@@ -818,6 +818,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert (
         outcomes.pop("a_joiner_gets_a_department_pack_and_a_mover_or_leaver_loses_it")[0] == NOT_RUN
     )
+    # Nor does it have a Starter pack for the mover's automations to be judged against; the check's
+    # own test furnishes one (`tests/unit/test_acceptance_checks_mover_automations.py`).
+    assert outcomes.pop("a_mover_s_automation_is_paused_and_a_stayer_s_is_not")[0] == NOT_RUN
     # The scratch database is not an install started from a release, so no image reference was
     # handed in; `tests/unit/test_acceptance_checks_install_template.py` hands it one.
     assert outcomes.pop("the_install_runs_one_published_image_at_a_named_release")[0] == NOT_RUN
