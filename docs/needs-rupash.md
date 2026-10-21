@@ -6,6 +6,52 @@ Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
 # Open
 
+## 257. May a knowledge owner be shown that a question found nothing, when the product keeps no text of any question?
+
+**In plain terms:** task M27.15.11 wants a knowledge owner to see where company knowledge is missing: a
+question that found nothing, shown only when the owner could see everything the asker could and the
+owner's own search also finds nothing, so nobody learns what an asker was refused. The product was built
+the other way on purpose: the log of unanswered questions holds a department and a source and no words,
+because a list of what people asked and did not get is a search history. So today an owner can be shown
+"finance asked something a source you have not connected would answer", never the question. What is built
+works under every answer below.
+
+**Option A: keep what is built, and narrow the task.** Owners see the department and the source that would
+have answered, as the Questions and gaps screen does, and never a question or a nothing-found flag.
+
+**Option B: work the flag out at the moment of asking, and keep no words.** When a question finds nothing,
+the product searches again as the widest reader could and records only whether that also found nothing. The
+Questions and gaps screen then shows a department and "nothing in the company" apart from "something exists
+that the asker may not read". No words are kept. It costs a second search for each question that found
+nothing.
+
+**Option C: keep the question for a short time for owners to read.** The most useful for fixing the gap,
+and the log becomes a search history that has to be erased on a schedule.
+
+**My recommendation:** B. It answers "is this a gap in the company's knowledge" without keeping anything a
+person typed.
+
+**What I need from you:** reply "257: A", "257: B" or "257: C".
+
+## 256. A request's time to the first word of an answer cannot be measured; may the ledger record the time to the first frame instead?
+
+**In plain terms:** task M27.1.5 lists the fields the record of every request holds, and one is the time
+until the first word of the answer. No model's answer is streamed to the product: it waits for the whole
+reply, so there is no first word to time. The only moment it can time is when the first frame is sent to
+the person, which is later and measures something else. The record declares the field empty for that reason
+and says so. The other two empty fields (the policy version the answer was redacted under, and how long the
+row read took) can be filled without a decision.
+
+**Option A: leave the field empty and say so,** until a model is streamed.
+
+**Option B: record the time to the first frame under its own name,** a separate field, so the figure is
+never mistaken for the first word. It shows how long a person waited before anything appeared.
+
+**My recommendation:** B for the person's wait, with the first-word field left empty until streaming exists.
+
+**What I need from you:** reply "256: A" or "256: B".
+
+
 ## 255. May the server keep the key that opens its own encrypted backups, so a rehearsal can run by itself?
 
 **In plain terms:** tasks M30.3.4 and M30.3.6 want each backup encrypted with a key you hold, and a
