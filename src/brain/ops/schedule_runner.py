@@ -277,7 +277,29 @@ def retention_sweep(now: datetime, report_only: bool, database_url: str) -> str:
     with psycopg.connect(libpq_conninfo(database_url), prepare_threshold=None) as conn:
         swept = run_retention_sweep(conn, now=now, report_only=report_only)
         partitions = maintain_ledger_partitions(conn, now=now, report_only=report_only)
-    return f"{swept}\n{partitions.summary()}"
+    recordings = _recording_sweep(now, report_only, database_url)
+    return f"{swept}\n{partitions.summary()}\n{recordings}"
+
+
+def _recording_sweep(now: datetime, report_only: bool, database_url: str) -> str:
+    """Browser recordings past their window, removed unless held (M19.6.6, M19.9.11).
+
+    The object store has no executor in `brain.ops.retention`, so this is it for the recordings
+    bucket: the same release, the same report-only rule, and a store that is not connected is a
+    line in the report and never a failure of the sweep. See `brain.browsing.recording_sweep`.
+    """
+    from brain.browsing.recording_sweep import run_recording_sweep_now
+    from brain.ops.worker import _loop_factory
+
+    settings = settings_from(process_environment())
+    return run_recording_sweep_now(
+        database_url,
+        now=now,
+        report_only=report_only,
+        vault_address=settings.vault_address,
+        vault_token=settings.vault_token,
+        loop_factory=_loop_factory(),
+    )
 
 
 def spend_report_refresh(now: datetime, report_only: bool, database_url: str) -> str:

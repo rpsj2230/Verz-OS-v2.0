@@ -1975,14 +1975,14 @@ const PROGRESS = {
     updated: "2026-10-20",
   },
   "M19.6.5": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): sessions.py:may_start consults ops.admission.decide so a halt refuses a new session; enforcer.stopped_now stops a running one at safe points; tests in test_browsing_enforcer.py, test_browsing_sessions.py. brain.ops.halt is live but no run exists to stop and no worker calls may_start. NEXT: Call may_start in the driver and enforcer.stopped_now in the relay loop; a check can then halt and see a start refused with RefusalKind.HALTED.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-21 on browsing/driver.py (merged behind the browser_runs switch), recording.py and concurrency.py. The halt is asked before a new session (concurrency.may_open -> admission.decide) and between every instruction of a run in flight (enforcer.stopped_now in the driver's relay). Install check browser_sessions_are_limited_and_a_halt_stops_a_run: a halt refuses a new session, and a halt raised mid-run stops the product's own runner between two instructions with its session closed and its recording kept; the runner's page is a stand-in the check holds. INSTALL PROOF: on the Install page press Run now and read that row: it must say Passed. A person-run proof against a real page waits for the live read run (later PR).",
+    updated: "2026-10-21",
   },
   "M19.6.6": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): browsing/recording.py has record, write, transcript_digest, recording_gaps and remove_expired (window = ops.retention.RECORDING_RETENTION_DAYS, holds kept, undated keys counted); test_browsing_recording.py. Docstring: no worker calls record/write, no scheduled caller of remove_expired, nothing written to the object store. NEXT: Hand an S3Backend (ops/object_store.py) to recording.write at run end in the driver and add a remove_expired job to ops/schedule_runner.py.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-21 on browsing/driver.py (merged behind the browser_runs switch), recording.py and concurrency.py. Recordings were written by the driver at run end and nothing removed them. browsing/recording_sweep.py puts them under the install's object-store prefix and the retention schedule (ops/schedule_runner.retention_sweep) now removes the ones past RECORDING_RETENTION_DAYS, keeps those a legal hold names (by session, by asker or company-wide), counts undated objects, and in report-only mode removes nothing. Install check a_browser_recording_is_kept_and_removed_when_its_time_has_passed. INSTALL PROOF: with an object store connected, Install page, Run now, row a_browser_recording_is_kept_and_removed_when_its_time_has_passed says Passed (it writes and removes only objects of its own run ids). With no store connected it says Not run in one sentence.",
+    updated: "2026-10-21",
   },
   "M19.6.7": {
     status: "IN PROGRESS",
@@ -4750,9 +4750,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M19.9.9": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): sessions.may_start (global admission budget) and concurrency.may_open (domain, agent) decide with reasons; concurrency docstring: the counter that records sessions as they start and end is not built, and nothing calls either decision. NEXT: Build the counter from browser_session rows (session_store.start/end), call both decisions from the driver, then a check that fills a limit and sees a refusal naming it.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-21 on browsing/driver.py (merged behind the browser_runs switch), recording.py and concurrency.py. Install check browser_sessions_are_limited_and_a_halt_stops_a_run counts sessions from the rows that record them and shows a session past the global budget, a site's limit or an agent's refused with a sentence naming the site and the agent. INSTALL PROOF: Install page, Run now, row browser_sessions_are_limited_and_a_halt_stops_a_run says Passed. The live session count against real containers waits for the live read run.",
+    updated: "2026-10-21",
   },
   "M19.9.10": {
     status: "IN PROGRESS",
@@ -4760,9 +4760,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M19.9.11": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): recording.write and remove_expired are built and tested, with the recordings bucket in ops/storage.py and RECORDING_RETENTION_DAYS; no caller writes a recording at run end and no scheduled job calls remove_expired. NEXT: Call recording.write in the driver and register a scheduled remove_expired in ops/schedule_runner.py (holds from the legal hold store); then a check that writes, ages and sweeps.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-21 on browsing/driver.py (merged behind the browser_runs switch), recording.py and concurrency.py. Same work and check as M19.6.6: recordings sit under the install's prefix and a scheduled pass removes expired ones, keeps held ones and reports undated ones. INSTALL PROOF: connect the object store, Install page, Run now, row a_browser_recording_is_kept_and_removed_when_its_time_has_passed says Passed; then read the Scheduled jobs page's retention sweep report, which now carries a line 'recordings: removed N, kept N under a hold, N with no date in their key'. Written at run end by a real run waits for the live read run.",
+    updated: "2026-10-21",
   },
   "M21.4.2": {
     status: "IN PROGRESS",
