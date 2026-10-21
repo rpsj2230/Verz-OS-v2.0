@@ -3,7 +3,7 @@
 - **Screens:** `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`, `/channels`, `/channels/:name`, `/channels/:name/:view`, `/connector-consent`, `/connectors/new-api`, `/incidents`
 - **Tables:** `auth.binding_code`, `ops.channel`, `ops.channel_delivery`, `ops.connector_connection`, `ops.connector_sync`, `ops.alert_acknowledgement`, `ops.oauth_consent`, `ops.custom_connector`, `proj.record`, `proj.record_retired`, `proj.source_epoch`, `er.alias`, `er.canonical`, `er.identifier`, `er.link`
 - **Installation values:** `INSTALL_LARK_USES`, `INSTALL_LARK_PLATFORM`, `INSTALL_LARK_BASE`, `INSTALL_LARK_CARD_APPROVALS`
-- **Measured here:** 48 routes, 6 called by no screen; 23 write routes, 18 with all three proofs; 4 gaps.
+- **Measured here:** 49 routes, 6 called by no screen; 23 write routes, 18 with all three proofs; 4 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -19,6 +19,7 @@
 | `GET /api/v1/console/channels` | `/channels` |
 | `GET /api/v1/console/channels/{name}` | `/channels/:name`, `/channels/:name/:view` |
 | `GET /api/v1/console/channels/{name}/stats` | `/channels`, `/channels/:name` |
+| `GET /api/v1/console/connector-start` | `/connectors` |
 | `GET /api/v1/console/connectors` | `/connectors` |
 | `GET /api/v1/console/connectors/{connector}` | `/connectors/:connector`, `/connectors/:connector/:view` |
 | `GET /api/v1/console/connectors/{connector}/drift` | `/connectors/:connector`, `/connectors/:connector/:view` |
