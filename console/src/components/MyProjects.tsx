@@ -66,7 +66,7 @@ export const KEEP_LABEL = "Keep it";
 export const PUT_AWAY_CONSEQUENCE =
   "It stops being listed and no question reads it. The conversations and documents in it stay " +
   "where they are.";
-export const TAKE_OUT_LABEL = "Take out";
+export const TAKE_OUT_LABEL = "Withdraw";
 export const ADD_THREAD_LABEL = "Add a conversation";
 export const CHOOSE_THREAD = "Choose a conversation";
 export const ADD_FILE_LABEL = "Add a file";
@@ -194,7 +194,7 @@ function ProjectOpen({
   };
 
   return (
-    <div className="project">
+    <div>
       {failure === null ? null : <FailureNotice failure={failure} />}
       {detail.failure ? (
         <FailureNotice failure={detail.failure} />
