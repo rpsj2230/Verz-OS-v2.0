@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-21T03:34:32.320638+00:00",
-  "commit": "7eef3f36",
-  "commit_subject": "An install check follows a model call into its cost and a used-up budget into its stop (#652)",
+  "generated_at": "2026-10-21T04:42:13.829129+00:00",
+  "commit": "70b03c78",
+  "commit_subject": "The model-spend install check is named as a reader of the budget stop switch (#662)",
   "total": 1626,
   "done": 1168,
   "percent": 71.8,
