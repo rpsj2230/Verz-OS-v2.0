@@ -218,7 +218,11 @@ class Stage:
         (self.root / name).touch()
 
     def run(
-        self, script: Path, *args: str, unset: tuple[str, ...] = ()
+        self,
+        script: Path,
+        *args: str,
+        unset: tuple[str, ...] = (),
+        extra: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
         env = {
             **os.environ,
@@ -232,6 +236,7 @@ class Stage:
             "BRAIN_BACKUP_ENDPOINT": "http://127.0.0.1:9",
             "BRAIN_BACKUP_WORK_DIR": (self.root / "work").as_posix(),
         }
+        env.update(extra or {})
         for name in unset:
             env.pop(name)
         assert SH is not None
@@ -752,3 +757,117 @@ def test_the_drill_asks_the_scratch_database_what_the_taker_asked_the_live_one(
     assert len(asked) == 2
     for statement in asked:
         assert statement in session
+
+
+# ------------------------------------------------------- where the copy went and who can read it
+CRYPT = REPO / "ops" / "backup" / "brain-backup-crypt"
+
+
+def _client_keys(directory: Path) -> tuple[Path, Path]:
+    """A throwaway key pair standing for the client's, made with the openssl the scripts use."""
+    private, public = directory / "client.pem", directory / "client.pub"
+    subprocess.run(
+        ["openssl", "genrsa", "-out", str(private), "2048"], capture_output=True, check=True
+    )
+    subprocess.run(
+        ["openssl", "rsa", "-in", str(private), "-pubout", "-out", str(public)],
+        capture_output=True,
+        check=True,
+    )
+    return private, public
+
+
+def test_an_unconfigured_taker_says_on_its_manifest_that_the_copy_is_here_and_readable(
+    taken: tuple[Stage, subprocess.CompletedProcess[str]],
+) -> None:
+    """The honest defaults. Delete this and a manifest that says nothing about where it went is
+    read by the Recovery screen as a copy nobody knows anything about, instead of one it can say
+    is on the machine it is a copy of and is not encrypted."""
+    stage, result = taken
+    assert result.returncode == 0, result.stderr
+    manifest = json.loads(_uploaded(stage, ".manifest.json").read_text(encoding="utf-8"))
+    assert manifest["off_host"] is False
+    assert manifest["key_held_by"] == "nobody"
+    assert "encryption" not in manifest
+
+
+@pytest.mark.skipif(shutil.which("openssl") is None, reason="no openssl here")
+def test_a_taker_given_a_recipient_uploads_only_the_encrypted_copy_and_names_the_client_as_holder(
+    tmp_path: Path,
+) -> None:
+    """The copy leaves the machine encrypted, the plaintext never does, and the manifest keeps the
+    dump's own size for the drill. Delete this and a configured recipient can be ignored, so the
+    company's records are uploaded readable by a script that said it encrypted them."""
+    private, public = _client_keys(tmp_path)
+    stage = Stage.at(tmp_path / "stage")
+    result = stage.run(
+        TAKER,
+        extra={
+            "BRAIN_BACKUP_RECIPIENT": str(public),
+            "BRAIN_BACKUP_OFF_HOST": "yes",
+            "BRAIN_BACKUP_CRYPT": str(CRYPT),
+        },
+    )
+    assert result.returncode == 0, result.stderr
+
+    manifest = json.loads(_uploaded(stage, ".manifest.json").read_text(encoding="utf-8"))
+    names = sorted(path.name for path in (stage.root / "bucket").iterdir())
+    backup_id = manifest["backup_id"]
+    assert names == [f"{backup_id}.dump.enc", f"{backup_id}.dump.key", f"{backup_id}.manifest.json"]
+    assert manifest["off_host"] is True
+    assert manifest["key_held_by"] == "client"
+    assert (
+        manifest["encrypted_size_bytes"]
+        == (stage.root / "bucket" / f"{backup_id}.dump.enc").stat().st_size
+    )
+    assert backup_from(manifest, where="m").size_bytes == manifest["size_bytes"]
+
+    opened = tmp_path / "opened.dump"
+    subprocess.run(
+        [
+            SH or "sh",
+            str(CRYPT),
+            "decrypt",
+            "--identity",
+            str(private),
+            "--in",
+            str(stage.root / "bucket" / f"{backup_id}.dump.enc"),
+            "--key",
+            str(stage.root / "bucket" / f"{backup_id}.dump.key"),
+            "--out",
+            str(opened),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    assert opened.stat().st_size == manifest["size_bytes"]
+    assert sorted(path.name for path in (stage.root / "work").iterdir()) == []
+
+
+@pytest.mark.skipif(shutil.which("openssl") is None, reason="no openssl here")
+def test_a_copy_that_cannot_be_encrypted_is_not_uploaded_in_the_clear_instead(
+    tmp_path: Path,
+) -> None:
+    """A private key where the public one belongs, which the crypt script refuses. Delete this and
+    a misconfigured key becomes a quiet decision to upload the whole database unprotected."""
+    private, _ = _client_keys(tmp_path)
+    stage = Stage.at(tmp_path / "stage")
+    result = stage.run(
+        TAKER,
+        extra={"BRAIN_BACKUP_RECIPIENT": str(private), "BRAIN_BACKUP_CRYPT": str(CRYPT)},
+    )
+    assert result.returncode == 1
+    assert stage.calls("aws") == []
+    assert not (stage.root / "bucket").exists() or list((stage.root / "bucket").iterdir()) == []
+    assert sorted(path.name for path in (stage.root / "work").iterdir()) == []
+
+
+def test_a_taker_whose_off_host_answer_is_neither_yes_nor_no_is_refused_before_it_counts_anything(
+    tmp_path: Path,
+) -> None:
+    """The declaration is a word, not a truthy string. Delete this and 'maybe' is written to the
+    manifest as the install's placement."""
+    stage = Stage.at(tmp_path)
+    result = stage.run(TAKER, extra={"BRAIN_BACKUP_OFF_HOST": "maybe"})
+    assert result.returncode == 1
+    assert stage.calls("docker") == []

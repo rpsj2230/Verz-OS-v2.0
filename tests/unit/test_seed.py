@@ -552,6 +552,12 @@ def test_nothing_in_this_repository_loads_a_database_from_one_stack_into_another
     loads this install's copy into a scratch database it refuses to point at the live one, and
     it is the only file exempted; `pg_basebackup` is still banned everywhere.
 
+    **A dump of the roles alone is not a taker.** The drill service creates the live database's
+    roles in the scratch container before the load, because a copy holds the policies that name
+    them and not the roles, and it reads them with `pg_dumpall --roles-only
+    --no-role-passwords`, which takes no row and no password. It is let through by that flag on the
+    line and by nothing else, so a dump of any data stays banned beside it.
+
     Delete this and a convenience script that restores production into staging lands in `ops/`
     with nothing objecting."""
     repo = Path(__file__).resolve().parents[2]
@@ -565,7 +571,7 @@ def test_nothing_in_this_repository_loads_a_database_from_one_stack_into_another
     taking = [
         f"{where}:{number}"
         for where, number, line in _ops_lines(repo)
-        if "pg_dump" in line and where != THE_ONLY_TAKER
+        if "pg_dump" in line and where != THE_ONLY_TAKER and "--roles-only" not in line
     ]
     assert not taking, (
         f"only {THE_ONLY_TAKER} may take a copy, and these also do: {taking}. A second taker "

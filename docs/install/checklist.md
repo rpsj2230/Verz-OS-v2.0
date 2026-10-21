@@ -47,7 +47,8 @@ starts.
 
 | Timer | Installed by | What it does |
 | --- | --- | --- |
-| `brain-backup.timer` | `ops/backup/brain-install-backup` | Copies the database every night at 02:00 into the bucket it discovers from the running system. On a copied disk, check what it discovered. |
+| `brain-backup.timer` | `ops/backup/brain-install-backup` | Copies the database every night at 02:00 into the bucket named at setup, which has to be another machine's and is declared so on every copy. On a copied disk, check where it points. |
+| `brain-drill.timer` | `ops/backup/brain-install-backup`, only when told `BRAIN_DRILL_SERVICE=yes` | Every ten minutes looks for a restore rehearsal that is owed (weekly, or asked for from the Recovery screen) and, when one is, loads the newest copy into a scratch database and writes what it found beside the copy. Not installed unless asked for. |
 | `brain-autodeploy.timer` | `ops/deploy/brain-install-autodeploy` | Pulls `:latest` every two minutes and redeploys when it moved. An install that pins a release has no use for it, and an install running it is not pinned. |
 
 ## Server

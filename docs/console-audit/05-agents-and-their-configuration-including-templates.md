@@ -1,9 +1,9 @@
 ### Agents and their configuration, including templates
 
 - **Screens:** `/agents`, `/agents/:agentId`, `/agents/:agentId/:tab`, `/agent-templates`, `/agent-templates/:templateId`, `/approvals`, `/approvals/:suspensionId`, `/agents/new`, `/agents/drafts`, `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step`
-- **Tables:** `agent.agent`, `agent.template_instance`, `agent.template_version`, `agent.template_withdrawal`, `agent.template_draft`, `agent.audience_extra`, `agent.upgrade_decline`, `agent.leash_change`, `agent.supervised_action`, `agent.action_verdict`, `agent.supervision_pin`, `agent.tool_attachment`, `ops.agent_item_use`, `agent.group_install`, `ops.channel_room`, `agent.browser_envelope`, `gate.suspension`, `agent.manifest_draft`, `agent.manifest_revision`, `agent.manifest_act`, `agent.learning_pause`, `ops.agent_run`
+- **Tables:** `agent.agent`, `agent.template_instance`, `agent.template_version`, `agent.template_withdrawal`, `agent.template_draft`, `agent.audience_extra`, `agent.agent_callee`, `agent.agent_fanout`, `agent.upgrade_decline`, `agent.leash_change`, `agent.supervised_action`, `agent.action_verdict`, `agent.supervision_pin`, `agent.tool_attachment`, `ops.agent_item_use`, `agent.group_install`, `ops.channel_room`, `agent.browser_envelope`, `gate.suspension`, `agent.manifest_draft`, `agent.manifest_revision`, `agent.manifest_act`, `agent.learning_pause`, `ops.agent_run`
 - **Installation values:** none
-- **Measured here:** 86 routes, 14 called by no screen; 49 write routes, 43 with all three proofs; 4 gaps.
+- **Measured here:** 90 routes, 18 called by no screen; 49 write routes, 43 with all three proofs; 5 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -26,6 +26,7 @@
 | `GET /api/v1/agents/{agent_id}/audience` | `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/capabilities` | `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/conversations` | `/agents/:agentId/:tab` |
+| `GET /api/v1/agents/{agent_id}/coordination` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/groups` | `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/knowledge` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/learning` | `/agents/:agentId/:tab` |
@@ -65,6 +66,9 @@
 | `POST /api/v1/agents/{agent_id}/audience/additions` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/audience/removals` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/channels` | `/agents/:agentId`, `/agents/:agentId/:tab` |
+| `POST /api/v1/agents/{agent_id}/coordination/callees` | **no screen** |
+| `POST /api/v1/agents/{agent_id}/coordination/callees/removals` | **no screen** |
+| `POST /api/v1/agents/{agent_id}/coordination/fan-out` | **no screen** |
 | `POST /api/v1/agents/{agent_id}/disable` | `/agent-templates/:templateId`, `/agents`, `/agents/:agentId`, `/agents/:agentId/:tab`, `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step`, `/department`, `/department/:view`, `/people`, `/people/:personId`, `/people/:personId/:view` |
 | `POST /api/v1/agents/{agent_id}/drafts` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/duplicate` | `/agent-templates/:templateId`, `/agents`, `/agents/:agentId`, `/agents/:agentId/:tab`, `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step`, `/department`, `/department/:view`, `/people`, `/people/:personId`, `/people/:personId/:view` |
@@ -97,6 +101,7 @@
 - **Gap.** An agent's finished runs are recorded, how each ended and what it spent, and no screen lists them. Recorded: ops.agent_run is written by brain.gate.runtime for operating the runtime and is not the record of what an agent did (brain.ops.agent_run_store.AN_AGENT_RUN_ROW_IS_A_COUNT_AND_NOT_AN_AUDIT_RECORD); the agent's Dashboard draws spend from the usage routes, and a list of runs is a screen nobody has drawn yet.
 - **Gap.** A draft is written, checked and rehearsed on every install, and published only where the install holds a template signing key. Recorded: brain.agent_builder_routes signs a published draft with the key brain.agent_lifecycle_routes installs with, and no setting holds one yet (brain.ops.starter_store.NO_TEMPLATE_IS_SIGNED_BEFORE_THE_INSTALL_HOLDS_A_KEY_OF_ITS_OWN); publishing says so rather than signing with a weaker key.
 - **Gap.** A rung above Shadow cannot be published from a draft, and a rehearsal does not ask its test questions. Recorded: brain.builder.agent_drafts.A_RUNG_IS_RAISED_WITH_EVIDENCE_AND_NEVER_BY_A_DRAFT, and no model answers for an agent yet (brain.agent_builder_routes.A_REHEARSAL_RUNS_NO_MODEL_YET).
+- **Gap.** Which agents an agent may hand a subtask to, and whether it may run them at the same time, cannot be set from the console. Open leaf `M18.5.1`.
 - **Gap.** A published template version cannot be installed from the console. Recorded: brain.agent_lifecycle_routes serves the version and its install, and the Agent templates page has no button that presses it yet; switching on and off, archiving, duplicating and handing on are pressed from the Agents pages.
 
 **Every write to this area, followed to the system.**

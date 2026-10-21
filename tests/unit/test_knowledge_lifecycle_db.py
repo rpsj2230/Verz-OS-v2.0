@@ -12,7 +12,7 @@ Every change is in the ledger, and a document a reader may not see is answered a
 Skipped when `DATABASE_URL` is unset, as every `needs_db` test is, and without pgvector, which the
 chain to head needs; CI has both.
 
-Task ids: M7.4.4, M7.4.5, M7.4.6, M7.6.2, M7.7.2
+Task ids: M7.4.4, M7.4.5, M7.4.6, M7.6.2, M7.7.2, M27.15.1
 """
 
 from __future__ import annotations
@@ -60,6 +60,12 @@ WEB_ADMIN = "u_admin"
 WEB_READER = "u_narrow"
 FINANCE_READER = "u_elsewhere"
 SUPER = "u_wide"
+#: Adds documents to finance, as a member of web: the department a person belongs to is the
+#: token directory's (`tests.unit.test_agent_routes.DEPARTMENTS`) and not where they add.
+FINANCE_ADMIN = "u_prefix"
+#: Reads finance's documents and holds none of a passage's fields, so the redactor leaves nothing of
+#: the text to show: a read that was shown nothing is not a read to write down (M27.15.1).
+FINANCE_BLIND = "u_admin_only"
 TABLES: tuple[str, ...] = ("know.steward_task", "know.solution")
 
 #: The field grants a passage is read under, as a pack assignment grants them.
@@ -83,7 +89,14 @@ GRANTS: dict[str, tuple[Grant, ...]] = {
     WEB_ADMIN: _in("web", KNOWLEDGE_UPLOAD.value, KNOWLEDGE_READ.value, *PASSAGE_FIELDS),
     WEB_READER: _in("web", KNOWLEDGE_READ.value, *PASSAGE_FIELDS),
     FINANCE_READER: _in("finance", KNOWLEDGE_READ.value, *PASSAGE_FIELDS),
-    SUPER: (Grant(capability=PROMOTION_CAPABILITY, scope=Scope.unrestricted()),),
+    SUPER: (
+        Grant(capability=PROMOTION_CAPABILITY, scope=Scope.unrestricted()),
+        # Reads finance as a member of sales, which is what makes finance's text another
+        # department's to this person (M27.15.1).
+        *_in("finance", KNOWLEDGE_READ.value, *PASSAGE_FIELDS),
+    ),
+    FINANCE_ADMIN: _in("finance", KNOWLEDGE_UPLOAD.value, KNOWLEDGE_READ.value, *PASSAGE_FIELDS),
+    FINANCE_BLIND: _in("finance", KNOWLEDGE_READ.value),
 }
 
 V1 = LINE.join(["# Site handover", "", "Sign the TEALOLD list before leaving."]).encode()
@@ -730,3 +743,62 @@ def test_the_tables_are_what_the_models_declare_and_the_application_opens_no_tas
 
     assert others == (0,)
     assert own == (1,)
+
+
+# ----------------------------------------------- opening another department's text (M27.15.1)
+def test_opening_the_text_of_another_departments_document_leaves_an_entry_naming_the_reader() -> (
+    None
+):
+    """**M27.15.1 on a server, through the route.** A document is added to finance. A member of
+    sales who holds the read over finance opens its text, twice: it is shown both times and the
+    ledger holds two `record_read` entries whose actor is that reader and whose subject is the
+    document, carrying the kind of record and nothing of the text. A member of finance opening it
+    leaves none, because a read inside the department is not the read the line is about. A member
+    of web holding no read over finance is told it is absent in the words an invented id gets and
+    leaves none.
+
+    Delete this and the route can show another department's text with nothing written down, which
+    is the read the departments exist to make askable afterwards."""
+    with company("brain_k2_cross_opening") as url:
+
+        async def presses(client: httpx.AsyncClient) -> dict[str, Any]:
+            added = await client.post(
+                api("/knowledge/uploads"),
+                params={"kind": "sop", "level": "department", "department": "finance"},
+                content=V1,
+                headers=file_headers(FINANCE_ADMIN),
+            )
+            assert added.status_code == 201, added.text
+            there = api(f"/knowledge/items/{added.json()['item_id']}/passages")
+            return {
+                "added": added.json(),
+                "across": await client.get(there, headers=headers(SUPER)),
+                "again": await client.get(there, headers=headers(SUPER)),
+                "inside": await client.get(there, headers=headers(FINANCE_READER)),
+                "blind": await client.get(there, headers=headers(FINANCE_BLIND)),
+                "turned_away": await client.get(there, headers=headers(WEB_READER)),
+                "invented": await client.get(
+                    api("/knowledge/items/upload.nothing_here/passages"),
+                    headers=headers(WEB_READER),
+                ),
+            }
+
+        said = pressed(url, presses)
+        document = said["added"]["item_id"]
+        entries = sql(
+            url,
+            "SELECT actor_id, subject, details::text FROM obs.audit_entry "
+            "WHERE action = 'record_read' ORDER BY seq",
+        )
+
+    assert said["across"].status_code == said["again"].status_code == 200
+    assert said["inside"].status_code == 200
+    # Shown nothing of the text, so not a read: the sibling of the two entries below.
+    assert said["blind"].status_code == 200 and said["blind"].json()["passages"] == []
+    assert any("TEALOLD" in one["text"] for one in said["across"].json()["passages"])
+    assert said["turned_away"].status_code == said["invented"].status_code == 404
+    assert without_trace(said["turned_away"].json()) == without_trace(said["invented"].json())
+    assert [(one[0], one[1]) for one in entries] == [(SUPER, f"entity:{document}")] * 2
+    for _, _, details in entries:
+        assert "document" in details
+        assert "TEALOLD" not in details

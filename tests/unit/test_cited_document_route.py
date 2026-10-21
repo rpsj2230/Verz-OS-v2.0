@@ -6,7 +6,7 @@ every passage of every document whatever the statement asked. So anything missin
 removed by the redactor or by the route's own reference check, never left unfetched, and the
 refusals below are the walls this route relies on rather than a stand-in's manners.
 
-Task ids: M8.1.2
+Task ids: M8.1.2, M27.15.1
 """
 
 from __future__ import annotations
@@ -233,3 +233,63 @@ def test_a_reference_outside_the_grammar_is_refused_before_anything_is_read(
 
     assert got.status_code == 422
     assert source.asked == []
+
+
+# --- another department's text is written down (M27.15.1)
+
+
+@pytest.fixture
+def written(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Every opening the route writes down, with a database stood in for by a sentinel."""
+    found: list[dict[str, Any]] = []
+
+    async def record(sessions: object, **values: Any) -> None:
+        found.append(values)
+
+    monkeypatch.setattr("brain.cited_document_routes.sessions_of", lambda _request: object())
+    monkeypatch.setattr("brain.cited_document_routes.record_document_opening", record)
+    return found
+
+
+def test_opening_a_document_in_another_department_is_written_down_naming_it_and_the_reader(
+    client: TestClient, written: list[dict[str, Any]]
+) -> None:
+    """The reader is a member of web and the ledger document is finance's, which this reader may
+    read: the page opens and one opening is written with the document and the reader, and the
+    reach digest of the request. Delete this and the cited-document route shows another
+    department's text with nothing written, while the library's route writes it."""
+    got = opened(client, LEDGER, pid="u_narrow")
+
+    assert got.status_code == 200
+    assert [(one["document_id"], one["reader_id"]) for one in written] == [(LEDGER, "u_narrow")]
+    assert written[0]["ent_hash"]
+
+
+def test_opening_a_document_in_the_readers_own_department_writes_nothing(
+    client: TestClient, written: list[dict[str, Any]]
+) -> None:
+    """The permitted sibling: the handbook is web's and so is the reader. Delete this and the
+    route writes an entry for every opening, which is the log of every read."""
+    assert opened(client, HANDBOOK, pid="u_narrow").status_code == 200
+    assert written == []
+
+
+def test_a_refused_opening_writes_nothing(
+    client: TestClient, written: list[dict[str, Any]]
+) -> None:
+    """A document the reader may not read is the one 404, and a refusal is not a disclosure.
+    Delete this and a reader turned away leaves an entry saying they read finance's text."""
+    assert opened(client, LEDGER, pid="u_wide").status_code == 404
+    assert written == []
+
+
+def test_a_process_with_no_database_opens_the_page_and_writes_nothing(
+    client: TestClient, written: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nowhere to write is not a reason to refuse a reader the page, and nothing is written. Delete
+    this and the route is changed to hand the writer a missing factory, which fails every opening
+    on a process built without a database."""
+    monkeypatch.setattr("brain.cited_document_routes.sessions_of", lambda _request: None)
+
+    assert opened(client, LEDGER, pid="u_narrow").status_code == 200
+    assert written == []

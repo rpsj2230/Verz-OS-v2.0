@@ -41,7 +41,7 @@ export default defineConfig({
     { name: "furnish", testMatch: /first-run\.spec\.ts/, use: { ...devices["Desktop Chrome"] } },
     {
       name: "console",
-      testMatch: /(modules|reader|two-tabs|policy|report-export|agent-automation|agent-knowledge)\.spec\.ts/,
+      testMatch: /(modules|module-cases|reader|two-tabs|policy|report-export|agent-automation|agent-knowledge)\.spec\.ts/,
       dependencies: ["furnish"],
       use: { ...devices["Desktop Chrome"] },
     },
