@@ -65,7 +65,11 @@ def _test_sources() -> list[Path]:
 #: that could never be registered. A sweep that is looser than the thing it guards is worse
 #: than no sweep, because it reports "ok" about a rule it is not applying.
 TOOL_NAME_RE = re.compile(TOOL_NAME_PATTERN)
-TASK_ID_RE = re.compile(r"\bM\d+(?:\.\d+){1,4}\b")
+#: **An id followed by `.x` is a wildcard over a group, not a claim on one.** A subject that said
+#: "(M27.14.x, part)" was read as a claim on the group M27.14 and turned the traceability sweep red
+#: on main, where this sweep is not run on a merge. `brain.status` carries the same pattern for
+#: the same reason, held equal by `test_the_two_task_id_patterns_are_one_pattern`.
+TASK_ID_RE = re.compile(r"\bM\d+(?:\.\d+){1,4}\b(?!\.[A-Za-z])")
 #: The one line a file may claim task ids on. Everything else is discussion.
 TASK_LINE_RE = re.compile(r"^\s*Task ids:\s*(.+)$", re.M)
 
