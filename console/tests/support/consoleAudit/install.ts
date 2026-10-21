@@ -84,7 +84,7 @@ const A_BROWSER_ROW_IS_FOLLOWED_BY_THE_INSTALL_CHECK = t(
 
 const A_BROWSER_PERMISSION_IS_IN_THE_LEDGER = t(
   "test_browser_declarations",
-  "test_signing_and_revoking_are_ledger_entries_the_recorder_would_have_written",
+  "test_signing_and_revoking_are_leash_changes_in_the_ledger",
   true,
 );
 
