@@ -298,6 +298,9 @@ def test_a_reader_of_the_automations_tab_is_shown_every_template_and_what_instal
         "name": expected[0].name,
         "summary": expected[0].summary,
         "schedule": expected[0].cadence.words(),
+        "trigger": expected[0].trigger.value,
+        "connectors": list(expected[0].connectors),
+        "approval": expected[0].approval,
         "installed_as": None,
         "installable": True,
     }

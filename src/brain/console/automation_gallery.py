@@ -132,6 +132,7 @@ from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.principal import Principal
 from brain.gate.admission import admit
 from brain.ops.automation_owner import AUTOMATION_ASSURANCE, AUTOMATION_CHANNEL, AUTOMATION_ID
+from brain.orchestration.unattended import TriggerKind
 
 # ------------------------------------------------------------------ written-down reasons
 #: Where the line between the product's templates and a company's own is drawn.
@@ -242,6 +243,17 @@ _AUTOMATION_ID_RE: Final = re.compile(AUTOMATION_ID)
 #: The longest summary a card carries. One sentence.
 MAXIMUM_SUMMARY: Final = 240
 
+#: A kind of source, in the product's words: lowercase words, so no vendor name or address fits.
+_CONNECTOR_KIND_RE: Final = re.compile(r"^[a-z]+(?: [a-z]+){0,2}$")
+
+#: Why every template says what starts it, what it uses and who decides.
+EVERY_TEMPLATE_DECLARES_WHAT_STARTS_IT_WHAT_IT_USES_AND_WHO_DECIDES: Final = (
+    "A person choosing an automation reads what will start it, which kinds of source it will use, "
+    "and, for one that drafts, the step at which a person decides before anything takes effect. "
+    "A template that drafts and names no approval, or names one and drafts nothing, cannot be "
+    "built."
+)
+
 #: Hours in a day and days in a week, for the cadence's bounds.
 HOURS: Final = 24
 WEEKDAYS: Final[tuple[str, ...]] = (
@@ -316,8 +328,29 @@ class AutomationTemplate:
     cadence: Cadence
     #: What breaks if it does not run. Becomes the registry entry's `guards`.
     guards: str
+    #: What starts it. Declared, so a person choosing it reads what will start it. See
+    #: `EVERY_TEMPLATE_DECLARES_WHAT_STARTS_IT_WHAT_IT_USES_AND_WHO_DECIDES`.
+    trigger: TriggerKind = TriggerKind.SCHEDULE
+    #: The kinds of source it uses, in the product's words ("chat", "email", "customer records"),
+    #: never a vendor or a company's own system, so the same template is right on every install.
+    connectors: tuple[str, ...] = ()
+    #: True for an outcome that drafts something a person then decides about.
+    drafts: bool = False
+    #: The approval step: what a person does before anything the automation drafted takes effect.
+    #: Required exactly when it drafts, and empty for one that only reads and tells.
+    approval: str = ""
 
     def __post_init__(self) -> None:
+        if self.drafts != bool(self.approval.strip()):
+            msg = f"{self.template_id!r} " + (
+                "drafts something and says nothing of the approval a person gives it"
+                if self.drafts
+                else "declares an approval step and drafts nothing"
+            )
+            raise GalleryError(msg)
+        if any(not _CONNECTOR_KIND_RE.fullmatch(one) for one in self.connectors):
+            msg = f"{self.template_id!r} names a source that is not a kind of source in plain words"
+            raise GalleryError(msg)
         if not _TEMPLATE_ID_RE.fullmatch(self.template_id):
             msg = f"{self.template_id!r} is not a template id"
             raise GalleryError(msg)
@@ -400,6 +433,64 @@ BUILT_IN: Final[tuple[AutomationTemplate, ...]] = (
         guards=(
             "Without it an action this agent suspended for a decision waits until it lapses, and "
             "the work it was doing simply does not happen."
+        ),
+    ),
+    AutomationTemplate(
+        template_id="daily_brief",
+        version=1,
+        name="I send you a brief of the day ahead each morning",
+        summary=(
+            "What is on your calendar, what is waiting on you and what changed overnight in the "
+            "sources this agent draws on, in one short read."
+        ),
+        task="automation.daily_brief",
+        cadence=Cadence(every=Every.WEEKDAY, hour_utc=7),
+        guards=(
+            "Without it the day starts with a search through four places, and what changed "
+            "overnight is found when it is already late."
+        ),
+        connectors=("calendar", "tasks", "email"),
+    ),
+    AutomationTemplate(
+        template_id="deal_capture",
+        version=1,
+        name="I draft customer records from deals mentioned in group chats",
+        summary=(
+            "A deal talked about in a group chat is drafted as a customer record for a person to "
+            "read, correct and approve before anything is written."
+        ),
+        task="automation.deal_capture",
+        cadence=Cadence(every=Every.DAY, hour_utc=18),
+        guards=(
+            "Without it a deal agreed in a chat lives only in the chat, and the customer record "
+            "is missing it on the day somebody needs it."
+        ),
+        connectors=("chat", "customer records"),
+        drafts=True,
+        approval=(
+            "A person reads each draft, corrects it and approves it. Until then nothing is "
+            "written to a customer record."
+        ),
+    ),
+    AutomationTemplate(
+        template_id="email_replies",
+        version=1,
+        name="I draft replies to the emails waiting on you",
+        summary=(
+            "A reply drafted for each email that has waited for an answer, left for a person to "
+            "read, change and send."
+        ),
+        task="automation.email_replies",
+        cadence=Cadence(every=Every.WEEKDAY, hour_utc=8),
+        guards=(
+            "Without it an email waiting for an answer is found when the sender asks again, and "
+            "the first reply is written in a hurry."
+        ),
+        connectors=("email",),
+        drafts=True,
+        approval=(
+            "A person reads each draft, changes it and sends it themselves. This agent sends "
+            "nothing."
         ),
     ),
 )
@@ -507,6 +598,9 @@ class InstallPreview:
             "summary": self.template.summary,
             "task": self.template.task,
             "cadence": self.template.cadence.words(),
+            "trigger": self.template.trigger.value,
+            "connectors": list(self.template.connectors),
+            "approval": self.template.approval,
             "guards": self.template.guards,
             "runs_as": self.runs_as.id,
             "next_run_at": None if self.next_run_at is None else self.next_run_at.isoformat(),

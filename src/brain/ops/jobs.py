@@ -164,6 +164,7 @@ from brain.ops.queue import (
     HEARTBEAT_SECONDS,
     MAX_REDRIVES,
     MIB_PER_SLOT,
+    TASK_DEADLINE_SECONDS,
     Job,
     Redrive,
     driver_is_installed,
@@ -958,7 +959,7 @@ def pool_gaps(
 #: other end and for the same reason. Neither can compute the other: that one bounds a single
 #: request and this bounds a whole job, so the day a job makes two requests the two numbers
 #: stop agreeing and both are still right.
-DEFAULT_TIMEOUT_SECONDS: Final[float] = stale_after().total_seconds() - HEARTBEAT_SECONDS
+DEFAULT_TIMEOUT_SECONDS: Final[float] = TASK_DEADLINE_SECONDS
 
 
 def timeout_gaps(seconds: float = DEFAULT_TIMEOUT_SECONDS) -> tuple[str, ...]:

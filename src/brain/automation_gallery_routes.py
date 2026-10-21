@@ -111,6 +111,13 @@ class AutomationTemplateView(BaseModel):
     name: str
     summary: str
     schedule: str
+    #: What starts it: `schedule`, `connector_event` or `webhook`.
+    trigger: str
+    #: The kinds of source it uses, in plain words.
+    connectors: list[str]
+    #: The step at which a person decides before anything takes effect, or empty for one that only
+    #: reads and tells.
+    approval: str
     #: The automation this reader installed from it on this agent, or null.
     installed_as: str | None = None
     #: This reader holds the authority to install it here. Presentation only: decided again.
@@ -137,6 +144,9 @@ class InstallPreviewView(BaseModel):
     name: str
     summary: str
     schedule: str
+    trigger: str
+    connectors: list[str]
+    approval: str
     runs_as: str
     runs_as_name: str
     starts_paused: bool
@@ -315,6 +325,9 @@ def preview_view(shown: InstallPreview) -> InstallPreviewView:
         name=template.name,
         summary=template.summary,
         schedule=template.cadence.words(),
+        trigger=template.trigger.value,
+        connectors=list(template.connectors),
+        approval=template.approval,
         runs_as=shown.runs_as.id,
         runs_as_name=shown.runs_as.display_name,
         starts_paused=shown.next_run_at is None,
@@ -371,6 +384,9 @@ async def automation_gallery(
                 name=card.template.name,
                 summary=card.template.summary,
                 schedule=card.template.cadence.words(),
+                trigger=card.template.trigger.value,
+                connectors=list(card.template.connectors),
+                approval=card.template.approval,
                 installed_as=card.installed_as,
                 installable=may_install(agent_id, card.template, asked.reach, asked.now),
             )
