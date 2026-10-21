@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-21T10:09:11.987343+00:00",
-  "commit": "c7effc85",
-  "commit_subject": "Three questions from the browser work are on the Needs you page: signed browser and desktop images, website passwords, and pictures to a model (#668)",
+  "generated_at": "2026-10-21T10:27:20.104853+00:00",
+  "commit": "b7d89228",
+  "commit_subject": "15 more tasks are proved on the install by the newest complete acceptance run",
   "total": 1626,
-  "done": 1197,
-  "percent": 73.6,
-  "built": 1382,
-  "built_percent": 85.0,
-  "built_unproven": 185,
+  "done": 1212,
+  "percent": 74.5,
+  "built": 1389,
+  "built_percent": 85.4,
+  "built_unproven": 177,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -84,8 +84,6 @@
     "M26.3.2",
     "M27.10.2",
     "M27.11.10",
-    "M27.11.7",
-    "M27.12.5",
     "M27.15.12",
     "M27.15.19",
     "M27.15.50",
@@ -102,7 +100,6 @@
     "M27.16.3",
     "M27.16.4",
     "M27.16.5",
-    "M27.7.15",
     "M27.7.23",
     "M27.7.26",
     "M27.9.8",
@@ -136,10 +133,6 @@
     "M35.2.2.4",
     "M35.3.1.1",
     "M36.2.4.1",
-    "M37.2.2.2",
-    "M37.2.2.5",
-    "M37.2.3.4",
-    "M37.2.4.3",
     "M37.5.1.2",
     "M37.5.1.3",
     "M37.5.1.4",
@@ -170,7 +163,6 @@
     "M40.1.2.3",
     "M40.4.1.1",
     "M40.5.1.3",
-    "M40.5.1.4",
     "M40.7.1",
     "M40.7.3",
     "M42.1.3",
@@ -248,10 +240,10 @@
       "wave": 3,
       "name": "Agents, knowledge, console",
       "total": 599,
-      "done": 474,
-      "percent": 79.1,
+      "done": 477,
+      "percent": 79.6,
       "in_progress": 16,
-      "ready_for_testing": 62,
+      "ready_for_testing": 59,
       "blocked": 6,
       "open": 41,
       "acts": 1,
@@ -263,25 +255,25 @@
       "wave": 4,
       "name": "Doing, lifecycle, extensions",
       "total": 232,
-      "done": 125,
-      "percent": 53.9,
-      "in_progress": 56,
-      "ready_for_testing": 32,
+      "done": 133,
+      "percent": 57.3,
+      "in_progress": 49,
+      "ready_for_testing": 31,
       "blocked": 15,
       "open": 4,
       "acts": 0,
       "decided": 23,
-      "built": 156,
-      "built_percent": 67.2
+      "built": 163,
+      "built_percent": 70.3
     },
     {
       "wave": 5,
       "name": "Hands, delivery, go-live",
       "total": 217,
-      "done": 97,
-      "percent": 44.7,
+      "done": 101,
+      "percent": 46.5,
       "in_progress": 57,
-      "ready_for_testing": 33,
+      "ready_for_testing": 29,
       "blocked": 19,
       "open": 11,
       "acts": 42,
@@ -481,10 +473,10 @@
       "name": "Automation and the task lane",
       "wave": 4,
       "total": 41,
-      "done": 17,
+      "done": 24,
       "acts": 0,
       "decided": 0,
-      "built": 22
+      "built": 29
     },
     {
       "module": "M18",
@@ -581,7 +573,7 @@
       "name": "Console, reports, observability",
       "wave": 3,
       "total": 216,
-      "done": 164,
+      "done": 167,
       "acts": 0,
       "decided": 22,
       "built": 188
@@ -681,7 +673,7 @@
       "name": "Migration, launch and handover",
       "wave": 5,
       "total": 45,
-      "done": 24,
+      "done": 28,
       "acts": 41,
       "decided": 4,
       "built": 32
@@ -711,7 +703,7 @@
       "name": "Member self-service application",
       "wave": 4,
       "total": 54,
-      "done": 37,
+      "done": 38,
       "acts": 0,
       "decided": 6,
       "built": 44
@@ -1108,7 +1100,14 @@
     "M17.4.3",
     "M17.4.4",
     "M17.5.3",
+    "M17.6.1",
+    "M17.6.2",
+    "M17.6.3",
+    "M17.6.4",
+    "M17.6.6",
+    "M17.6.7",
     "M17.7.5",
+    "M17.7.7",
     "M17.7.9",
     "M18.1.2",
     "M18.1.3",
@@ -1246,12 +1245,14 @@
     "M27.11.3",
     "M27.11.5",
     "M27.11.6",
+    "M27.11.7",
     "M27.11.8",
     "M27.11.9",
     "M27.12.1",
     "M27.12.2",
     "M27.12.3",
     "M27.12.4",
+    "M27.12.5",
     "M27.12.6",
     "M27.12.7",
     "M27.12.8",
@@ -1350,6 +1351,7 @@
     "M27.7.12",
     "M27.7.13",
     "M27.7.14",
+    "M27.7.15",
     "M27.7.16",
     "M27.7.17",
     "M27.7.18",
@@ -1621,11 +1623,15 @@
     "M37.1.4.2",
     "M37.1.4.3",
     "M37.1.4.4",
+    "M37.2.2.2",
     "M37.2.2.3",
+    "M37.2.2.5",
     "M37.2.3.1",
     "M37.2.3.2",
     "M37.2.3.3",
+    "M37.2.3.4",
     "M37.2.4.1",
+    "M37.2.4.3",
     "M37.2.4.4",
     "M37.3.2.4",
     "M37.4.1.2",
@@ -1797,6 +1803,7 @@
     "M40.4.2.4",
     "M40.5.1.1",
     "M40.5.1.2",
+    "M40.5.1.4",
     "M40.5.2.1",
     "M40.5.2.2",
     "M40.5.2.3",
@@ -2420,37 +2427,7 @@
       "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): outbox.signed_request/signature_for sign each delivery in the worker alone (webhook_delivery reads the secret), sent through issue_once so a delivery is at-least-once with one effect per id. Test: test_outbox. NEXT: write check naming M17.5.2: dispatch to a local receiver, verify the signature with signature_matches and that a replay sends once",
       "updated": "2026-10-13"
     },
-    "M17.6.1": {
-      "status": "IN PROGRESS",
-      "why": "BUILT 2026-10-21, not yet proved on an install and no page draws it. brain.orchestration.workflow reads a stored, versioned definition (steps: tool, connector read, skill; named typed outputs; reads only earlier declared outputs; a condition over an output; parallel flag; retry and back-off; failure path stop, continue or handler). brain.orchestration.workflow_run runs it through a door, keeps statuses and words and no value, and says repeated failure; brain.workflow_routes writes, assigns and runs it (migration 0273, switch stored_workflows ships off) through call_piece at the asker's reach narrowed by the agent; install check acceptance_checks_workflow. Not built: a console page, a skill step's offered skills bound to the run, writes (the leash is empty so a step that changes something is stated as not offered), and the two-connector two-skill run of M17.6.8.",
-      "updated": "2026-10-20"
-    },
-    "M17.6.2": {
-      "status": "IN PROGRESS",
-      "why": "BUILT 2026-10-21, not yet proved on an install and no page draws it. brain.orchestration.workflow reads a stored, versioned definition (steps: tool, connector read, skill; named typed outputs; reads only earlier declared outputs; a condition over an output; parallel flag; retry and back-off; failure path stop, continue or handler). brain.orchestration.workflow_run runs it through a door, keeps statuses and words and no value, and says repeated failure; brain.workflow_routes writes, assigns and runs it (migration 0273, switch stored_workflows ships off) through call_piece at the asker's reach narrowed by the agent; install check acceptance_checks_workflow. Not built: a console page, a skill step's offered skills bound to the run, writes (the leash is empty so a step that changes something is stated as not offered), and the two-connector two-skill run of M17.6.8.",
-      "updated": "2026-10-20"
-    },
-    "M17.6.3": {
-      "status": "IN PROGRESS",
-      "why": "BUILT 2026-10-21, not yet proved on an install and no page draws it. brain.orchestration.workflow reads a stored, versioned definition (steps: tool, connector read, skill; named typed outputs; reads only earlier declared outputs; a condition over an output; parallel flag; retry and back-off; failure path stop, continue or handler). brain.orchestration.workflow_run runs it through a door, keeps statuses and words and no value, and says repeated failure; brain.workflow_routes writes, assigns and runs it (migration 0273, switch stored_workflows ships off) through call_piece at the asker's reach narrowed by the agent; install check acceptance_checks_workflow. Not built: a console page, a skill step's offered skills bound to the run, writes (the leash is empty so a step that changes something is stated as not offered), and the two-connector two-skill run of M17.6.8.",
-      "updated": "2026-10-20"
-    },
-    "M17.6.4": {
-      "status": "IN PROGRESS",
-      "why": "BUILT 2026-10-21, not yet proved on an install and no page draws it. brain.orchestration.workflow reads a stored, versioned definition (steps: tool, connector read, skill; named typed outputs; reads only earlier declared outputs; a condition over an output; parallel flag; retry and back-off; failure path stop, continue or handler). brain.orchestration.workflow_run runs it through a door, keeps statuses and words and no value, and says repeated failure; brain.workflow_routes writes, assigns and runs it (migration 0273, switch stored_workflows ships off) through call_piece at the asker's reach narrowed by the agent; install check acceptance_checks_workflow. Not built: a console page, a skill step's offered skills bound to the run, writes (the leash is empty so a step that changes something is stated as not offered), and the two-connector two-skill run of M17.6.8.",
-      "updated": "2026-10-20"
-    },
     "M17.6.5": {
-      "status": "IN PROGRESS",
-      "why": "BUILT 2026-10-21, not yet proved on an install and no page draws it. brain.orchestration.workflow reads a stored, versioned definition (steps: tool, connector read, skill; named typed outputs; reads only earlier declared outputs; a condition over an output; parallel flag; retry and back-off; failure path stop, continue or handler). brain.orchestration.workflow_run runs it through a door, keeps statuses and words and no value, and says repeated failure; brain.workflow_routes writes, assigns and runs it (migration 0273, switch stored_workflows ships off) through call_piece at the asker's reach narrowed by the agent; install check acceptance_checks_workflow. Not built: a console page, a skill step's offered skills bound to the run, writes (the leash is empty so a step that changes something is stated as not offered), and the two-connector two-skill run of M17.6.8.",
-      "updated": "2026-10-20"
-    },
-    "M17.6.6": {
-      "status": "IN PROGRESS",
-      "why": "BUILT 2026-10-21, not yet proved on an install and no page draws it. brain.orchestration.workflow reads a stored, versioned definition (steps: tool, connector read, skill; named typed outputs; reads only earlier declared outputs; a condition over an output; parallel flag; retry and back-off; failure path stop, continue or handler). brain.orchestration.workflow_run runs it through a door, keeps statuses and words and no value, and says repeated failure; brain.workflow_routes writes, assigns and runs it (migration 0273, switch stored_workflows ships off) through call_piece at the asker's reach narrowed by the agent; install check acceptance_checks_workflow. Not built: a console page, a skill step's offered skills bound to the run, writes (the leash is empty so a step that changes something is stated as not offered), and the two-connector two-skill run of M17.6.8.",
-      "updated": "2026-10-20"
-    },
-    "M17.6.7": {
       "status": "IN PROGRESS",
       "why": "BUILT 2026-10-21, not yet proved on an install and no page draws it. brain.orchestration.workflow reads a stored, versioned definition (steps: tool, connector read, skill; named typed outputs; reads only earlier declared outputs; a condition over an output; parallel flag; retry and back-off; failure path stop, continue or handler). brain.orchestration.workflow_run runs it through a door, keeps statuses and words and no value, and says repeated failure; brain.workflow_routes writes, assigns and runs it (migration 0273, switch stored_workflows ships off) through call_piece at the asker's reach narrowed by the agent; install check acceptance_checks_workflow. Not built: a console page, a skill step's offered skills bound to the run, writes (the leash is empty so a step that changes something is stated as not offered), and the two-connector two-skill run of M17.6.8.",
       "updated": "2026-10-20"
@@ -2484,11 +2461,6 @@
       "status": "IN PROGRESS",
       "why": "PARTLY BUILT 2026-10-14: control_not_run now has a sender through tell_later and the mail relay (brain.control_not_run_told), so seven of the fourteen notice kinds are sent. Still unsent: evening_digest (sent by the digest destination, not through tell_later), approval_request, budget_stopped, access_request, backup_exposure, emergency_access and self_grant. Not built: an undelivered state per notice on the Notifications screen. Delivery outcomes are already kept in ops.channel_delivery (refused and unknown included) but carry no notice kind, so showing them per notice needs the kind or the intent prefix recorded beside the outcome",
       "updated": "2026-10-14"
-    },
-    "M17.7.7": {
-      "status": "IN PROGRESS",
-      "why": "BUILT 2026-10-21, not yet proved on an install and no page draws it. brain.orchestration.workflow reads a stored, versioned definition (steps: tool, connector read, skill; named typed outputs; reads only earlier declared outputs; a condition over an output; parallel flag; retry and back-off; failure path stop, continue or handler). brain.orchestration.workflow_run runs it through a door, keeps statuses and words and no value, and says repeated failure; brain.workflow_routes writes, assigns and runs it (migration 0273, switch stored_workflows ships off) through call_piece at the asker's reach narrowed by the agent; install check acceptance_checks_workflow. Not built: a console page, a skill step's offered skills bound to the run, writes (the leash is empty so a step that changes something is stated as not offered), and the two-connector two-skill run of M17.6.8.",
-      "updated": "2026-10-20"
     },
     "M17.7.8": {
       "status": "BLOCKED",
@@ -2845,11 +2817,6 @@
       "why": "Built: the Staff sources page chooses a source, tests it before saving, and asks for a trial read the worker makes with nothing applied (ops.staff_connect, ops.staff_trial). The install proof needs the owner's own staff source; it is held with the other staff-list checks (needs-rupash 126).",
       "updated": "2026-10-21"
     },
-    "M27.7.15": {
-      "status": "READY FOR TESTING",
-      "why": "Built and wired, and now followed end to end by the install check `a_model_call_is_costed_and_a_used_up_budget_stops_the_next`: a department whose daily ceiling is used up has a stop recorded for its next question, listed to a reader of that department's spend with whether the install enforced it, and shown to nobody in another department. The check reads the enforcement switch and never sets it, so it passes on an install with enforcement off (the stop is listed as not enforced) and on one with it on. To prove it on the install: open Install, run the checks and read that check; the leaf closes when it passes on the install's two newest runs.",
-      "updated": "2026-10-21"
-    },
     "M27.7.23": {
       "status": "READY FOR TESTING",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (artifact_routes, pages/Artifacts.tsx, pages/operations/ArtifactsPage.tsx); open for proof on the install or a decision, not for code",
@@ -2890,20 +2857,10 @@
       "why": "Waits on needs-rupash item 188, point 2: the staff source and directory sync are managed from the console (built); the identity provider and the embedding size are read-only in Settings and the owner has not said whether to build the change or move it to the installer.",
       "updated": "2026-10-21"
     },
-    "M27.11.7": {
-      "status": "READY FOR TESTING",
-      "why": "BUILT: the Agent templates pages install a template from the gallery, withdraw a version and undo it, and save an agent as a template through the review that hoists every value out. Three install checks, each proving one clause on the install's own schema and routes, now name this leaf, so it closes when all three pass on the install's two newest runs: a built-in template installs as a disabled agent at Shadow (acceptance_checks_templates), an agent saved as a template is a draft only its author reads, reviewed with every value hoisted out and published once (acceptance_checks_templates_audience), and a withdrawn version is not offered while installed agents stay pinned (acceptance_checks_template_withdrawal). Install proof: open Agent templates, install one, withdraw a version with a reason and undo it.",
-      "updated": "2026-10-21"
-    },
     "M27.11.10": {
       "status": "READY FOR TESTING",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in credential_routes, ops.acceptance_operations_console_6, ops.credential_catalogue +9 more; NOT wired: pages/Credentials.route.tsx. MORE ELSEWHERE, read before building: closed PR #171's branch M27/console-credentials (may be replayed already)",
       "updated": "2026-10-06"
-    },
-    "M27.12.5": {
-      "status": "READY FOR TESTING",
-      "why": "Built and wired, and now followed end to end by the install check `a_model_call_is_costed_and_a_used_up_budget_stops_the_next`: a question answered by a priced stand-in model leaves one cost in its department equal to the tokens its request row recorded at the price set. To prove it on the install: open Install, run the checks, and read that check; the leaf closes when it passes on the install's two newest runs. It says it was not run, rather than failing, on an install with no currency set. Found on the way and fixed for every install: a question the checks ask was recorded with no trace on a budget stop, which the table refused, so the stop was silently not written.",
-      "updated": "2026-10-21"
     },
     "M27.13.3": {
       "status": "IN PROGRESS",
@@ -3480,34 +3437,14 @@
       "why": "TRIAGE 2026-10-13 class 2 (partly built): parallel.py: Period and Comparison hold an agreed window and per-question answers of both systems (tested). Nothing sends a question to both systems or records comparisons; no caller outside the package. NEXT: needs a runner that asks the old system via a plugin and records Comparison rows, plus a route; first build the store and recorder",
       "updated": "2026-10-13"
     },
-    "M37.2.2.2": {
-      "status": "READY FOR TESTING",
-      "why": "BUILT: POST /migration/skills/convert returns each pasted skill's description with the router preamble stripped as a draft for the reviewer, and lists the ones still written at a router. PROOF ON THE INSTALL: switch Keep a migration on under Features, paste a skill whose description begins Use the X skill to, and read the draft back. The check pasted_skills_are_converted_and_nothing_is_imported passes.",
-      "updated": "2026-10-20"
-    },
     "M37.2.2.4": {
       "status": "IN PROGRESS",
       "why": "PARTLY BUILT: the same route takes the real-task checks a person recorded and names every skill no task was run through and every one whose answer changed (skills.unproven). NOT BUILT: running the same task on both systems, which needs a person with the old system, and keeping the checks. NEXT: a store for behaviour checks shown on the skill review page.",
       "updated": "2026-10-20"
     },
-    "M37.2.2.5": {
-      "status": "READY FOR TESTING",
-      "why": "BUILT: POST /migration/skills/convert lists the pasted skills not invoked in ninety days and those never recorded as invoked, as ones to leave behind (skills.to_retire); retiring one is the existing retirement route. PROOF ON THE INSTALL: paste a skill with a last-invoked date a year old; it is listed. The check pasted_skills_are_converted_and_nothing_is_imported passes.",
-      "updated": "2026-10-20"
-    },
-    "M37.2.3.4": {
-      "status": "READY FOR TESTING",
-      "why": "BUILT: POST /migration/availability maps each pasted agent's availability to who may see it here from the mapping the person gives, names the agents whose availability nobody mapped and never defaults one, and leaves what the agent may reach to its authority. PROOF ON THE INSTALL: paste two agents with one availability unmapped; the unmapped one is named. The check availability_is_mapped_and_never_defaulted passes.",
-      "updated": "2026-10-20"
-    },
     "M37.2.4.2": {
       "status": "IN PROGRESS",
       "why": "PARTLY BUILT: POST /migration/learning re-derives each conclusion a person drew from an old memory file through the ordinary tier rules and returns the derivations (learning.re_derive). NOT BUILT: filing each derivation into the memory proposal queue, which would put a proposal in front of a reviewer. NEXT: a call from the route into agent_memory_routes' queue behind its own switch.",
-      "updated": "2026-10-20"
-    },
-    "M37.2.4.3": {
-      "status": "READY FOR TESTING",
-      "why": "BUILT: the same route refuses, by name and in the package's words, any conclusion that would change who may see what, without stopping the others. PROOF ON THE INSTALL: paste a memory file with a preference and a scope-widening conclusion; only the preference is derived. The check a_conclusion_is_re_derived_and_a_widening_is_refused passes.",
       "updated": "2026-10-20"
     },
     "M37.5.1.2": {
@@ -3755,11 +3692,6 @@
       "why": "built: POST /me/accounts/{connector}/disconnect (member_accounts_routes) revokes at the vendor then removes the person's slot through ops/person_token_revoker.VaultTokenRevoker, in the order member.connections.disconnect requires; Google Workspace now declares its revocation endpoint; the application vault policy gains delete on a person's own slot only. Check: a_member_disconnects_their_account_and_the_vendor_is_told_first in ops/acceptance_checks_member_accounts.py, over a recording vendor and vault. NOT provable in CI: that the vendor stops honouring the token, and that the install's vault holds the new policy line (the release applies it). To prove on the install: after the release, connect your own Google account from My workspace, press Disconnect my Google account and confirm; the card must show Not connected, and at your Google account's third-party access page the install must no longer be listed.",
       "updated": "2026-10-20"
     },
-    "M40.5.1.4": {
-      "status": "READY FOR TESTING",
-      "why": "built: GET /me/accounts lists a connected source that names the person's own department (and that each person does not consent to) with provenance department and no disconnect control, through member.connections.inherited; a person in another department is shown nothing. A department connection is defined here as a connected source naming a department the person holds a grant scoped to exactly (no separate department-connection object exists). Check: a_departments_connection_is_inherited_and_not_detachable in ops/acceptance_checks_member_accounts.py. To prove on the install: as a member of a department that has a source connected, open My workspace and read the Connected accounts card; the source must show as provided by the department with no button, and a member of another department must not see it.",
-      "updated": "2026-10-20"
-    },
     "M40.6.1.2": {
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 2 (partly built): Approve and reject written to the ledger via approval_routes take_decision and audit approval entries. Amend is explicitly not offered (AMENDING_WAITS_FOR_A_REPLACEMENT_RAISED_THROUGH_THE_GATE in approval_routes). NEXT: build amend as reject plus a replacement raised through the gate, then a check; until then a check can cover approve and reject only",
@@ -3983,11 +3915,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 31,
+  "closed_today": 46,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "b7d8922",
+      "at": "2026-10-21T10:17:17+00:00",
+      "subject": "15 more tasks are proved on the install by the newest complete acceptance run",
+      "closed": "M17.6.1,M17.6.2,M17.6.3,M17.6.4,M17.6.6,M17.6.7,M17.7.7,M27.11.7,M27.12.5,M27.7.15,M37.2.2.2,M37.2.2.5,M37.2.3.4,M37.2.4.3,M40.5.1.4"
+    },
     {
       "sha": "44fe5d8",
       "at": "2026-10-21T09:56:29+00:00",
@@ -4101,12 +4039,6 @@
       "at": "2026-10-15T04:30:43+00:00",
       "subject": "A task is proved on the install by the newest complete acceptance run: documents from approved templates",
       "closed": "M12.3.5"
-    },
-    {
-      "sha": "2a58d07",
-      "at": "2026-10-15T04:08:12+00:00",
-      "subject": "Every grid in the console is drawn through TanStack Table, and the Artifacts list pages on the server (M32.5.2.1) (#605)",
-      "closed": "M32.5.2.1"
     }
   ]
 }
