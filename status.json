@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-21T08:42:10.421136+00:00",
-  "commit": "86f410a1",
-  "commit_subject": "Browser recordings are removed when due and held while a hold names them; limits and the halt are shown on the install (M19.6.5, M19.6.6, M19.9.9, M19.9.11) (#663)",
+  "generated_at": "2026-10-21T08:53:27.245031+00:00",
+  "commit": "7201a94b",
+  "commit_subject": "A person the staff sync moves has the automations that would now reach less paused (M26.2.3, switch off) (#659)",
   "total": 1626,
-  "done": 1188,
+  "done": 1189,
   "percent": 73.1,
-  "built": 1373,
-  "built_percent": 84.4,
+  "built": 1374,
+  "built_percent": 84.5,
   "built_unproven": 185,
   "built_task_ids": [
     "M1.1.8",
@@ -263,16 +263,16 @@
       "wave": 4,
       "name": "Doing, lifecycle, extensions",
       "total": 232,
-      "done": 121,
-      "percent": 52.2,
+      "done": 122,
+      "percent": 52.6,
       "in_progress": 59,
       "ready_for_testing": 32,
-      "blocked": 16,
+      "blocked": 15,
       "open": 4,
       "acts": 0,
       "decided": 23,
-      "built": 152,
-      "built_percent": 65.5
+      "built": 153,
+      "built_percent": 65.9
     },
     {
       "wave": 5,
@@ -571,10 +571,10 @@
       "name": "Joiner, mover, leaver",
       "wave": 4,
       "total": 16,
-      "done": 5,
+      "done": 6,
       "acts": 0,
       "decided": 1,
-      "built": 12
+      "built": 13
     },
     {
       "module": "M27",
@@ -1216,6 +1216,7 @@
     "M25.2.3",
     "M25.3.1",
     "M26.1.4",
+    "M26.2.3",
     "M26.3.1",
     "M26.3.3",
     "M26.3.4",
@@ -2811,11 +2812,6 @@
       "why": "TRIAGE 2026-10-13 class 2 (partly built): Personal agents follow the person by construction: E_run is the caller's reach intersected with the agent ceiling (gate.leash.decide), so a moved owner's agent reaches the new department. lifecycle.agents_following has no caller. Not verified that a personal agent's audience record updates on a move. NEXT: Check naming M26.2.2: move an owner, call their personal agent, assert old-department knowledge is not reached; fix the agent audience if it fails.",
       "updated": "2026-10-13"
     },
-    "M26.2.3": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): identity.lifecycle.reevaluate_delegations (suspend, never narrow) and Reconfirmation are built and tested but no caller; no delegation table or route exists on main (grep delegation in tables and routes). Nearest live object is an automation owner (M26.3.3). NEXT: Decide what a delegation is on this install (elevation, automation owner or a new object), then call reevaluate_delegations from the sync run when a move changes reach.",
-      "updated": "2026-10-13"
-    },
     "M26.2.4": {
       "status": "READY FOR TESTING",
       "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): Answer cache key includes the entitlement hash (gate.answer_cache, cache_key); check M6.5.2 shows a person who moved department was refused the cached answer (acceptance_checks_cache.py:196). Test test_answer_cache. NEXT: Add M26.2.4 to that check's leaves=(...).",
@@ -2827,9 +2823,9 @@
       "updated": "2026-10-13"
     },
     "M26.2.7": {
-      "status": "BLOCKED",
-      "why": "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Roll-up test leaf: tests/unit/test_lifecycle.py covers the pure module, but several clauses it covers (provision, delegations, welcome) are not wired, so a test of every item above has nothing end to end to run.",
-      "updated": "2026-10-13"
+      "status": "IN PROGRESS",
+      "why": "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Roll-up test leaf: tests/unit/test_lifecycle.py covers the pure module, but several clauses it covers (provision, delegations, welcome) are not wired, so a test of every item above has nothing end to end to run. 2026-10-20 ROLL-UP BUILT, NOT YET ABLE TO PASS: acceptance_checks_jml_roll_up.every_mover_leaf_is_shown_clause_by_clause_in_this_run reads the checks for M26.2.1 to M26.2.6 and is not run while any has none (M26.2.2 is on another branch and M26.2.5 has no install check). tests/unit/test_mover_end_to_end.py drives the staff run and asks the reach, cache key, memory, automation and knowledge rules of one mover on the state it leaves. A person runs the install checks; this closes when every clause check passes in one run.",
+      "updated": "2026-10-20"
     },
     "M26.3.2": {
       "status": "READY FOR TESTING",
@@ -2838,8 +2834,8 @@
     },
     "M26.4.1": {
       "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): Roll-up proof (a check can be written once clauses exist) across joiner, mover and leaver; clauses depend on unwired parts (delegations M26.2.3, personal knowledge disposition M26.3.4, ended grant mid-run, external person end date). NEXT: Waits on M26.2.3 and M26.3.4, then a person runs it and the checks are recorded.",
-      "updated": "2026-10-13"
+      "why": "TRIAGE 2026-10-13 class 2 (partly built): Roll-up proof (a check can be written once clauses exist) across joiner, mover and leaver; clauses depend on unwired parts (delegations M26.2.3, personal knowledge disposition M26.3.4, ended grant mid-run, external person end date). NEXT: Waits on M26.2.3 and M26.3.4, then a person runs it and the checks are recorded. 2026-10-20 ROLL-UP BUILT, NOT YET ABLE TO PASS: acceptance_checks_jml_roll_up.joiner_mover_leaver_is_shown_clause_by_clause_in_this_run reads the clause checks and names any clause with none: a personal agent following its owner (M26.2.2, another branch), memories of the old reach (M26.2.5), a run stopping on a revoked grant (M13.8.2, has a check), an external person's end date (M1.8.1) and a service key stopping with its owner (M1.8.2), neither of which has a check, and an owned item a person can no longer reach leaving their workspace, which no leaf names. It stays not run, never passed, until each is shown.",
+      "updated": "2026-10-20"
     },
     "M27.1.5": {
       "status": "IN PROGRESS",
@@ -4019,11 +4015,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 22,
+  "closed_today": 23,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "7201a94",
+      "at": "2026-10-21T08:41:20+00:00",
+      "subject": "A person the staff sync moves has the automations that would now reach less paused (M26.2.3, switch off) (#659)",
+      "closed": "M26.2.3"
+    },
     {
       "sha": "86f410a",
       "at": "2026-10-21T08:11:09+00:00",
@@ -4137,12 +4139,6 @@
       "at": "2026-10-14T09:08:07+00:00",
       "subject": "239 tasks are proved on the install by one complete acceptance run",
       "closed": "M10.7.6,M10.7.7,M10.7.8,M11.9.16,M11.9.17,M12.2.8,M12.3.3,M12.4.10,M12.4.14,M12.4.4,M13.7.1,M13.7.7,M13.8.15,M13.8.17,M13.8.19,M13.9.1,M14.3.1,M14.7.1,M14.7.2,M14.8.1,M15.3.1,M16.2.2,M16.2.4,M16.3.2,M16.6.1,M16.6.7,M16.7.14,M16.7.3,M17.1.3,M17.2.2,M17.2.4,M17.2.5,M17.3.1,M17.3.2,M17.3.3,M17.3.4,M17.3.5,M17.4.2,M17.4.3,M17.4.4,M17.5.3,M17.7.9,M18.3.1,M18.3.2,M18.3.3,M19.2.1,M19.2.2,M19.2.3,M19.5.1,M19.5.3,M19.5.4,M19.6.2,M19.6.3,M19.9.3,M20.1.1,M20.4.2,M21.1.4,M21.1.5,M21.2.3,M21.3.1,M21.3.2,M21.3.3,M21.3.4,M21.3.5,M21.3.6,M22.2.2,M25.1.1,M25.1.2,M25.1.3,M25.1.5,M25.2.3,M25.3.1,M26.1.4,M26.3.1,M26.3.3,M26.3.4,M27.10.5,M27.11.15,M27.11.6,M27.11.9,M27.12.3,M27.12.4,M27.12.6,M27.12.8,M27.13.2,M27.13.6,M27.13.7,M27.15.14,M27.15.17,M27.15.18,M27.15.25,M27.15.27,M27.15.28,M27.15.29,M27.15.3,M27.15.30,M27.15.33,M27.15.37,M27.15.4,M27.15.40,M27.15.44,M27.15.45,M27.15.54,M27.15.6,M27.15.61,M27.2.5,M27.2.6,M27.2.7,M27.2.8,M27.3.11,M27.3.12,M27.5.5,M27.7.17,M27.7.20,M27.7.22,M27.7.25,M28.2.2,M28.2.4,M28.3.1,M28.3.2,M28.3.3,M28.4.1,M28.5.1,M28.5.3,M29.1.12,M29.1.2,M29.1.3,M29.1.4,M29.1.5,M29.1.7,M29.2.1,M29.2.2,M29.2.3,M29.2.6,M30.3.5,M30.4.6,M30.4.7,M30.5.2,M30.6.9,M32.3.1.3,M33.1.1.3,M33.2.2.4,M33.4.1.3,M33.5.1.3,M33.7.1.3,M33.8.3,M34.2.2.3,M34.3.1.1,M34.3.1.2,M34.3.2.1,M34.4.1,M35.1.1.3,M35.1.2.1,M35.1.2.2,M35.1.2.3,M35.3.2.1,M35.3.2.2,M35.4.5,M36.1.1.1,M36.1.1.4,M36.1.2.2,M36.1.3.2,M36.1.4.3,M36.2.1.1,M36.2.1.2,M36.2.4.2,M37.2.2.3,M37.2.3.1,M37.2.3.2,M37.2.3.3,M37.3.2.4,M39.1.1.1,M39.10.1,M39.10.2,M39.10.6,M39.11.1,M39.11.2,M39.2.3.5,M39.2.4.4,M39.7.1,M39.8.1,M39.9.1.1,M39.9.1.2,M39.9.1.4,M39.9.1.6,M39.9.1.8,M39.9.2.1,M39.9.2.2,M39.9.2.4,M39.9.2.5,M40.1.1.1,M40.1.1.2,M40.1.1.3,M40.1.1.5,M40.1.2.1,M40.1.2.2,M40.1.2.4,M40.2.1.1,M40.2.1.2,M40.2.1.4,M40.2.2.1,M40.2.2.4,M40.2.2.5,M40.3.1.1,M40.3.1.4,M40.3.1.5,M40.3.3.1,M40.3.3.3,M40.4.1.2,M40.4.1.4,M40.4.2.1,M40.4.2.4,M40.5.1.1,M40.5.1.2,M40.5.2.1,M40.5.2.2,M40.5.2.3,M40.5.2.4,M40.6.1.1,M40.6.1.3,M40.6.1.4,M42.1.1,M42.2.3,M42.2.8,M42.3.1,M42.3.2,M42.3.3,M42.3.6,M42.3.9,M42.5.1,M42.5.11,M42.5.15,M42.6.2,M42.6.3,M42.6.4,M6.2.3,M6.2.4,M6.2.5,M7.2.6"
-    },
-    {
-      "sha": "503fc3d",
-      "at": "2026-10-14T09:01:43+00:00",
-      "subject": "Nine Wave 1 tasks are proved on the install by the owner's own tests",
-      "closed": "M1.10.1,M1.10.3,M1.10.4,M1.10.5,M1.6.13,M1.6.16,M1.6.17,M1.6.18,M1.6.19"
     }
   ]
 }
