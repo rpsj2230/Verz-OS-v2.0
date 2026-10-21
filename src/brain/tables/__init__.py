@@ -51,6 +51,7 @@ from brain.tables.access_request import AccessRequestHandledRow, AccessRequestRo
 from brain.tables.adoption import QuestionAskedRow
 from brain.tables.agent import AgentRow
 from brain.tables.agent_automation import AgentAutomationRow
+from brain.tables.agent_coordination import AgentCalleeRow, AgentFanoutRow
 from brain.tables.agent_item_use import AgentItemUseRow
 from brain.tables.agent_run import AgentRunRow
 from brain.tables.alert_acknowledgement import AlertAcknowledgementRow
@@ -75,6 +76,7 @@ from brain.tables.compliance import BreachCaseRow, SensitiveReferralRow
 from brain.tables.config import SettingRow, SettingType
 from brain.tables.connector_connection import ConnectorConnectionRow
 from brain.tables.connector_sync import ConnectorSyncRow
+from brain.tables.coordinated_run import CoordinatedRunRow
 from brain.tables.credential import CredentialWriteRow
 from brain.tables.custom_connector import CustomConnectorRow
 from brain.tables.data_export import DataExportRow
@@ -578,6 +580,11 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0261_template_withdrawal. Points at the template version it withdraws, so it follows it; the
     # person is a value.
     "agent.template_withdrawal",
+    # 0272_agent_coordination. Points at nothing: an agent and a person are values, so a link, a
+    # fan-out grant and a kept run outlive both.
+    "agent.agent_callee",
+    "agent.agent_fanout",
+    "ops.coordinated_run",
 )
 
 __all__ = [
@@ -589,6 +596,8 @@ __all__ = [
     "ActionVerdictRow",
     "AdaptiveMemoryRow",
     "AgentAutomationRow",
+    "AgentCalleeRow",
+    "AgentFanoutRow",
     "AgentItemUseRow",
     "AgentRequestRow",
     "AgentRow",
@@ -631,6 +640,7 @@ __all__ = [
     "ConnectorSyncRow",
     "ControlRunRow",
     "ConversationRow",
+    "CoordinatedRunRow",
     "CorrectionRow",
     "CredentialWriteRow",
     "CustomConnectorRow",
