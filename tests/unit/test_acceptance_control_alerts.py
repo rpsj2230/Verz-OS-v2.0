@@ -9,7 +9,7 @@ sentence.
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M17.7.2
+Task ids: M17.7.2, M37.5.1.3, M37.5.2.1
 """
 
 from __future__ import annotations
@@ -31,11 +31,12 @@ def mine() -> dict[str, Check]:
     return {one.name: one for one in registered((MODULE,))}
 
 
-def test_the_control_alert_check_is_listed_for_its_one_leaf() -> None:
-    """The one check this module registers, proving the leaf it was scoped to. Delete this and it
-    can drop out of the page, or close a leaf it does not exercise."""
+def test_the_control_alert_check_is_listed_for_its_three_leaves() -> None:
+    """The one check this module registers, proving the leaves it was scoped to: that a missed
+    window is told (M37.5.1.3) and to whom by severity (M37.5.2.1). Delete this and it can drop out
+    of the page, or close a leaf it does not exercise."""
     assert checks_in(MODULE) == [ALERT]
-    assert mine()[ALERT].leaves == ("M17.7.2",)
+    assert mine()[ALERT].leaves == ("M17.7.2", "M37.5.1.3", "M37.5.2.1")
     assert MODULE in check_modules()
 
 

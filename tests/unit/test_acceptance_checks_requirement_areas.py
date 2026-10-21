@@ -1,7 +1,7 @@
-"""The install checks for four areas' "demonstrated on an install by a person" leaves, passing on
+"""The install checks for five areas' "demonstrated on an install by a person" leaves, passing on
 PostgreSQL once people have recorded their checks and refusing to pass before.
 
-The pure half holds the module against the screen it reads: the four areas are the four the screen
+The pure half holds the module against the screen it reads: the five areas are the five the screen
 names for these leaves, and the key sits in the range this package was given. The database half
 runs the module as the worker would, over a register of its own written for the test, and shows
 each outcome: not run while a requirement has no recorded check, failed when the newest check is a
@@ -10,7 +10,7 @@ superseding an earlier failure without the earlier row being edited.
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M1.8.8, M2.3.2, M5.6.5, M24.3.6
+Task ids: M1.8.8, M2.3.2, M5.6.5, M24.3.6, M27.15.12
 """
 
 from __future__ import annotations
@@ -40,17 +40,19 @@ PERMISSIONS = "every_permissions_requirement_is_shown_working_by_a_person"
 DEPARTMENTS = "every_departments_requirement_is_shown_working_by_a_person"
 MODELS = "every_models_requirement_is_shown_working_by_a_person"
 OBSERVABILITY = "every_observability_requirement_is_shown_working_by_a_person"
+CONSOLE = "every_console_requirement_is_shown_working_by_a_person"
 
 #: A register of the test's own, so the outcome never depends on the shipped register's rows.
 ROWS = (
     ("TEST-P-1", "Permissions"),
     ("TEST-P-2", "Permissions"),
     ("TEST-M-1", "Models"),
+    ("TEST-C-1", "Console"),
 )
 
 
 # ------------------------------------------------------------------------ the figures
-def test_the_module_declares_one_check_for_each_of_the_four_leaves() -> None:
+def test_the_module_declares_one_check_for_each_of_the_five_leaves() -> None:
     """One check per leaf, each naming only its own. Delete this and one check can name two
     leaves, so one area's failure holds another area's leaf open, or lose a leaf the page shows."""
     assert {one.name: one.leaves for one in registered((MODULE,))} == {
@@ -58,16 +60,19 @@ def test_the_module_declares_one_check_for_each_of_the_four_leaves() -> None:
         DEPARTMENTS: ("M2.3.2",),
         MODELS: ("M5.6.5",),
         OBSERVABILITY: ("M24.3.6",),
+        CONSOLE: ("M27.15.12",),
     }
-    assert sorted(checks_in(MODULE)) == sorted([PERMISSIONS, DEPARTMENTS, MODELS, OBSERVABILITY])
+    assert sorted(checks_in(MODULE)) == sorted(
+        [PERMISSIONS, DEPARTMENTS, MODELS, OBSERVABILITY, CONSOLE]
+    )
 
 
-def test_the_four_areas_are_the_four_the_screen_names_for_these_leaves() -> None:
+def test_the_five_areas_are_the_five_the_screen_names_for_these_leaves() -> None:
     """Held against the Requirement checks screen's own map, which the module does not import.
     Delete this and an area can be renamed on the screen while this check keeps looking for a
     name the register no longer carries, and the leaf then says not run for ever."""
     assert {area: CHECKED_BY[area] for area in AREAS} == AREAS
-    assert set(AREAS) == {"Permissions", "Departments", "Models", "Observability"}
+    assert set(AREAS) == {"Permissions", "Departments", "Models", "Observability", "Console"}
 
 
 def test_the_module_sits_in_the_range_this_package_was_given() -> None:
@@ -166,6 +171,7 @@ def test_the_checks_say_not_run_until_a_person_has_recorded_every_requirement(
     assert first[MODELS] == (NOT_RUN, SOME_REQUIREMENT_HAS_NO_RECORDED_CHECK)
     assert first[DEPARTMENTS] == (NOT_RUN, THIS_RELEASE_CARRIES_NO_REGISTER)
     assert first[OBSERVABILITY] == (NOT_RUN, THIS_RELEASE_CARRIES_NO_REGISTER)
+    assert first[CONSOLE] == (NOT_RUN, SOME_REQUIREMENT_HAS_NO_RECORDED_CHECK)
     record(install, "TEST-P-1", CheckOutcome.PASSED)
     assert run_areas(install)[PERMISSIONS] == (NOT_RUN, SOME_REQUIREMENT_HAS_NO_RECORDED_CHECK)
 
@@ -199,3 +205,21 @@ def test_a_failing_newest_check_fails_the_area_until_a_person_passes_it_again(
     assert "TEST-P-1" not in reason
     record(install, "TEST-P-1", CheckOutcome.PASSED)
     assert run_areas(install)[PERMISSIONS] == (PASSED, "")
+
+
+@pytest.mark.needs_db
+def test_the_console_area_passes_on_its_own_requirements_and_fails_on_a_failing_one(
+    install: str, register: None
+) -> None:
+    """The console's one requirement, passed by a person, passes the console's check and leaves
+    the models one, whose requirement nobody has recorded, waiting; a failure recorded after it
+    fails the console's check alone.
+    Delete this and the console's leaf is either never reachable or is held by another area."""
+    record(install, "TEST-C-1", CheckOutcome.PASSED)
+    results = run_areas(install)
+    assert results[CONSOLE] == (PASSED, "")
+    assert results[MODELS][0] == NOT_RUN
+    record(install, "TEST-C-1", CheckOutcome.FAILED)
+    outcome, reason = run_areas(install)[CONSOLE]
+    assert outcome == FAILED
+    assert "TEST-C-1" not in reason

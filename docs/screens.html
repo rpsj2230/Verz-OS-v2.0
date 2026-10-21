@@ -316,7 +316,7 @@
 
 <!-- ============ 1 ============ -->
 <section class="scr">
-  <div class="scrhead">
+  <div class="scrhead" id="screen-1">
     <span class="scrnum">SCREEN 1</span>
     <h2>Company Overview</h2>
     <span class="who">Super Admin</span>
@@ -467,7 +467,7 @@
 
 <!-- ============ 2 ============ -->
 <section class="scr">
-  <div class="scrhead">
+  <div class="scrhead" id="screen-2">
     <span class="scrnum">SCREEN 2</span>
     <h2>Department Console</h2>
     <span class="who">Department Admin &middot; Maintenance</span>
@@ -589,7 +589,7 @@
 
 <!-- ============ 3 ============ -->
 <section class="scr">
-  <div class="scrhead">
+  <div class="scrhead" id="screen-3">
     <span class="scrnum">SCREEN 3</span>
     <h2>Ask</h2>
     <span class="who">Member &middot; everyone else</span>
@@ -666,7 +666,7 @@
 
 <!-- ============ 4 ============ -->
 <section class="scr">
-  <div class="scrhead">
+  <div class="scrhead" id="screen-4">
     <span class="scrnum">SCREEN 4</span>
     <h2>Agents</h2>
     <span class="who">Super Admin &middot; all departments</span>
@@ -736,7 +736,7 @@
 
 <!-- ============ 5 ============ -->
 <section class="scr">
-  <div class="scrhead">
+  <div class="scrhead" id="screen-5">
     <span class="scrnum">SCREEN 5</span>
     <h2>Agent Templates</h2>
     <span class="who">Super Admin &middot; catalogue</span>
@@ -824,7 +824,7 @@
 
 <!-- ============ 6 ============ -->
 <section class="scr">
-  <div class="scrhead">
+  <div class="scrhead" id="screen-6">
     <span class="scrnum">SCREEN 6</span>
     <h2>Skills</h2>
     <span class="who">Super Admin &middot; all departments</span>
@@ -890,7 +890,7 @@
 
 <!-- ============ 7 ============ -->
 <section class="scr">
-  <div class="scrhead">
+  <div class="scrhead" id="screen-7">
     <span class="scrnum">SCREEN 7</span>
     <h2>Knowledge</h2>
     <span class="who">Super Admin &middot; every department</span>
@@ -960,7 +960,7 @@
 
 <!-- ============ 8 ============ -->
 <section class="scr">
-  <div class="scrhead">
+  <div class="scrhead" id="screen-8">
     <span class="scrnum">SCREEN 8</span>
     <h2>Learning</h2>
     <span class="who">Super Admin &middot; every department</span>
@@ -1028,7 +1028,7 @@
 
 <!-- ============ 9 ============ -->
 <section class="scr">
-  <div class="scrhead">
+  <div class="scrhead" id="screen-9">
     <span class="scrnum">SCREEN 9</span>
     <h2>Connectors</h2>
     <span class="who">Super Admin &middot; company-wide</span>
@@ -1090,7 +1090,7 @@
 
 <!-- ============ 10 ============ -->
 <section class="scr">
-  <div class="scrhead">
+  <div class="scrhead" id="screen-10">
     <span class="scrnum">SCREEN 10</span>
     <h2>People and Grants</h2>
     <span class="who">Super Admin &middot; company &rarr; departments &rarr; users</span>
@@ -1167,7 +1167,7 @@
 
 <!-- ============ 11 ============ -->
 <section class="scr">
-  <div class="scrhead">
+  <div class="scrhead" id="screen-11">
     <span class="scrnum">SCREEN 11</span>
     <h2>Models</h2>
     <span class="who">Super Admin &middot; routing and cost</span>
@@ -1232,7 +1232,7 @@
 
 <!-- ============ 12 ============ -->
 <section class="scr">
-  <div class="scrhead">
+  <div class="scrhead" id="screen-12">
     <span class="scrnum">SCREEN 12</span>
     <h2>My Workspace</h2>
     <span class="who">Member &middot; signed in on the web</span>
@@ -1342,7 +1342,7 @@
 
 <!-- ============ 13 ============ -->
 <section class="scr">
-  <div class="scrhead">
+  <div class="scrhead" id="screen-13">
     <span class="scrnum">SCREEN 13</span>
     <h2>Inside an Agent</h2>
     <span class="who">Department Admin &middot; Site Health Sentinel</span>
@@ -1505,7 +1505,7 @@
 
 <!-- ============ 14 ============ -->
 <section class="scr">
-  <div class="scrhead">
+  <div class="scrhead" id="screen-14">
     <span class="scrnum">SCREEN 14</span>
     <h2>Agent Detail</h2>
     <span class="who">Department Admin &middot; Ticket triage</span>
@@ -1738,6 +1738,726 @@
   </div>
 </section>
 
+
+<!-- ============ 15 onward: the other primary pages ============ -->
+<div class="callout"><b>Screens 15 onward draw the console's other primary pages.</b> Screens 1 to 14 are the designs the console was first built to. Every page the menu serves has a screen here, so none is a page nobody drew: these are wireframes, showing each page's layout, its controls and its words, with example values in place of data. A page is rebuilt only once its screen is drawn, and <a href="/build/pages">the list of pages</a> says where each one stands.</div>
+
+<!-- ============ 15 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-15">
+    <span class="scrnum">SCREEN 15</span>
+    <h2>Whole company</h2>
+    <span class="who">Administrator &middot; /company/estate</span>
+  </div>
+  <p class="scrjob">Every agent, skill, document and connector the reader may see, by department and by person. Existence only: no content, and no count of what the reader may not see.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Home &rsaquo; <em>Whole company</em></span>
+      <span class="filters"><span class="act">Export</span></span>
+    </div>
+    <div class="panebody">
+      <div class="seg"><div class="tabs"><span class="tab on">Everything</span><span class="tab">Activity</span><span class="tab">Consumption</span></div></div>
+      <div class="filters"><span class="fchip">Kind</span><span class="fchip">Department</span><span class="fchip">Person</span><span class="fchip">Clear the filters</span></div>
+      <div class="card"><h3>Everything you may see</h3><div class="in"><table><thead><tr><th>Name</th><th>Kind</th></tr></thead><tbody><tr><td class="name">Example A</td><td>Detail</td></tr><tr><td class="name">Example B</td><td>Detail</td></tr><tr><td class="name">Example C</td><td>Detail</td></tr></tbody></table></div></div>
+      <div class="hint"><b>When there is nothing: Nothing to show.</b> Nothing you may see matches these filters.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 16 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-16">
+    <span class="scrnum">SCREEN 16</span>
+    <h2>Roles and permissions</h2>
+    <span class="who">Administrator &middot; /roles</span>
+  </div>
+  <p class="scrjob">The six platform roles, who holds each, and which directory groups confer one. A role grants nothing: what a person can do is what they hold, shown on their own page.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; People and access &rsaquo; <em>Roles and permissions</em></span>
+      <span class="filters"><span class="act solid">Appoint</span><span class="act">Appoint a deputy</span><span class="act">Nominate</span><span class="act">Map a group</span></span>
+    </div>
+    <div class="panebody">
+      <div class="seg"><div class="tabs"><span class="tab on">Roles</span><span class="tab">Capabilities</span><span class="tab">Scopes</span><span class="tab">Packs</span></div></div>
+      <div class="card"><h3>Roles</h3><div class="in"><table><thead><tr><th>Role</th><th>Exists to</th><th>Usually held by</th><th>Scope</th></tr></thead><tbody><tr><td class="name">Example A</td><td>Detail</td><td>Detail</td><td>Detail</td></tr><tr><td class="name">Example B</td><td>Detail</td><td>Detail</td><td>Detail</td></tr><tr><td class="name">Example C</td><td>Detail</td><td>Detail</td><td>Detail</td></tr></tbody></table></div></div>
+      <div class="card"><h3>Who holds a role</h3><div class="in"><table><thead><tr><th>Person</th><th>Role</th><th>Over</th><th>Until</th><th></th></tr></thead><tbody><tr><td class="name">Person A</td><td>Example A</td><td>Detail</td><td>Detail</td><td style="text-align:right"><span class="act quiet">Withdraw</span></td></tr><tr><td class="name">Person B</td><td>Example B</td><td>Detail</td><td>Detail</td><td style="text-align:right"><span class="act quiet">Withdraw</span></td></tr><tr><td class="name">Person C</td><td>Example C</td><td>Detail</td><td>Detail</td><td style="text-align:right"><span class="act quiet">Withdraw</span></td></tr></tbody></table></div></div>
+      <div class="card"><h3>Nominations</h3><div class="in"><table><thead><tr><th>Person</th><th>Role</th><th>Why</th><th>State</th><th></th></tr></thead><tbody><tr><td class="name">Person A</td><td>Example A</td><td>Detail</td><td><span class="pill ok">Active</span></td><td style="text-align:right"><span class="act quiet">Decide</span></td></tr><tr><td class="name">Person B</td><td>Example B</td><td>Detail</td><td><span class="pill neu">Off</span></td><td style="text-align:right"><span class="act quiet">Decide</span></td></tr><tr><td class="name">Person C</td><td>Example C</td><td>Detail</td><td><span class="pill warn">Waiting</span></td><td style="text-align:right"><span class="act quiet">Decide</span></td></tr></tbody></table></div></div>
+      <div class="card"><h3>Directory groups</h3><div class="in"><table><thead><tr><th>Group</th><th>Role</th><th>Since</th><th></th></tr></thead><tbody><tr><td class="name">Example A</td><td>Example A</td><td>2 Mar, 09:14</td><td style="text-align:right"><span class="act quiet">Retire</span></td></tr><tr><td class="name">Example B</td><td>Example B</td><td>28 Feb, 16:40</td><td style="text-align:right"><span class="act quiet">Retire</span></td></tr><tr><td class="name">Example C</td><td>Example C</td><td>11 Feb, 08:02</td><td style="text-align:right"><span class="act quiet">Retire</span></td></tr></tbody></table></div></div>
+      <div class="hint">Approver role and approve permission: a list of people who hold one without the other, each with the one act that fixes it.</div>
+      <div class="hint"><b>When there is nothing: Nobody you may see holds a role.</b> Each panel says its own empty sentence.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 17 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-17">
+    <span class="scrnum">SCREEN 17</span>
+    <h2>Access reviews and elevation</h2>
+    <span class="who">Administrator &middot; /access_review</span>
+  </div>
+  <p class="scrjob">Keep what still belongs and remove what does not. Every decision is recorded with the reviewer&#x27;s name, and a grant never reviewed rises to the top.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; People and access &rsaquo; <em>Access reviews and elevation</em></span>
+      <span class="filters"><span class="act solid">Export certification report</span><span class="act">Keep selected</span><span class="act">Withdraw selected</span></span>
+    </div>
+    <div class="panebody">
+      <div class="seg"><div class="tabs"><span class="tab on">Access review</span><span class="tab">Elevation requests</span></div></div>
+      <div class="filters"><span class="fchip">Department</span><span class="fchip">Person</span><span class="fchip">Reviewed</span><span class="fchip">Kind</span><span class="fchip">Search people and grants</span><span class="fchip">Sort by</span></div>
+      <div class="card"><h3>Grants to review</h3><div class="in"><table><thead><tr><th>Person</th><th>Holds</th><th>Granted</th><th>Lapses</th><th>Last review</th><th></th></tr></thead><tbody><tr><td class="name">Person A</td><td>Detail</td><td>2 Mar, 09:14</td><td>2 Mar, 09:14</td><td>2 Mar, 09:14</td><td style="text-align:right"><span class="act quiet">Keep / Withdraw</span></td></tr><tr><td class="name">Person B</td><td>Detail</td><td>28 Feb, 16:40</td><td>28 Feb, 16:40</td><td>28 Feb, 16:40</td><td style="text-align:right"><span class="act quiet">Keep / Withdraw</span></td></tr><tr><td class="name">Person C</td><td>Detail</td><td>11 Feb, 08:02</td><td>11 Feb, 08:02</td><td>11 Feb, 08:02</td><td style="text-align:right"><span class="act quiet">Keep / Withdraw</span></td></tr></tbody></table></div></div>
+      <div class="hint"><b>When there is nothing: No grants to review.</b> A grant appears here when somebody is given access you could have granted yourself.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 18 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-18">
+    <span class="scrnum">SCREEN 18</span>
+    <h2>Sign-in, directory and sessions</h2>
+    <span class="who">Administrator &middot; /sessions</span>
+  </div>
+  <p class="scrjob">Who is signed in now, and until when. Ending a session is one confirmed act, and ending several at once is a bulk act with each item checked on its own.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; People and access &rsaquo; <em>Sign-in, directory and sessions</em></span>
+      <span class="filters"><span class="act">End sessions</span></span>
+    </div>
+    <div class="panebody">
+      <div class="seg"><div class="tabs"><span class="tab on">Sessions</span><span class="tab">Sign-in links</span><span class="tab">Staff sources</span></div></div>
+      <div class="filters"><span class="fchip">Department</span><span class="fchip">Person</span><span class="fchip">Second factor</span><span class="fchip">Search by name or department</span><span class="fchip">Sort by</span></div>
+      <div class="card"><h3>Signed in</h3><div class="in"><table><thead><tr><th>Person</th><th>Signed in</th><th>Ends by</th><th>Second factor</th><th></th></tr></thead><tbody><tr><td class="name">Person A</td><td>2 Mar, 09:14</td><td>2 Mar, 09:14</td><td>Detail</td><td style="text-align:right"><span class="act quiet">End session</span></td></tr><tr><td class="name">Person B</td><td>28 Feb, 16:40</td><td>28 Feb, 16:40</td><td>Detail</td><td style="text-align:right"><span class="act quiet">End session</span></td></tr><tr><td class="name">Person C</td><td>11 Feb, 08:02</td><td>11 Feb, 08:02</td><td>Detail</td><td style="text-align:right"><span class="act quiet">End session</span></td></tr></tbody></table></div></div>
+      <div class="hint"><b>When there is nothing: No sessions to show.</b> A session appears here from the first request it makes.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 19 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-19">
+    <span class="scrnum">SCREEN 19</span>
+    <h2>Service accounts and API keys</h2>
+    <span class="who">Administrator &middot; /service-accounts</span>
+  </div>
+  <p class="scrjob">Integrations that call this system with a key. Each acts at its owner&#x27;s live reach, narrowed to the capabilities it lists, holds at most two live keys, and stops when the owner loses that reach.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; People and access &rsaquo; <em>Service accounts and API keys</em></span>
+      <span class="filters"><span class="act solid">Register an account</span></span>
+    </div>
+    <div class="panebody">
+      <div class="filters"><span class="fchip">Capability</span><span class="fchip">Search by name or ID</span><span class="fchip">Sort by</span></div>
+      <div class="card"><h3>Accounts</h3><div class="in"><table><thead><tr><th>Account</th><th>Capabilities</th><th>Live keys</th><th>Stops working</th><th></th></tr></thead><tbody><tr><td class="name">Example A</td><td>Detail</td><td>12</td><td>2 Mar, 09:14</td><td style="text-align:right"><span class="act quiet">Issue a key / Retire account</span></td></tr><tr><td class="name">Example B</td><td>Detail</td><td>7</td><td>28 Feb, 16:40</td><td style="text-align:right"><span class="act quiet">Issue a key / Retire account</span></td></tr><tr><td class="name">Example C</td><td>Detail</td><td>3</td><td>11 Feb, 08:02</td><td style="text-align:right"><span class="act quiet">Issue a key / Retire account</span></td></tr></tbody></table></div></div>
+      <div class="hint"><b>When there is nothing: No service accounts yet.</b> An account appears here once you register one for an integration.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 20 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-20">
+    <span class="scrnum">SCREEN 20</span>
+    <h2>Automations</h2>
+    <span class="who">Administrator &middot; /automations</span>
+  </div>
+  <p class="scrjob">What each agent does on a schedule, as the person it runs as. An automation is added from an agent&#x27;s own page; this is where all of them are read together.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Agents and AI &rsaquo; <em>Automations</em></span>
+      <span class="filters"><span class="act solid">Add an automation</span></span>
+    </div>
+    <div class="panebody">
+      <div class="filters"><span class="fchip">State</span><span class="fchip">Agent</span><span class="fchip">Runs as</span><span class="fchip">Search automations</span><span class="fchip">Sort by</span></div>
+      <div class="card"><h3>Automations</h3><div class="in"><table><thead><tr><th>Automation</th><th>State</th><th>Agent</th><th>Runs as</th><th>Schedule</th><th>Last run</th><th>Next run</th></tr></thead><tbody><tr><td class="name">Example A</td><td><span class="pill ok">Active</span></td><td>Detail</td><td>Person A</td><td>Detail</td><td>2 Mar, 09:14</td><td>Detail</td></tr><tr><td class="name">Example B</td><td><span class="pill neu">Off</span></td><td>Detail</td><td>Person B</td><td>Detail</td><td>28 Feb, 16:40</td><td>Detail</td></tr><tr><td class="name">Example C</td><td><span class="pill warn">Waiting</span></td><td>Detail</td><td>Person C</td><td>Detail</td><td>11 Feb, 08:02</td><td>Detail</td></tr></tbody></table></div></div>
+      <div class="hint"><b>When there is nothing: No automations to show.</b> An automation added to an agent from its gallery appears here.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 21 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-21">
+    <span class="scrnum">SCREEN 21</span>
+    <h2>Fields and records</h2>
+    <span class="who">Administrator &middot; /classification</span>
+  </div>
+  <p class="scrjob">Which columns of a table are confidential, what it takes to see each, and which can be worked out from the others. Marks are applied by a person other than the one who proposed them.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Knowledge and data &rsaquo; <em>Fields and records</em></span>
+      <span class="filters"><span class="act">Show its classification</span><span class="act">Upload</span></span>
+    </div>
+    <div class="panebody">
+      <div class="seg"><div class="tabs"><span class="tab on">Fields</span><span class="tab">Possible duplicates</span><span class="tab">Quick answers</span></div></div>
+      <div class="card"><h3>Open a classified table</h3><div class="in"><div class="kv"><span class="k">Which table</span><span class="v">Entity</span></div><div class="kv"><span class="k">Then</span><span class="v">Show its classification</span></div></div></div>
+      <div class="card"><h3>Columns of the table opened</h3><div class="in"><table><thead><tr><th>Column</th><th>Access</th><th>Classification</th><th>Required capability</th><th>Derived from</th><th></th></tr></thead><tbody><tr><td class="name">Detail</td><td>Detail</td><td>Detail</td><td>Detail</td><td>Detail</td><td style="text-align:right"><span class="act quiet">Edit</span></td></tr><tr><td class="name">Detail</td><td>Detail</td><td>Detail</td><td>Detail</td><td>Detail</td><td style="text-align:right"><span class="act quiet">Edit</span></td></tr><tr><td class="name">Detail</td><td>Detail</td><td>Detail</td><td>Detail</td><td>Detail</td><td style="text-align:right"><span class="act quiet">Edit</span></td></tr></tbody></table></div></div>
+      <div class="card"><h3>Upload a price list</h3><div class="in"><div class="kv"><span class="k">Table name</span><span class="v">Text</span></div><div class="kv"><span class="k">Title</span><span class="v">Text</span></div><div class="kv"><span class="k">Heading a question names a row by</span><span class="v">Text</span></div><div class="kv"><span class="k">File</span><span class="v">CSV or XLSX</span></div></div></div>
+      <div class="hint"><b>When there is nothing: Name a table above.</b> Name a table to see how its columns are classified.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 22 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-22">
+    <span class="scrnum">SCREEN 22</span>
+    <h2>Artifacts</h2>
+    <span class="who">Administrator &middot; /artifacts</span>
+  </div>
+  <p class="scrjob">What the system produced: documents, decks, reports, exports and images, and until when each is kept. A row exists only for an artifact the reader may see.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Knowledge and data &rsaquo; <em>Artifacts</em></span>
+      <span class="filters"></span>
+    </div>
+    <div class="panebody">
+      <div class="filters"><span class="fchip">Kind</span><span class="fchip">Search artifacts</span><span class="fchip">Sort by</span></div>
+      <div class="card"><h3>Artifacts</h3><div class="in"><table><thead><tr><th>Artifact</th><th>Produced</th><th>Kept until</th></tr></thead><tbody><tr><td class="name">Example A</td><td>2 Mar, 09:14</td><td>2 Mar, 09:14</td></tr><tr><td class="name">Example B</td><td>28 Feb, 16:40</td><td>28 Feb, 16:40</td></tr><tr><td class="name">Example C</td><td>11 Feb, 08:02</td><td>11 Feb, 08:02</td></tr></tbody></table></div></div>
+      <div class="card"><h3>How long an artifact is kept</h3><div class="in"><div class="kv"><span class="k">Documents</span><span class="v">Per the retention rule</span></div><div class="kv"><span class="k">Exports</span><span class="v">Per the retention rule</span></div></div></div>
+      <div class="hint"><b>When there is nothing: No artifacts yet.</b> An artifact appears here once an agent produces one for somebody you may see.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 23 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-23">
+    <span class="scrnum">SCREEN 23</span>
+    <h2>Channels</h2>
+    <span class="who">Administrator &middot; /channels</span>
+  </div>
+  <p class="scrjob">The chat channels the reader manages, whether each is switched on, and how it is doing. A channel&#x27;s secret is never shown; its set-up and its test are on its own page.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Channels and notifications &rsaquo; <em>Channels</em></span>
+      <span class="filters"><span class="act">Edit set-up</span></span>
+    </div>
+    <div class="panebody">
+      <div class="filters"><span class="fchip">Status</span><span class="fchip">Health</span><span class="fchip">Received</span><span class="fchip">Search channels</span><span class="fchip">Sort by</span></div>
+      <div class="card"><h3>Channels</h3><div class="in"><table><thead><tr><th>Channel</th><th>Status</th><th>Secret</th><th>Health</th><th>Bound people</th><th>Last active</th><th></th></tr></thead><tbody><tr><td class="name">Example A</td><td><span class="pill ok">Active</span></td><td>Detail</td><td><span class="pill ok">Active</span></td><td>Detail</td><td>2 Mar, 09:14</td><td style="text-align:right"><span class="act quiet">Open</span></td></tr><tr><td class="name">Example B</td><td><span class="pill neu">Off</span></td><td>Detail</td><td><span class="pill neu">Off</span></td><td>Detail</td><td>28 Feb, 16:40</td><td style="text-align:right"><span class="act quiet">Open</span></td></tr><tr><td class="name">Example C</td><td><span class="pill warn">Waiting</span></td><td>Detail</td><td><span class="pill warn">Waiting</span></td><td>Detail</td><td>11 Feb, 08:02</td><td style="text-align:right"><span class="act quiet">Open</span></td></tr></tbody></table></div></div>
+      <div class="hint"><b>When there is nothing: No channels to show.</b> A channel appears here for each chat surface this release declares that you manage.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 24 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-24">
+    <span class="scrnum">SCREEN 24</span>
+    <h2>Webhooks</h2>
+    <span class="who">Administrator &middot; /webhooks</span>
+  </div>
+  <p class="scrjob">Systems outside the company told when something happens here. They are sent identifiers, never content, signed with a secret shown once.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Channels and notifications &rsaquo; <em>Webhooks</em></span>
+      <span class="filters"><span class="act solid">Register a subscriber</span></span>
+    </div>
+    <div class="panebody">
+      <div class="card"><h3>Subscribers</h3><div class="in"><table><thead><tr><th>Subscriber</th><th>Told at</th><th>Told about</th><th>State</th><th>Signing secret</th><th>Last delivered</th><th></th></tr></thead><tbody><tr><td class="name">Example A</td><td>Detail</td><td>Detail</td><td><span class="pill ok">Active</span></td><td>Detail</td><td>2 Mar, 09:14</td><td style="text-align:right"><span class="act quiet">Replace secret / Switch off</span></td></tr><tr><td class="name">Example B</td><td>Detail</td><td>Detail</td><td><span class="pill neu">Off</span></td><td>Detail</td><td>28 Feb, 16:40</td><td style="text-align:right"><span class="act quiet">Replace secret / Switch off</span></td></tr><tr><td class="name">Example C</td><td>Detail</td><td>Detail</td><td><span class="pill warn">Waiting</span></td><td>Detail</td><td>11 Feb, 08:02</td><td style="text-align:right"><span class="act quiet">Replace secret / Switch off</span></td></tr></tbody></table></div></div>
+      <div class="card"><h3>Delivery</h3><div class="in"><div class="kv"><span class="k">Last run</span><span class="v">2 Mar, 09:14</span></div><div class="kv"><span class="k">What it did</span><span class="v">Told two subscribers</span></div></div></div>
+      <div class="hint"><b>When there is nothing: No subscribers yet.</b> Register one to tell a system outside the company when something happens here.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 25 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-25">
+    <span class="scrnum">SCREEN 25</span>
+    <h2>Notifications and email</h2>
+    <span class="who">Administrator &middot; /notifications</span>
+  </div>
+  <p class="scrjob">Who this install tells what, whether anything sends it yet, and the relay mail is sent through. A colleague who keeps being refused is named here so someone can help them.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Channels and notifications &rsaquo; <em>Notifications and email</em></span>
+      <span class="filters"><span class="act solid">Set up relay</span><span class="act">Send test message</span></span>
+    </div>
+    <div class="panebody">
+      <div class="seg"><div class="tabs"><span class="tab on">Notifications and email</span><span class="tab">Subscribers</span></div></div>
+      <div class="card"><h3>Notices</h3><div class="in"><table><thead><tr><th>Notice</th><th>Who is told</th><th>Today</th><th>Switch</th><th></th></tr></thead><tbody><tr><td class="name">Example A</td><td>Person A</td><td>Detail</td><td>Detail</td><td style="text-align:right"><span class="act quiet">Switch on / off</span></td></tr><tr><td class="name">Example B</td><td>Person B</td><td>Detail</td><td>Detail</td><td style="text-align:right"><span class="act quiet">Switch on / off</span></td></tr><tr><td class="name">Example C</td><td>Person C</td><td>Detail</td><td>Detail</td><td style="text-align:right"><span class="act quiet">Switch on / off</span></td></tr></tbody></table></div></div>
+      <div class="card"><h3>Email relay</h3><div class="in"><div class="kv"><span class="k">Relay</span><span class="v">Host</span></div><div class="kv"><span class="k">Sender</span><span class="v">Address</span></div><div class="kv"><span class="k">User name</span><span class="v">Name</span></div><div class="kv"><span class="k">Password</span><span class="v">Held, never shown</span></div><div class="kv"><span class="k">Last saved</span><span class="v">2 Mar, 09:14</span></div></div></div>
+      <div class="hint"><b>When there is nothing: No notices declared.</b> No relay is saved, so no mail is sent.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 26 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-26">
+    <span class="scrnum">SCREEN 26</span>
+    <h2>Runs and queue</h2>
+    <span class="who">Administrator &middot; /runs</span>
+  </div>
+  <p class="scrjob">What the install is running now, which jobs are owed a run, and the actions a stopped worker left unconfirmed. An action whose result is unknown leaves that state only by being checked with the system it went to.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Operations &rsaquo; <em>Runs and queue</em></span>
+      <span class="filters"></span>
+    </div>
+    <div class="panebody">
+      <div class="card"><h3>Running now</h3><div class="in"><table><thead><tr><th>Job</th><th>Started</th><th>Running for</th><th>Mode</th></tr></thead><tbody><tr><td class="name">Example A</td><td>2 Mar, 09:14</td><td>Detail</td><td>Detail</td></tr><tr><td class="name">Example B</td><td>28 Feb, 16:40</td><td>Detail</td><td>Detail</td></tr><tr><td class="name">Example C</td><td>11 Feb, 08:02</td><td>Detail</td><td>Detail</td></tr></tbody></table></div></div>
+      <div class="card"><h3>Waiting</h3><div class="in"><table><thead><tr><th>Job</th><th>Owed since</th><th>Late by</th></tr></thead><tbody><tr><td class="name">Example A</td><td>2 Mar, 09:14</td><td>Detail</td></tr><tr><td class="name">Example B</td><td>28 Feb, 16:40</td><td>Detail</td></tr><tr><td class="name">Example C</td><td>11 Feb, 08:02</td><td>Detail</td></tr></tbody></table></div></div>
+      <div class="card"><h3>Actions waiting for a person</h3><div class="in"><table><thead><tr><th>Action</th><th>Sent to</th><th>State</th><th>Since</th><th>What was found</th></tr></thead><tbody><tr><td class="name">Example A</td><td>Detail</td><td><span class="pill ok">Active</span></td><td>2 Mar, 09:14</td><td>Example A</td></tr><tr><td class="name">Example B</td><td>Detail</td><td><span class="pill neu">Off</span></td><td>28 Feb, 16:40</td><td>Example B</td></tr><tr><td class="name">Example C</td><td>Detail</td><td><span class="pill warn">Waiting</span></td><td>11 Feb, 08:02</td><td>Example C</td></tr></tbody></table></div></div>
+      <div class="hint"><b>When there is nothing: Nothing is running.</b> A job appears here while the worker is running it.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 27 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-27">
+    <span class="scrnum">SCREEN 27</span>
+    <h2>Background jobs</h2>
+    <span class="who">Administrator &middot; /jobs</span>
+  </div>
+  <p class="scrjob">Every job the worker runs on a schedule, how it last went, and what has been done to it. A job set aside for a person can be run again, once, by a person who holds the schedule&#x27;s authority.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Operations &rsaquo; <em>Background jobs</em></span>
+      <span class="filters"><span class="act">Run again</span></span>
+    </div>
+    <div class="panebody">
+      <div class="card"><h3>Jobs</h3><div class="in"><table><thead><tr><th>Job</th><th>State</th><th>Last run</th><th>Last success</th><th></th></tr></thead><tbody><tr><td class="name">Example A</td><td><span class="pill ok">Active</span></td><td>2 Mar, 09:14</td><td>2 Mar, 09:14</td><td style="text-align:right"><span class="act quiet">Pause / Resume / Run now</span></td></tr><tr><td class="name">Example B</td><td><span class="pill neu">Off</span></td><td>28 Feb, 16:40</td><td>28 Feb, 16:40</td><td style="text-align:right"><span class="act quiet">Pause / Resume / Run now</span></td></tr><tr><td class="name">Example C</td><td><span class="pill warn">Waiting</span></td><td>11 Feb, 08:02</td><td>11 Feb, 08:02</td><td style="text-align:right"><span class="act quiet">Pause / Resume / Run now</span></td></tr></tbody></table></div></div>
+      <div class="card"><h3>Jobs set aside for a person</h3><div class="in"><table><thead><tr><th>Task</th><th>What happened</th><th>Tries</th><th>Set aside</th><th>Run again</th><th></th></tr></thead><tbody><tr><td class="name">Example A</td><td>Example A</td><td>12</td><td>2 Mar, 09:14</td><td>Detail</td><td style="text-align:right"><span class="act quiet">Run again</span></td></tr><tr><td class="name">Example B</td><td>Example B</td><td>7</td><td>28 Feb, 16:40</td><td>Detail</td><td style="text-align:right"><span class="act quiet">Run again</span></td></tr><tr><td class="name">Example C</td><td>Example C</td><td>3</td><td>11 Feb, 08:02</td><td>Detail</td><td style="text-align:right"><span class="act quiet">Run again</span></td></tr></tbody></table></div></div>
+      <div class="hint"><b>When there is nothing: No background jobs to show.</b> A job appears here once the worker&#x27;s schedule starts it and it is offered to you.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 28 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-28">
+    <span class="scrnum">SCREEN 28</span>
+    <h2>Stop</h2>
+    <span class="who">Administrator &middot; /stop</span>
+  </div>
+  <p class="scrjob">Stop work at once: everything, one department, one person, one connector or one agent. A stop takes one press and never ends on its own; resuming needs a written reason that names the stop it overrides.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Operations &rsaquo; <em>Stop</em></span>
+      <span class="filters"><span class="act solid">Stop</span></span>
+    </div>
+    <div class="panebody">
+      <div class="card"><h3>Stop something</h3><div class="in"><div class="kv"><span class="k">What to stop</span><span class="v">Everything / One department / One person / One connector / One agent</span></div><div class="kv"><span class="k">Which one</span><span class="v">Choice</span></div><div class="kv"><span class="k">Why, if you want to say</span><span class="v">Text</span></div></div></div>
+      <div class="card"><h3>One department: Department 1</h3><div class="in"><div class="kv"><span class="k">Stopped</span><span class="v">2 Mar, 09:14, by Person A</span></div><div class="kv"><span class="k">Why it is safe to resume</span><span class="v">Required text, then Resume</span></div></div></div>
+      <div class="hint"><b>When there is nothing: Nothing is stopped.</b> Nothing you may see is stopped.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 29 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-29">
+    <span class="scrnum">SCREEN 29</span>
+    <h2>Logs and errors</h2>
+    <span class="who">Administrator &middot; /logs</span>
+  </div>
+  <p class="scrjob">Warnings and errors the application logged, newest first, with every value taken out. An entry carries an event name and a reference, never a record.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Operations &rsaquo; <em>Logs and errors</em></span>
+      <span class="filters"><span class="act">Export</span></span>
+    </div>
+    <div class="panebody">
+      <div class="seg"><div class="tabs"><span class="tab on">Logs</span><span class="tab">Errors</span></div></div>
+      <div class="filters"><span class="fchip">Event name</span><span class="fchip">Level</span><span class="fchip">When</span><span class="fchip">Order</span><span class="fchip">Saved filters</span></div>
+      <div class="card"><h3>Rows</h3><div class="in"><table><thead><tr><th>When</th><th>Level</th><th>Event</th><th>Reference</th><th>Exception</th><th>Repeated</th><th>Fields</th></tr></thead><tbody><tr><td class="name">2 Mar, 09:14</td><td>Detail</td><td>Example A</td><td>Example A</td><td>Detail</td><td>Detail</td><td>Detail</td></tr><tr><td class="name">28 Feb, 16:40</td><td>Detail</td><td>Example B</td><td>Example B</td><td>Detail</td><td>Detail</td><td>Detail</td></tr><tr><td class="name">11 Feb, 08:02</td><td>Detail</td><td>Example C</td><td>Example C</td><td>Detail</td><td>Detail</td><td>Detail</td></tr></tbody></table></div></div>
+      <div class="hint"><b>When there is nothing: Nothing kept for this search.</b> Change the level, the period or the search.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 30 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-30">
+    <span class="scrnum">SCREEN 30</span>
+    <h2>Incidents</h2>
+    <span class="who">Administrator &middot; /incidents</span>
+  </div>
+  <p class="scrjob">Which connected sources are slow or not answering now, and what stops working because of it. Below it, the parts this install depends on and the guarantees that hold only while their control runs.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Operations &rsaquo; <em>Incidents</em></span>
+      <span class="filters"></span>
+    </div>
+    <div class="panebody">
+      <div class="card"><h3>Degraded now</h3><div class="in"><table><thead><tr><th>Source</th><th>State</th><th>Since</th><th>What stops working</th><th>Acknowledged</th><th></th></tr></thead><tbody><tr><td class="name">Example A</td><td><span class="pill ok">Active</span></td><td>2 Mar, 09:14</td><td>2 Mar, 09:14</td><td>Detail</td><td style="text-align:right"><span class="act quiet">Acknowledge</span></td></tr><tr><td class="name">Example B</td><td><span class="pill neu">Off</span></td><td>28 Feb, 16:40</td><td>28 Feb, 16:40</td><td>Detail</td><td style="text-align:right"><span class="act quiet">Acknowledge</span></td></tr><tr><td class="name">Example C</td><td><span class="pill warn">Waiting</span></td><td>11 Feb, 08:02</td><td>11 Feb, 08:02</td><td>Detail</td><td style="text-align:right"><span class="act quiet">Acknowledge</span></td></tr></tbody></table></div></div>
+      <div class="card"><h3>What this install depends on</h3><div class="in"><table><thead><tr><th>Part</th><th>Standing</th><th>What was measured</th><th>Kept by</th></tr></thead><tbody><tr><td class="name">Example A</td><td><span class="pill ok">Active</span></td><td>Example A</td><td>Detail</td></tr><tr><td class="name">Example B</td><td><span class="pill neu">Off</span></td><td>Example B</td><td>Detail</td></tr><tr><td class="name">Example C</td><td><span class="pill warn">Waiting</span></td><td>Example C</td><td>Detail</td></tr></tbody></table></div></div>
+      <div class="card"><h3>Guarantees</h3><div class="in"><table><thead><tr><th>State</th><th>Why not</th><th>What it protects</th></tr></thead><tbody><tr><td class="name"><span class="pill ok">Active</span></td><td>Detail</td><td>Example A</td></tr><tr><td class="name"><span class="pill neu">Off</span></td><td>Detail</td><td>Example B</td></tr><tr><td class="name"><span class="pill warn">Waiting</span></td><td>Detail</td><td>Example C</td></tr></tbody></table></div></div>
+      <div class="hint"><b>When there is nothing: Nothing is degraded.</b> Every source you may see was answering when the worker last read it.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 31 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-31">
+    <span class="scrnum">SCREEN 31</span>
+    <h2>Audit log</h2>
+    <span class="who">Administrator &middot; /audit</span>
+  </div>
+  <p class="scrjob">Who changed what, and when. Open what an entry is about to read everything recorded about it. The ledger is verified on request and an export is itself an entry.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Governance &rsaquo; <em>Audit log</em></span>
+      <span class="filters"><span class="act solid">Verify the ledger</span><span class="act">Read a run&#x27;s trace</span><span class="act">Export the trail</span></span>
+    </div>
+    <div class="panebody">
+      <div class="filters"><span class="fchip">What</span><span class="fchip">About</span><span class="fchip">Who</span><span class="fchip">When</span><span class="fchip">Order</span><span class="fchip">Search the entries</span></div>
+      <div class="card"><h3>Entries</h3><div class="in"><table><thead><tr><th>When</th><th>Who</th><th>What</th><th>About</th><th>Details</th></tr></thead><tbody><tr><td class="name">2 Mar, 09:14</td><td>Person A</td><td>Example A</td><td>Detail</td><td>Detail</td></tr><tr><td class="name">28 Feb, 16:40</td><td>Person B</td><td>Example B</td><td>Detail</td><td>Detail</td></tr><tr><td class="name">11 Feb, 08:02</td><td>Person C</td><td>Example C</td><td>Detail</td><td>Detail</td></tr></tbody></table></div></div>
+      <div class="hint">A card above the list, Refusals and redactions, says that things were withheld from the reader&#x27;s own view in words that name no record and give no count.</div>
+      <div class="hint"><b>When there is nothing: No entries in this period.</b> Choose a longer period to read further back.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 32 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-32">
+    <span class="scrnum">SCREEN 32</span>
+    <h2>Retention, legal holds and erasure</h2>
+    <span class="who">Administrator &middot; /retention</span>
+  </div>
+  <p class="scrjob">How long each kind of thing is kept, what stops it being removed, and requests to erase somebody&#x27;s data. The sweep reports before it removes, and a hold outranks every window.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Governance &rsaquo; <em>Retention, legal holds and erasure</em></span>
+      <span class="filters"><span class="act solid">Release the sweep</span><span class="act">Place a hold</span><span class="act">File an erasure request</span></span>
+    </div>
+    <div class="panebody">
+      <div class="seg"><div class="tabs"><span class="tab on">Sweep</span><span class="tab">Legal holds</span><span class="tab">Erasure requests</span><span class="tab">Exports</span></div></div>
+      <div class="kpis k4"><div class="kpi"><span class="lab">Report of</span><span class="val">00</span><span class="sub">example</span></div><div class="kpi"><span class="lab">That run</span><span class="val">00</span><span class="sub">example</span></div><div class="kpi"><span class="lab">Due now</span><span class="val">00</span><span class="sub">example</span></div><div class="kpi"><span class="lab">Next run</span><span class="val">00</span><span class="sub">example</span></div></div>
+      <div class="card"><h3>What the sweep found in each store</h3><div class="in"><table><thead><tr><th>Store</th><th>Kept as</th><th>Past its window</th><th>Held</th><th>Due</th><th>Removed</th><th>Queued</th></tr></thead><tbody><tr><td class="name">Example A</td><td>Detail</td><td>Detail</td><td>Detail</td><td>Detail</td><td>Detail</td><td>Example A</td></tr><tr><td class="name">Example B</td><td>Detail</td><td>Detail</td><td>Detail</td><td>Detail</td><td>Detail</td><td>Example B</td></tr><tr><td class="name">Example C</td><td>Detail</td><td>Detail</td><td>Detail</td><td>Detail</td><td>Detail</td><td>Example C</td></tr></tbody></table></div></div>
+      <div class="card"><h3>How long each kind of thing is kept</h3><div class="in"><table><thead><tr><th>Kind of thing</th><th>How long</th><th>Why</th></tr></thead><tbody><tr><td class="name">Example A</td><td>Detail</td><td>Detail</td></tr><tr><td class="name">Example B</td><td>Detail</td><td>Detail</td></tr><tr><td class="name">Example C</td><td>Detail</td><td>Detail</td></tr></tbody></table></div></div>
+      <div class="hint"><b>When there is nothing: The sweep has not reported yet.</b> The first report appears here after the sweep&#x27;s next run.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 33 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-33">
+    <span class="scrnum">SCREEN 33</span>
+    <h2>Import and export</h2>
+    <span class="who">Administrator &middot; /import-export</span>
+  </div>
+  <p class="scrjob">Take an export of the audit trail with a reason and a window, see the exports already taken, and what else can be moved in or out.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Governance &rsaquo; <em>Import and export</em></span>
+      <span class="filters"><span class="act solid">Export the audit trail</span></span>
+    </div>
+    <div class="panebody">
+      <div class="card"><h3>Export the audit trail</h3><div class="in"><div class="kv"><span class="k">Reason</span><span class="v">Text</span></div><div class="kv"><span class="k">Reference of the written request</span><span class="v">Text</span></div><div class="kv"><span class="k">First day</span><span class="v">Date</span></div><div class="kv"><span class="k">Last day</span><span class="v">Date</span></div></div></div>
+      <div class="card"><h3>Your exports</h3><div class="in"><table><thead><tr><th>Taken</th><th>Reason</th><th>Reference</th><th>Window</th><th>Chain</th></tr></thead><tbody><tr><td class="name">2 Mar, 09:14</td><td>Detail</td><td>Example A</td><td>Detail</td><td>Detail</td></tr><tr><td class="name">28 Feb, 16:40</td><td>Detail</td><td>Example B</td><td>Detail</td><td>Detail</td></tr><tr><td class="name">11 Feb, 08:02</td><td>Detail</td><td>Example C</td><td>Detail</td><td>Detail</td></tr></tbody></table></div></div>
+      <div class="card"><h3>What can be moved</h3><div class="in"><table><thead><tr><th>Data</th><th>Direction</th><th>What it carries</th><th>Today</th></tr></thead><tbody><tr><td class="name">Detail</td><td>Detail</td><td>Example A</td><td>Detail</td></tr><tr><td class="name">Detail</td><td>Detail</td><td>Example B</td><td>Detail</td></tr><tr><td class="name">Detail</td><td>Detail</td><td>Example C</td><td>Detail</td></tr></tbody></table></div></div>
+      <div class="hint"><b>When there is nothing: You have not taken an export.</b> An export you take appears here with its reason and its window.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 34 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-34">
+    <span class="scrnum">SCREEN 34</span>
+    <h2>Compliance</h2>
+    <span class="who">Administrator &middot; /compliance</span>
+  </div>
+  <p class="scrjob">Data breach cases and the clock each is on, who a sensitive question is routed to, and what each connected source reads and keeps.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Governance &rsaquo; <em>Compliance</em></span>
+      <span class="filters"><span class="act solid">Open a breach case</span><span class="act">Name a person</span></span>
+    </div>
+    <div class="panebody">
+      <div class="seg"><div class="tabs"><span class="tab on">Breach cases</span><span class="tab">Sensitive topics</span><span class="tab">Processing register</span><span class="tab">Escalation queues</span></div></div>
+      <div class="card"><h3>Breach cases</h3><div class="in"><table><thead><tr><th>Case</th><th>Where it stands</th><th>Clock started</th><th>Assessment</th><th>Commission notified</th></tr></thead><tbody><tr><td class="name">Example A</td><td><span class="pill ok">Active</span></td><td>2 Mar, 09:14</td><td>Detail</td><td>Detail</td></tr><tr><td class="name">Example B</td><td><span class="pill neu">Off</span></td><td>28 Feb, 16:40</td><td>Detail</td><td>Detail</td></tr><tr><td class="name">Example C</td><td><span class="pill warn">Waiting</span></td><td>11 Feb, 08:02</td><td>Detail</td><td>Detail</td></tr></tbody></table></div></div>
+      <div class="card"><h3>Escalation queues</h3><div class="in"><table><thead><tr><th>Queue</th><th>Handed to</th><th>Reached on</th><th>Named</th><th></th></tr></thead><tbody><tr><td class="name">Example A</td><td>Person A</td><td>2 Mar, 09:14</td><td>Example A</td><td style="text-align:right"><span class="act quiet">Name somebody else</span></td></tr><tr><td class="name">Example B</td><td>Person B</td><td>28 Feb, 16:40</td><td>Example B</td><td style="text-align:right"><span class="act quiet">Name somebody else</span></td></tr><tr><td class="name">Example C</td><td>Person C</td><td>11 Feb, 08:02</td><td>Example C</td><td style="text-align:right"><span class="act quiet">Name somebody else</span></td></tr></tbody></table></div></div>
+      <div class="hint"><b>When there is nothing: No breach case has been opened.</b> A case is opened here when there is reason to believe personal data was breached, and its clock starts then.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 35 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-35">
+    <span class="scrnum">SCREEN 35</span>
+    <h2>Usage and cost</h2>
+    <span class="who">Administrator &middot; /usage</span>
+  </div>
+  <p class="scrjob">How much people ask, where they ask it, and what the answers consumed, over a period the reader picks. Figures are counts of what the reader may see and nothing else.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Reports &rsaquo; <em>Usage and cost</em></span>
+      <span class="filters"><span class="act">Export</span></span>
+    </div>
+    <div class="panebody">
+      <div class="seg"><div class="tabs"><span class="tab on">Usage</span><span class="tab">Spend</span><span class="tab">Adoption</span></div></div>
+      <div class="kpis k4"><div class="kpi"><span class="lab">Questions</span><span class="val">00</span><span class="sub">example</span></div><div class="kpi"><span class="lab">People asking</span><span class="val">00</span><span class="sub">example</span></div><div class="kpi"><span class="lab">Tokens in</span><span class="val">00</span><span class="sub">example</span></div><div class="kpi"><span class="lab">Tokens out</span><span class="val">00</span><span class="sub">example</span></div></div>
+      <div class="filters"><span class="fchip">7 days</span><span class="fchip">30 days</span><span class="fchip">90 days</span></div>
+      <div class="card"><h3>Questions by department</h3><div class="in"><div class="barrow"><span class="bl">Department 1</span><span class="bar"><span class="acc" style="width:78%"></span></span><span class="bn">00</span></div><div class="barrow"><span class="bl">Department 2</span><span class="bar"><span class="acc" style="width:54%"></span></span><span class="bn">00</span></div><div class="barrow"><span class="bl">Department 3</span><span class="bar"><span class="acc" style="width:31%"></span></span><span class="bn">00</span></div></div></div>
+      <div class="card"><h3>Who asks most</h3><div class="in"><div class="barrow"><span class="bl">Person A</span><span class="bar"><span class="acc" style="width:78%"></span></span><span class="bn">00</span></div><div class="barrow"><span class="bl">Person B</span><span class="bar"><span class="acc" style="width:54%"></span></span><span class="bn">00</span></div><div class="barrow"><span class="bl">Person C</span><span class="bar"><span class="acc" style="width:31%"></span></span><span class="bn">00</span></div></div></div>
+      <div class="hint"><b>When there is nothing: No usage to show.</b> Usage appears here as people ask questions.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 36 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-36">
+    <span class="scrnum">SCREEN 36</span>
+    <h2>Questions and gaps</h2>
+    <span class="who">Administrator &middot; /questions</span>
+  </div>
+  <p class="scrjob">What people asked that no connected source could answer, and what would fix it. A gap is shown as a department and a source to connect, never as the question.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Reports &rsaquo; <em>Questions and gaps</em></span>
+      <span class="filters"><span class="act">Export</span></span>
+    </div>
+    <div class="panebody">
+      <div class="kpis k3"><div class="kpi"><span class="lab">Unanswered questions</span><span class="val">00</span><span class="sub">example</span></div><div class="kpi"><span class="lab">Departments asking</span><span class="val">00</span><span class="sub">example</span></div><div class="kpi"><span class="lab">Sources to connect</span><span class="val">00</span><span class="sub">example</span></div></div>
+      <div class="filters"><span class="fchip">7 days</span><span class="fchip">30 days</span><span class="fchip">90 days</span></div>
+      <div class="card"><h3>Unanswered, by department</h3><div class="in"><div class="barrow"><span class="bl">Department 1</span><span class="bar"><span class="acc" style="width:78%"></span></span><span class="bn">00</span></div><div class="barrow"><span class="bl">Department 2</span><span class="bar"><span class="acc" style="width:54%"></span></span><span class="bn">00</span></div><div class="barrow"><span class="bl">Department 3</span><span class="bar"><span class="acc" style="width:31%"></span></span><span class="bn">00</span></div></div></div>
+      <div class="card"><h3>What would have answered them</h3><div class="in"><table><thead><tr><th>Department</th><th>Source that would have answered</th><th>Asked</th><th>Fix</th><th></th></tr></thead><tbody><tr><td class="name">Department 1</td><td>Example A</td><td>12</td><td>Detail</td><td style="text-align:right"><span class="act quiet">Connect a source</span></td></tr><tr><td class="name">Department 2</td><td>Example B</td><td>7</td><td>Detail</td><td style="text-align:right"><span class="act quiet">Connect a source</span></td></tr><tr><td class="name">Department 1</td><td>Example C</td><td>3</td><td>Detail</td><td style="text-align:right"><span class="act quiet">Connect a source</span></td></tr></tbody></table></div></div>
+      <div class="hint"><b>When there is nothing: No gaps to show.</b> Questions no connected source could answer appear here.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 37 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-37">
+    <span class="scrnum">SCREEN 37</span>
+    <h2>Quality and canaries</h2>
+    <span class="who">Administrator &middot; /quality</span>
+  </div>
+  <p class="scrjob">The permission canaries check that each person is offered only the tools their access allows and, once answer rules are loaded, that a refusal reads the same for everyone. A pass means what was checked held.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Reports &rsaquo; <em>Quality and canaries</em></span>
+      <span class="filters"><span class="act">Export</span></span>
+    </div>
+    <div class="panebody">
+      <div class="kpis k4"><div class="kpi"><span class="lab">Last run</span><span class="val">00</span><span class="sub">example</span></div><div class="kpi"><span class="lab">Passed</span><span class="val">00</span><span class="sub">example</span></div><div class="kpi"><span class="lab">Failed</span><span class="val">00</span><span class="sub">example</span></div><div class="kpi"><span class="lab">Schedule</span><span class="val">00</span><span class="sub">example</span></div></div>
+      <div class="filters"><span class="fchip">7 days</span><span class="fchip">30 days</span><span class="fchip">90 days</span></div>
+      <div class="card"><h3>Runs</h3><div class="in"><table><thead><tr><th>Started</th><th>Result</th><th>Finished</th></tr></thead><tbody><tr><td class="name">2 Mar, 09:14</td><td><span class="pill ok">Active</span></td><td>Detail</td></tr><tr><td class="name">28 Feb, 16:40</td><td><span class="pill neu">Off</span></td><td>Detail</td></tr><tr><td class="name">11 Feb, 08:02</td><td><span class="pill warn">Waiting</span></td><td>Detail</td></tr></tbody></table></div></div>
+      <div class="hint"><b>When there is nothing: No canary figures to show.</b> The canaries&#x27; runs appear here once they have run.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 38 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-38">
+    <span class="scrnum">SCREEN 38</span>
+    <h2>Service levels</h2>
+    <span class="who">Administrator &middot; /service-levels</span>
+  </div>
+  <p class="scrjob">What each lane promised, what it measured, and where it fell short. A lane with no reading says so rather than drawing a pass.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Reports &rsaquo; <em>Service levels</em></span>
+      <span class="filters"><span class="act">Export</span></span>
+    </div>
+    <div class="panebody">
+      <div class="kpis k3"><div class="kpi"><span class="lab">Lanes</span><span class="val">00</span><span class="sub">example</span></div><div class="kpi"><span class="lab">Meeting their objective</span><span class="val">00</span><span class="sub">example</span></div><div class="kpi"><span class="lab">Missing their objective</span><span class="val">00</span><span class="sub">example</span></div></div>
+      <div class="filters"><span class="fchip">7 days</span><span class="fchip">30 days</span><span class="fchip">90 days</span></div>
+      <div class="card"><h3>Answer time against objective</h3><div class="in"><div class="barrow"><span class="bl">Lane 1</span><span class="bar"><span class="acc" style="width:78%"></span></span><span class="bn">00</span></div><div class="barrow"><span class="bl">Lane 2</span><span class="bar"><span class="acc" style="width:54%"></span></span><span class="bn">00</span></div><div class="barrow"><span class="bl">Lane 3</span><span class="bar"><span class="acc" style="width:31%"></span></span><span class="bn">00</span></div></div></div>
+      <div class="card"><h3>Every lane</h3><div class="in"><table><thead><tr><th>Lane</th><th>Outcome</th><th>p95</th><th>p95 promised</th><th>Success</th><th>Success promised</th><th>Requests</th><th>Shortfalls</th></tr></thead><tbody><tr><td class="name">Example A</td><td><span class="pill ok">Active</span></td><td>12</td><td>Detail</td><td>Detail</td><td>Detail</td><td>12</td><td>12</td></tr><tr><td class="name">Example B</td><td><span class="pill neu">Off</span></td><td>7</td><td>Detail</td><td>Detail</td><td>Detail</td><td>7</td><td>7</td></tr><tr><td class="name">Example C</td><td><span class="pill warn">Waiting</span></td><td>3</td><td>Detail</td><td>Detail</td><td>Detail</td><td>3</td><td>3</td></tr></tbody></table></div></div>
+      <div class="hint"><b>When there is nothing: No lane to show.</b> Each lane&#x27;s reading appears here when there is one to show.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 39 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-39">
+    <span class="scrnum">SCREEN 39</span>
+    <h2>Settings</h2>
+    <span class="who">Administrator &middot; /settings</span>
+  </div>
+  <p class="scrjob">The values that make this install the company&#x27;s own. The editable ones are changed here; each of the others says where it is changed. No key, token or password is shown.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Platform &rsaquo; <em>Settings</em></span>
+      <span class="filters"><span class="act solid">Save</span></span>
+    </div>
+    <div class="panebody">
+      <div class="card"><h3>A group of settings</h3><div class="in"><div class="kv"><span class="k">A setting</span><span class="v">Value, with its source chip and a Save</span></div><div class="kv"><span class="k">A read-only setting</span><span class="v">Value, with the reason and where it is changed</span></div><div class="kv"><span class="k">Return to default</span><span class="v">Confirmed</span></div></div></div>
+      <div class="card"><h3>Leaving: handover and uninstall</h3><div class="in"><table><thead><tr><th>What</th><th>Removed by</th><th>How</th></tr></thead><tbody><tr><td class="name">Example A</td><td>Detail</td><td>Detail</td></tr><tr><td class="name">Example B</td><td>Detail</td><td>Detail</td></tr><tr><td class="name">Example C</td><td>Detail</td><td>Detail</td></tr></tbody></table></div></div>
+      <div class="hint"><b>When there is nothing: No settings to show.</b> The answer carried no group of settings, so there is nothing to change here.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 40 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-40">
+    <span class="scrnum">SCREEN 40</span>
+    <h2>Features and plugins</h2>
+    <span class="who">Administrator &middot; /features</span>
+  </div>
+  <p class="scrjob">New features ship switched off on every install. Switch one on here once you have read what it does and what it does while it is off.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Platform &rsaquo; <em>Features and plugins</em></span>
+      <span class="filters"><span class="act solid">Switch on</span><span class="act">Record plugin</span></span>
+    </div>
+    <div class="panebody">
+      <div class="card"><h3>A feature</h3><div class="in"><div class="kv"><span class="k">State</span><span class="v">Off</span></div><div class="kv"><span class="k">What it does</span><span class="v">One sentence</span></div><div class="kv"><span class="k">While off</span><span class="v">One sentence</span></div><div class="kv"><span class="k">Last switched</span><span class="v">2 Mar, 09:14</span></div></div></div>
+      <div class="card"><h3>Plugins</h3><div class="in"><div class="kv"><span class="k">Manifest (JSON)</span><span class="v">Record plugin</span></div><div class="kv"><span class="k">Each plugin</span><span class="v">Switch on, Switch off, Retire</span></div></div></div>
+      <div class="card"><h3>Migration from another system</h3><div class="in"><div class="kv"><span class="k">Record</span><span class="v">Save</span></div><div class="kv"><span class="k">Cutover</span><span class="v">Report the cutover complete</span></div></div></div>
+      <div class="hint"><b>When there is nothing: No features to switch.</b> This install declares no feature that can be switched.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 41 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-41">
+    <span class="scrnum">SCREEN 41</span>
+    <h2>Limits, budgets and capacity</h2>
+    <span class="who">Administrator &middot; /limits</span>
+  </div>
+  <p class="scrjob">What is refusing a request now, the windows requests are counted in, and the ceilings of the systems this install reads. The limits that can be changed say within what bounds.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Platform &rsaquo; <em>Limits, budgets and capacity</em></span>
+      <span class="filters"><span class="act">Change</span></span>
+    </div>
+    <div class="panebody">
+      <div class="seg"><div class="tabs"><span class="tab on">Rate limits</span><span class="tab">Capacity</span></div></div>
+      <div class="card"><h3>Refusing now</h3><div class="in"><table><thead><tr><th>Whose</th><th>Who</th><th>Allowed</th><th>Asks again in</th></tr></thead><tbody><tr><td class="name">Detail</td><td>Person A</td><td>2 Mar, 09:14</td><td>Detail</td></tr><tr><td class="name">Detail</td><td>Person B</td><td>28 Feb, 16:40</td><td>Detail</td></tr><tr><td class="name">Detail</td><td>Person C</td><td>11 Feb, 08:02</td><td>Detail</td></tr></tbody></table></div></div>
+      <div class="card"><h3>Windows</h3><div class="in"><table><thead><tr><th>Applies to</th><th>Allowed</th><th>If the count cannot be read</th><th>Can be raised</th></tr></thead><tbody><tr><td class="name">Detail</td><td>2 Mar, 09:14</td><td>Detail</td><td>Detail</td></tr><tr><td class="name">Detail</td><td>28 Feb, 16:40</td><td>Detail</td><td>Detail</td></tr><tr><td class="name">Detail</td><td>11 Feb, 08:02</td><td>Detail</td><td>Detail</td></tr></tbody></table></div></div>
+      <div class="card"><h3>Limits you can change</h3><div class="in"><table><thead><tr><th>Limit</th><th>In force</th><th>Set by</th><th>Product&#x27;s figure</th><th>Can be set</th><th></th></tr></thead><tbody><tr><td class="name">Example A</td><td>Detail</td><td>Detail</td><td>Detail</td><td>Detail</td><td style="text-align:right"><span class="act quiet">Change</span></td></tr><tr><td class="name">Example B</td><td>Detail</td><td>Detail</td><td>Detail</td><td>Detail</td><td style="text-align:right"><span class="act quiet">Change</span></td></tr><tr><td class="name">Example C</td><td>Detail</td><td>Detail</td><td>Detail</td><td>Detail</td><td style="text-align:right"><span class="act quiet">Change</span></td></tr></tbody></table></div></div>
+      <div class="hint"><b>When there is nothing: Nothing is refusing a request.</b> Each list says its own empty sentence.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 42 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-42">
+    <span class="scrnum">SCREEN 42</span>
+    <h2>Secrets and credentials</h2>
+    <span class="who">Administrator &middot; /credentials</span>
+  </div>
+  <p class="scrjob">Every secret this install keeps in its vault, and when each was last set. A value is written here and never shown again.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Platform &rsaquo; <em>Secrets and credentials</em></span>
+      <span class="filters"><span class="act">Set or replace</span></span>
+    </div>
+    <div class="panebody">
+      <div class="seg"><div class="tabs"><span class="tab on">Credentials</span><span class="tab">Vault activity</span></div></div>
+      <div class="filters"><span class="fchip">Kind</span><span class="fchip">Value</span><span class="fchip">Search credentials</span><span class="fchip">Sort by</span></div>
+      <div class="card"><h3>The vault</h3><div class="in"><div class="kv"><span class="k">State</span><span class="v">Open</span></div><div class="kv"><span class="k">Policies loaded</span><span class="v">Yes</span></div></div></div>
+      <div class="card"><h3>Credentials</h3><div class="in"><table><thead><tr><th>Belongs to</th><th>Kind</th><th>Value</th><th>Last set</th><th>Environment</th><th></th></tr></thead><tbody><tr><td class="name">Detail</td><td>Detail</td><td><span class="pill ok">Active</span></td><td>2 Mar, 09:14</td><td>Detail</td><td style="text-align:right"><span class="act quiet">Set or replace</span></td></tr><tr><td class="name">Detail</td><td>Detail</td><td><span class="pill neu">Off</span></td><td>28 Feb, 16:40</td><td>Detail</td><td style="text-align:right"><span class="act quiet">Set or replace</span></td></tr><tr><td class="name">Detail</td><td>Detail</td><td><span class="pill warn">Waiting</span></td><td>11 Feb, 08:02</td><td>Detail</td><td style="text-align:right"><span class="act quiet">Set or replace</span></td></tr></tbody></table></div></div>
+      <div class="hint"><b>When there is nothing: No credentials to show.</b> A slot appears here for every model provider, source and channel this release declares.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 43 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-43">
+    <span class="scrnum">SCREEN 43</span>
+    <h2>Storage</h2>
+    <span class="who">Administrator &middot; /storage</span>
+  </div>
+  <p class="scrjob">The buckets this install keeps files in, how much each holds, and how long it keeps them.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Platform &rsaquo; <em>Storage</em></span>
+      <span class="filters"></span>
+    </div>
+    <div class="panebody">
+      <div class="card"><h3>Where the store is</h3><div class="in"><div class="kv"><span class="k">Kind of store</span><span class="v">Kind</span></div><div class="kv"><span class="k">Address</span><span class="v">Install&#x27;s own</span></div><div class="kv"><span class="k">Prefix</span><span class="v">Text</span></div></div></div>
+      <div class="card"><h3>Buckets</h3><div class="in"><table><thead><tr><th>Bucket</th><th>Holds</th><th>Holds now</th><th>Kept for</th><th>Versioned</th><th>Readable without signing in</th></tr></thead><tbody><tr><td class="name">Example A</td><td>Detail</td><td>Detail</td><td>Detail</td><td>Detail</td><td>Detail</td></tr><tr><td class="name">Example B</td><td>Detail</td><td>Detail</td><td>Detail</td><td>Detail</td><td>Detail</td></tr><tr><td class="name">Example C</td><td>Detail</td><td>Detail</td><td>Detail</td><td>Detail</td><td>Detail</td></tr></tbody></table></div></div>
+      <div class="hint"><b>When there is nothing: No buckets declared.</b> This install declares no bucket to keep files in.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 44 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-44">
+    <span class="scrnum">SCREEN 44</span>
+    <h2>Backup and recovery</h2>
+    <span class="who">Administrator &middot; /recovery</span>
+  </div>
+  <p class="scrjob">What has been copied, when a restore was last verified, and whether a rehearsal is owed. A copy is never reported as recoverable until a rehearsal has shown it.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Platform &rsaquo; <em>Backup and recovery</em></span>
+      <span class="filters"><span class="act">Start a rehearsal</span></span>
+    </div>
+    <div class="panebody">
+      <div class="kpis k4"><div class="kpi"><span class="lab">Where this install stands</span><span class="val">00</span><span class="sub">example</span></div><div class="kpi"><span class="lab">Last verified restore</span><span class="val">00</span><span class="sub">example</span></div><div class="kpi"><span class="lab">Rehearsal</span><span class="val">00</span><span class="sub">example</span></div><div class="kpi"><span class="lab">Last restore took</span><span class="val">00</span><span class="sub">example</span></div></div>
+      <div class="card"><h3>Copies</h3><div class="in"><table><thead><tr><th>Coverage</th><th>Newest copy</th><th>Inside the recovery point</th><th>Recovery point promised</th></tr></thead><tbody><tr><td class="name">Detail</td><td>2 Mar, 09:14</td><td>Detail</td><td>Detail</td></tr><tr><td class="name">Detail</td><td>28 Feb, 16:40</td><td>Detail</td><td>Detail</td></tr><tr><td class="name">Detail</td><td>11 Feb, 08:02</td><td>Detail</td><td>Detail</td></tr></tbody></table></div></div>
+      <div class="card"><h3>Rehearsing a restore</h3><div class="in"><div class="kv"><span class="k">Owed every</span><span class="v">Interval</span></div><div class="kv"><span class="k">Recovery time promised</span><span class="v">Duration</span></div><div class="kv"><span class="k">A copy is kept for</span><span class="v">Duration</span></div></div></div>
+      <div class="hint"><b>When there is nothing: No copies are taken.</b> This profile takes no copies, so there is nothing to recover from.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 45 ============ -->
+<section class="scr">
+  <div class="scrhead" id="screen-45">
+    <span class="scrnum">SCREEN 45</span>
+    <h2>Version and updates</h2>
+    <span class="who">Administrator &middot; /updates</span>
+  </div>
+  <p class="scrjob">Which release is running here, and whether a newer one has been published. Nothing here updates the install: that is the installer&#x27;s own command.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMINISTRATOR</b> &rsaquo; Platform &rsaquo; <em>Version and updates</em></span>
+      <span class="filters"><span class="act">Read its release notes</span></span>
+    </div>
+    <div class="panebody">
+      <div class="seg"><div class="tabs"><span class="tab on">Version and updates</span><span class="tab">This install</span></div></div>
+      <div class="card"><h3>What is running</h3><div class="in"><div class="kv"><span class="k">Release</span><span class="v">Version</span></div><div class="kv"><span class="k">Commit</span><span class="v">Short hash</span></div></div></div>
+      <div class="card"><h3>The newest published release</h3><div class="in"><div class="kv"><span class="k">Newest release</span><span class="v">Version</span></div><div class="kv"><span class="k">Said by</span><span class="v">The release feed</span></div><div class="kv"><span class="k">Said at</span><span class="v">2 Mar, 09:14</span></div></div></div>
+      <div class="card"><h3>What has been deployed here</h3><div class="in"><table><thead><tr><th>When</th><th>Commit</th><th>Outcome</th><th>Tasks in this release</th></tr></thead><tbody><tr><td class="name">2 Mar, 09:14</td><td>Detail</td><td><span class="pill ok">Active</span></td><td>Example A</td></tr><tr><td class="name">28 Feb, 16:40</td><td>Detail</td><td><span class="pill neu">Off</span></td><td>Example B</td></tr><tr><td class="name">11 Feb, 08:02</td><td>Detail</td><td><span class="pill warn">Waiting</span></td><td>Example C</td></tr></tbody></table></div></div>
+      <div class="hint"><b>When there is nothing: This install does not name a release.</b> The history is shown as written.</div>
+    </div>
+  </div>
+</section>
 
 <footer>
   <div class="swatches">

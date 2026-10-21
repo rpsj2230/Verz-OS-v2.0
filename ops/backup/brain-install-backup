@@ -6,31 +6,66 @@
 # machine and should be one reviewable thing somebody deliberately runs, not six lines copied
 # out of a chat window in the right order.
 #
-# WHY IT DISCOVERS THE VALUES RATHER THAN TAKING THEM AS ARGUMENTS. The database container's
-# name, the bucket and the object store's address are all facts about the install this is being
-# run on, and every one of them was the same class of value that put one deployment's host into
-# six files in this repository until 2026-09-09. Read from the running system, they are right
-# on every server; typed into a page for somebody to copy, they are right on exactly one. Item
-# 49 in `docs/needs-rupash.md` is the whole story and it cost a wrong identifier.
+# WHY IT DISCOVERS THE VALUES IT CAN AND ASKS FOR THE ONES IT CANNOT. The database container's
+# name is a fact about the install this is being run on, and every one of that class of value
+# put one deployment's host into six files in this repository until 2026-09-09. Read from the
+# running system, it is right on every server; typed into a page for somebody to copy, it is
+# right on exactly one. Item 49 in `docs/needs-rupash.md` is the whole story and it cost a wrong
+# identifier. **Where the copies go and who can read them are the opposite class**: no running
+# system can say that the object store it can see is on another machine, or that the person
+# holding the key is the client, so they are declared here and carried on every manifest, where
+# the Recovery screen reads them back (`brain.ops.recovery.destination_gaps`).
+#
+# WHERE COPIES GO IS NO LONGER DEFAULTED (M30.3.3). This used to fall back to the install's own
+# file store container, which put every copy on the machine it is a copy of, so the failure that
+# destroyed the original destroyed the copy in the same second, and nothing said so. Now an
+# endpoint has to be given, it has to be declared off this host (`BRAIN_BACKUP_OFF_HOST=yes`), and
+# an address that is plainly this machine (loopback, `localhost`, this host's name, a container
+# running here) is refused even when declared. A person who knowingly wants copies on the host
+# says `BRAIN_BACKUP_ALLOW_ON_HOST=yes`, and the manifest records that they are, which the
+# Recovery screen then states in the words `destination_gaps` gives.
+#
+# ENCRYPTION TO THE CLIENT'S PUBLIC KEY IS REQUIRED THE SAME WAY (M30.3.4). `BRAIN_BACKUP_RECIPIENT`
+# is the path of a public key whose private half the client holds (`brain-backup-crypt` says why
+# a public key). Without one, `BRAIN_BACKUP_ALLOW_UNENCRYPTED=yes` is the explicit statement that
+# copies are to be stored readable, and the manifest says that too.
+#
+# THE DRILL SERVICE IS OPT-IN (needs-rupash item 235, option B). `BRAIN_DRILL_SERVICE=yes` installs a
+# timer that starts `brain-drill-service` every ten minutes; it does nothing until a rehearsal is
+# owed or requested. Nothing here installs it unasked, because it is a service on the server that
+# starts containers, and whether to trust the install with that is the owner's decision, not a
+# default.
 #
 # It is idempotent: running it again rewrites the units and the environment file and restarts
 # the timer, which is what you want after editing any of them.
 set -euo pipefail
+
+# Where things go. Overridable so the refusals below can be exercised without a root shell and a
+# real systemd; the defaults are where a server has them.
+BIN_DIR="${BRAIN_BIN_DIR:-/usr/local/bin}"
+ENV_FILE="${BRAIN_BACKUP_ENV_FILE:-/etc/brain-backup.env}"
+UNIT_DIR="${BRAIN_SYSTEMD_DIR:-/etc/systemd/system}"
+SYSTEMCTL="${BRAIN_SYSTEMCTL:-systemctl}"
+INSTALL_ENV="${BRAIN_INSTALL_ENV:-/opt/brain/.env}"
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "run this as root: it writes to /etc/systemd/system" >&2
   exit 1
 fi
 
-for required in docker aws; do
+for required in docker aws openssl; do
   if ! command -v "$required" >/dev/null 2>&1; then
     echo "missing $required, which the copy needs. Install it and run this again." >&2
     exit 1
   fi
 done
 
-if [ ! -x /usr/local/bin/brain-backup ]; then
-  echo "missing /usr/local/bin/brain-backup - copy ops/backup/brain-backup there first" >&2
+if [ ! -x "$BIN_DIR/brain-backup" ]; then
+  echo "missing $BIN_DIR/brain-backup - copy ops/backup/brain-backup there first" >&2
+  exit 1
+fi
+if [ ! -x "$BIN_DIR/brain-backup-crypt" ]; then
+  echo "missing $BIN_DIR/brain-backup-crypt - copy ops/backup/brain-backup-crypt there first" >&2
   exit 1
 fi
 
@@ -48,18 +83,64 @@ DB_NAME="${BRAIN_DB_NAME:-brain}"
 DB_USER="${BRAIN_DB_USER:-brain}"
 BUCKET="${BRAIN_BACKUP_BUCKET:-backups}"
 
-# The object store's address. Taken from the environment when the operator sets it, and
-# otherwise from the file store container's own published port on this host, which is where
-# every install's is. No default naming a host: see the header.
+# Where copies go: given, never defaulted, and not obviously this machine.
 ENDPOINT="${BRAIN_BACKUP_ENDPOINT:-}"
 if [ -z "$ENDPOINT" ]; then
-  STORE="$(docker ps --format '{{.Names}}' | grep '^seaweedfs' | head -1 || true)"
-  if [ -z "$STORE" ]; then
-    echo "no file store container is running and BRAIN_BACKUP_ENDPOINT is not set, so" >&2
-    echo "nothing says where copies should go. Set it and run this again." >&2
+  echo "BRAIN_BACKUP_ENDPOINT is not set, and nothing says where copies should go. A copy" >&2
+  echo "kept on this machine is lost with it, so there is no default: give the address of an" >&2
+  echo "object store on another machine and run this again." >&2
+  exit 1
+fi
+ENDPOINT_HOST="${ENDPOINT#*://}"
+ENDPOINT_HOST="${ENDPOINT_HOST%%/*}"
+ENDPOINT_HOST="${ENDPOINT_HOST##*@}"
+case "$ENDPOINT_HOST" in
+  "["*"]"*) ENDPOINT_HOST="${ENDPOINT_HOST%%]*}]" ;;
+  *) ENDPOINT_HOST="${ENDPOINT_HOST%%:*}" ;;
+esac
+OFF_HOST="${BRAIN_BACKUP_OFF_HOST:-no}"
+ALLOW_ON_HOST="${BRAIN_BACKUP_ALLOW_ON_HOST:-no}"
+THIS_HOST="$(hostname 2>/dev/null || true)"
+is_this_machine() {
+  case "$ENDPOINT_HOST" in
+    localhost | 127.* | ::1 | "[::1]" | 0.0.0.0) return 0 ;;
+  esac
+  [ -n "$THIS_HOST" ] && [ "$ENDPOINT_HOST" = "$THIS_HOST" ] && return 0
+  docker ps --format '{{.Names}}' | grep -qxF -- "$ENDPOINT_HOST" && return 0
+  return 1
+}
+if [ "$ALLOW_ON_HOST" = yes ]; then
+  OFF_HOST=no
+  echo "copies will be kept on this machine, as BRAIN_BACKUP_ALLOW_ON_HOST=yes says; the" >&2
+  echo "Recovery screen will say that the failure that destroys this machine destroys them." >&2
+else
+  if [ "$OFF_HOST" != yes ]; then
+    echo "BRAIN_BACKUP_OFF_HOST is not yes. Say yes only once you have checked that $ENDPOINT_HOST" >&2
+    echo "is another machine; to keep copies here knowingly, set BRAIN_BACKUP_ALLOW_ON_HOST=yes." >&2
     exit 1
   fi
-  ENDPOINT="http://127.0.0.1:8333"
+  if is_this_machine; then
+    echo "$ENDPOINT_HOST is this machine, or a container running on it, so it is not off the host." >&2
+    echo "Give an object store on another machine, or set BRAIN_BACKUP_ALLOW_ON_HOST=yes." >&2
+    exit 1
+  fi
+fi
+
+# Who can read the copies: the client's public key, or an explicit statement that nobody holds one.
+RECIPIENT="${BRAIN_BACKUP_RECIPIENT:-}"
+if [ -z "$RECIPIENT" ]; then
+  if [ "${BRAIN_BACKUP_ALLOW_UNENCRYPTED:-no}" != yes ]; then
+    echo "BRAIN_BACKUP_RECIPIENT is not set. Give the path of the client's public key and copies" >&2
+    echo "are encrypted to it; to store them readable knowingly, set BRAIN_BACKUP_ALLOW_UNENCRYPTED=yes." >&2
+    exit 1
+  fi
+elif [ ! -f "$RECIPIENT" ]; then
+  echo "BRAIN_BACKUP_RECIPIENT is $RECIPIENT and there is no file there." >&2
+  exit 1
+elif grep -q 'PRIVATE KEY' "$RECIPIENT" || ! openssl pkey -pubin -in "$RECIPIENT" -noout 2>/dev/null; then
+  echo "$RECIPIENT is not a public key in PEM form (a private key is refused: it must stay with" >&2
+  echo "the client, not on this machine)." >&2
+  exit 1
 fi
 
 # Refused rather than defaulted, because a copy that cannot authenticate to the bucket fails
@@ -69,19 +150,48 @@ fi
 : "${AWS_ACCESS_KEY_ID:?set AWS_ACCESS_KEY_ID to a key that may write to the backups bucket}"
 : "${AWS_SECRET_ACCESS_KEY:?set AWS_SECRET_ACCESS_KEY to the secret of that key}"
 
+# The drill service, when asked for: it needs the application image the install runs, which the
+# installer wrote beside the compose file, and the two helper scripts.
+DRILL="${BRAIN_DRILL_SERVICE:-no}"
+APP_IMAGE="${BRAIN_APP_IMAGE:-}"
+if [ "$DRILL" = yes ]; then
+  for helper in brain-drill-service brain-restore-drill; do
+    if [ ! -x "$BIN_DIR/$helper" ]; then
+      echo "missing $BIN_DIR/$helper - copy ops/backup/$helper there first" >&2
+      exit 1
+    fi
+  done
+  if [ -z "$APP_IMAGE" ] && [ -f "$INSTALL_ENV" ]; then
+    APP_IMAGE="$(sed -n 's/^APP_IMAGE=//p' "$INSTALL_ENV" | head -1)"
+  fi
+  if [ -z "$APP_IMAGE" ]; then
+    echo "the drill service needs the application image this install runs. Set BRAIN_APP_IMAGE," >&2
+    echo "or run this where $INSTALL_ENV names it." >&2
+    exit 1
+  fi
+fi
+
 umask 077
-cat > /etc/brain-backup.env <<ENVFILE
+cat > "$ENV_FILE" <<ENVFILE
 BRAIN_DB_CONTAINER=$DB_CONTAINER
 BRAIN_DB_NAME=$DB_NAME
 BRAIN_DB_USER=$DB_USER
 BRAIN_BACKUP_BUCKET=$BUCKET
 BRAIN_BACKUP_ENDPOINT=$ENDPOINT
+BRAIN_BACKUP_OFF_HOST=$OFF_HOST
+BRAIN_BACKUP_RECIPIENT=$RECIPIENT
 AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
 AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
 ENVFILE
-chmod 600 /etc/brain-backup.env
+if [ "$DRILL" = yes ]; then
+  printf 'BRAIN_APP_IMAGE=%s\n' "$APP_IMAGE" >> "$ENV_FILE"
+  if [ -n "${BRAIN_BACKUP_IDENTITY:-}" ]; then
+    printf 'BRAIN_BACKUP_IDENTITY=%s\n' "$BRAIN_BACKUP_IDENTITY" >> "$ENV_FILE"
+  fi
+fi
+chmod 600 "$ENV_FILE"
 
-cat > /etc/systemd/system/brain-backup.service <<'UNIT'
+cat > "$UNIT_DIR/brain-backup.service" <<UNIT
 [Unit]
 Description=Take a copy of the Company Brain database and describe it
 After=docker.service
@@ -89,15 +199,15 @@ Requires=docker.service
 
 [Service]
 Type=oneshot
-EnvironmentFile=/etc/brain-backup.env
-ExecStart=/usr/local/bin/brain-backup
+EnvironmentFile=$ENV_FILE
+ExecStart=$BIN_DIR/brain-backup
 # Thirty minutes is not a prediction of how long a dump takes. It is the point past which
 # something has gone wrong in a way that will not resolve itself, and a oneshot with no
 # timeout hangs for ever holding the timer's next run.
 TimeoutStartSec=1800
 UNIT
 
-cat > /etc/systemd/system/brain-backup.timer <<'UNIT'
+cat > "$UNIT_DIR/brain-backup.timer" <<'UNIT'
 [Unit]
 Description=Take a copy of the Company Brain database every night
 
@@ -115,21 +225,63 @@ AccuracySec=1min
 WantedBy=timers.target
 UNIT
 
-systemctl daemon-reload
-systemctl enable --now brain-backup.timer
+if [ "$DRILL" = yes ]; then
+  cat > "$UNIT_DIR/brain-drill.service" <<UNIT
+[Unit]
+Description=Rehearse reading the newest Company Brain copy back, when one is owed
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=$ENV_FILE
+ExecStart=$BIN_DIR/brain-drill-service
+# A rehearsal of a large copy is the longest thing this server does on its own. Two hours is the
+# point past which the load is stuck and not slow.
+TimeoutStartSec=7200
+UNIT
+
+  cat > "$UNIT_DIR/brain-drill.timer" <<'UNIT'
+[Unit]
+Description=Look every ten minutes for a Company Brain restore rehearsal that is owed
+
+[Timer]
+# Ten minutes, not weekly: the service decides whether a rehearsal is owed (weekly, or asked for
+# from the console), and polling is how a button pressed at noon is answered before the weekend.
+OnBootSec=15min
+OnUnitInactiveSec=10min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
+UNIT
+fi
+
+"$SYSTEMCTL" daemon-reload
+"$SYSTEMCTL" enable --now brain-backup.timer
+if [ "$DRILL" = yes ]; then
+  "$SYSTEMCTL" enable --now brain-drill.timer
+fi
 
 echo
 echo "--- what it will copy ---"
 echo "  container: $DB_CONTAINER"
 echo "  database:  $DB_NAME"
 echo "  bucket:    s3://$BUCKET at $ENDPOINT"
+if [ "$OFF_HOST" = yes ]; then echo "  placement: another machine"; else echo "  placement: THIS machine"; fi
+if [ -n "$RECIPIENT" ]; then echo "  key:       encrypted to the client's public key"; else echo "  key:       NOT ENCRYPTED"; fi
 echo
 echo "--- next run ---"
-systemctl list-timers brain-backup.timer --no-pager | head -3 || true
+"$SYSTEMCTL" list-timers brain-backup.timer --no-pager | head -3 || true
 echo
 echo "Installed. Take one now to prove it works, rather than finding out in the morning:"
 echo "  systemctl start brain-backup.service && journalctl -u brain-backup.service -n 20 --no-pager"
 echo
-echo "A copy nobody has read back is a file, not a backup. Reading one back is a drill, and it"
-echo "is not scheduled: follow docs/install/restore-drill.md, whose load and row counts"
-echo "ops/backup/brain-restore-drill performs."
+echo "A copy nobody has read back is a file, not a backup."
+if [ "$DRILL" = yes ]; then
+  echo "A rehearsal is started by brain-drill.timer when one is owed, and by the button on the"
+  echo "Recovery screen once its switch is on; its record is written beside the copy."
+else
+  echo "Reading one back is a rehearsal, and none is scheduled on this install: follow"
+  echo "docs/install/restore-drill.md by hand, or set BRAIN_DRILL_SERVICE=yes and run this again."
+fi

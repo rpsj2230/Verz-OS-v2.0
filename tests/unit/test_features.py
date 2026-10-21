@@ -125,6 +125,8 @@ def test_every_declared_reader_asks_about_its_feature_and_nothing_else_asks() ->
         "brain.ops.starter_skill_store",
         "brain.orchestration_routes",
         "brain.plugin_routes",
+        "brain.rehearsal_routes",
+        "brain.handover_routes",
         "brain.migration_routes",
         "brain.browsing.driver",
         "brain.tools.document_generation",
@@ -138,6 +140,7 @@ def test_every_declared_reader_asks_about_its_feature_and_nothing_else_asks() ->
         "brain.agent_audience_routes",
         "brain.project_context",
         "brain.thread_routes",
+        "brain.coordination_routes",
     }
 
 
@@ -273,6 +276,8 @@ def test_switching_a_feature_on_writes_its_row_and_the_next_read_sees_it(
         "plugin_registry": False,
         "orchestration_rehearsal": False,
         "migration_workspace": False,
+        "backup_drill_requests": False,
+        "handover_pack": False,
         "browser_runs": False,
         "control_not_run_alerts": False,
         "agent_learned_changes": False,
@@ -284,6 +289,7 @@ def test_switching_a_feature_on_writes_its_row_and_the_next_read_sees_it(
         "model_server": False,
         "job_redrive": False,
         "agent_audience_extras": False,
+        "multi_agent_coordination": False,
     }
 
 

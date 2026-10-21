@@ -42,6 +42,9 @@ CALLS_A_MODEL_WITHOUT_TOOLS: Final[frozenset[str]] = frozenset(
         "brain.models.adapter",
         # The website widget's answer, written from the public passages with no tool at all.
         "brain.widget_answers",
+        # Splits a request into subtasks for a coordinating agent: a model asked with the request
+        # and the names of the specialists, and no tool. The specialists are run by `answered_for`.
+        "brain.coordination_routes",
     }
 )
 

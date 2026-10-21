@@ -4,10 +4,12 @@ Needs Rupash item 45, Option A. On 2026-09-09 he chose to answer "which agents h
 HR record" for a narrow, high-sensitivity set rather than for everything, and this module is
 that set and the three refusals around it.
 
-**The set is his to widen and it starts here.** `WRITTEN_DOWN` holds three entries today:
+**The set is his to widen and it starts here.** `WRITTEN_DOWN` holds four entries today:
 personnel records and anything carrying a salary, which is the recommendation in the item and
-which he did not narrow, and since 2026-10-12 an artifact download, which is his own requirement
-(M27.15.42) and widens the set by one declared line. It is declared data with an argument per
+which he did not narrow, since 2026-10-12 an artifact download, which is his own requirement
+(M27.15.42), and a document's text opened in a department the reader does not belong to, which is
+his own requirement too (M27.15.1). Each widened the set by one declared line. It is declared
+data with an argument per
 entry rather than a branch, for two reasons that pull the same way: widening it later is one
 `LoggedRead(...)` line somebody can review the argument for, and the whole of what is being
 recorded about everybody can be read in one place instead of being distributed over call
@@ -18,7 +20,7 @@ the set**. `record_read` computes membership from this table and refuses a read 
 does not cover.
 
 **A read log is itself a map of who is interested in whom.** That is the privacy cost item 45
-names, and three decisions follow from it rather than from convenience. The set is three entries,
+names, and three decisions follow from it rather than from convenience. The set is four entries,
 each argued. The log answers to its own capability and not to the audit trail's, so the people
 who can already read the ledger do not acquire it by default; see
 `THE_READ_LOG_ANSWERS_TO_ITS_OWN_NOUN_SO_NO_AUDIT_WILDCARD_REACHES_IT`. And its retention is
@@ -67,7 +69,7 @@ Scope: domain logic. Nothing here opens a connection, reads a clock or writes an
 `brain.audit.record.AuditRecorder.record_read` is the one writer and `brain.audit.view` is the
 one reader.
 
-Task ids: M40.4.2.4, M27.15.42
+Task ids: M40.4.2.4, M27.15.42, M27.15.1
 """
 
 from __future__ import annotations
@@ -84,13 +86,13 @@ from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.field_policy import NAME_PATTERN
 
 # ------------------------------------------------------------------ written-down reasons
-#: Why the set is two entries rather than every record with a permission on it.
+#: Why the set is a few declared entries rather than every record with a permission on it.
 A_READ_LOG_IS_A_MAP_OF_WHO_IS_INTERESTED_IN_WHOM: Final = (
     "Needs Rupash item 45 states the cost of Option B plainly: a log of every read becomes "
     "the largest thing in the database and is itself a record of who is interested in whom, "
     "kept for as long as the ledger is. That cost does not disappear for a narrow set, it "
     "becomes proportionate to it, so the set has to stay small on purpose rather than grow "
-    "one convenient entry at a time. Two entries is the whole of it, each with its own "
+    "one convenient entry at a time. Four entries are the whole of it, each with its own "
     "argument, and widening it is a decision somebody makes in this file and can be asked "
     "about later rather than a predicate somebody loosens at a call site."
 )
@@ -251,10 +253,11 @@ class LoggedRead:
 
 
 #: The whole of what a read gets written down for. Two entries are item 45's recommendation,
-#: which he did not narrow, and the third is the owner's requirement that every artifact download
-#: leave an entry (M27.15.42).
+#: which he did not narrow, the third is the owner's requirement that every artifact download
+#: leave an entry (M27.15.42) and the fourth his requirement that opening the text of another
+#: department's document leave one (M27.15.1).
 #:
-#: **This is the line somebody widens, and it is meant to be reviewable as a line.** A fourth
+#: **This is the line somebody widens, and it is meant to be reviewable as a line.** A fifth
 #: entry is a `LoggedRead(...)` with its own `because`, and nothing else in the system has to
 #: change: `record_read` reads this tuple, the view's rule is per action rather than per
 #: reason, and the retention is one number for the whole log.
@@ -298,6 +301,21 @@ WRITTEN_DOWN: Final[tuple[LoggedRead, ...]] = (
             "was shown. The set stays small on purpose, and this is the third line and not the "
             "first of a family: opening a document in the library or reading a row is not written "
             "down, and a proposal to write those down is Option B again"
+        ),
+    ),
+    LoggedRead(
+        name="document_opened_in_another_department",
+        entity="document",
+        because=(
+            "the owner's own requirement (M27.15.1): opening the text of a document that sits in "
+            "a department the reader does not belong to is a capability separate from seeing it "
+            "listed, and every opening leaves an entry naming the document and the reader. It is "
+            "the read that crosses the line the departments exist to draw, so it is the one worth "
+            "asking about afterwards, and it is bounded by that line: a reader opening their own "
+            "department's document, or one the company reads, leaves nothing, so this is not "
+            "the library's reads written down. The unit is the document, and the entry says "
+            "nothing about which passages were shown, so two readers of one document leave the "
+            "same row"
         ),
     ),
 )

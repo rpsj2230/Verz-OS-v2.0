@@ -49,6 +49,23 @@ docker inspect --format '{{.State.Health.Status}}' <the browser-launcher contain
 docker network ls --filter name=brain-browser-egress                                 # created at start
 ```
 
+## 3a. The install's own check makes a sandbox, reads what the daemon made, and removes it
+
+Sections 5 and 6 below are a person reading `docker inspect`. The install runs the same reading
+itself, with no browser: the check `a_browser_sandbox_is_made_for_one_run_and_removed_with_it`
+(module `brain.ops.acceptance_checks_browser_sandbox`) sends the launcher a `rehearse` line. The
+launcher creates a run's network and proxy and the runner unstarted, asks the daemon to describe
+all three (`brain.browsing.inspection`), removes them, and answers with the runner's runtime, every
+way the description is weaker than the product says, and how many things still carry the run's
+label. The check passes only when there are no gaps, the runtime is `runsc` and nothing is left.
+
+With the `browser_runs` switch off, or with no launcher to answer, the check is **not run** and says
+which in one sentence; it is never passed on the product's own bodies alone. To run it, switch
+"Let agents run a browser" on in Features, compose the overlay as in section 3, and press Run now on
+the Install page. A failure is then a defect in section 6's list or in the host. The check's reason
+is one fixed sentence, so reproduce it by hand with section 5 to see which field the daemon gave
+differently.
+
 ## 4. A start line that names a gap is refused before anything is created
 
 From inside the worker container, send a start message with an origin that is not an origin

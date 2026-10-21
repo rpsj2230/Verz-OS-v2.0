@@ -231,6 +231,7 @@ from brain.knowledge.search import KNOWLEDGE_READ
 from brain.memory.promotion_store import counted_after_answering
 from brain.memory.turn import Turn, recall_place, session_statements, turn_of
 from brain.ops.agent_item_use import StoredItemUses, cited_item_ids, counting_is_on
+from brain.ops.automation import flow_reach
 from brain.ops.budget_stop_store import Asker, budget_refusal_for
 from brain.ops.capacity_ledger import CapacityLedger, make_ledger
 from brain.ops.classification_store import classified_lane_of
@@ -1862,6 +1863,12 @@ class Answering:
     #: The caller the web route authenticated, so a run resolves them again exactly as the route
     #: did, service accounts included. None on a chat channel, which carries a person.
     caller: Caller | None = None
+    #: The ceilings of the lenses above the agent this question is put to, root first: the agent
+    #: that handed the work on and the subtask's own (`brain.orchestration.coordinator`). Empty for
+    #: a question a person asked. Folded into the reach resolved again before each tool call, so a
+    #: delegated run is narrowed by them at every call and not only when it started. See
+    #: `A_DELEGATED_RUN_IS_NARROWED_AGAIN_BY_ITS_LENSES_AT_EVERY_TOOL_CALL`.
+    lenses: tuple[EntitlementSet, ...] = ()
 
     @classmethod
     def of(cls, asked: Asking) -> Answering:
@@ -1913,6 +1920,16 @@ EVERY_CALLER_IS_RESOLVED_AGAIN_BEFORE_EACH_TOOL_CALL: Final = (
     "the resolver and admitted at the strength chat is held to, or the weakest where that is not "
     "known. Only a caller the run has no way to resolve keeps the reach it was admitted at, and "
     "no route builds one."
+)
+
+#: Why a run handed on by another agent is narrowed again by the agents above it at every call.
+A_DELEGATED_RUN_IS_NARROWED_AGAIN_BY_ITS_LENSES_AT_EVERY_TOOL_CALL: Final = (
+    "The reach resolved again before a tool call is the caller's own, narrowed by the agent the "
+    "run is put to. A run a coordinating agent handed on has more lenses than that: the "
+    "coordinator's ceiling and the subtask's. Resolving afresh and narrowing by the specialist "
+    "alone would give back, at the first tool call, what those two took away, so the lenses ride "
+    "on the question and are folded into the fresh reach every time, through the one wrapper "
+    "over the one intersection."
 )
 
 #: The one caller a run cannot resolve again, said where a reader of the rule will look.
@@ -2027,7 +2044,7 @@ def reach_again(
     """
     wiring = wiring_of(request)
 
-    async def again(now: datetime) -> EntitlementSet:
+    async def resolved(now: datetime) -> EntitlementSet:
         if wiring is None:
             return asking.reach
         if asking.caller is not None:
@@ -2048,7 +2065,23 @@ def reach_again(
         assurance = asking.assurance or Assurance.UNVERIFIED
         return admit(own.entitlements, asking.channel, assurance)
 
+    async def again(now: datetime) -> EntitlementSet:
+        return through_lenses(await resolved(now), asking.lenses)
+
     return again
+
+
+def through_lenses(reach: EntitlementSet, lenses: Sequence[EntitlementSet]) -> EntitlementSet:
+    """A reach narrowed by each lens above the agent a question is put to, in order.
+
+    `flow_reach` once per lens, which is the one wrapper over the one intersection, so this adds no
+    implementation of the central rule. With no lens it returns the reach it was handed, the same
+    object, so a run nobody delegated is exactly what it was. See
+    `A_DELEGATED_RUN_IS_NARROWED_AGAIN_BY_ITS_LENSES_AT_EVERY_TOOL_CALL`.
+    """
+    for lens in lenses:
+        reach = flow_reach(reach, lens)
+    return reach
 
 
 #: Why an agent's leash and a place to hold writes are read only for an agent that may ask for one.

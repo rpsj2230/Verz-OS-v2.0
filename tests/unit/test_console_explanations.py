@@ -51,7 +51,6 @@ A_ROUTE_THAT_WOULD_RETIRE_IT: dict[str, str] = {
     "learning.promote": f"{API_PREFIX}/govern/learning/promote",
     "learning.decide": f"{API_PREFIX}/govern/learning/decisions",
     "operations.stop_run": f"{API_PREFIX}/jobs/{{name}}/stop",
-    "operations.start_rehearsal": f"{API_PREFIX}/install/recovery/rehearsals",
     "operations.import_data": f"{API_PREFIX}/data-transfer/imports",
     "template.author": f"{API_PREFIX}/agent-templates/publish",
     "automation.reinstate": f"{API_PREFIX}/automations/{{automation_id}}/reinstate",

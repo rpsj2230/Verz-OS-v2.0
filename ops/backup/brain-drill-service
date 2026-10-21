@@ -1,0 +1,224 @@
+#!/bin/sh
+# The server's drill service: when a restore rehearsal is owed, read the newest copy back into a
+# scratch database, ask it the questions, and write down what came back.
+#
+#   brain-drill-service
+#
+# Run by the `brain-drill.timer` unit every ten minutes as root, and by hand the same way. It
+# takes no arguments: what it rehearses and whether it is owed is decided by
+# `brain.ops.drill_service`, from the bucket's listing and the clock.
+#
+# WHY THIS IS A SCRIPT ON THE SERVER AND NOT A TASK IN THE WORKER (needs-rupash item 235). A
+# rehearsal starts a container beside the database, and nothing the product runs holds the access
+# to start one. A button that reached nothing would be worse than none, so this is the installer's
+# own service, with the server's own access, and the product itself still starts nothing: it asks
+# by putting a small object in the bucket (`drill-request.json`), and reads the result by reading
+# the record this writes beside the copy. Whether to run it at all, or to rehearse by hand, is the
+# owner's choice (item 235, options A to C); this is option B, behind a switch that ships off.
+#
+# WHAT IT DECIDES AND WHAT IT DOES NOT. It decides nothing about whether a copy verified. It asks
+# three questions of the loaded copy and states what each answered, and the verdict is
+# `brain.ops.recovery.verification_of`'s when the product reads the record
+# (`A_RUNNER_THAT_COULD_WRITE_THE_VERDICT_WOULD_BE_THE_RULE`). A step that cannot run is recorded
+# as a check that did not pass, with a sentence saying which step and never what it read: a
+# rehearsal that fell over is the rehearsal whose absence of a record would leave the previous
+# success standing as the newest evidence.
+#
+# THE SCRATCH COPY NEVER TOUCHES THE LIVE DATABASE. The scratch container is a different
+# container, on an internal network with no way out, from the live database's own image, and this
+# refuses to run when the names it was given for the two are the same. `brain-restore-drill`
+# repeats that refusal from its side by name, by the identifier docker reports and by network.
+#
+# EVERYTHING DOWNLOADED IS DESTROYED, on success, on failure and on a signal. The copy holds every
+# record the install holds and the roles file names every role, so a rehearsal that left them in
+# /var/tmp would be a second, unencrypted, unmonitored copy of the company's data.
+#
+# Environment (all from /etc/brain-backup.env, which `brain-install-backup` writes):
+#   BRAIN_DB_CONTAINER, BRAIN_DB_NAME, BRAIN_DB_USER   the live database, read for its roles and image
+#   BRAIN_BACKUP_BUCKET, BRAIN_BACKUP_ENDPOINT         where copies and records are
+#   BRAIN_APP_IMAGE        the application image this install runs, which holds the checks
+#   BRAIN_BACKUP_IDENTITY  optional: the client's private key, for an encrypted copy (see
+#                          `brain-backup-crypt` for what leaving it here trades away)
+#   BRAIN_BACKUP_CRYPT, BRAIN_RESTORE_DRILL            the two helper scripts, if not in /usr/local/bin
+#   BRAIN_DRILL_WORK_DIR   where a rehearsal downloads to, default /var/tmp/brain-drill
+#
+# Exits 0 when nothing was owed or a record was written, whatever it says; 1 when a rehearsal
+# could not even leave a record; 2 when it refuses before touching anything.
+set -eu
+
+BRAIN_DB_CONTAINER="${BRAIN_DB_CONTAINER:?set BRAIN_DB_CONTAINER to this install's database container}"
+BRAIN_DB_NAME="${BRAIN_DB_NAME:?set BRAIN_DB_NAME to this install's database}"
+BRAIN_DB_USER="${BRAIN_DB_USER:?set BRAIN_DB_USER to a role that may read every role}"
+BRAIN_BACKUP_BUCKET="${BRAIN_BACKUP_BUCKET:?set BRAIN_BACKUP_BUCKET to the bucket copies are in}"
+BRAIN_BACKUP_ENDPOINT="${BRAIN_BACKUP_ENDPOINT:?set BRAIN_BACKUP_ENDPOINT to the object store address}"
+BRAIN_APP_IMAGE="${BRAIN_APP_IMAGE:?set BRAIN_APP_IMAGE to the application image this install runs}"
+BRAIN_BACKUP_IDENTITY="${BRAIN_BACKUP_IDENTITY:-}"
+BRAIN_BACKUP_CRYPT="${BRAIN_BACKUP_CRYPT:-/usr/local/bin/brain-backup-crypt}"
+BRAIN_RESTORE_DRILL="${BRAIN_RESTORE_DRILL:-/usr/local/bin/brain-restore-drill}"
+BRAIN_DRILL_WORK_DIR="${BRAIN_DRILL_WORK_DIR:-/var/tmp/brain-drill}"
+
+# Fixed names, so a rehearsal that was killed leaves something the next one knows how to remove.
+SCRATCH_CONTAINER=brain-drill-db
+SCRATCH_NETWORK=brain-drill
+SCRATCH_DATABASE=brain_drill
+REQUEST_KEY=drill-request.json
+READY_TRIES=60
+
+log() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1"; }
+fail() { printf 'failed: %s\n' "$1" >&2; exit 1; }
+refuse() { printf 'refused: %s\n' "$1" >&2; exit 2; }
+s3() { aws --endpoint-url "$BRAIN_BACKUP_ENDPOINT" "$@"; }
+
+[ "$SCRATCH_CONTAINER" != "$BRAIN_DB_CONTAINER" ] \
+    || refuse "the live database container is called $SCRATCH_CONTAINER, which is the name a rehearsal removes; rename one of them"
+[ "$SCRATCH_DATABASE" != "$BRAIN_DB_NAME" ] \
+    || refuse "the live database is called $SCRATCH_DATABASE, the scratch database's name"
+command -v docker >/dev/null || refuse "docker is not on PATH; this runs beside the containers"
+command -v aws >/dev/null || refuse "the aws cli is not installed; it is how copies are read"
+
+NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+LISTING="$(s3 s3api list-objects-v2 --bucket "$BRAIN_BACKUP_BUCKET" \
+    --query 'Contents[].[Key,LastModified]' --output text)" \
+    || fail "the bucket could not be listed, so nothing was decided"
+# The aws cli prints the word None for an empty bucket and the planner refuses it as a line.
+[ "$LISTING" != None ] || LISTING=
+
+PLAN="$(printf '%s\n' "$LISTING" | docker run --rm -i --network none "$BRAIN_APP_IMAGE" \
+    python -m brain.ops.drill_service plan --now "$NOW")" \
+    || fail "the plan could not be made from the listing, so no rehearsal was started"
+case "$PLAN" in
+    "skip "*)
+        log "no rehearsal owed: ${PLAN#skip }"
+        exit 0
+        ;;
+    "run "*) ;;
+    *) fail "the plan said '$PLAN', which is neither run nor skip" ;;
+esac
+REST="${PLAN#run }"
+BACKUP_ID="${REST%% *}"
+WHY="${REST#* }"
+case "$BACKUP_ID" in
+    database-*) ;;
+    *) fail "the plan named '$BACKUP_ID', which is not a copy of the database" ;;
+esac
+
+mkdir -p "$BRAIN_DRILL_WORK_DIR"
+chmod 700 "$BRAIN_DRILL_WORK_DIR"
+WORK="$(mktemp -d "$BRAIN_DRILL_WORK_DIR/run.XXXXXX")"
+
+scratch_gone() {
+    docker rm -f "$SCRATCH_CONTAINER" >/dev/null 2>&1 || :
+    docker network rm "$SCRATCH_NETWORK" >/dev/null 2>&1 || :
+}
+cleanup() {
+    scratch_gone
+    rm -rf "$WORK"
+}
+trap cleanup EXIT
+trap 'exit 1' INT TERM
+
+# A scratch container left by a rehearsal that was killed is removed before this one starts. Only
+# the names this service owns, which the refusals above hold apart from the live ones.
+scratch_gone
+
+log "rehearsing $BACKUP_ID ($WHY)"
+STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+PASSWORD="$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')"
+
+SMOKE=failed
+SMOKE_DETAIL=
+NOT_ASKED='the copy was not loaded, so this question was not asked of it'
+
+step_failed() {
+    SMOKE=failed
+    SMOKE_DETAIL="$1"
+    log "$1"
+}
+
+load_and_count() {
+    s3 s3 cp "s3://$BRAIN_BACKUP_BUCKET/$BACKUP_ID.manifest.json" "$WORK/$BACKUP_ID.manifest.json" >/dev/null \
+        || { step_failed "the copy's manifest could not be downloaded, so nothing was loaded"; return 1; }
+    if printf '%s\n' "$LISTING" | grep -q "^$BACKUP_ID.dump.enc[[:space:]]"; then
+        s3 s3 cp "s3://$BRAIN_BACKUP_BUCKET/$BACKUP_ID.dump.enc" "$WORK/$BACKUP_ID.dump.enc" >/dev/null \
+            && s3 s3 cp "s3://$BRAIN_BACKUP_BUCKET/$BACKUP_ID.dump.key" "$WORK/$BACKUP_ID.dump.key" >/dev/null \
+            || { step_failed "the encrypted copy or its wrapped key could not be downloaded, so nothing was loaded"; return 1; }
+        if [ -z "$BRAIN_BACKUP_IDENTITY" ] || [ ! -f "$BRAIN_BACKUP_IDENTITY" ]; then
+            step_failed "the copy is encrypted to the client's key and no private key is left on this server for rehearsals, so it was not read back"
+            return 1
+        fi
+        sh "$BRAIN_BACKUP_CRYPT" decrypt --identity "$BRAIN_BACKUP_IDENTITY" \
+            --in "$WORK/$BACKUP_ID.dump.enc" --key "$WORK/$BACKUP_ID.dump.key" \
+            --out "$WORK/$BACKUP_ID.dump" \
+            || { step_failed "the copy could not be decrypted with the key on this server"; return 1; }
+        rm -f "$WORK/$BACKUP_ID.dump.enc" "$WORK/$BACKUP_ID.dump.key"
+    else
+        s3 s3 cp "s3://$BRAIN_BACKUP_BUCKET/$BACKUP_ID.dump" "$WORK/$BACKUP_ID.dump" >/dev/null \
+            || { step_failed "the copy could not be downloaded, so nothing was loaded"; return 1; }
+    fi
+
+    docker network create --internal "$SCRATCH_NETWORK" >/dev/null \
+        || { step_failed "the scratch network could not be made"; return 1; }
+    IMAGE="$(docker inspect --format '{{.Config.Image}}' "$BRAIN_DB_CONTAINER")" \
+        || { step_failed "the live database's image could not be read, so a scratch copy of it could not be started"; return 1; }
+    docker run -d --name "$SCRATCH_CONTAINER" --network "$SCRATCH_NETWORK" \
+        -e "POSTGRES_PASSWORD=$PASSWORD" "$IMAGE" >/dev/null \
+        || { step_failed "the scratch database could not be started"; return 1; }
+    tries=0
+    until docker exec "$SCRATCH_CONTAINER" pg_isready -U postgres >/dev/null 2>&1; do
+        tries=$((tries + 1))
+        [ "$tries" -lt "$READY_TRIES" ] || { step_failed "the scratch database did not become ready"; return 1; }
+        sleep 2
+    done
+    # A dump holds a database and not the roles its policies name. Loading without them brings
+    # back the rows and fails the policies, which is the failure the canary exists to see, so a
+    # roles file that cannot be made is a rehearsal that did not run and not one that failed.
+    docker exec "$BRAIN_DB_CONTAINER" pg_dumpall -U "$BRAIN_DB_USER" --roles-only --no-role-passwords \
+        > "$WORK/roles.sql" \
+        || { step_failed "the live database's roles could not be read, so the policies could not be loaded"; return 1; }
+    # A role the scratch database already has is reported as existing, which is harmless.
+    docker exec -i "$SCRATCH_CONTAINER" psql -X -q -U postgres < "$WORK/roles.sql" >/dev/null 2>&1 || :
+
+    if sh "$BRAIN_RESTORE_DRILL" --manifest "$WORK/$BACKUP_ID.manifest.json" \
+        --dump "$WORK/$BACKUP_ID.dump" \
+        --scratch-container "$SCRATCH_CONTAINER" --scratch-database "$SCRATCH_DATABASE"; then
+        SMOKE=passed
+        SMOKE_DETAIL="every table's row count and the migration head in the scratch copy matched the copy's manifest"
+    else
+        step_failed "the copy did not load, or its row counts or migration head did not match its manifest"
+        return 1
+    fi
+}
+
+load_and_count || :
+
+if [ "$SMOKE" = passed ]; then
+    if ! docker run --rm --network "$SCRATCH_NETWORK" "$BRAIN_APP_IMAGE" \
+        python -m brain.ops.drill_checks \
+        "postgresql://postgres:$PASSWORD@$SCRATCH_CONTAINER:5432/$SCRATCH_DATABASE" \
+        > "$WORK/checks.json"; then
+        log "the application's checks could not be run against the scratch copy"
+        printf '%s\n' '[{"check": "schema_complete", "passed": false, "detail": "the application image could not run its checks against the scratch copy"}, {"check": "permission_canary", "passed": false, "detail": "the application image could not run its checks against the scratch copy"}]' > "$WORK/checks.json"
+    fi
+else
+    printf '[{"check": "schema_complete", "passed": false, "detail": "%s"}, {"check": "permission_canary", "passed": false, "detail": "%s"}]\n' "$NOT_ASKED" "$NOT_ASKED" > "$WORK/checks.json"
+fi
+
+FINISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+RECORD_KEY="$BACKUP_ID-drill-$(date -u +%Y%m%dT%H%M%SZ).drill.json"
+docker run --rm -i --network none "$BRAIN_APP_IMAGE" \
+    python -m brain.ops.drill_service record \
+    --backup-id "$BACKUP_ID" --started "$STARTED_AT" --finished "$FINISHED_AT" \
+    --smoke "$SMOKE" --smoke-detail "$SMOKE_DETAIL" --checks-file - \
+    < "$WORK/checks.json" > "$WORK/record.json" \
+    || fail "the record could not be written, so the rehearsal left no evidence; the journal above says why"
+
+s3 s3 cp "$WORK/record.json" "s3://$BRAIN_BACKUP_BUCKET/$RECORD_KEY" >/dev/null \
+    || fail "the record was written and could not be uploaded, so the panel will not see this rehearsal"
+
+# A request is removed only once its answer is beside the copy. Removed before, a failed upload
+# would lose the ask and leave a person pressing a button that had worked.
+if [ "$WHY" = requested ]; then
+    s3 s3 rm "s3://$BRAIN_BACKUP_BUCKET/$REQUEST_KEY" >/dev/null \
+        || fail "the rehearsal's record is in the bucket and its request could not be removed, so it will run again"
+fi
+log "recorded $RECORD_KEY: the copy $( [ "$SMOKE" = passed ] && echo loaded || echo did not load )"
