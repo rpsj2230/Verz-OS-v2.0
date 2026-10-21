@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-21T02:43:36.888223+00:00",
-  "commit": "b94f8d78",
-  "commit_subject": "Agent templates are proved on the install by three checks that already ran, and fourteen console leaves say what is true of them (#650)",
+  "generated_at": "2026-10-21T03:34:32.320638+00:00",
+  "commit": "7eef3f36",
+  "commit_subject": "An install check follows a model call into its cost and a used-up budget into its stop (#652)",
   "total": 1626,
   "done": 1168,
   "percent": 71.8,
-  "built": 1349,
-  "built_percent": 83.0,
-  "built_unproven": 181,
+  "built": 1351,
+  "built_percent": 83.1,
+  "built_unproven": 183,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -85,6 +85,7 @@
     "M27.10.2",
     "M27.11.10",
     "M27.11.7",
+    "M27.12.5",
     "M27.15.12",
     "M27.15.19",
     "M27.15.50",
@@ -101,6 +102,7 @@
     "M27.16.3",
     "M27.16.4",
     "M27.16.5",
+    "M27.7.15",
     "M27.7.23",
     "M27.7.26",
     "M27.9.8",
@@ -247,13 +249,13 @@
       "done": 474,
       "percent": 79.1,
       "in_progress": 16,
-      "ready_for_testing": 60,
+      "ready_for_testing": 62,
       "blocked": 6,
-      "open": 43,
+      "open": 41,
       "acts": 1,
       "decided": 56,
-      "built": 536,
-      "built_percent": 89.5
+      "built": 538,
+      "built_percent": 89.8
     },
     {
       "wave": 4,
@@ -580,7 +582,7 @@
       "done": 164,
       "acts": 0,
       "decided": 22,
-      "built": 186
+      "built": 188
     },
     {
       "module": "M28",
@@ -2898,8 +2900,8 @@
       "updated": "2026-10-21"
     },
     "M27.7.15": {
-      "status": "OPEN",
-      "why": "Built: spend, department and person budgets are versioned and stops are listed with whether they were enforced (install checks M21.1.5 and M21.3.6 pass on the install). Enforcement ships off behind budget_enforcement by the owner's decision 169. No install check follows a real model call into a stop.",
+      "status": "READY FOR TESTING",
+      "why": "Built and wired, and now followed end to end by the install check `a_model_call_is_costed_and_a_used_up_budget_stops_the_next`: a department whose daily ceiling is used up has a stop recorded for its next question, listed to a reader of that department's spend with whether the install enforced it, and shown to nobody in another department. The check reads the enforcement switch and never sets it, so it passes on an install with enforcement off (the stop is listed as not enforced) and on one with it on. To prove it on the install: open Install, run the checks and read that check; the leaf closes when it passes on the install's two newest runs.",
       "updated": "2026-10-21"
     },
     "M27.7.23": {
@@ -2953,8 +2955,8 @@
       "updated": "2026-10-06"
     },
     "M27.12.5": {
-      "status": "OPEN",
-      "why": "Built: a finished request is costed from the provider's counts and the price list by ops.usage_store.UsageRecorder, and budgets and stops are as for M27.7.15. No install check follows a model call to its spend row; one would use the stand-in model the routing checks use.",
+      "status": "READY FOR TESTING",
+      "why": "Built and wired, and now followed end to end by the install check `a_model_call_is_costed_and_a_used_up_budget_stops_the_next`: a question answered by a priced stand-in model leaves one cost in its department equal to the tokens its request row recorded at the price set. To prove it on the install: open Install, run the checks, and read that check; the leaf closes when it passes on the install's two newest runs. It says it was not run, rather than failing, on an install with no currency set. Found on the way and fixed for every install: a question the checks ask was recorded with no trace on a budget stop, which the table refused, so the stop was silently not written.",
       "updated": "2026-10-21"
     },
     "M27.13.3": {
