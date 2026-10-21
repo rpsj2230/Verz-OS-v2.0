@@ -120,6 +120,18 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       "/api/v1/me/agents/requestable": {
         agents: [{ agent_id: UNBROKEN, display_name: UNBROKEN, asked: false }],
       },
+      "/api/v1/me/deletion-request": {
+        may_ask: true,
+        asked_at: null,
+        state: "none",
+        told: UNBROKEN,
+        route: {
+          order: [{ store: "rows", holds: UNBROKEN }],
+          reaches: [{ store: "rows", holds: UNBROKEN }],
+          rotates_out: [{ store: "backup", holds: UNBROKEN }],
+          retained: [{ store: "ledger", holds: UNBROKEN }],
+        },
+      },
       "/api/v1/me/stored": {
         stores: [{ store: UNBROKEN, holds: UNBROKEN, deletion: UNBROKEN }],
         told: UNBROKEN,

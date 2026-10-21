@@ -16,7 +16,7 @@
  * **The holds are those the newest report cited**, which is the one list of holds the API serves;
  * a hold placed since is lifted by its reference from the Legal holds view's second button.
  *
- * Task ids: M27.7.24, M27.16.1, M27.16.3
+ * Task ids: M27.7.24, M27.16.1, M27.16.3, M40.4.2.3
  */
 
 import { Archive, FileDown, Gavel, MoreHorizontal, Plus, Trash2 } from "lucide-react";
@@ -65,6 +65,7 @@ import { nameOf, peopleIn, Pill, whenWords } from "../review/parts";
 import { ErasurePill } from "./pills";
 import { ErasureDrawer, HoldDrawer, LiftDrawer, LIFT_LABEL, SweepActs, Told, useLift } from "./RetentionActs";
 import { useRetention, type Retention } from "./useRetention";
+import { WaitingAsksList } from "./WaitingAsks";
 
 export const RETENTION_HEADING = "Retention and erasure";
 export const RETENTION_LEDE = "How long each kind of thing is kept, what stops it being removed, and requests to erase somebody's data.";
@@ -324,6 +325,7 @@ function ErasuresView({ retention, controls, onDone }: { readonly retention: Ret
     >
       <div className="flex min-w-0 flex-col gap-3">
         {controls.may_erase ? null : <Note>{ERASE_NOT_YOURS}</Note>}
+        {controls.may_erase ? <WaitingAsksList version={retention.version} /> : null}
         {requests.length === 0 ? (
           <EmptyList
             title={NO_ERASURES}
