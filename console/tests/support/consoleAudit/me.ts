@@ -17,6 +17,7 @@ import {
   shareApiPath,
   unshareApiPath,
 } from "../../../src/pages/myAccountQuery";
+import { IMPORT_MY_SKILL_API_PATH, MY_SKILLS_API_PATH, offerMySkillApiPath } from "../../../src/pages/mySkillsQuery";
 import { EDIT_API_PATH, FORGET_ALL_API_PATH, FORGET_API_PATH } from "../../../src/pages/myWorkspaceQuery";
 import { LEARNING_API_PATH, QUIET_API_PATH, REACH_API_PATH } from "../../../src/pages/myPreferencesQuery";
 import {
@@ -68,6 +69,15 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/components/MyAccountCards.tsx END_MY_DEVICE_API_PATH": [
     at("POST /api/v1/me/devices/end", "END_MY_DEVICE_API_PATH", END_MY_DEVICE_API_PATH),
+  ],
+  "src/components/MySkills.tsx MY_SKILLS_API_PATH": [
+    at("POST /api/v1/me/skills", "MY_SKILLS_API_PATH", MY_SKILLS_API_PATH),
+  ],
+  "src/components/MySkills.tsx IMPORT_MY_SKILL_API_PATH": [
+    at("POST /api/v1/me/skills/imports", "IMPORT_MY_SKILL_API_PATH", IMPORT_MY_SKILL_API_PATH),
+  ],
+  "src/components/MySkills.tsx offerMySkillApiPath(one.digest)": [
+    at("POST /api/v1/me/skills/{digest}/offer", "offerMySkillApiPath", offerMySkillApiPath("a".repeat(64))),
   ],
   "src/components/MyProjects.tsx PROJECTS_API_PATH": [
     at("POST /api/v1/me/projects", "PROJECTS_API_PATH", PROJECTS_API_PATH),
@@ -217,6 +227,24 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_acceptance_checks_member_agent_request", "test_the_request_check_passes_on_an_install_and_leaves_nothing", true),
     audit: { notApplicable: "A request changes nobody's access; what a department decides is written where audiences are changed." },
     behaviour: t("test_acceptance_checks_member_agent_request", "test_a_lead_told_every_time_fails_the_check", true),
+  },
+  // A personal skill is one row in agent.skill and one in agent.skill_personal written together as the
+  // person; the skill insert is the library trigger's `imported` entry. An offer sets one column on
+  // the personal row, once, and changes nobody's access: the decision a reader makes is the entry.
+  "POST /api/v1/me/skills": {
+    row: t("test_personal_skill_store", "test_a_skill_nobody_offered_is_the_owners_alone_and_offering_puts_it_in_the_library", true),
+    audit: t("test_personal_skill_store", "test_a_skill_nobody_offered_is_the_owners_alone_and_offering_puts_it_in_the_library", true),
+    behaviour: t("test_member_skill_routes", "test_a_new_skill_reads_as_private_pending_and_studio_written"),
+  },
+  "POST /api/v1/me/skills/imports": {
+    row: t("test_personal_skill_store", "test_a_skill_nobody_offered_is_the_owners_alone_and_offering_puts_it_in_the_library", true),
+    audit: t("test_personal_skill_store", "test_a_skill_nobody_offered_is_the_owners_alone_and_offering_puts_it_in_the_library", true),
+    behaviour: t("test_member_skill_routes", "test_a_skill_from_an_address_is_the_persons_own_with_an_address_origin"),
+  },
+  "POST /api/v1/me/skills/{digest}/offer": {
+    row: t("test_personal_skill_store", "test_a_skill_nobody_offered_is_the_owners_alone_and_offering_puts_it_in_the_library", true),
+    audit: { notApplicable: "Offering a skill changes nobody's access and runs nothing: it puts the person's own skill in front of the people who read the library, and the decision they make is the ledger entry." },
+    behaviour: t("test_member_skill_routes", "test_offering_marks_the_skill_offered_once_and_says_what_happens_next"),
   },
   "POST /api/v1/me/devices/end": {
     row: t("test_session_store", "test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request", true),

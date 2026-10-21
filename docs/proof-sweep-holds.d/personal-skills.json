@@ -1,0 +1,5 @@
+{
+  "held": {
+    "M40.3.2.2": "the check shows a member's pasted skill kept as theirs alone; it does not fetch from a repository or an address, because a check must not reach outside the install, so bringing a skill in from GitHub at a commit and from an address is shown only when a person does it on an install whose host list admits it"
+  }
+}

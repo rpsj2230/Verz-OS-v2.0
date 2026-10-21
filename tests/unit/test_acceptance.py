@@ -642,6 +642,7 @@ WRITTEN_BY_CHECKS = (
     "agent.skill_review",
     "agent.skill_category",
     "agent.skill_assignment",
+    "agent.skill_personal",
     "agent.agent",
     "agent.template_instance",
     "agent.template_version",

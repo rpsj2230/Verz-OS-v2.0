@@ -55,6 +55,9 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   "src/components/DataStewardCard.tsx": [{ pattern: "/people", index: 1, writes: true }],
   // A memory's edit opens in place on My workspace, the first form on the page once opened.
   "src/pages/MyWorkspace.tsx": [{ pattern: "/me", opener: "Edit", index: 0, writes: true }],
+  // A person's own skill, the one form of the skills card; the forms ahead of it on My workspace are
+  // the preferences card's two (where they are reached, and quiet hours).
+  "src/components/MySkills.tsx": [{ pattern: "/me", index: 2, writes: true }],
   // The one form checks a published head; the ledger's filters are on the Audit log's own page.
   "src/pages/audit/VerifyPage.tsx": [{ pattern: "/audit/verify", index: 0, writes: true }],
   // The one form names a trace and says why; sending it writes the row recording who read it.
