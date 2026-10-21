@@ -127,9 +127,17 @@ source, which everybody else still reads. `GET /me/accounts` lists the sources a
 connect for themselves and whether they have; one they may not is absent, as a source not
 connected is. See `brain.connectors.oauth.A_PERSONS_CONSENT_READS_ONLY_FOR_THAT_PERSON`.
 
+**It also lists what their department connected for them, as inherited (M40.5.1.4).** A connected
+source that names a department, which the person holds a grant scoped to exactly, is listed with
+`provenance` `department` and `disconnectable` false (`department_provided`, through
+`brain.member.connections.inherited`). A list of what the system can reach on a person's behalf
+that left the department's out would be worse than none, and the page offers no control on it,
+because the person did not attach it and detaching it would change what their colleagues get.
+Detaching one's own is `brain.member_accounts_routes`.
+
 Task ids: M42.6.5, M27.9.9, M38.4.1.1, M27.11.9, M27.15.39, M27.15.58, M11.7.7, M11.2.6, M27.15.8
 Task ids: M7.7.2
-Task ids: M11.7.3, M11.8.6, M11.7.8
+Task ids: M11.7.3, M11.8.6, M11.7.8, M40.5.1.4
 """
 
 from __future__ import annotations
@@ -228,8 +236,10 @@ from brain.credential_routes import credentials_of
 from brain.guide_views import GuideStepView, step_view
 from brain.identity.data_steward import declared_capabilities
 from brain.identity.principal_store import StoredPrincipals
+from brain.identity.starter_pack_sync import department_of
 from brain.install import InstallError, value_of
 from brain.listing import Column, ListAsked, Listing
+from brain.member.connections import PersonalConnection, Provenance, inherited
 from brain.ops.connectable import (
     CONNECTABLE,
     NOT_FROM_THE_CONSOLE,
@@ -2694,6 +2704,11 @@ class MyAccountView(BaseModel):
     #: Whether their own refresh token is kept; None when the vault could not be asked.
     connected: bool | None
     told: str = ""
+    #: Who attached it: `personal` for an account this person connected themselves, `department`
+    #: for a connection their department made that they read through (M40.5.1.4).
+    provenance: str = Provenance.PERSONAL.value
+    #: Whether this page offers to disconnect it. Never true for a department's connection.
+    disconnectable: bool = False
 
 
 class MyAccountsView(BaseModel):
@@ -2719,6 +2734,55 @@ async def _personal_sources(
         if one is not None and may_consent_for_themselves(reach, one, connection, now):
             found.append((one, connection))
     return sorted(found, key=lambda pair: pair[0].name)
+
+
+#: What My workspace says beside a connection a department made.
+DEPARTMENT_PROVIDED: Final = (
+    "Your department connected this. It is managed there, so it cannot be disconnected from your "
+    "page. Ask a department administrator to remove it."
+)
+
+
+async def department_provided(
+    request: Request, reach: EntitlementSet
+) -> list[tuple[ConnectorDeclaration, PersonalConnection]]:
+    """The connected sources this person reads through that their department made (M40.5.1.4).
+
+    A source is the department's for this person when it is connected, is not one each person
+    consents to for themselves, names a department it answers to
+    (`PERSONAL_DEPARTMENT_SETTING`), and the person holds a grant scoped to exactly that
+    department. A company-wide grant does not make every department's source "yours": the claim is
+    that somebody in this person's own department provided it, and anything else is absent, as a
+    source nobody connected is. Handed through `brain.member.connections.inherited`, the one
+    place that says which connections are not this person's to detach.
+    """
+    records = records_of(request)
+    if records is None:
+        return []
+    held = {department_of(one.scope) for one in reach.grants} - {None}
+    declared = declarations_of(request)
+    made: list[PersonalConnection] = []
+    named: dict[str, ConnectorDeclaration] = {}
+    for connection in await records.connected():
+        one = declared.get(connection.connector)
+        department = connection.settings.get(PERSONAL_DEPARTMENT_SETTING, "")
+        if one is None or not department or department not in held:
+            continue
+        if one.oauth is not None and one.oauth.kind is ConsentKind.PERSON:
+            continue
+        named[one.name] = one
+        made.append(
+            PersonalConnection(
+                principal_id=reach.principal_id,
+                source=one.name,
+                provenance=Provenance.DEPARTMENT,
+                connected_at=connection.connected_at,
+                token_ref=connector_key_slot(one.name).path,
+            )
+        )
+    return sorted(
+        ((named[one.source], one) for one in inherited(made)), key=lambda pair: pair[0].name
+    )
 
 
 def _connected_for(credentials: Credentials, connector: str, principal_id: str) -> bool | None:
@@ -2749,6 +2813,19 @@ async def my_accounts(request: Request, asked: Asked) -> MyAccountsView:
                 label=declared.label,
                 connected=connected,
                 told=NOT_ASKED_OF_THE_VAULT if connected is None else "",
+                provenance=Provenance.PERSONAL.value,
+                disconnectable=connected is True,
+            )
+        )
+    for declared, _ in await department_provided(request, asked.reach):
+        accounts.append(
+            MyAccountView(
+                connector=declared.name,
+                label=declared.label,
+                connected=True,
+                told=DEPARTMENT_PROVIDED,
+                provenance=Provenance.DEPARTMENT.value,
+                disconnectable=False,
             )
         )
     return MyAccountsView(accounts=accounts, told=CONNECTING_YOUR_OWN_ACCOUNT)

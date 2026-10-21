@@ -416,7 +416,9 @@ def test_the_application_may_write_connector_keys_and_read_only_their_metadata()
     """Exactly two rules under the connector key engine. Create and update so connecting a source
     from the console writes its key; metadata read so the screen can say it is held. No read of a
     key: this process runs no connector, so a read here would be a standing copy of every source's
-    key in the process that talks to a model. No delete: a disconnect leaves the key and says so.
+    key in the process that talks to a model. No delete of a source's key: a disconnect leaves the
+    key and says so. The one delete is a person's own refresh token slot, one segment deeper, which
+    their disconnect from My workspace removes after the vendor has revoked it (M40.5.1.3).
     `brain.ops.openbao.A_KEY_A_VENDOR_ISSUED_IS_STORED_BECAUSE_NOTHING_CAN_MINT_IT` argues it.
     The same two for a consented source's refresh token (M11.8.6), kept by the console's consent
     route, one segment deeper, and for a person's own refresh token, one segment deeper again.
@@ -433,7 +435,7 @@ def test_the_application_may_write_connector_keys_and_read_only_their_metadata()
         "connector_keys/data/oauth_refresh/+": ["create", "update"],
         "connector_keys/metadata/oauth_refresh/+": ["read"],
         "connector_keys/data/oauth_refresh/+/+": ["create", "update"],
-        "connector_keys/metadata/oauth_refresh/+/+": ["read"],
+        "connector_keys/metadata/oauth_refresh/+/+": ["delete", "read"],
     }
 
 
@@ -815,8 +817,10 @@ def test_nothing_running_with_nobody_present_can_read_a_persons_own_refresh_toke
 
 def test_a_persons_own_token_is_kept_by_the_application_and_rotated_by_the_rotate_role() -> None:
     """The writes on a person's slot: the application creates and updates it when that person's
-    consent is answered and reads only its metadata, which My workspace asks; the rotate role
-    patches it and reads nothing. Held against the paths the code calls.
+    consent is answered, reads only its metadata, which My workspace asks, and may delete that
+    metadata, which a person's own disconnect does once the vendor has revoked the token
+    (M40.5.1.3); the rotate role patches it and reads nothing. Held against the paths the code
+    calls.
 
     Delete this and a person's consent cannot be kept on any install, or a rotated token cannot be
     written back, and every vendor that rotates its refresh tokens loses that person's consent on
@@ -828,7 +832,9 @@ def test_a_persons_own_token_is_kept_by_the_application_and_rotated_by_the_rotat
     assert [sorted(caps) for rule, caps in application.items() if _matches(rule, data)] == [
         ["create", "update"]
     ]
-    assert [caps for rule, caps in application.items() if _matches(rule, metadata)] == [["read"]]
+    assert [sorted(caps) for rule, caps in application.items() if _matches(rule, metadata)] == [
+        ["delete", "read"]
+    ]
     rotate = _granted_paths((POLICIES / f"{ROTATE_POLICY}.hcl").read_text(encoding="utf-8"))
     assert [caps for rule, caps in rotate.items() if _matches(rule, data)] == [["patch"]]
 

@@ -4135,9 +4135,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.4.1.1": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): MyWorkspace shows each learned statement with stated/inferred and confidence; the weekly digest (learning_told) names signal kinds as evidence. member_activity.learned_about_me (statement plus evidence) has no caller, so the page shows no evidence. NEXT: call learned_about_me from mine_routes and add evidence (signal kinds) to MineLearnedView",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: GET /me/workspace now calls member_activity.learned_about_me, so each learned line carries the evidence that produced it in the weekly message's words (mine_routes.evidence_by_memory over learning_told.SIGNAL_WORDS), a line the person wrote says so, and an inferred line with no record says no record was kept; MyWorkspace draws the evidence list. Tests: tests/unit/test_mine_routes.py, console/tests/my-workspace-page.test.tsx. To prove on the install: sign in, ask the same question twice in other words so a preference is inferred, open My workspace, and read the evidence under the inferred line; it must name what was noticed and nothing of any conversation.",
+    updated: "2026-10-20",
   },
   "M40.4.1.2": {
     status: "READY FOR TESTING",
@@ -4175,14 +4175,14 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.5.1.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): member.connections.disconnect (revoke first, refuse on failure) built but no TokenRevoker implementation exists and no route; MyAccounts.tsx has no disconnect control. Vault slot connector_person_oauth_slot exists to delete. NEXT: implement a vault-backed TokenRevoker (vendor revoke then slot delete), add DELETE /me/accounts/{connector}, then a check",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: POST /me/accounts/{connector}/disconnect (member_accounts_routes) revokes at the vendor then removes the person's slot through ops/person_token_revoker.VaultTokenRevoker, in the order member.connections.disconnect requires; Google Workspace now declares its revocation endpoint; the application vault policy gains delete on a person's own slot only. Check: a_member_disconnects_their_account_and_the_vendor_is_told_first in ops/acceptance_checks_member_accounts.py, over a recording vendor and vault. NOT provable in CI: that the vendor stops honouring the token, and that the install's vault holds the new policy line (the release applies it). To prove on the install: after the release, connect your own Google account from My workspace, press Disconnect my Google account and confirm; the card must show Not connected, and at your Google account's third-party access page the install must no longer be listed.",
+    updated: "2026-10-20",
   },
   "M40.5.1.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): member.connections.inherited/personally_connected built, no caller; /me/accounts lists only sources the person may connect, with no provenance field, so department-provided connections are not shown as inherited. NEXT: add provenance to MyAccountView from inherited() and render inherited ones without a disconnect control",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: GET /me/accounts lists a connected source that names the person's own department (and that each person does not consent to) with provenance department and no disconnect control, through member.connections.inherited; a person in another department is shown nothing. A department connection is defined here as a connected source naming a department the person holds a grant scoped to exactly (no separate department-connection object exists). Check: a_departments_connection_is_inherited_and_not_detachable in ops/acceptance_checks_member_accounts.py. To prove on the install: as a member of a department that has a source connected, open My workspace and read the Connected accounts card; the source must show as provided by the department with no button, and a member of another department must not see it.",
+    updated: "2026-10-20",
   },
   "M40.5.2.1": {
     status: "READY FOR TESTING",
