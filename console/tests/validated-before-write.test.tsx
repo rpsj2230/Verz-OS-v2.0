@@ -280,6 +280,12 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
   "src/pages/roles/PacksPage.tsx": "Every form here opens in a drawer, which the kit renders outside the page's main landmark where " +
     "this harness looks. Each is submitted blank in tests/people-access-pages.test.tsx, which holds " +
     "that nothing is sent and that the form says, beside each field, what to fill in and in what form.",
+  "src/components/MyProjects.tsx":
+    "Every form here is opened behind a press on a project's row, which the page cases do not make, " +
+    "and none can be sent blank: the make and rename buttons are disabled until nameBody accepts a " +
+    "name, the conversation is chosen from the person's own list, and the file form refuses a " +
+    "missing or unsuitable file before anything is sent. tests/my-projects.test.tsx holds the " +
+    "disabled button and that a name is tidied before it is sent.",
   "src/pages/Ask.tsx":
     "The question form cannot be sent blank by a person: its only submit button is disabled until " +
     "askBody accepts the text, and the field's maxLength stops a question longer than the route " +

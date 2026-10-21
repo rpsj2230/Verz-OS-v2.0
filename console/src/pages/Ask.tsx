@@ -102,7 +102,7 @@
  * ordinary text. Listening stops when the question is sent. See `askDictationCore.ts`.
  *
  * Task ids: M42.6.3, M35.2.1.3, M27.8.5, M3.9.8, M8.1.1, M8.1.2, M8.1.3, M7.4.7, M11.4.9, M7.6.1
- * Task ids: M9.1.1, M9.1.2, M9.1.3, M12.3.6, M16.2.2, M40.7.3
+ * Task ids: M9.1.1, M9.1.2, M9.1.3, M12.3.6, M16.2.2, M40.7.3, M40.7.7, M40.7.6
  */
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
@@ -155,6 +155,8 @@ import {
 } from "./threadsQuery";
 import { FailureNotice, NO_REFERENCE_CAME_BACK } from "../ui/FailureNotice";
 import { readRoster, ROSTER_API_PATH, type RosterEntryView } from "./agentsQuery";
+import { AskProject } from "./AskProject";
+import { addItemApiPath, itemBody } from "./myProjectsQuery";
 import { CANNOT_SAVE, saveDocument } from "./dataTransferQuery";
 
 /** The console address of this screen. */
@@ -418,6 +420,8 @@ export function Ask() {
   const [agents, setAgents] = useState<readonly RosterEntryView[]>([]);
   const [agent, setAgent] = useState("");
   const [kind, setKind] = useState("");
+  // The personal project the next question is asked inside, or none (M40.7.7).
+  const [project, setProject] = useState("");
   // The conversation the next question continues, and this person's conversations (M9.1).
   const [thread, setThread] = useState("");
   // The titles of the files attached to this conversation, until a new one (M12.3.6).
@@ -483,7 +487,7 @@ export function Ask() {
   const ask = useCallback(
     (submitted: FormEvent<HTMLFormElement>) => {
       submitted.preventDefault();
-      const body = askBody(question, agent, kind, thread);
+      const body = askBody(question, agent, kind, thread, project);
       if (body === null) {
         // Not a question the route would take. Doing nothing is the answer: a request known
         // to be refused is a round trip spent to be told what this console already knew.
@@ -513,6 +517,14 @@ export function Ask() {
         setAsking((one) => ({ ...one, traceId: opened.traceId }));
         if (opened.threadId !== "") {
           setThread(opened.threadId);
+          if (project !== "") {
+            // The conversation joins the project it was asked inside. Listing it twice is one row,
+            // and a failure here changes nothing about the answer on the screen.
+            void request<unknown>(addItemApiPath(project), {
+              method: "POST",
+              body: itemBody("thread", opened.threadId),
+            });
+          }
         }
         setRetrievalId(opened.retrievalId);
         for await (const event of opened.events) {
@@ -527,7 +539,7 @@ export function Ask() {
         }
       })();
     },
-    [question, agent, kind, thread, listThreads],
+    [question, agent, kind, thread, project, listThreads],
   );
 
   const { view, busy, failure, traceId } = asking;
@@ -597,6 +609,7 @@ export function Ask() {
             </select>
           </>
         ) : null}
+        <AskProject project={project} disabled={busy} onChange={setProject} />
         <label className="ask__label" htmlFor={KIND_FIELD_ID}>
           {KIND_LABEL}
         </label>
@@ -872,6 +885,13 @@ export function Ask() {
                   {one.title}
                 </button>{" "}
                 <span className="note">{channelWords(one.lastChannel)}</span>
+                {one.stateWords === "" ? null : (
+                  <>
+                    {" "}
+                    <strong data-state={one.state}>{one.stateWords}</strong>
+                    {one.failedStep === "" ? null : <span className="note">{` ${one.failedStep}`}</span>}
+                  </>
+                )}
               </li>
             ))}
           </ul>

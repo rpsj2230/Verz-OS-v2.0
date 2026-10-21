@@ -748,6 +748,7 @@ def _message_of(row: MessageRow) -> ThreadMessage:
         refs=refs_from_json(raw),
         agent_id=row.agent_id or "",
         run_state=state,
+        trace_id=row.trace_id or "",
     )
 
 

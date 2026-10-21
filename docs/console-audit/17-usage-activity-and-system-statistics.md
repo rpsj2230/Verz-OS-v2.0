@@ -3,7 +3,7 @@
 - **Screens:** `/usage`, `/adoption`, `/spend`, `/questions`, `/quality`, `/service-levels`, `/me`, `/company/estate`, `/company/activity`, `/company/consumption`
 - **Tables:** `agent.artifact_share`, `agent.agent_request`, `auth.member_preference`, `ops.question_asked`, `ops.question_gap`, `ops.report_refresh`, `ops.spend_actual`, `obs.request_telemetry`, `ops.answer_flag`, `ops.regression_case`, `ops.quality_reading`, `ops.quality_annotation`, `ops.golden_score`, `ops.evaluation_candidate`, `ops.positive_example`, `ops.tier_decision`
 - **Installation values:** none
-- **Measured here:** 43 routes, 10 called by no screen; 11 write routes, 11 with all three proofs; 1 gaps.
+- **Measured here:** 50 routes, 11 called by no screen; 16 write routes, 16 with all three proofs; 1 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -15,6 +15,8 @@
 | `GET /api/v1/me/artifacts` | `/me` |
 | `GET /api/v1/me/devices` | `/me` |
 | `GET /api/v1/me/preferences` | `/me` |
+| `GET /api/v1/me/projects` | `/me` |
+| `GET /api/v1/me/projects/{project_id}` | **no screen** |
 | `GET /api/v1/me/reads` | `/me` |
 | `GET /api/v1/me/shared` | `/me` |
 | `GET /api/v1/me/shared/{artifact_id}/download` | **no screen** |
@@ -42,6 +44,11 @@
 | `POST /api/v1/me/preferences/learning` | `/me` |
 | `POST /api/v1/me/preferences/quiet-hours` | `/me` |
 | `POST /api/v1/me/preferences/reach` | `/me` |
+| `POST /api/v1/me/projects` | `/me` |
+| `POST /api/v1/me/projects/{project_id}/archive` | `/me` |
+| `POST /api/v1/me/projects/{project_id}/items` | `/ask`, `/me` |
+| `POST /api/v1/me/projects/{project_id}/items/remove` | `/me` |
+| `POST /api/v1/me/projects/{project_id}/rename` | `/me` |
 | `POST /api/v1/me/skills` | `/me` |
 | `POST /api/v1/me/skills/imports` | `/me` |
 | `POST /api/v1/me/skills/{digest}/offer` | `/me` |
@@ -64,6 +71,11 @@
 | `POST /api/v1/me/preferences/learning` | `/me` | `test_every_member_preference_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_preferences.py` (database, in CI) | Not applicable: A person's own setting about being reached changes nobody's access and is not written to the ledger. | `test_a_person_learnt_from_after_switching_it_off_fails_the_learning_check` in `tests/unit/test_acceptance_checks_member_preferences.py` (database, in CI) |
 | `POST /api/v1/me/preferences/quiet-hours` | `/me` | `test_every_member_preference_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_preferences.py` (database, in CI) | Not applicable: A person's own setting about being reached changes nobody's access and is not written to the ledger. | `test_a_digest_sent_inside_quiet_hours_fails_the_held_digest_check` in `tests/unit/test_acceptance_checks_member_preferences.py` (database, in CI) |
 | `POST /api/v1/me/preferences/reach` | `/me` | `test_every_member_preference_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_preferences.py` (database, in CI) | Not applicable: A person's own setting about being reached changes nobody's access and is not written to the ledger. | `test_a_card_sent_to_an_approver_who_chose_the_console_fails_the_approval_check` in `tests/unit/test_acceptance_checks_member_preferences.py` (database, in CI) |
+| `POST /api/v1/me/projects` | `/me` | `test_the_project_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_projects.py` (database, in CI) | Not applicable: A project is a person's own list of their own conversations and documents; it changes nobody's access and is not written to the ledger. | `test_a_person_makes_names_fills_and_puts_away_a_project_of_their_own` in `tests/unit/test_project_routes.py` |
+| `POST /api/v1/me/projects/{project_id}/archive` | `/me` | `test_the_project_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_projects.py` (database, in CI) | Not applicable: Putting one's own project away changes nobody's access and is not written to the ledger; its items stay where they are. | `test_a_person_makes_names_fills_and_puts_away_a_project_of_their_own` in `tests/unit/test_project_routes.py` |
+| `POST /api/v1/me/projects/{project_id}/items` | `/ask`, `/me` | `test_the_project_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_projects.py` (database, in CI) | Not applicable: Listing one's own conversation or a document one may read in one's own project grants nothing: what a run reads is decided at its reach, every turn. | `test_a_question_naming_a_project_brings_that_projects_files_read_by_the_document_tool` in `tests/unit/test_project_context.py` |
+| `POST /api/v1/me/projects/{project_id}/items/remove` | `/me` | `test_the_project_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_projects.py` (database, in CI) | Not applicable: Taking something out of one's own project changes nobody's access and is not written to the ledger. | `test_with_the_switch_off_nothing_new_is_made_and_nothing_made_is_trapped` in `tests/unit/test_project_routes.py` |
+| `POST /api/v1/me/projects/{project_id}/rename` | `/me` | `test_the_project_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_member_projects.py` (database, in CI) | Not applicable: Renaming one's own project changes nobody's access and is not written to the ledger. | `test_somebody_elses_project_is_answered_as_one_never_made_on_every_route` in `tests/unit/test_project_routes.py` |
 | `POST /api/v1/me/skills` | `/me` | `test_a_skill_nobody_offered_is_the_owners_alone_and_offering_puts_it_in_the_library` in `tests/unit/test_personal_skill_store.py` (database, in CI) | `test_a_skill_nobody_offered_is_the_owners_alone_and_offering_puts_it_in_the_library` in `tests/unit/test_personal_skill_store.py` (database, in CI) | `test_a_new_skill_reads_as_private_pending_and_studio_written` in `tests/unit/test_member_skill_routes.py` |
 | `POST /api/v1/me/skills/imports` | `/me` | `test_a_skill_nobody_offered_is_the_owners_alone_and_offering_puts_it_in_the_library` in `tests/unit/test_personal_skill_store.py` (database, in CI) | `test_a_skill_nobody_offered_is_the_owners_alone_and_offering_puts_it_in_the_library` in `tests/unit/test_personal_skill_store.py` (database, in CI) | `test_a_skill_from_an_address_is_the_persons_own_with_an_address_origin` in `tests/unit/test_member_skill_routes.py` |
 | `POST /api/v1/me/skills/{digest}/offer` | `/me` | `test_a_skill_nobody_offered_is_the_owners_alone_and_offering_puts_it_in_the_library` in `tests/unit/test_personal_skill_store.py` (database, in CI) | Not applicable: Offering a skill changes nobody's access and runs nothing: it puts the person's own skill in front of the people who read the library, and the decision they make is the ledger entry. | `test_offering_marks_the_skill_offered_once_and_says_what_happens_next` in `tests/unit/test_member_skill_routes.py` |

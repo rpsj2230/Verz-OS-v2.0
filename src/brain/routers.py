@@ -456,6 +456,10 @@ from brain.plugin_routes import router as plugin_router
 # grant decision in a scope admitting their row. See `brain.principal_state_routes`.
 from brain.principal_state_routes import router as principal_state_router
 
+# A person's own projects: their threads and documents grouped, a run inside one reading the
+# documents at its own reach (M40.7.7). See `brain.project_routes`.
+from brain.project_routes import router as project_router
+
 # A learned fast-lane rule promoted by one person, or two across money, never its proposer, once
 # enough conversations would have used it (M39.4.2.3). See `brain.promotion_routes`.
 from brain.promotion_routes import router as promotion_router
