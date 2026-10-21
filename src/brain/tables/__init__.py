@@ -127,6 +127,7 @@ from brain.tables.manifest_draft import (
     ManifestDraftRow,
     ManifestRevisionRow,
 )
+from brain.tables.member_deletion import DeletionRequestRow
 from brain.tables.member_preference import MemberPreferenceRow
 from brain.tables.member_share import AgentRequestRow, ArtifactShareRow
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
@@ -585,6 +586,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "agent.agent_callee",
     "agent.agent_fanout",
     "ops.coordinated_run",
+    # 0273_member_deletion_request. Points at nothing: the person and the erasure it became are
+    # values, so a request outlives both.
+    "ops.deletion_request",
 )
 
 __all__ = [
@@ -646,6 +650,7 @@ __all__ = [
     "CustomConnectorRow",
     "DataExportRow",
     "DeadLetterRow",
+    "DeletionRequestRow",
     "DepartmentLeadRow",
     "DepartmentRow",
     "DeploymentRecordRow",

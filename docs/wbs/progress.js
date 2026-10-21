@@ -4155,9 +4155,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.4.2.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): member_activity.request_deletion/route (maps to ops.erasure stores) built, no caller. Erasure queue exists for admins (erasure_routes POST /govern/erasures needs admin:erasure; deletion_rows lets the subject read their own). No member self-request route. NEXT: add POST /me/deletion-request filing into the erasure queue as a request (not an erase) and showing route()'s four lists",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built (M40/member-deletion-from-main, behind the switch member_deletion_requests, which ships off; migration 0273 adds ops.deletion_request): a person can ask, from My workspace, for their data to be deleted. The page first lists what a deletion reaches, what only time removes and what is kept on purpose (member_activity.route over ops.retention.STORES); the ask is a record, and nothing is deleted. People who asked are listed above the erasure form on the Retention screen for whoever holds the erasure authority over everything, and filing the erasure closes the ask. Rejected: filing straight into the erasure queue as the person, which makes a mis-click an irreversible erasure; whether an install wants that is the owner's. PRIOR WORK (2026-10-13 triage): member_activity.request_deletion and route were built and uncalled. PROVE ON THE INSTALL: (1) as an administrator open Features and switch on 'Let a person ask, from their own page, for their data to be deleted'; (2) as a member open My workspace, press 'Ask for my data to be deleted', read the three lists and confirm; (3) nothing about the member changes and they can still sign in; (4) as the administrator holding the erasure authority open Retention: the member's reference is listed under 'People who asked to be deleted'; (5) file the erasure for that reference: the ask leaves the list.",
+    updated: "2026-10-21",
   },
   "M40.4.2.4": {
     status: "READY FOR TESTING",

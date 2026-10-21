@@ -43,6 +43,7 @@ from brain.erasure_routes import (
 from brain.identity.bearer import TokenAuthority
 from brain.ops import erasure
 from brain.ops.data_export_store import TakenExport
+from brain.ops.deletion_request_store import Asked
 from brain.ops.erasure_store import (
     ALREADY_REQUESTED,
     ErasureRecord,
@@ -205,6 +206,24 @@ class Exports:
         return (an_export("e-1", "u_admin"), an_export("e-2", "u_wide"))
 
 
+class NoAsks:
+    """`DeletionRequests` in memory: nobody has asked, so filing an erasure closes nothing."""
+
+    async def ask(self, subject_id: str, *, at: datetime) -> tuple[Asked, bool]:
+        raise AssertionError("filing an erasure never makes an ask")
+
+    async def latest(self, subject_id: str) -> Asked | None:
+        return None
+
+    async def waiting(self, *, limit: int) -> tuple[Asked, ...]:
+        return ()
+
+    async def decide(
+        self, subject_id: str, *, by: str, erasure_request_id: str, at: datetime
+    ) -> bool:
+        return False
+
+
 @pytest.fixture
 def erasures() -> Erasures:
     return Erasures()
@@ -228,6 +247,7 @@ def client(erasures: Erasures) -> Iterator[TestClient]:
         )
         app.state.erasure_records = erasures
         app.state.export_log = Exports()
+        app.state.deletion_requests = NoAsks()
         yield c
 
 

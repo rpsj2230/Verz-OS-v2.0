@@ -45,6 +45,7 @@ import {
   MyShared,
   MyStored,
 } from "../components/MyAccountCards";
+import { MyDeletionCard } from "../components/MyDeletion";
 import { MyChannels } from "../components/MyChannels";
 import type { GridColumn } from "../components/gridFeatures";
 import { GridTable } from "../components/kit/GridTable";
@@ -515,6 +516,7 @@ export function MyWorkspace() {
           <MyShared />
           <MyRequestableAgents />
           <MyStored />
+          <MyDeletionCard />
         </>
       )}
     </article>
