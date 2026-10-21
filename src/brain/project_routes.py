@@ -102,7 +102,7 @@ def _told(status: int, message: str) -> JSONResponse:
     )
 
 
-class NameAsked(BaseModel):
+class MemberProjectNameAsked(BaseModel):
     """A project's name, as the person typed it."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -110,7 +110,7 @@ class NameAsked(BaseModel):
     name: str = Field(min_length=1, max_length=400)
 
 
-class ItemAsked(BaseModel):
+class MemberProjectItemAsked(BaseModel):
     """One thread or one file, by id."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -119,7 +119,7 @@ class ItemAsked(BaseModel):
     ref: str = Field(min_length=1, max_length=128, pattern=r"^\S+$")
 
 
-class ProjectView(BaseModel):
+class MemberProjectView(BaseModel):
     """One project in a list: its id, its name and when it was made. Nothing counted."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -129,17 +129,17 @@ class ProjectView(BaseModel):
     created_at: datetime
 
 
-class ProjectsView(BaseModel):
+class MemberProjectsView(BaseModel):
     """This person's active projects, newest first."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    projects: list[ProjectView]
+    projects: list[MemberProjectView]
     #: Whether making a project and filling one is switched on, so the page can say so.
     switched_on: bool
 
 
-class ProjectItemView(BaseModel):
+class MemberProjectItemView(BaseModel):
     """One thing in a project: its kind, its id and, for one of the person's threads, its title."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -150,7 +150,7 @@ class ProjectItemView(BaseModel):
     added_at: datetime
 
 
-class ProjectDetailView(BaseModel):
+class MemberProjectDetailView(BaseModel):
     """One project and everything it lists, including what the person can no longer read."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -158,38 +158,40 @@ class ProjectDetailView(BaseModel):
     project_id: str
     name: str
     created_at: datetime
-    items: list[ProjectItemView]
+    items: list[MemberProjectItemView]
     switched_on: bool
 
 
-class ProjectChanged(BaseModel):
+class MemberProjectChanged(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     project_id: str
 
 
-def _view(one: Project) -> ProjectView:
-    return ProjectView(project_id=one.project_id, name=one.name, created_at=one.created_at)
+def _view(one: Project) -> MemberProjectView:
+    return MemberProjectView(project_id=one.project_id, name=one.name, created_at=one.created_at)
 
 
 async def _on(request: Request) -> bool:
     return await projects_are_on(sessions_of(request))
 
 
-@router.get(PROJECTS_PATH, response_model=ProjectsView, responses=COMMON_RESPONSES)
-async def my_projects(request: Request, asked: Asked) -> ProjectsView:
+@router.get(PROJECTS_PATH, response_model=MemberProjectsView, responses=COMMON_RESPONSES)
+async def my_projects(request: Request, asked: Asked) -> MemberProjectsView:
     """The caller's active projects (M40.7.7). Never behind the switch."""
     _guard(asked)
     found = await _store(request).projects(asked.caller.principal.id)
-    return ProjectsView(projects=[_view(one) for one in found], switched_on=await _on(request))
+    return MemberProjectsView(
+        projects=[_view(one) for one in found], switched_on=await _on(request)
+    )
 
 
 @router.post(
-    PROJECTS_PATH, status_code=201, response_model=ProjectView, responses=PROJECT_RESPONSES
+    PROJECTS_PATH, status_code=201, response_model=MemberProjectView, responses=PROJECT_RESPONSES
 )
 async def make_my_project(
-    request: Request, body: NameAsked, asked: Asked
-) -> ProjectView | JSONResponse:
+    request: Request, body: MemberProjectNameAsked, asked: Asked
+) -> MemberProjectView | JSONResponse:
     """Make a project of the caller's own, when the switch is on."""
     _guard(asked)
     if not await _on(request):
@@ -205,8 +207,10 @@ async def make_my_project(
     return _view(made)
 
 
-@router.get(PROJECT_PATH, response_model=ProjectDetailView, responses=COMMON_RESPONSES)
-async def my_project(request: Request, project_id: ProjectId, asked: Asked) -> ProjectDetailView:
+@router.get(PROJECT_PATH, response_model=MemberProjectDetailView, responses=COMMON_RESPONSES)
+async def my_project(
+    request: Request, project_id: ProjectId, asked: Asked
+) -> MemberProjectDetailView:
     """One of the caller's projects with everything it lists, or the one 404. Never switched."""
     _guard(asked)
     me = asked.caller.principal.id
@@ -215,14 +219,14 @@ async def my_project(request: Request, project_id: ProjectId, asked: Asked) -> P
         raise _not_answerable()
     project, items = found
     threads = threads_of(request.app.state)
-    shown: list[ProjectItemView] = []
+    shown: list[MemberProjectItemView] = []
     for one in items:
         title = ""
         if one.kind == "thread" and threads is not None:
             held = await threads.thread(me, one.ref)
             title = "" if held is None else held.title
         shown.append(_item(one, title))
-    return ProjectDetailView(
+    return MemberProjectDetailView(
         project_id=project.project_id,
         name=project.name,
         created_at=project.created_at,
@@ -231,14 +235,14 @@ async def my_project(request: Request, project_id: ProjectId, asked: Asked) -> P
     )
 
 
-def _item(one: ProjectItem, title: str) -> ProjectItemView:
-    return ProjectItemView(kind=one.kind, ref=one.ref, title=title, added_at=one.added_at)
+def _item(one: ProjectItem, title: str) -> MemberProjectItemView:
+    return MemberProjectItemView(kind=one.kind, ref=one.ref, title=title, added_at=one.added_at)
 
 
-@router.post(RENAME_PATH, response_model=ProjectChanged, responses=PROJECT_RESPONSES)
+@router.post(RENAME_PATH, response_model=MemberProjectChanged, responses=PROJECT_RESPONSES)
 async def rename_my_project(
-    request: Request, project_id: ProjectId, body: NameAsked, asked: Asked
-) -> ProjectChanged | JSONResponse:
+    request: Request, project_id: ProjectId, body: MemberProjectNameAsked, asked: Asked
+) -> MemberProjectChanged | JSONResponse:
     """Change a project's name. Never behind the switch."""
     _guard(asked)
     name = clean_name(body.name)
@@ -246,26 +250,26 @@ async def rename_my_project(
         return _told(422, NAME_NEEDED)
     if not await _store(request).rename(asked.caller.principal.id, project_id, name):
         raise _not_answerable()
-    return ProjectChanged(project_id=project_id)
+    return MemberProjectChanged(project_id=project_id)
 
 
-@router.post(ARCHIVE_PATH, response_model=ProjectChanged, responses=COMMON_RESPONSES)
+@router.post(ARCHIVE_PATH, response_model=MemberProjectChanged, responses=COMMON_RESPONSES)
 async def put_my_project_away(
     request: Request, project_id: ProjectId, asked: Asked
-) -> ProjectChanged:
+) -> MemberProjectChanged:
     """Put a project away: it is no longer listed and no run reads it. Never behind the switch."""
     _guard(asked)
     if not await _store(request).archive(asked.caller.principal.id, project_id, asked.now):
         raise _not_answerable()
-    return ProjectChanged(project_id=project_id)
+    return MemberProjectChanged(project_id=project_id)
 
 
 @router.post(
-    ADD_ITEM_PATH, status_code=201, response_model=ProjectChanged, responses=PROJECT_RESPONSES
+    ADD_ITEM_PATH, status_code=201, response_model=MemberProjectChanged, responses=PROJECT_RESPONSES
 )
 async def add_to_my_project(
-    request: Request, project_id: ProjectId, body: ItemAsked, asked: Asked
-) -> ProjectChanged | JSONResponse:
+    request: Request, project_id: ProjectId, body: MemberProjectItemAsked, asked: Asked
+) -> MemberProjectChanged | JSONResponse:
     """List one of the caller's threads, or a file they may read, in one of their projects."""
     _guard(asked)
     me = asked.caller.principal.id
@@ -292,19 +296,19 @@ async def add_to_my_project(
         return _told(422, TOO_MANY_ITEMS)
     if not kept:
         raise _not_answerable()
-    return ProjectChanged(project_id=project_id)
+    return MemberProjectChanged(project_id=project_id)
 
 
 def _is_item_id(ref: str) -> bool:
     return re.fullmatch(ITEM_ID_PATTERN, ref) is not None
 
 
-@router.post(REMOVE_ITEM_PATH, response_model=ProjectChanged, responses=COMMON_RESPONSES)
+@router.post(REMOVE_ITEM_PATH, response_model=MemberProjectChanged, responses=COMMON_RESPONSES)
 async def take_out_of_my_project(
-    request: Request, project_id: ProjectId, body: ItemAsked, asked: Asked
-) -> ProjectChanged:
+    request: Request, project_id: ProjectId, body: MemberProjectItemAsked, asked: Asked
+) -> MemberProjectChanged:
     """Take one thing out of a project. Never behind the switch."""
     _guard(asked)
     if not await _store(request).remove(asked.caller.principal.id, project_id, body.kind, body.ref):
         raise _not_answerable()
-    return ProjectChanged(project_id=project_id)
+    return MemberProjectChanged(project_id=project_id)

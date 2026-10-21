@@ -336,11 +336,21 @@ def test_no_view_carries_a_count_of_anything() -> None:
     """The views list the caller's own projects and items and have no field counting anything
     hidden, left out or unreadable. Delete this and a count of what the person can no longer read
     can be added to a view without anyone deciding to."""
-    from brain.project_routes import ProjectDetailView, ProjectItemView, ProjectsView, ProjectView
+    from brain.project_routes import (
+        MemberProjectDetailView,
+        MemberProjectItemView,
+        MemberProjectsView,
+        MemberProjectView,
+    )
 
     names = {
         name
-        for view in (ProjectsView, ProjectView, ProjectDetailView, ProjectItemView)
+        for view in (
+            MemberProjectsView,
+            MemberProjectView,
+            MemberProjectDetailView,
+            MemberProjectItemView,
+        )
         for name in view.model_fields
     }
     assert names == {

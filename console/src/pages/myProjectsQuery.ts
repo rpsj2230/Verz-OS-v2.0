@@ -12,10 +12,10 @@
 
 import type { components } from "../api/schema";
 
-export type ProjectsBody = components["schemas"]["ProjectsView"];
-export type ProjectView = components["schemas"]["ProjectView"];
-export type ProjectDetail = components["schemas"]["ProjectDetailView"];
-export type ProjectItemView = components["schemas"]["ProjectItemView"];
+export type ProjectsBody = components["schemas"]["MemberProjectsView"];
+export type ProjectView = components["schemas"]["MemberProjectView"];
+export type ProjectDetail = components["schemas"]["MemberProjectDetailView"];
+export type ProjectItemView = components["schemas"]["MemberProjectItemView"];
 
 export const PROJECTS_API_PATH = "/me/projects";
 

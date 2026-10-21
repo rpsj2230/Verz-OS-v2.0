@@ -104,8 +104,8 @@ async def a_member_asks_inside_a_project_and_it_reads_what_they_may_read(h: Harn
     from brain.ops.acceptance_threads import _asking, _request, _web
     from brain.ops.features_declared.personal_projects import PERSONAL_PROJECTS
     from brain.project_routes import (
-        ItemAsked,
-        NameAsked,
+        MemberProjectItemAsked,
+        MemberProjectNameAsked,
         add_to_my_project,
         make_my_project,
         my_project,
@@ -174,12 +174,14 @@ async def a_member_asks_inside_a_project_and_it_reads_what_they_may_read(h: Harn
 
     # With the switch off nothing is made. Turned on, the same request makes a project.
     await switched(False, 1)
-    off = await make_my_project(_request(app), NameAsked(name="Acceptance"), await asked(owner))
+    off = await make_my_project(
+        _request(app), MemberProjectNameAsked(name="Acceptance"), await asked(owner)
+    )
     if _status(off) != 409 or await listed(owner):
         raise CheckFailedError(MADE_WITH_THE_SWITCH_OFF)
     await switched(True, 2)
     made = await make_my_project(
-        _request(app), NameAsked(name="  Acceptance   plan "), await asked(owner)
+        _request(app), MemberProjectNameAsked(name="  Acceptance   plan "), await asked(owner)
     )
     project_id = getattr(made, "project_id", "")
     if not project_id:
@@ -190,10 +192,13 @@ async def a_member_asks_inside_a_project_and_it_reads_what_they_may_read(h: Harn
     # What a person may list: a document they can read and a thread of their own, nothing else.
     colleagues_try = (
         add_to_my_project(
-            _request(app), project_id, ItemAsked(kind="file", ref=document), await asked(colleague)
+            _request(app),
+            project_id,
+            MemberProjectItemAsked(kind="file", ref=document),
+            await asked(colleague),
         ),
         rename_my_project(
-            _request(app), project_id, NameAsked(name="Mine"), await asked(colleague)
+            _request(app), project_id, MemberProjectNameAsked(name="Mine"), await asked(colleague)
         ),
         put_my_project_away(_request(app), project_id, await asked(colleague)),
         my_project(_request(app), project_id, await asked(colleague)),
@@ -201,24 +206,29 @@ async def a_member_asks_inside_a_project_and_it_reads_what_they_may_read(h: Harn
     for call in colleagues_try:
         if not await _refused(call):
             raise CheckFailedError(SEEN_BY_ANOTHER)
-    theirs = await make_my_project(_request(app), NameAsked(name="Theirs"), await asked(colleague))
+    theirs = await make_my_project(
+        _request(app), MemberProjectNameAsked(name="Theirs"), await asked(colleague)
+    )
     if not await _refused(
         add_to_my_project(
             _request(app),
             getattr(theirs, "project_id", ""),
-            ItemAsked(kind="file", ref=document),
+            MemberProjectItemAsked(kind="file", ref=document),
             await asked(colleague),
         )
     ) or not await _refused(
         add_to_my_project(
             _request(app),
             getattr(theirs, "project_id", ""),
-            ItemAsked(kind="thread", ref=thread),
+            MemberProjectItemAsked(kind="thread", ref=thread),
             await asked(colleague),
         )
     ):
         raise CheckFailedError(LISTED_WHAT_COULD_NOT_BE_READ)
-    for item in (ItemAsked(kind="file", ref=document), ItemAsked(kind="thread", ref=thread)):
+    for item in (
+        MemberProjectItemAsked(kind="file", ref=document),
+        MemberProjectItemAsked(kind="thread", ref=thread),
+    ):
         done = await add_to_my_project(_request(app), project_id, item, await asked(owner))
         if getattr(done, "project_id", "") != project_id:
             raise CheckFailedError(NOT_FILLED)
@@ -277,10 +287,13 @@ async def a_member_asks_inside_a_project_and_it_reads_what_they_may_read(h: Harn
     if await following(owner, Question(question="x", project=project_id)) is not None:
         raise CheckFailedError(STILL_READ_WITH_SWITCH_OFF)
     taken = await take_out_of_my_project(
-        _request(app), project_id, ItemAsked(kind="thread", ref=thread), await asked(owner)
+        _request(app),
+        project_id,
+        MemberProjectItemAsked(kind="thread", ref=thread),
+        await asked(owner),
     )
     renamed = await rename_my_project(
-        _request(app), project_id, NameAsked(name="Tidied"), await asked(owner)
+        _request(app), project_id, MemberProjectNameAsked(name="Tidied"), await asked(owner)
     )
     if (
         getattr(taken, "project_id", "") != project_id
@@ -292,7 +305,10 @@ async def a_member_asks_inside_a_project_and_it_reads_what_they_may_read(h: Harn
         raise CheckFailedError(NOT_BROUGHT)
     # The conversation goes back in, so a question that only continues it is the one asked below.
     await add_to_my_project(
-        _request(app), project_id, ItemAsked(kind="thread", ref=thread), await asked(owner)
+        _request(app),
+        project_id,
+        MemberProjectItemAsked(kind="thread", ref=thread),
+        await asked(owner),
     )
     continued = await following(owner, Question(question="x", thread=thread))
     if continued is None or continued.project_files != (document,):
@@ -307,7 +323,10 @@ async def a_member_asks_inside_a_project_and_it_reads_what_they_may_read(h: Harn
     # A project put away takes nothing more and cannot be put away twice.
     if not await _refused(
         add_to_my_project(
-            _request(app), project_id, ItemAsked(kind="thread", ref=thread), await asked(owner)
+            _request(app),
+            project_id,
+            MemberProjectItemAsked(kind="thread", ref=thread),
+            await asked(owner),
         )
     ) or not await _refused(put_my_project_away(_request(app), project_id, await asked(owner))):
         raise CheckFailedError(AWAY_BUT_STILL_CHANGED)
@@ -317,16 +336,20 @@ async def a_member_asks_inside_a_project_and_it_reads_what_they_may_read(h: Harn
 
     for number in range(MOST_PROJECTS):
         shelf = await make_my_project(
-            _request(app), NameAsked(name=f"P{number}"), await asked(owner)
+            _request(app), MemberProjectNameAsked(name=f"P{number}"), await asked(owner)
         )
         if not getattr(shelf, "project_id", ""):
             raise CheckFailedError(FULL_SHELF_NOT_SAID)
-    over = await make_my_project(_request(app), NameAsked(name="Over"), await asked(owner))
+    over = await make_my_project(
+        _request(app), MemberProjectNameAsked(name="Over"), await asked(owner)
+    )
     if _status(over) != 422:
         raise CheckFailedError(FULL_SHELF_NOT_SAID)
     first = (await my_projects(_request(app), await asked(owner))).projects[0].project_id
     await put_my_project_away(_request(app), first, await asked(owner))
-    again = await make_my_project(_request(app), NameAsked(name="Room"), await asked(owner))
+    again = await make_my_project(
+        _request(app), MemberProjectNameAsked(name="Room"), await asked(owner)
+    )
     if not getattr(again, "project_id", ""):
         raise CheckFailedError(FULL_SHELF_NOT_SAID)
 
