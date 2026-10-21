@@ -4705,9 +4705,9 @@ const PROGRESS = {
     updated: "2026-10-20",
   },
   "M19.8.1": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): Nothing found by subject (desktop, virtual desktop, computer use, xvfb) in src or ops; only register rows (ARC-B-028, OWN-98, CONA-25) name it, as 'deferred behind browser checks'.",
-    updated: "2026-10-13",
+    status: "IN PROGRESS",
+    why: "PARTLY BUILT 2026-10-21, not claimed. Built: brain.browsing.desktop_app declares a desktop application as a target (a name, one program under /opt/desktop-apps, windows as surfaces on https://<name>.desktop.invalid) so the browser's envelope, enforcer, approval and recording govern it unchanged, and builds its sandbox (gVisor, internal network with no other member, no proxy, no secret, only the declared program) held to the browser's own container gap list; the toolkit's widgets are read as the enforcer's tree; switch desktop_runs ships off; ops/desktop/ holds a Dockerfile and a runner that were never built or run; install check a_desktop_application_runs_in_a_sandbox_with_no_way_out is NOT_RUN on every install by design. NOT built: the launcher creating a desktop sandbox, the driver relaying a desktop run, the image on a host, so no desktop has ever been started and the Profile still says computer use is not offered. NEXT: a launcher message for desktop runs and ops/desktop/REHEARSAL.md on a host with gVisor, then the second half of the check.",
+    updated: "2026-10-21",
   },
   "M19.9.1": {
     status: "IN PROGRESS",
