@@ -41,7 +41,17 @@ the transcript through `brain.browsing.recording`, behind the `browser_runs` swi
 off. None of the socket code below has run against a Docker daemon; the decisions it makes are
 tested and the plumbing is the rehearsal in `ops/browser/REHEARSAL.md`.
 
-Task ids: M19.1.1, M19.1.5, M19.1.6
+**A rehearsal makes the sandbox and asks the daemon what it made, and starts no browser.** The
+request is a `rehearse` message and the answer is a `rehearsed` one. It creates the run's network
+and proxy and the runner unstarted exactly as a run would, reads the daemon's own description of the
+three (`brain.browsing.inspection`), removes them, and then asks the daemon what still carries the
+run's label. Everything a bad request could not show is shown: gVisor registered under the name the
+bodies use, a root nothing can write, a network with no gateway, caps the daemon applied, and
+nothing left behind. It exists so an install can prove its isolation to the worker, which cannot
+reach the daemon, without any page being opened. See
+`A_REHEARSAL_REPORTS_THE_DAEMON_AND_NOT_THE_REQUEST`.
+
+Task ids: M19.1.1, M19.1.5, M19.1.6, M19.3.5, M19.6.4
 """
 
 from __future__ import annotations
@@ -56,16 +66,30 @@ from typing import Any, Final, Protocol
 
 import httpx
 
+from brain.browsing.inspection import (
+    container_facts,
+    network_facts,
+    observed_gaps,
+)
 from brain.browsing.sandbox import (
     EGRESS_NETWORK,
     RUN_LABEL,
     RUNTIME,
     RunSandbox,
+    SandboxError,
     egress_network_body,
     sandbox_for,
     sandbox_gaps,
 )
-from brain.browsing.wire import MAX_LINE_BYTES, Kind, WireError, decode
+from brain.browsing.wire import MAX_LINE_BYTES, Kind, WireError, decode, encode
+
+#: Why a rehearsal reports what the daemon says and not what was sent.
+A_REHEARSAL_REPORTS_THE_DAEMON_AND_NOT_THE_REQUEST: Final = (
+    "The bodies are checked before they are sent, and a daemon is free to ignore a field it does "
+    "not know or to register its runtime under another name. A rehearsal that reported the "
+    "request back would pass on every host, including one with no gVisor. So it reads the "
+    "daemon's own description of what it created and holds that to the same expectations."
+)
 
 #: Where the launcher listens on its internal network. Fixed, because it is a service name and a
 #: port inside the product, not a value that differs between installs.
@@ -145,12 +169,21 @@ class Engine(Protocol):
         """Remove a network. A network that is already gone is not an error."""
         ...
 
-    def labelled(self) -> tuple[tuple[str, ...], tuple[str, ...]]:
-        """Every container and every network carrying the run label, as ids."""
+    def labelled(self, run_id: str | None = None) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        """Every container and every network carrying the run label, as ids, or only the ones
+        carrying this run's."""
         ...
 
     def runtimes(self) -> tuple[str, ...]:
         """The OCI runtimes the daemon has registered."""
+        ...
+
+    def inspect_container(self, container: str) -> Mapping[str, Any]:
+        """The daemon's own description of a container, as it answered."""
+        ...
+
+    def inspect_network(self, network: str) -> Mapping[str, Any]:
+        """The daemon's own description of a network, as it answered."""
         ...
 
 
@@ -162,6 +195,20 @@ class Launched:
     network: str = ""
     egress: str = ""
     runner: str = ""
+
+
+@dataclass(frozen=True)
+class Rehearsal:
+    """What a rehearsal found: the runtime the daemon gave the runner, what is wrong, what is left.
+
+    `gaps` are fixed sentences about roles (`brain.browsing.inspection`) and name nothing the
+    daemon said, so the report can be served as it is.
+    """
+
+    run_id: str
+    runtime: str
+    gaps: tuple[str, ...]
+    left_behind: int
 
 
 @dataclass
@@ -196,6 +243,34 @@ class Launcher:
         except BaseException:
             self.tear_down(created)
             raise
+
+    def rehearse(self, run_id: str, origins: frozenset[str]) -> Rehearsal:
+        """Make a run's sandbox, read what the daemon made of it, remove it, and count what is left.
+
+        No runner is started, so no page is opened and nothing leaves the host. A removal that
+        failed, a daemon that could not describe a part, and anything still carrying the run's label
+        afterwards are each a finding. Raises `LauncherError` or `SandboxError` for a request the
+        sandbox refuses, because that is a refusal and not an observation.
+        """
+        launched = self.launch(run_id, origins)
+        gaps: list[str] = []
+        runtime = ""
+        try:
+            network = network_facts(self.engine.inspect_network(launched.network))
+            runner = container_facts(self.engine.inspect_container(launched.runner))
+            egress = container_facts(self.engine.inspect_container(launched.egress))
+            runtime = runner.runtime or ""
+            gaps.extend(observed_gaps(run_id, network=network, runner=runner, egress=egress))
+        except EngineError:
+            gaps.append("the daemon could not describe what it created")
+        finally:
+            try:
+                self.tear_down(launched)
+            except LauncherError:
+                gaps.append("what the rehearsal created was not wholly removed")
+        containers, networks = self.engine.labelled(run_id)
+        left = len(containers) + len([one for one in networks if one != EGRESS_NETWORK])
+        return Rehearsal(run_id=run_id, runtime=runtime, gaps=tuple(gaps), left_behind=left)
 
     def tear_down(self, launched: Launched) -> None:
         """Remove the runner, the proxy and the network, attempting each whatever came before."""
@@ -260,8 +335,27 @@ def start_request(line: bytes) -> tuple[str, frozenset[str]]:
     if message.kind is not Kind.START:
         msg = f"a launcher accepts a start message and was sent {message.kind.value}"
         raise LauncherError(msg)
-    run_id = message.fields["run_id"]
-    origins = message.fields["origins"]
+    return _run_and_origins(message.fields)
+
+
+def rehearsal_request(line: bytes) -> tuple[str, frozenset[str]] | None:
+    """The run id and origins of a `rehearse` line, or None when the line is anything else.
+
+    A line that cannot be read at all is also None, so that `start_request` refuses it in its own
+    words and a rehearsal is never what a malformed line turns into.
+    """
+    try:
+        message = decode(line)
+    except WireError:
+        return None
+    if message.kind is not Kind.REHEARSE:
+        return None
+    return _run_and_origins(message.fields)
+
+
+def _run_and_origins(fields: Mapping[str, Any]) -> tuple[str, frozenset[str]]:
+    run_id = fields["run_id"]
+    origins = fields["origins"]
     if not isinstance(run_id, str) or not isinstance(origins, list):
         msg = "a start message names its run or its origins in a shape that cannot be read"
         raise LauncherError(msg)
@@ -372,8 +466,19 @@ class DockerEngine:
     def remove_network(self, network: str) -> None:
         self._request("DELETE", f"/networks/{network}")
 
-    def labelled(self) -> tuple[tuple[str, ...], tuple[str, ...]]:
-        filters = json.dumps({"label": [RUN_LABEL]})
+    def inspect_container(self, container: str) -> Mapping[str, Any]:
+        response = self._request("GET", f"/containers/{container}/json")
+        _present(response, f"container {container}")
+        return _object_of(response)
+
+    def inspect_network(self, network: str) -> Mapping[str, Any]:
+        response = self._request("GET", f"/networks/{network}")
+        _present(response, f"network {network}")
+        return _object_of(response)
+
+    def labelled(self, run_id: str | None = None) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        label = RUN_LABEL if run_id is None else f"{RUN_LABEL}={run_id}"
+        filters = json.dumps({"label": [label]})
         containers = self._request(
             "GET", "/containers/json", params={"all": "1", "filters": filters}
         )
@@ -403,6 +508,14 @@ def _id_of(response: httpx.Response) -> str:
         msg = "the daemon created something and did not say what"
         raise EngineError(msg)
     return created
+
+
+def _object_of(response: httpx.Response) -> Mapping[str, Any]:
+    described = response.json()
+    if not isinstance(described, dict):
+        msg = "the daemon described something and did not answer with an object"
+        raise EngineError(msg)
+    return described
 
 
 def _present(response: httpx.Response, what: str) -> None:
@@ -452,6 +565,34 @@ async def _relay(
             task.cancel()
 
 
+async def _rehearsed(
+    launcher: Launcher, writer: asyncio.StreamWriter, run_id: str, origins: frozenset[str]
+) -> None:
+    """Rehearse one run and write the one `rehearsed` line that answers it.
+
+    A request the sandbox refuses is answered as a finding, with the sandbox's own sentence, and a
+    daemon that cannot be reached as a finding saying so: a rehearsal that closed the connection
+    instead would be read by the other side as a launcher that is not there.
+    """
+    try:
+        found = await asyncio.to_thread(launcher.rehearse, run_id, origins)
+        gaps, runtime, left = found.gaps, found.runtime, found.left_behind
+    except (LauncherError, SandboxError) as exc:
+        gaps, runtime, left = (str(exc),), "", 0
+    except EngineError:
+        gaps, runtime, left = ("the daemon refused or could not be reached",), "", 0
+    writer.write(
+        encode(
+            Kind.REHEARSED,
+            run_id=run_id,
+            runtime=runtime,
+            gaps=list(gaps),
+            left_behind=left,
+        )
+    )
+    await writer.drain()
+
+
 def serve(launcher: Launcher, *, socket: str, engine: DockerEngine) -> None:
     """Listen on the control network, one run per connection, for as long as the process lives."""
 
@@ -459,6 +600,10 @@ def serve(launcher: Launcher, *, socket: str, engine: DockerEngine) -> None:
         launched: Launched | None = None
         try:
             first = await reader.readuntil(b"\n")
+            rehearsing = rehearsal_request(first)
+            if rehearsing is not None:
+                await _rehearsed(launcher, writer, *rehearsing)
+                return
             run_id, origins = start_request(first)
             launched = await asyncio.to_thread(launcher.launch, run_id, origins)
             attached = await _attach(socket, launched.runner)

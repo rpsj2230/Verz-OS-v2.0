@@ -250,6 +250,30 @@ TASKS: Final[tuple[TaskDeclaration, ...]] = (
         ),
     ),
     TaskDeclaration(
+        task="automation.daily_brief",
+        needs=(
+            "a calendar, a task list and a mailbox to read as the person it runs as, and a "
+            "performer that composes them. No connector of those kinds is read by a scheduled run "
+            "yet, so a brief would report that nothing waits"
+        ),
+    ),
+    TaskDeclaration(
+        task="automation.deal_capture",
+        needs=(
+            "a group chat to read, a customer-record source to draft against, and a place a "
+            "person approves a draft. Nothing drafts a record from a chat, and a draft held for "
+            "approval from an unattended run has not yet been shown to reach the right person"
+        ),
+    ),
+    TaskDeclaration(
+        task="automation.email_replies",
+        needs=(
+            "a mailbox to read as the person it runs as and a place a drafted reply waits for "
+            "them. Nothing drafts a reply, and an unattended run may not call a model until the "
+            "owner decides (needs-rupash 210)"
+        ),
+    ),
+    TaskDeclaration(
         task=INSTRUCTION_TASK,
         needs=(
             "an agent run with nobody present. The agent runtime answers a person who asked, and "

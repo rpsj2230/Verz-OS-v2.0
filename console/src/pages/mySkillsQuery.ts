@@ -10,8 +10,8 @@
 
 import type { components } from "../api/schema";
 
-export type MySkillsBody = components["schemas"]["PersonalSkillsView"];
-export type MySkill = components["schemas"]["PersonalSkillView"];
+export type MySkillsBody = components["schemas"]["MemberOwnSkillsView"];
+export type MySkill = components["schemas"]["MemberOwnSkillView"];
 
 export const MY_SKILLS_API_PATH = "/me/skills";
 export const IMPORT_MY_SKILL_API_PATH = "/me/skills/imports";

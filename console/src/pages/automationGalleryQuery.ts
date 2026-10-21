@@ -44,6 +44,12 @@ export interface AutomationCard {
   readonly summary: string;
   /** The cadence once started, in the API's words and with its zone. */
   readonly schedule: string;
+  /** What starts it, in the API's word (`schedule`, `connector_event` or `webhook`). */
+  readonly trigger?: string;
+  /** The kinds of source it uses, in plain words. May be empty. */
+  readonly connectors: readonly string[];
+  /** The step at which a person decides, for one that drafts; absent for one that only reads. */
+  readonly approval?: string;
   /** The automation this reader already installed from it on this agent. */
   readonly installedAs?: string;
   /** This reader may install it here. Decides whether a button is drawn and nothing else. */
@@ -63,6 +69,9 @@ export interface InstallPreview {
   readonly name: string;
   readonly summary: string;
   readonly schedule: string;
+  readonly trigger?: string;
+  readonly connectors: readonly string[];
+  readonly approval?: string;
   readonly runsAs: string;
   readonly runsAsName: string;
   readonly startsPaused: boolean;
@@ -108,6 +117,12 @@ function published(value: unknown): number | undefined {
   return typeof value === "number" && Number.isInteger(value) && value >= 1 ? value : undefined;
 }
 
+function wordsOf(value: unknown): readonly string[] {
+  return Array.isArray(value)
+    ? (value as readonly unknown[]).map(said).filter((one): one is string => one !== undefined)
+    : [];
+}
+
 /** A confirmation: the SHA-256 the route computes, and nothing else. */
 const DIGEST = /^[0-9a-f]{64}$/;
 
@@ -145,12 +160,17 @@ export function readGallery(payload: unknown): AutomationGalleryAnswer | null {
     }
     seen.add(templateId);
     const installedAs = said(entry?.["installed_as"]);
+    const trigger = said(entry?.["trigger"]);
+    const approval = said(entry?.["approval"]);
     cards.push({
       templateId,
       version,
       name,
       summary,
       schedule,
+      connectors: wordsOf(entry?.["connectors"]),
+      ...(trigger === undefined ? {} : { trigger }),
+      ...(approval === undefined ? {} : { approval }),
       installable: entry?.["installable"] === true,
       ...(installedAs === undefined ? {} : { installedAs }),
     });
@@ -200,11 +220,16 @@ export function readPreview(payload: unknown): InstallPreview | null {
   ) {
     return null;
   }
+  const trigger = said(fields["trigger"]);
+  const approval = said(fields["approval"]);
   return {
     templateId,
     name,
     summary,
     schedule,
+    connectors: wordsOf(fields["connectors"]),
+    ...(trigger === undefined ? {} : { trigger }),
+    ...(approval === undefined ? {} : { approval }),
     runsAs,
     runsAsName,
     startsPaused: fields["starts_paused"],

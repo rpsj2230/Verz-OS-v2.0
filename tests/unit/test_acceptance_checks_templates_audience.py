@@ -36,7 +36,7 @@ def test_the_module_declares_one_check_per_leaf() -> None:
     """Delete this and a check can lose a leaf with the Install page showing the same rows, and the
     leaf closes on a check that never looked."""
     assert [(one.name, one.leaves) for one in registered((MODULE,))] == [
-        (DRAFT, ("M13.8.15",)),
+        (DRAFT, ("M13.8.15", "M27.11.7")),
         (SCHEMA, ("M13.8.17",)),
         (OFFERED, ("M13.8.19",)),
     ]

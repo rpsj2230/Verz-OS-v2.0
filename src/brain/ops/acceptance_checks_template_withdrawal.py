@@ -135,7 +135,7 @@ async def _refused_by_the_database(h: Harness, actor: str, statement: Any) -> bo
 
 
 @check(
-    leaves=("M27.15.35",),
+    leaves=("M27.15.35", "M27.11.7"),
     sentence=(
         "An administrator withdraws a template version with a reason and undoes it, each a row and "
         "a ledger entry naming who; a withdrawn version is not offered to a new install or as an "

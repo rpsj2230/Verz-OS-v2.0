@@ -26,12 +26,16 @@
  */
 
 import { Play } from "lucide-react";
+import { useCallback, useState } from "react";
+import { request } from "../../api/client";
+import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
 import {
   Advanced,
   BY_THE_INSTALL,
+  ConfirmDialog,
   type EntityColumn,
-  Explanation,
+  FailureState,
   Fact,
   FactList,
   KpiStrip,
@@ -39,18 +43,20 @@ import {
   SectionCard,
   StatCard,
 } from "../../components/kit";
+import { Button } from "../../components/ui/button";
 import {
   isKnown,
   RECOVERY_API_PATH,
+  REHEARSAL_ASK_PATH,
   readRecovery,
   wasRead,
   type Copies,
   type Recovery as RecoveryBody,
   type Rehearsal,
+  type RecoveryRehearsalAsked,
 } from "../installQuery";
 import { durationWords, Line, OpsPage, PLATFORM, WholeList } from "./parts";
 import { Pill } from "./pills";
-import { ACT_LABELS } from "./operationsActions";
 
 export const RECOVERY_HEADING = "Backup and recovery";
 export const RECOVERY_LEDE = "What has been copied, when a restore was last verified, and whether a rehearsal is owed.";
@@ -70,24 +76,81 @@ export const RESTORE_TOOK_LABEL = "Last restore took";
 export const REHEARSAL_OWED = "Owed";
 export const REHEARSAL_NOT_OWED = "Not owed";
 
+/** The control that asks the server for a rehearsal, and the dialog that says what it will do. */
+export const START_A_REHEARSAL = "Start a rehearsal";
+export const START_QUESTION = "Start a restore rehearsal?";
+export const START_CONSEQUENCE =
+  "Your server will load your newest copy into a scratch database beside your containers, check it, and write down what it found. Nothing of the live database changes.";
+export const KEEP_IT_AS_IT_IS = "Not now";
+/** Heading over what the copies' declared placement is worth, when something is wrong with it. */
+export const WHERE_COPIES_ARE_KEPT = "Where copies are kept";
+/** Said beside the control while a request is waiting for the server. */
+export const A_REQUEST_IS_WAITING = "A rehearsal has been asked for and is waiting for your server to start it.";
+
 export const COPIES_HEADING = "Copies";
 export const COPIES_CAPTION = "Each coverage's copies against the recovery point";
 /** A profile that takes no copies, said rather than left as no rows at all. */
 export const NO_COPIES = "No copies are taken";
 export const NO_COPIES_MORE = "This profile takes no copies, so there is nothing to recover from.";
 
-function RehearsalCard({ rehearsal }: { readonly rehearsal: Rehearsal }) {
+/**
+ * What the last press came to. Held by the page and not the card, because asking again for the
+ * screen's answer draws the loading state in the card's place, and a sentence kept in the card
+ * would go with it.
+ */
+interface Pressed {
+  readonly said: string | null;
+  readonly failure: ApiFailure | null;
+}
+
+function RehearsalCard({
+  rehearsal,
+  pressed,
+  onPressed,
+  onAsked,
+}: {
+  readonly rehearsal: Rehearsal;
+  readonly pressed: Pressed;
+  readonly onPressed: (next: Pressed) => void;
+  readonly onAsked: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const { said, failure } = pressed;
+
+  const ask = useCallback(() => {
+    setBusy(true);
+    void (async () => {
+      const result = await request<RecoveryRehearsalAsked>(REHEARSAL_ASK_PATH, { method: "POST", body: {} });
+      setBusy(false);
+      setConfirming(false);
+      if (!result.ok) {
+        onPressed({ said: null, failure: result.failure });
+        return;
+      }
+      onPressed({ said: result.data.says, failure: null });
+      onAsked();
+    })();
+  }, [onAsked, onPressed]);
+
   return (
     <SectionCard
       title={REHEARSING_A_RESTORE}
       action={
-        <Explanation
-          form="action"
-          act="operations.start_rehearsal"
-          label={ACT_LABELS.startRehearsal}
-          text={ACT_LABELS.startRehearsal}
-          icon={<Play aria-hidden />}
-        />
+        rehearsal.can_request ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={rehearsal.request_waiting || busy}
+            onClick={() => {
+              onPressed({ said: null, failure: null });
+              setConfirming(true);
+            }}
+          >
+            <Play aria-hidden />
+            {START_A_REHEARSAL}
+          </Button>
+        ) : undefined
       }
       footer={<Line>{rehearsal.no_control_here}</Line>}
     >
@@ -96,6 +159,28 @@ function RehearsalCard({ rehearsal }: { readonly rehearsal: Rehearsal }) {
         <Fact label="Recovery time promised">{durationWords(rehearsal.promised_recovery_seconds)}</Fact>
         <Fact label="A copy is kept for">{`${String(rehearsal.copies_kept_days)} days`}</Fact>
       </FactList>
+      {rehearsal.request_waiting ? <Note>{A_REQUEST_IS_WAITING}</Note> : null}
+      {failure !== null ? <FailureState failure={failure} /> : null}
+      {said !== null ? (
+        <div role="status" aria-live="polite">
+          <Note>{said}</Note>
+        </div>
+      ) : null}
+      {confirming ? (
+        <ConfirmDialog
+          open
+          question={START_QUESTION}
+          consequence={START_CONSEQUENCE}
+          confirmLabel={START_A_REHEARSAL}
+          cancelLabel={KEEP_IT_AS_IT_IS}
+          danger={false}
+          busy={busy}
+          onConfirm={ask}
+          onCancel={() => {
+            setConfirming(false);
+          }}
+        />
+      ) : null}
     </SectionCard>
   );
 }
@@ -131,8 +216,16 @@ const COPY_COLUMNS: readonly EntityColumn<Copies>[] = [
 ];
 
 export function RecoveryPage() {
-  const answer = useResource<RecoveryBody>(RECOVERY_API_PATH);
-  const body = answer.data === null ? null : { read: readRecovery(answer.data), rehearsal: answer.data.rehearsal ?? null };
+  const [version, setVersion] = useState(0);
+  const [pressed, setPressed] = useState<Pressed>({ said: null, failure: null });
+  const asked = useCallback(() => {
+    setVersion((was) => was + 1);
+  }, []);
+  const answer = useResource<RecoveryBody>(RECOVERY_API_PATH, version);
+  const body =
+    answer.data === null
+      ? null
+      : { read: readRecovery(answer.data), rehearsal: answer.data.rehearsal ?? null, placement: answer.data.placement ?? [] };
 
   return (
     <OpsPage
@@ -144,7 +237,7 @@ export function RecoveryPage() {
       failure={answer.failure}
       body={body}
     >
-      {({ read, rehearsal }) => (
+      {({ read, rehearsal, placement }) => (
         <>
           {wasRead(read) ? (
             <>
@@ -199,7 +292,18 @@ export function RecoveryPage() {
               <Note>{read.unread}</Note>
             </SectionCard>
           )}
-          {rehearsal === null ? null : <RehearsalCard rehearsal={rehearsal} />}
+          {placement.length === 0 ? null : (
+            <SectionCard title={WHERE_COPIES_ARE_KEPT}>
+              <ul className="m-0 flex list-none flex-col gap-1 p-0">
+                {placement.map((one) => (
+                  <li key={one} className="text-[13px]">
+                    {one}
+                  </li>
+                ))}
+              </ul>
+            </SectionCard>
+          )}
+          {rehearsal === null ? null : <RehearsalCard rehearsal={rehearsal} pressed={pressed} onPressed={setPressed} onAsked={asked} />}
           {rehearsal === null ? null : (
             <Advanced>
               <FactList>

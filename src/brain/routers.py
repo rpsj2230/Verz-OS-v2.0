@@ -212,6 +212,11 @@ from brain.console_overview_routes import router as console_overview_router
 # `brain.console_overview_routes`.
 from brain.console_stats_routes import router as console_stats_router
 
+# A coordinating agent: which agents it may hand a subtask to, whether it may run them together,
+# and splitting a request between them behind the `multi_agent_coordination` switch, which ships
+# off. See `brain.coordination_routes`.
+from brain.coordination_routes import router as coordination_router
+
 # Setting a credential, and seeing which are held. Beside the wizard because the wizard's
 # provider key is kept through the same store, and a router of its own because its subject is
 # the one value no other route may carry: it writes into the vault, answers that a secret is
@@ -306,6 +311,11 @@ from brain.group_rule_routes import router as group_rule_router
 # a scope that matches what is stopped. See `brain.halt_routes` and `brain.ops.halt_store`.
 from brain.halt_routes import router as halt_router
 
+# The handover pack: the service level statement or why there is none, the subprocessors, who at the
+# company owns what and when the review is, behind `admin:install_setting` and the `handover_pack`
+# switch for its two writes. See `brain.handover_routes`.
+from brain.handover_routes import router as handover_router
+
 # The install's own help pages: what it can see, a runbook for each screen and alert, and the
 # incident playbook, each as open as the screen it is about. See `brain.help_routes`.
 from brain.help_routes import router as help_router
@@ -374,6 +384,11 @@ from brain.member_share_routes import router as member_share_router
 # alone and offered to the department's library for a person to read. Gated on the member grant
 # and the `personal_skills` switch. See `brain.member_skill_routes`.
 from brain.member_skill_routes import router as member_skill_router
+
+# What a person pastes from the old system, checked by the migration package before anything is done
+# with it: skills, exported items, memory files and agents' availability. Keeps nothing. See
+# `brain.migration_convert_routes`.
+from brain.migration_convert_routes import router as migration_convert_router
 
 # Running a migration from another system, kept and checked: what the old system holds and what
 # happens to each of it, the comparison period and the cutover, behind `admin:install_setting` over
@@ -453,6 +468,11 @@ from brain.quality_routes import router as quality_router
 
 # Who can see a record, for somebody who can already see it. See `brain.record_access_routes`.
 from brain.record_access_routes import router as record_access_router
+
+# Asking the server for a restore rehearsal from the Recovery screen: a request left in the backup
+# bucket for the drill service, behind `admin:install_setting` and the `backup_drill_requests`
+# switch. Starts nothing itself. See `brain.rehearsal_routes`.
+from brain.rehearsal_routes import router as rehearsal_router
 
 # The three Report screens: service levels, spend and adoption. A router of its own because
 # the decision differs again and in the opposite direction to the matrix's: none of these

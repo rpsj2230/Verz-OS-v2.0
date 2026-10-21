@@ -195,7 +195,7 @@ def _guard(asked: Asked) -> None:
         raise _not_answerable()
 
 
-class PersonalSkillView(BaseModel):
+class MemberOwnSkillView(BaseModel):
     """One skill this person holds: what it is, where it came from and what it can do now."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -217,25 +217,25 @@ class PersonalSkillView(BaseModel):
     may_offer: bool
 
 
-class PersonalSkillsView(BaseModel):
+class MemberOwnSkillsView(BaseModel):
     """This person's own skills, and whether they may add or offer one."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    skills: list[PersonalSkillView]
+    skills: list[MemberOwnSkillView]
     more: bool = False
     may_add: bool
     #: Why they cannot add or offer, in a sentence; empty when they can.
     unavailable: str = ""
 
 
-def _view(entry: PersonalEntry, owner_id: str, *, on: bool) -> PersonalSkillView:
+def _view(entry: PersonalEntry, owner_id: str, *, on: bool) -> MemberOwnSkillView:
     one = entry.skill
     row = my_skills(
         [PersonalSkill(owner_id=owner_id, imported=one.imported, digest=one.digest)],
         principal_id=owner_id,
     )[0]
-    return PersonalSkillView(
+    return MemberOwnSkillView(
         digest=row.digest,
         name=row.name,
         version=row.version,
@@ -250,14 +250,14 @@ def _view(entry: PersonalEntry, owner_id: str, *, on: bool) -> PersonalSkillView
     )
 
 
-@router.get(MY_SKILLS_PATH, response_model=PersonalSkillsView, responses=COMMON_RESPONSES)
-async def my_personal_skills(request: Request, asked: Asked) -> PersonalSkillsView:
+@router.get(MY_SKILLS_PATH, response_model=MemberOwnSkillsView, responses=COMMON_RESPONSES)
+async def my_personal_skills(request: Request, asked: Asked) -> MemberOwnSkillsView:
     """This person's own skills, offered or not, newest first."""
     _guard(asked)
     me = asked.caller.principal.id
     on = await personal_skills_are_on(request)
     found = await store_of(request).mine(me, MOST_SHOWN + 1)
-    return PersonalSkillsView(
+    return MemberOwnSkillsView(
         skills=[_view(one, me, on=on) for one in found[:MOST_SHOWN]],
         more=len(found) > MOST_SHOWN,
         may_add=on,
@@ -291,7 +291,7 @@ async def _kept(request: Request, asked: Asked, package: Package, origin: Origin
 
 
 @router.post(
-    MY_SKILLS_PATH, status_code=201, response_model=PersonalSkillView, responses=COMMON_RESPONSES
+    MY_SKILLS_PATH, status_code=201, response_model=MemberOwnSkillView, responses=COMMON_RESPONSES
 )
 async def add_my_skill(request: Request, body: SkillPackageAsked, asked: Asked) -> JSONResponse:
     """Keep a pasted or written skill as this person's own, undecided."""
@@ -310,7 +310,7 @@ async def add_my_skill(request: Request, body: SkillPackageAsked, asked: Asked) 
 
 
 @router.post(
-    IMPORT_PATH, status_code=201, response_model=PersonalSkillView, responses=COMMON_RESPONSES
+    IMPORT_PATH, status_code=201, response_model=MemberOwnSkillView, responses=COMMON_RESPONSES
 )
 async def import_my_skill(request: Request, body: SkillImportAsked, asked: Asked) -> JSONResponse:
     """Bring a skill from a repository at a commit or from an address, as this person's own.
@@ -333,8 +333,8 @@ async def import_my_skill(request: Request, body: SkillImportAsked, asked: Asked
     )
 
 
-@router.post(OFFER_PATH, response_model=PersonalSkillView, responses=COMMON_RESPONSES)
-async def offer_my_skill(request: Request, digest: Digest, asked: Asked) -> PersonalSkillView:
+@router.post(OFFER_PATH, response_model=MemberOwnSkillView, responses=COMMON_RESPONSES)
+async def offer_my_skill(request: Request, digest: Digest, asked: Asked) -> MemberOwnSkillView:
     """Offer one of this person's own skills to the department's library for a person to read."""
     _guard(asked)
     me = asked.caller.principal.id

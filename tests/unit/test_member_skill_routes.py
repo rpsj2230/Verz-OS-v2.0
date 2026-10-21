@@ -217,10 +217,10 @@ def test_the_list_carries_no_count_of_what_the_reader_cannot_see() -> None:
     request = a_request(FakeStore())
     for who in (ME, COLLEAGUE, "u_third"):
         add(request, text_with(name=f"skill-{who.split('_')[1]}"), who=who)
-    from brain.member_skill_routes import PersonalSkillsView, PersonalSkillView
+    from brain.member_skill_routes import MemberOwnSkillsView, MemberOwnSkillView
 
-    assert set(PersonalSkillsView.model_fields) == {"skills", "more", "may_add", "unavailable"}
-    assert hidden_count_fields([PersonalSkillsView, PersonalSkillView]) == ()
+    assert set(MemberOwnSkillsView.model_fields) == {"skills", "more", "may_add", "unavailable"}
+    assert hidden_count_fields([MemberOwnSkillsView, MemberOwnSkillView]) == ()
     assert len(listed(request).skills) == 1
 
 
