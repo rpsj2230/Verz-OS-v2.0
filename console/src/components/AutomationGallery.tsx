@@ -70,6 +70,8 @@ export const CANNOT_INSTALL_HERE = "You cannot install automations on this agent
 export const RUNS_AS_LABEL = "Runs as";
 export const SCHEDULE_LABEL = "When it runs, once started";
 export const START_LABEL = "How it starts";
+export const USES_LABEL = "What it uses";
+export const APPROVAL_LABEL = "Who decides";
 export const REACH_LABEL = "What it can reach";
 export const GUARDS_LABEL = "What breaks without it";
 export const FACTS_LABEL = "What installing it would do";
@@ -92,6 +94,21 @@ export function installedSentence(name: string, automationId: string): string {
 
 export function scheduleSentence(schedule: string): string {
   return `Once started, it runs ${schedule}.`;
+}
+
+/** What starts an automation and which kinds of source it uses, in one sentence. */
+export function usesSentence(trigger: string | undefined, connectors: readonly string[]): string {
+  const starts =
+    trigger === "connector_event"
+      ? "Starts when a connected source changes."
+      : trigger === "webhook"
+        ? "Starts when another system calls it."
+        : "Starts on a schedule.";
+  return connectors.length === 0 ? starts : `${starts} Uses: ${connectors.join(", ")}.`;
+}
+
+export function approvalSentence(approval: string): string {
+  return `A person decides: ${approval}`;
 }
 
 export function installedAsSentence(automationId: string): string {
@@ -134,6 +151,18 @@ function PreviewFacts({ shown }: { readonly shown: InstallPreview }) {
         <dt>{SCHEDULE_LABEL}</dt>
         <dd>{shown.schedule}</dd>
       </div>
+      {shown.connectors.length === 0 ? null : (
+        <div className="fields__row">
+          <dt>{USES_LABEL}</dt>
+          <dd>{usesSentence(shown.trigger, shown.connectors)}</dd>
+        </div>
+      )}
+      {shown.approval === undefined ? null : (
+        <div className="fields__row">
+          <dt>{APPROVAL_LABEL}</dt>
+          <dd>{shown.approval}</dd>
+        </div>
+      )}
       <div className="fields__row">
         <dt>{START_LABEL}</dt>
         <dd>{shown.pausedBecause}</dd>
@@ -318,6 +347,12 @@ export function AutomationGallery({
               <h4>{card.name}</h4>
               <p>{card.summary}</p>
               <p className="note">{scheduleSentence(card.schedule)}</p>
+              {card.connectors.length > 0 || card.trigger !== undefined ? (
+                <p className="note">{usesSentence(card.trigger, card.connectors)}</p>
+              ) : null}
+              {card.approval === undefined ? null : (
+                <p className="note">{approvalSentence(card.approval)}</p>
+              )}
               {card.installedAs !== undefined ? (
                 <p className="note">
                   {installedAsSentence(card.installedAs)}

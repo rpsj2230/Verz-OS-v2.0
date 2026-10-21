@@ -66,6 +66,7 @@ from brain.knowledge.visibility import Visibility
 from brain.ops.automation import flow_reach
 from brain.ops.automation_owner import AUTOMATION_ASSURANCE, AUTOMATION_CHANNEL, AUTOMATION_ID
 from brain.ops.jobs import reach_carrying_fields
+from brain.orchestration.unattended import TriggerKind
 
 AGENT = "quote_helper"
 INSTALLER = "u_installer"
@@ -512,3 +513,79 @@ def test_an_installation_whose_halves_disagree_cannot_be_built() -> None:
     for change, refused in refusals:
         with pytest.raises(GalleryError, match=refused):
             replace(made, **change)  # type: ignore[arg-type]
+
+
+# ------------------------------------------------------- what each template declares (M17.7.5)
+def test_the_gallery_ships_a_daily_brief_deal_capture_and_drafted_email_replies() -> None:
+    """Delete this and the gallery loses the three outcomes M17.7.5 names, or ships them without
+    saying what starts them, which kinds of source they use or who decides."""
+    by_id = {one.template_id: one for one in BUILT_IN}
+    brief, deals, replies = (by_id[n] for n in ("daily_brief", "deal_capture", "email_replies"))
+    assert brief.trigger is TriggerKind.SCHEDULE and brief.connectors == (
+        "calendar",
+        "tasks",
+        "email",
+    )
+    assert brief.drafts is False and brief.approval == ""
+    assert deals.connectors == ("chat", "customer records") and deals.drafts
+    assert "approves" in deals.approval
+    assert replies.connectors == ("email",) and replies.drafts
+    assert "sends it themselves" in replies.approval
+
+
+def test_a_template_that_drafts_names_its_approval_and_one_that_does_not_has_none() -> None:
+    """Delete this and a drafting automation ships with no step at which a person decides, or a
+    read-only one claims an approval it never asks for."""
+    fields = {
+        "template_id": TEMPLATE.template_id,
+        "version": TEMPLATE.version,
+        "name": TEMPLATE.name,
+        "summary": TEMPLATE.summary,
+        "task": TEMPLATE.task,
+        "cadence": TEMPLATE.cadence,
+        "guards": TEMPLATE.guards,
+    }
+    with pytest.raises(GalleryError, match="drafts something"):
+        AutomationTemplate(**fields, drafts=True)  # type: ignore[arg-type]
+    with pytest.raises(GalleryError, match="drafts nothing"):
+        AutomationTemplate(**fields, approval="A person reads it.")  # type: ignore[arg-type]
+    ok = AutomationTemplate(**fields, drafts=True, approval="A person reads it.")  # type: ignore[arg-type]
+    assert ok.approval == "A person reads it."
+
+
+@pytest.mark.parametrize("kind", ["HubSpot", "crm.example.invalid", "a b c d", "", "chat!"])
+def test_a_source_is_named_by_its_kind_in_plain_words_and_never_by_a_product_or_an_address(
+    kind: str,
+) -> None:
+    """Delete this and a template names a vendor or a company's own system."""
+    with pytest.raises(GalleryError, match="kind of source"):
+        AutomationTemplate(
+            template_id=TEMPLATE.template_id,
+            version=1,
+            name=TEMPLATE.name,
+            summary=TEMPLATE.summary,
+            task=TEMPLATE.task,
+            cadence=TEMPLATE.cadence,
+            guards=TEMPLATE.guards,
+            connectors=(kind,),
+        )
+
+
+def test_the_confirmation_moves_with_what_starts_it_what_it_uses_and_its_approval() -> None:
+    """Delete this and a person confirms an install whose approval changed after they read it."""
+    agent = an_agent("read:client.name")
+    base = preview(TEMPLATE, agent, installer=person(), installer_reach=installer_reach())
+    changed = {
+        preview(
+            replace(TEMPLATE, **change),
+            agent,
+            installer=person(),
+            installer_reach=installer_reach(),
+        ).confirmation
+        for change in (
+            {"trigger": TriggerKind.WEBHOOK},
+            {"connectors": ("email",)},
+            {"drafts": True, "approval": "A person reads it."},
+        )
+    }
+    assert base.confirmation not in changed and len(changed) == 3

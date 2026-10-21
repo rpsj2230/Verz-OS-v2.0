@@ -1611,8 +1611,8 @@ const PROGRESS = {
   },
   "M17.1.4": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): ops/jobs.py models interrupt, CANCELLING/ABORTED/CANCELLED and DEFAULT_TIMEOUT_SECONDS (test_jobs) but nothing calls interrupt and no timeout is enforced in ops/worker.py or queue.py; jobs_routes offers pause/resume/run now only (NO_RUN_CAN_BE_STOPPED_FROM_HERE). NEXT: enforce a per-task timeout in the worker and add a cancel control calling jobs.interrupt over the driver's abort, then a check",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT 2026-10-21. Every task of ours now has a deadline (brain.ops.queue.TASK_DEADLINE_SECONDS, one heartbeat inside the staleness window): register_task cancels a task that overruns and fails the attempt with TaskDeadlineExceededError, and refuses a deadline of nothing or one past the window. Not built: a cancel control that calls jobs.interrupt over the driver's abort, which needs a screen listing the queue's jobs (M17.1.1).",
+    updated: "2026-10-20",
   },
   "M17.1.5": {
     status: "READY FOR TESTING",
@@ -4560,9 +4560,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M17.7.5": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): Gallery ships weekly_work_summary, unanswered_questions and source_freshness (console/automation_gallery BUILT_IN); no daily brief, no deal capture from group chats, no drafted email replies. Reuse: ops/digest_delivery (evening digest), channels/email, hubspot connector, automation_run.TASKS.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-21. Install proof: sign in as an administrator, open an agent, open its Automations tab and look at the gallery. Three new cards are listed: a daily brief, drafting customer records from deals in group chats, and drafting replies to emails waiting on you. Each says what starts it and which kinds of source it uses; the two that draft say who decides before anything takes effect, and the brief says none. Open Install on one: the confirmation shows the same. None of the three can be started yet and the tab says what each still needs.",
+    updated: "2026-10-20",
   },
   "M17.7.6": {
     status: "IN PROGRESS",
