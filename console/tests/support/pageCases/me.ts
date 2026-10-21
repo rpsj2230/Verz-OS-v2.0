@@ -113,6 +113,10 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         items: [{ artifact: ARTIFACT, shared_by: UNBROKEN, shared_at: "2019-03-01T09:00:00Z" }],
         more: false,
       },
+      "/api/v1/me/projects": {
+        projects: [{ project_id: UNBROKEN, name: UNBROKEN, created_at: "2019-03-01T09:00:00Z" }],
+        switched_on: true,
+      },
       "/api/v1/me/shares": {
         shares: [{ artifact_id: UNBROKEN, shared_with: UNBROKEN, shared_at: "2019-03-01T09:00:00Z" }],
         more: false,

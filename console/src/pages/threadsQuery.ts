@@ -22,7 +22,7 @@
  * changes nothing until that document's steward approves it on the Corrections tab
  * (`brain.knowledge.candidates.A_CORRECTION_S_WORDS_CHANGE_NOTHING_UNTIL_SOMEBODY_APPROVES_THEM`).
  *
- * Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4, M16.6.5
+ * Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4, M16.6.5, M40.7.6
  */
 
 import type { components } from "../api/schema";
@@ -57,6 +57,15 @@ export interface ThreadSummary {
   readonly title: string;
   readonly lastAt: string;
   readonly lastChannel: string;
+  /**
+   * Where the run behind the last answer has got to (M40.7.6): `running`, `waiting_for_approval`,
+   * `done` or `failed`, or empty while the install has the switch off or the thread has no answer
+   * to ask about. Drawn as the API's own words in `stateWords`, with nothing counted.
+   */
+  readonly state: string;
+  readonly stateWords: string;
+  /** For a failed run, the phrase for the step it stopped at. Empty for every other state. */
+  readonly failedStep: string;
 }
 
 /** `brain.thread_routes.ThreadMessageView`, as this console holds it. */
@@ -97,6 +106,9 @@ export function readThreads(payload: unknown): readonly ThreadSummary[] | null {
         title: text(row?.["title"]) ?? "",
         lastAt,
         lastChannel: text(row?.["last_channel"]) ?? "",
+        state: text(row?.["state"]) ?? "",
+        stateWords: text(row?.["state_words"]) ?? "",
+        failedStep: text(row?.["failed_step"]) ?? "",
       },
     ];
   });

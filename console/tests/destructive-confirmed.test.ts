@@ -369,6 +369,24 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Records that somebody asked for an agent they cannot run, once for each person and agent, and " +
     "grants nothing: the lead is told once and decides, which " +
     "tests/unit/test_acceptance_checks_member_agent_request.py holds.",
+  "src/pages/Ask.tsx addItemApiPath(project)":
+    "Lists the thread just asked in the person's own project, which is a reference and not a copy: " +
+    "nothing is ended or replaced, the thread stays where it was, and taking it out of the list is " +
+    "the same press undone, which tests/unit/test_project_routes.py holds.",
+  "src/components/MyProjects.tsx path":
+    "Renames a project or takes one reference out of its list. Neither ends anything: the thread " +
+    "or document stays where it was, the name is typed back, and the reference is added again by " +
+    "the same form, which tests/unit/test_project_routes.py holds.",
+  "src/components/MyProjects.tsx uploadPath(kind, \"personal\", \"\")":
+    "Stores a file the person chose, as theirs alone, and adds it to the project as a reference; " +
+    "nothing is replaced, which tests/unit/test_project_routes.py holds for the list it joins.",
+  "src/components/MyProjects.tsx addItemApiPath(projectId)":
+    "Adds a thread or a document the person may read to their own project as a reference; nothing " +
+    "is ended or replaced and it is taken out again by the same card, which " +
+    "tests/unit/test_project_routes.py holds.",
+  "src/components/MyProjects.tsx PROJECTS_API_PATH":
+    "Makes a new project of the person's own with a name they typed; nothing is replaced, and it is " +
+    "put away from the same card, which tests/unit/test_project_routes.py holds.",
   "src/components/MyChannels.tsx myCodeApiPath(row.channel)":
     "Asking for a code binds nothing: the code is shown to the person who asked and does nothing " +
     "until they send it from their own chat. It ends only an older code of theirs for that channel " +

@@ -788,6 +788,11 @@ class FollowUp:
     recall: Callable[..., Awaitable[TypedResult[KnowledgePassage]]] | None = None
     attached: tuple[str, ...] = ()
     read_attached: Callable[..., Awaitable[TypedResult[KnowledgePassage]]] | None = None
+    #: The documents of the personal project the run is made in, in the order they were added, and
+    #: the registered document tool that reads one at the run's reach (M40.7.7). See
+    #: `brain.project_context`.
+    project_files: tuple[str, ...] = ()
+    read_project_file: Callable[..., Awaitable[TypedResult[KnowledgePassage]]] | None = None
 
 
 def with_recalled(
@@ -1227,6 +1232,17 @@ async def draft(
         # under this reach and go first. See the reason constant beside `FollowUp`.
         recalled = await follow_up.recall(follow_up.cited, entitlement=entitlement, now=now)
         found = with_recalled(recalled, found)
+    if (
+        follow_up is not None
+        and follow_up.project_files
+        and follow_up.read_project_file is not None
+    ):
+        # A personal project's documents are read the same way, at this reach and no other, and
+        # before the thread's own attachments so those still go ahead of them. One a person can no
+        # longer read contributes nothing and the answer says nothing of it (M40.7.7).
+        for document in reversed(follow_up.project_files):
+            read = await follow_up.read_project_file(document, entitlement=entitlement, now=now)
+            found = with_recalled(read, found)
     if follow_up is not None and follow_up.attached and follow_up.read_attached is not None:
         # The files the person attached go first of all, the first attached first, each read
         # through its tool at this reach. See the reason constant beside `FollowUp`.

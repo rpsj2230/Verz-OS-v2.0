@@ -4660,14 +4660,14 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.7.6": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Per-agent conversation list carries run state answered/declined/degraded/failed (console/agent_conversations.py, tables.chat.RunState). The member's own GET /threads has no state and nothing reads job or suspension records for running or waiting; no failed-step text. NEXT: extend ThreadSummaryView with state read from ops.jobs and gate.suspension_store plus the failing step",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built (M40/member-ask-projects, behind the switch thread_states, which ships off): each recent conversation on Ask says what became of the last thing asked: running, waiting for approval, done or failed, and a failed one says the step it stopped at, read from the person's own job, suspension and request records (brain.member_task_state, brain.ops.task_state_store). Nothing is counted and nothing of anybody else's is read. PRIOR WORK (2026-10-13 triage): the per-agent conversation list already carried answered, declined, degraded and failed; the member's own list had no state. PROVE ON THE INSTALL: (1) as an administrator open Features and switch on 'Show whether each recent conversation is running, waiting, done or failed'; (2) as a member ask a question and open Ask: the conversation reads done; (3) ask something that prepares an action needing approval: it reads waiting for approval, and after it is approved and run, done; (4) cause a failure (for example ask with the model provider stopped): it reads failed and names the step; (5) switch the feature off: the list is the same list without states.",
+    updated: "2026-10-21",
   },
   "M40.7.7": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No personal project: no table or route groups threads and files (searched tables, thread_routes, chat/). Attachments exist per thread only (thread_routes ATTACHMENTS_PATH).",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built (M40/member-ask-projects, behind the switch personal_projects, which ships off): My workspace has a My projects card (console/src/components/MyProjects.tsx) to make, open, rename, put away and fill a project with the person's own conversations and with files they add; Ask offers Ask inside a project (AskProject.tsx) and the conversation joins the project. A question inside a project reads the project's files through the registered knowledge.read_document tool at the reach the run holds (brain.project_context, wired into follow_up_for and the FollowUp the model lane already reads attachments from), never a second retrieval path, and nothing in brain.memory reads a project (a test reads the source). A file the person can no longer read stays on the list, is not read and nothing marks it. NOT wired: an agent that runs through the tool loop (brain.gate.runtime) is not handed the project's files up front; it reads documents through its own tools. PRIOR WORK: tables agent.project and agent.project_item (0233) existed with no code over them. PROVE ON THE INSTALL: (1) Features page, turn on Personal projects; (2) My workspace, My projects, make a project called Test; open it, add a conversation from the list and add a small file of your own; (3) Ask, choose Test under Ask inside a project and ask something only the file answers: the answer uses the file; (4) sign in as a colleague: they see no project of yours and a question naming its id gets an ordinary answer; (5) have an administrator take away your right to read documents, ask again inside Test: the file is on the project list and the answer does not use it; (6) put the project away: it leaves the list and a question no longer reads it; (7) turn the switch off: nothing new can be made, but you can still see, rename, empty and put away your projects.",
+    updated: "2026-10-20",
   },
   "M40.7.8": {
     status: "OPEN",
