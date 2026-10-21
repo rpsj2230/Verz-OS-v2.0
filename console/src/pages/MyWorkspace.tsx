@@ -29,7 +29,7 @@
  * The Connected accounts card also lists the sources a person may connect their own account with,
  * and sends them to the vendor to do it (`components/MyAccounts.tsx`, M11.8.6).
  *
- * Task ids: M27.7.28, M16.4.2, M11.8.6, M40.4.1.4, M40.5.2.1, M40.5.2.2, M40.5.2.3, M40.5.2.4, M40.1.1.3, M40.4.2.4, M40.3.3.1, M40.4.2.1, M40.3.3.3, M40.2.2.5, M40.4.1.2
+ * Task ids: M27.7.28, M16.4.2, M11.8.6, M40.4.1.4, M40.5.2.1, M40.5.2.2, M40.5.2.3, M40.5.2.4, M40.1.1.3, M40.4.2.4, M40.3.3.1, M40.4.2.1, M40.3.3.3, M40.2.2.5, M40.4.1.2, M40.7.7
  */
 
 import { useCallback, useState } from "react";
@@ -47,6 +47,7 @@ import {
 } from "../components/MyAccountCards";
 import { MyDeletionCard } from "../components/MyDeletion";
 import { MyChannels } from "../components/MyChannels";
+import { MyProjects } from "../components/MyProjects";
 import type { GridColumn } from "../components/gridFeatures";
 import { GridTable } from "../components/kit/GridTable";
 import { MyPreferences } from "../components/MyPreferences";
@@ -525,6 +526,7 @@ export function MyWorkspace() {
           <MyReads />
           <MyArtifacts />
           <MyShared />
+          <MyProjects />
           <MyRequestableAgents />
           <MyStored />
           <MyDeletionCard />
