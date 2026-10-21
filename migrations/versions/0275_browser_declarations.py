@@ -27,14 +27,14 @@ the fact.
 **Both are in the ledger as a leash change, by the database.** An insert into
 `agent.browser_grant` appends a `leash_change` entry about `connector:browser.<target>` in the same
 transaction, naming the surface (or the skill) and the rung it moves between, and a revocation
-appends the reverse, each as the person who did it. `AuditRecorder.browser_grant` writes the same
-details and a test holds the two equal. Rejected: a Python call after the insert, which is an entry
-a crashed request never writes.
+appends the reverse, each as the person who did it. The recorder has no method for it, because
+`ACTION_BY_METHOD` pins one method per action and `leash_change` has one about an agent; a test
+holds the entries to the details written out beside the rungs. Rejected: a Python call after the
+insert, which is an entry a crashed request never writes.
 
 **A skill's hyphens are written as underscores in the entry.** The ledger keeps names, and a name is
 lowercase letters, digits and underscores (`brain.audit.ledger.FIELD_NAME`); an entry whose detail
-broke that would be refused when the chain is read back, which is the worst moment to find out. The
-recorder does the same.
+broke that would be refused when the chain is read back, which is the worst moment to find out.
 
 **No foreign key to a person or to a target.** A person is a value, so a grant outlives whoever
 signed it, and a grant may name a target a later row retired, because the question it answers is who

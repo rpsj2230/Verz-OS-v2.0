@@ -2,8 +2,8 @@
 
 The pure half holds the codec: every refusal it makes and the round trip it must make. The database
 half builds PostgreSQL at head and drives `brain.browsing.declared` as `brain_app`, reading back the
-ledger entries `0275`'s trigger appends and holding them to what `AuditRecorder.browser_grant`
-writes; it skips when `DATABASE_URL` is unset. The clock is 2999, for the reason CLAUDE.md records
+ledger entries `0275`'s trigger appends and holding them to the details a leash change carries;
+it skips when `DATABASE_URL` is unset. The clock is 2999, for the reason CLAUDE.md records
 about fixtures that go off.
 
 Task ids: M19.2.4, M19.6.7, M19.7.3, M19.9.7
@@ -13,22 +13,24 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import enum
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Final
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
 from brain.audit.ledger import AuditChain
-from brain.audit.record import BROWSER_GRANT_RUNGS, AuditRecorder, BrowserGrantChange
+from brain.audit.record import AuditRecorder
 from brain.browsing import declared
 from brain.browsing.declared import DeclarationError, declared_from, document_of
 from brain.browsing.sessions import ACT_ON_SURFACE_CAPABILITY, BROWSE_SURFACE
 from brain.browsing.targets import TargetRegistry, Verb
 from brain.core.entitlement import EntitlementSet, Grant
 from brain.core.scope import Scope
+from brain.gate.injection import AutonomyTier
 from brain.tables.browsing import BrowserTargetRow
 
 NOW = datetime(2999, 6, 1, 9, 0, tzinfo=UTC)
@@ -525,11 +527,46 @@ def test_the_application_can_revoke_a_grant_and_change_nothing_else_about_it(hea
             asyncio.run(edit(column))
 
 
+class BrowserGrantChange(enum.StrEnum):
+    """The four changes `0275`'s trigger writes, each a leash change about the target.
+
+    Here and not in `brain.audit.record`: the trigger is the only writer, and the recorder pins one
+    method per action (`ACTION_BY_METHOD`), so a method for these would be a second `leash_change`
+    that nothing calls. An `exception` moves a surface from the assisted rung to the autonomous
+    one; an `exemption` moves a skill from refused to exempted; a revocation moves it back.
+    """
+
+    EXCEPTION_SIGNED = "exception_signed"
+    EXCEPTION_REVOKED = "exception_revoked"
+    EXEMPTION_SIGNED = "exemption_signed"
+    EXEMPTION_REVOKED = "exemption_revoked"
+
+
+#: The two rungs each change moves between, `(from, to)`, as the trigger spells them.
+BROWSER_GRANT_RUNGS: Final[dict[BrowserGrantChange, tuple[str, str]]] = {
+    BrowserGrantChange.EXCEPTION_SIGNED: ("assisted", "autonomous"),
+    BrowserGrantChange.EXCEPTION_REVOKED: ("autonomous", "assisted"),
+    BrowserGrantChange.EXEMPTION_SIGNED: ("refused", "exempted"),
+    BrowserGrantChange.EXEMPTION_REVOKED: ("exempted", "refused"),
+}
+
+
+def leash_details(target: str, what: str, change: BrowserGrantChange) -> dict[str, str]:
+    """The details one change carries: a skill's hyphens are underscores, because the ledger keeps
+    names (`brain.audit.ledger.FIELD_NAME`)."""
+    before, after = BROWSER_GRANT_RUNGS[change]
+    return {
+        "target": f"browser.{target}.{what.replace('-', '_')}",
+        "from_rung": before,
+        "to_rung": after,
+    }
+
+
 @pytest.mark.needs_db
-def test_signing_and_revoking_are_ledger_entries_the_recorder_would_have_written(head: str) -> None:
-    """The trigger and `AuditRecorder.browser_grant` are two writers of one entry and this holds
-    them equal, for all four changes. Delete this and one drifts: the ledger then says something
-    the recorder's own test never saw."""
+def test_signing_and_revoking_are_leash_changes_in_the_ledger(head: str) -> None:
+    """The trigger writes a leash change in the shape the recorder's own `leash_change` does, for
+    all four changes. Delete this and the entries drift from that shape, which the audit view and
+    anyone reading the ledger for a leash change would then misread."""
     document = edited(lambda d: d.update(name="ledgered"))
     asyncio.run(_declare(head, document))
     target = declared_from(document).target
@@ -579,7 +616,12 @@ def test_signing_and_revoking_are_ledger_entries_the_recorder_would_have_written
     )
 
     def expected(what: str, change: BrowserGrantChange) -> dict[str, str]:
-        return dict(recorder.browser_grant(target="ledgered", what=what, change=change).details)
+        return leash_details("ledgered", what, change)
+
+    shape = recorder.leash_change(
+        agent_id="a", target="t", from_rung=AutonomyTier.ASSISTED, to_rung=AutonomyTier.AUTONOMOUS
+    ).details
+    assert set(expected("login", BrowserGrantChange.EXCEPTION_SIGNED)) == set(shape)
 
     assert [(one[0], one[1], one[3]) for one in found] == [
         ("leash_change", "signer", expected("login", BrowserGrantChange.EXCEPTION_SIGNED)),

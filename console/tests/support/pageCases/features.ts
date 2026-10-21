@@ -33,8 +33,8 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       "/api/v1/install/browser": {
         targets: [
           {
-            name: "stand_in",
-            origins: ["https://stand-in.example"],
+            name: "books",
+            origins: ["https://books.example"],
             api_tools: [],
             surfaces: [],
             bindings: [],
