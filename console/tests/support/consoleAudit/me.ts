@@ -8,7 +8,7 @@
  */
 
 import { myCodeApiPath, myUnbindApiPath } from "../../../src/pages/channelsQuery";
-import { myConsentPath } from "../../../src/pages/connectors/consentAtVendor";
+import { myConsentPath, myDisconnectPath } from "../../../src/pages/connectors/consentAtVendor";
 import { LEARNING_UNDO_API_PATH } from "../../../src/pages/learningUndoQuery";
 import {
   END_MY_DEVICE_API_PATH,
@@ -40,6 +40,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/components/MyAccounts.tsx myConsentPath(row.connector)": [
     at("POST /api/v1/me/accounts/{connector}/consent", "myConsentPath", myConsentPath("xero")),
+  ],
+  "src/components/MyAccounts.tsx myDisconnectPath(row.connector)": [
+    at("POST /api/v1/me/accounts/{connector}/disconnect", "myDisconnectPath", myDisconnectPath("xero")),
   ],
   "src/components/MyPreferences.tsx LEARNING_API_PATH": [
     at("POST /api/v1/me/preferences/learning", "LEARNING_API_PATH", LEARNING_API_PATH),
@@ -97,6 +100,24 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
 };
 
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/me/accounts/{connector}/disconnect": {
+    row: {
+      notApplicable:
+        "The change is the removal of one vault slot, the person's own refresh token, and no table row: " +
+        "the route reads the slot's metadata, asks the vendor to revoke, then removes it, which " +
+        "test_person_token_revoker holds in that order against a recording vendor and vault.",
+    },
+    audit: {
+      notApplicable:
+        "A credential removal is recorded by the vault's own audit log, which names the slot and the " +
+        "token that removed it; the application keeps no ledger row for a removal, and the route logs " +
+        "only the source name. test_member_accounts holds that a failed revocation removes nothing.",
+    },
+    behaviour: t(
+      "test_member_accounts",
+      "test_a_person_disconnects_their_own_account_and_the_revoker_is_asked_for_their_slot",
+    ),
+  },
   "POST /api/v1/me/accounts/{connector}/consent": {
     row: t(
       "test_connector_consent",

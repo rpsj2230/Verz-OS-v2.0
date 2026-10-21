@@ -123,7 +123,7 @@ PARAGRAPH_BREAK_RE = re.compile(r"\n[ \t]*\n")
 #: module id such as `M27` in a subject is prose and a group id such as `M27.9` is a claim.
 #: Kept equal to `brain.status.TASK_ID_RE` by a test rather than imported, because this
 #: module runs in a commit hook and `brain.status` pulls in the work breakdown loader.
-SUBJECT_ID_RE = re.compile(r"\bM\d+(?:\.\d+){1,4}\b")
+SUBJECT_ID_RE = re.compile(r"\bM\d+(?:\.\d+){1,4}\b(?!\.[A-Za-z])")
 
 #: Why a group id in a subject is refused and not merely noted.
 A_SUBJECT_IS_READ_AS_A_CLAIM = (

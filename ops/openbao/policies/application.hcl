@@ -127,8 +127,16 @@ path "connector_keys/data/oauth_refresh/+/+" {
 }
 
 path "connector_keys/metadata/oauth_refresh/+/+" {
-  capabilities = ["read"]
+  capabilities = ["read", "delete"]
 }
+
+# `delete` on a person's own slot only (one segment deeper than a source's key or its own refresh
+# token, so neither is reachable by it): when a person disconnects their own account from My
+# workspace, the vendor is asked to revoke the token and then the slot is removed with every
+# version of it (M40.5.1.3). The worker holds the same line for erasure; the application holds it
+# because a disconnect is immediate and waits for no queue. No read of the value: the token is read
+# for the revocation with a connector-person token, as a question's read is. See
+# brain.ops.person_token_revoker.
 
 # One question's read of a connected source borrows that source's key for the one read, by the
 # owner's decision (needs-rupash 99, 2026-09-28): a run token minted against the connector-run token
