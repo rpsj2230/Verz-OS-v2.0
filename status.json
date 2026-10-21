@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-21T10:27:20.104853+00:00",
-  "commit": "b7d89228",
-  "commit_subject": "15 more tasks are proved on the install by the newest complete acceptance run",
+  "generated_at": "2026-10-21T10:37:48.017960+00:00",
+  "commit": "7d327870",
+  "commit_subject": "The disconnect install check searches the tables a disconnect writes to, and names the step when the database refuses one (#669)",
   "total": 1626,
   "done": 1212,
   "percent": 74.5,
