@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-21T04:50:43.331873+00:00",
-  "commit": "c4051652",
-  "commit_subject": "A person's learned lines show their evidence, and their accounts show what is inherited and disconnect with the token revoked first (M40.4.1.1, M40.5.1.3, M40.5.1.4) (#658)",
+  "generated_at": "2026-10-21T05:03:06.616718+00:00",
+  "commit": "d0579efb",
+  "commit_subject": "A wildcard over a group in a commit subject is no longer read as a claim on that group (#655)",
   "total": 1626,
   "done": 1168,
   "percent": 71.8,
@@ -4112,12 +4112,6 @@
       "closed": "M17.1.4,M17.7.5"
     },
     {
-      "sha": "c40ddf8",
-      "at": "2026-10-21T02:17:34+00:00",
-      "subject": "Every module of the console is proved in the browser under the situations that need no write (M27.14.x, part) (#648)",
-      "closed": "M27.14"
-    },
-    {
       "sha": "a4465ea",
       "at": "2026-10-20T21:00:32+00:00",
       "subject": "6 more tasks are proved on the install by the newest complete acceptance run",
@@ -4224,6 +4218,12 @@
       "at": "2026-10-06T17:14:23+00:00",
       "subject": "The browser harness proves two tabs refresh, no page leaks an internal name or another host, and a drawer works under the console's style policy (#451)",
       "closed": "M27.15.13,M27.15.53,M27.15.81,M27.15.82"
+    },
+    {
+      "sha": "4647570",
+      "at": "2026-10-06T08:11:27+00:00",
+      "subject": "A regression in the golden corpus blocks the merge, and a test keeps the three parts of that together (#454)",
+      "closed": "M28.1.4"
     }
   ]
 }
