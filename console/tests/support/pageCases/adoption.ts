@@ -28,6 +28,41 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         not_measured: [],
         tokens: [],
       },
+      // The coverage statement: a connected department drawn in its widest values, one with nothing
+      // connected and nothing to suggest, and an action for the champion.
+      "/api/v1/report/coverage": {
+        switched_on: true,
+        lines: [
+          {
+            department: UNBROKEN,
+            source: UNBROKEN,
+            source_label: UNBROKEN,
+            state: "connected",
+            state_words: "Connected",
+            records: 120,
+            last_sync: "2019-03-04T09:30:00Z",
+          },
+          {
+            department: `${UNBROKEN}q`,
+            source: UNBROKEN,
+            source_label: UNBROKEN,
+            state: "not_connected",
+            state_words: "Not connected",
+            records: null,
+            last_sync: null,
+          },
+        ],
+        shopping: [
+          {
+            department: `${UNBROKEN}q`,
+            source: UNBROKEN,
+            source_label: UNBROKEN,
+            need: "authorise_the_source",
+            words: "Authorise this source so the department can ask about it",
+          },
+        ],
+        note: "Sources that answer to the whole organisation rather than to one department are listed on the Connectors screen and are not counted in a department's line.",
+      },
       "/api/v1/report/adoption": {
         items: [{ department: UNBROKEN, questions: 12, people: 3 }],
         next_cursor: null,

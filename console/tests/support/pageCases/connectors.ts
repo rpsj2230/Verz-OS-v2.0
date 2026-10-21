@@ -192,6 +192,8 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     answers: {
       "/api/v1/console/connectors": { items: [CONNECTOR_ROW], next_cursor: null, total: null },
       "/api/v1/console/connectors/xero/stats": CONNECTOR_STATS,
+      // The source to start with, drawn on the list while nothing is connected.
+      "/api/v1/console/connector-start": { source: "hubspot", label: UNBROKEN },
       // Connect Lark's guide with the staff list on, so Lark's connected card is drawn, and the
       // staff list's runs the card's last sync reads.
       "/api/v1/connectors/lark-app": LARK_GUIDE,

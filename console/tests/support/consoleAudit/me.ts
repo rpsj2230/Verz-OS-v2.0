@@ -10,6 +10,7 @@
 import { myCodeApiPath, myUnbindApiPath } from "../../../src/pages/channelsQuery";
 import { myConsentPath, myDisconnectPath } from "../../../src/pages/connectors/consentAtVendor";
 import { LEARNING_UNDO_API_PATH } from "../../../src/pages/learningUndoQuery";
+import { MY_DELETION_API_PATH } from "../../../src/pages/myDeletionQuery";
 import {
   END_MY_DEVICE_API_PATH,
   askForAgentApiPath,
@@ -29,6 +30,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/components/MyAccounts.tsx myConsentPath(row.connector)": [
     at("POST /api/v1/me/accounts/{connector}/consent", "myConsentPath", myConsentPath("xero")),
+  ],
+  "src/components/MyDeletion.tsx MY_DELETION_API_PATH": [
+    at("POST /api/v1/me/deletion-request", "MY_DELETION_API_PATH", MY_DELETION_API_PATH),
   ],
   "src/components/MyAccounts.tsx myDisconnectPath(row.connector)": [
     at("POST /api/v1/me/accounts/{connector}/disconnect", "myDisconnectPath", myDisconnectPath("xero")),
@@ -67,6 +71,24 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
 };
 
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/me/deletion-request": {
+    row: t(
+      "test_acceptance_checks_member_deletion",
+      "test_the_deletion_check_passes_on_an_install_and_leaves_nothing",
+      true,
+    ),
+    audit: {
+      notApplicable:
+        "Asking changes nothing the system holds: the row is the record that a person asked, and it is " +
+        "kept when they are erased. The act with a consequence is the erasure the retention owner files, " +
+        "which migration 0060's trigger records as a ledger entry; test_member_deletion holds that " +
+        "asking files nothing in the queue.",
+    },
+    behaviour: t(
+      "test_member_deletion",
+      "test_asking_records_the_ask_and_deletes_nothing",
+    ),
+  },
   "POST /api/v1/me/accounts/{connector}/disconnect": {
     row: {
       notApplicable:

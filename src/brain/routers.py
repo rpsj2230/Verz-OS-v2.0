@@ -40,6 +40,10 @@ from brain.acceptance_routes import router as acceptance_router
 # a request is delivered. See `brain.access_request_routes`.
 from brain.access_request_routes import router as access_request_router
 
+# What is connected for each department, the shopping list, and the first connector to suggest.
+# See `brain.adoption_coverage_routes`.
+from brain.adoption_coverage_routes import router as adoption_coverage_router
+
 # One agent's About tab, which reads the agent's automations and so cannot sit on the
 # workspace's router without an import cycle. The same audience and the same one 404.
 from brain.agent_about_routes import router as agent_about_router
@@ -371,6 +375,11 @@ from brain.member_accounts_routes import router as member_accounts_router
 # Asking for an agent you can see and cannot run. Gated on the member grant. See
 # `brain.member_agent_request_routes`.
 from brain.member_agent_request_routes import router as member_agent_request_router
+
+# A person asking for their data to be deleted, and the retention owner seeing who has asked.
+# Gated on the member grant and, for the list, the erasure authority. See
+# `brain.member_deletion_routes`.
+from brain.member_deletion_routes import router as member_deletion_router
 
 # A member's own settings: whether they are learnt from, where they are reached and when not.
 # Gated on the member grant. See `brain.member_preference_routes`.
