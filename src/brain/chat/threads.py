@@ -146,6 +146,9 @@ class ThreadMessage:
     #: For an answer, how its run ended, or None when that was not recorded. See
     #: `brain.tables.chat.RunState`.
     run_state: RunState | None = None
+    #: For an answer, the trace of the request that gave it, or empty. Read by the member's thread
+    #: list to find the records behind the run (M40.7.6); it is an identifier and says nothing.
+    trace_id: str = ""
 
     def __post_init__(self) -> None:
         if self.at.tzinfo is None:

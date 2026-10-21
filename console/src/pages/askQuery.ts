@@ -44,7 +44,7 @@
  * and `freshnessWords` puts the API's freshness beside the date. See
  * `A_CITATION_IS_DRAWN_AS_A_LINK_TO_WHAT_IT_NAMES`.
  *
- * Task ids: M42.6.3, M3.9.8, M8.1.1, M8.1.2, M8.1.3, M7.4.7, M7.6.1, M9.1.1
+ * Task ids: M42.6.3, M3.9.8, M8.1.1, M8.1.2, M8.1.3, M7.4.7, M7.6.1, M9.1.1, M40.7.7
  */
 
 import type { AnswerEvent } from "../api/events";
@@ -136,11 +136,13 @@ export function askBody(
   agent = "",
   kind = "",
   thread = "",
+  project = "",
 ): {
   readonly question: string;
   readonly agent?: string;
   readonly kinds?: readonly string[];
   readonly thread?: string;
+  readonly project?: string;
 } | null {
   const asked = question.trim();
   if (asked === "" || asked.length > MAX_QUESTION_CHARS) {
@@ -154,7 +156,16 @@ export function askBody(
   const narrowed = kind !== "" && kind in KIND_WORDS ? { kinds: [kind] } : {};
   // The conversation this question continues (M9.1.1), sent only when there is one.
   const continued = thread === "" ? {} : { thread };
-  return { question: asked, ...(named === "" ? {} : { agent: named }), ...narrowed, ...continued };
+  // The personal project the question is asked inside (M40.7.7), sent only when one is chosen. The
+  // route judges it like any name: a project that is not theirs brings nothing and says nothing.
+  const inside = project === "" ? {} : { project };
+  return {
+    question: asked,
+    ...(named === "" ? {} : { agent: named }),
+    ...narrowed,
+    ...continued,
+    ...inside,
+  };
 }
 
 /** Written down because a citation that cannot be followed is one nobody checks. */
