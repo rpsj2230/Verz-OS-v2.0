@@ -185,7 +185,9 @@ Task ids: M32.4.1.1, M32.4.1.3, M32.4.2.1, M32.4.2.2, M32.4.2.3, M17.1.2
 
 from __future__ import annotations
 
+import asyncio
 import enum
+import functools
 import json
 import re
 from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
@@ -1560,6 +1562,35 @@ A_TASK_RUNS_ON_THE_QUEUE_ITS_CLASS_DERIVES: Final = (
 )
 
 
+#: The longest a task of ours may run before the worker gives up on it (M17.1.4). Derived, not
+#: chosen: bounded above by the staleness window, because a deadline at or past it is never the
+#: thing that fires (the recovery sweep acts first and starts a second copy while the first is
+#: still inside its deadline), and one heartbeat inside it, the smallest unit staleness is measured
+#: in. `brain.ops.jobs.DEFAULT_TIMEOUT_SECONDS` is this figure and is derived from nothing else.
+TASK_DEADLINE_SECONDS: Final[float] = stale_after().total_seconds() - HEARTBEAT_SECONDS
+
+
+class TaskDeadlineExceededError(TimeoutError):
+    """A task ran past its deadline and was stopped. A timeout is the system giving up, so the
+    driver reads it as a failed attempt and its retry rules apply; it is not a cancellation."""
+
+
+def _bounded(
+    name: str, run: Callable[..., Awaitable[object]], timeout: float
+) -> Callable[..., Awaitable[object]]:
+    """`run` with a deadline: cancelled at `timeout` seconds and raised as a failed attempt."""
+
+    @functools.wraps(run)
+    async def bounded(*args: object, **kwargs: object) -> object:
+        try:
+            return await asyncio.wait_for(run(*args, **kwargs), timeout=timeout)
+        except TimeoutError as expired:
+            msg = f"task {name!r} ran past its {timeout:g} second deadline and was stopped"
+            raise TaskDeadlineExceededError(msg) from expired
+
+    return bounded
+
+
 def register_task(
     app: App,
     name: str,
@@ -1567,6 +1598,7 @@ def register_task(
     *,
     traffic_class: TrafficClass,
     slot_class: SlotClass = SlotClass.STANDARD,
+    timeout: float = TASK_DEADLINE_SECONDS,
 ) -> None:
     """Put one of our tasks on the driver, on the queue its class derives.
 
@@ -1577,7 +1609,20 @@ def register_task(
     Refuses a name the driver's own tasks use, so `tasks_of_ours` cannot be made to report a task
     of ours as the driver's, and refuses a second registration of one name, which the driver
     would otherwise let replace the first.
+
+    **Every task has a deadline** (M17.1.4): `timeout` seconds, `TASK_DEADLINE_SECONDS` unless the
+    caller names a shorter one. A deadline of nothing, or one at or past the staleness window, is
+    refused, because the first abandons the task before it starts and the second is never the thing
+    that fires. A task that overruns is cancelled and fails the attempt with
+    `TaskDeadlineExceededError`, which spends the attempt and leaves the job to its retry rules; a
+    cancellation by a person is a different row (`brain.ops.jobs.interrupt`).
     """
+    if not 0 < timeout < stale_after().total_seconds():
+        msg = (
+            f"a task of ours may run for more than nothing and less than "
+            f"{stale_after().total_seconds():g} seconds, not {timeout:g}"
+        )
+        raise QueueError(msg)
     if not name.strip() or any(name.startswith(p) for p in DRIVER_BUILTIN_TASK_PREFIXES):
         msg = f"{name!r} is not a name a task of ours may have"
         raise QueueError(msg)
@@ -1589,7 +1634,9 @@ def register_task(
     # A library boundary: the decorator's generic signature cannot be satisfied by a callable
     # whose parameters are only known at run time, and proving it buys nothing here.
     decorate = cast(Any, app.task)
-    decorate(name=name, queue=queue_name_for(traffic_class, slot_class))(run)
+    decorate(name=name, queue=queue_name_for(traffic_class, slot_class))(
+        _bounded(name, run, timeout)
+    )
 
 
 async def enqueue_job(app: App, job: Job, *, slot_class: SlotClass = SlotClass.STANDARD) -> int:

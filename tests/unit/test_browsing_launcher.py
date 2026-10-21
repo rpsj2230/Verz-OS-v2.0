@@ -69,11 +69,17 @@ class FakeEngine:
     def remove_network(self, network: str) -> None:
         self._called("remove_network", network)
 
-    def labelled(self) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    def labelled(self, run_id: str | None = None) -> tuple[tuple[str, ...], tuple[str, ...]]:
         return self.leftovers
 
     def runtimes(self) -> tuple[str, ...]:
         return ("runc", "runsc")
+
+    def inspect_container(self, container: str) -> Mapping[str, Any]:
+        return {}
+
+    def inspect_network(self, network: str) -> Mapping[str, Any]:
+        return {}
 
 
 def launcher(engine: FakeEngine) -> Launcher:
@@ -318,3 +324,52 @@ def test_the_docker_adapter_finds_leftovers_by_the_run_label() -> None:
 
     assert engine.labelled() == (("c1",), ("brain-browser-run-1",))
     assert all(json.loads(one.url.params["filters"]) == {"label": [RUN_LABEL]} for one in seen)
+
+
+def test_the_docker_adapter_describes_a_container_and_a_network_by_the_daemons_own_answer() -> None:
+    """Delete this and a rehearsal's description can come from the request path, or from a 404
+    read as an empty description that parses as no facts at all.
+
+    Task ids: M19.1.1, M19.1.5, M19.1.6, M19.3.5, M19.6.4"""
+    seen: list[httpx.Request] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.url.path.endswith("/gone/json"):
+            return httpx.Response(404)
+        return httpx.Response(200, json={"Name": "described"})
+
+    engine = DockerEngine(
+        httpx.Client(transport=httpx.MockTransport(answer), base_url="http://docker")
+    )
+
+    assert engine.inspect_container("abc") == {"Name": "described"}
+    assert engine.inspect_network("net") == {"Name": "described"}
+    assert [one.url.path for one in seen] == [
+        f"/{API_VERSION}/containers/abc/json",
+        f"/{API_VERSION}/networks/net",
+    ]
+    with pytest.raises(EngineError, match="not there"):
+        engine.inspect_container("gone")
+
+
+def test_the_docker_adapter_can_ask_for_the_leftovers_of_one_run() -> None:
+    """Delete this and a rehearsal counts another run's containers as its own leftovers, so a real
+    run in flight turns every acceptance run red.
+
+    Task ids: M19.1.1, M19.1.5"""
+    seen: list[httpx.Request] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=[])
+
+    engine = DockerEngine(
+        httpx.Client(transport=httpx.MockTransport(answer), base_url="http://docker")
+    )
+
+    assert engine.labelled("rehearsal-1") == ((), ())
+    assert all(
+        json.loads(one.url.params["filters"]) == {"label": [f"{RUN_LABEL}=rehearsal-1"]}
+        for one in seen
+    )

@@ -331,6 +331,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents/{agent_id}/groups*",
       "/api/v1/agents/{agent_id}/learning",
       "/api/v1/agents/{agent_id}/audience*",
+      "/api/v1/agents/{agent_id}/coordination*",
       "/api/v1/console/agents/{agent_id}/stats",
       "/api/v1/agents/{agent_id}/budget",
       "/api/v1/agents/{agent_id}/budget/ceilings",
@@ -372,6 +373,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.template_withdrawal",
       "agent.template_draft",
       "agent.audience_extra",
+      "agent.agent_callee",
+      "agent.agent_fanout",
       "agent.upgrade_decline",
       "agent.leash_change",
       "agent.supervised_action",
@@ -403,6 +406,10 @@ export const AREAS: Readonly<Record<string, Area>> = {
       {
         what: "A rung above Shadow cannot be published from a draft, and a rehearsal does not ask its test questions.",
         because: "brain.builder.agent_drafts.A_RUNG_IS_RAISED_WITH_EVIDENCE_AND_NEVER_BY_A_DRAFT, and no model answers for an agent yet (brain.agent_builder_routes.A_REHEARSAL_RUNS_NO_MODEL_YET).",
+      },
+      {
+        what: "Which agents an agent may hand a subtask to, and whether it may run them at the same time, cannot be set from the console.",
+        leaf: "M18.5.1",
       },
       {
         what: "A published template version cannot be installed from the console.",
@@ -731,8 +738,14 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "Feature and module enablement": {
     screens: ["/features"],
-    routes: ["/api/v1/install/features*", "/api/v1/install/plugins*", "/api/v1/orchestration/weighed-plans", "/api/v1/migration*"],
-    tables: ["ops.fanout_gate", "ops.migration_record", "ops.plugin_install", "ops.plugin_version"],
+    routes: [
+      "/api/v1/install/features*",
+      "/api/v1/install/plugins*",
+      "/api/v1/orchestration/weighed-plans",
+      "/api/v1/orchestration/coordinated-runs",
+      "/api/v1/migration*",
+    ],
+    tables: ["ops.coordinated_run", "ops.fanout_gate", "ops.migration_record", "ops.plugin_install", "ops.plugin_version"],
     installation: [],
     gaps: [
       {
@@ -741,9 +754,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
           "The points that take code run it in a sidecar or a sandbox and neither runner exists, so the panel says no_plugin_is_loaded; M29.2.4 (a drain on upgrade) and M29.2.5 (an isolation tier enforced by a host) wait on one.",
       },
       {
-        what: "A weighed plan starts nothing: no coordinating agent exists to dispatch the agents it would split across.",
+        what: "A weighed plan starts nothing, and a request split between a coordinating agent's specialists has no page.",
         because:
-          "The panel says nothing_is_started; the planner that asks a model for subtasks, the callee allow-list and the specialist run are M18.5.x, and the global parallelism budget at dispatch is M18.3.5.",
+          "The panel says nothing_is_started because weighing is a rehearsal; splitting a request, running the specialists and listing the runs kept are POST and GET /orchestration/coordinated-runs (brain.coordination_routes), behind the multi_agent_coordination switch, and no page draws them yet (M18.5.3).",
       },
       {
         what: "Nothing in a migration reaches the old system: a revocation, a job stopped and an act done are recorded as a person says they are.",
@@ -932,7 +945,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/referrals",
     ],
     routes: [
-      "/api/v1/install/recovery",
+      "/api/v1/install/recovery*",
       "/api/v1/govern/retention*",
       "/api/v1/govern/legal-holds*",
       "/api/v1/govern/erasures",
@@ -950,7 +963,13 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "gate.escalation",
     ],
     installation: [],
-    gaps: [{ what: "A recovery drill cannot be started, and a restore cannot be verified, from the console.", leaf: "M30.3.9" }],
+    gaps: [
+      {
+        what: "A recovery drill is asked for from the console and started by the server, so a press does not say it began.",
+        because:
+          "Nothing the product runs holds the access to start a container (needs-rupash item 235); the press leaves a request for the drill service, and the leaf is proved only when a person has pressed it on an install that has the service and read the record that appears.",
+      },
+    ],
   },
   "Import and export": {
     screens: ["/import-export"],
@@ -961,10 +980,16 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "Version, build and deployment information": {
     screens: ["/updates", "/install"],
-    routes: ["/api/v1/install/updates"],
+    routes: ["/api/v1/install/updates", "/api/v1/handover*"],
     tables: ["ops.deployment_record"],
     installation: ["INSTALL_UPDATE_MODE"],
-    gaps: [],
+    gaps: [
+      {
+        what: "No page draws the handover pack: the service level statement, the subprocessors, the named owners and the booked review are served and nothing links to them.",
+        because:
+          "brain.handover_routes serves them to the install authority (M30.5.4, M30.6.6, M37.4.2.4, M37.4.3.3, M37.4.3.5) and the console has not been given a Handover page.",
+      },
+    ],
   },
 };
 

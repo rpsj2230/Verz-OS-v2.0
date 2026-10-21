@@ -21,7 +21,11 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
           manifest_ends: ".manifest.json",
           record_ends: ".drill.json",
           no_control_here: UNBROKEN,
+          can_request: false,
+          request_waiting: false,
+          requested_at: null,
         },
+        placement: [],
         panel: {
           profile: "standard",
           copies: [

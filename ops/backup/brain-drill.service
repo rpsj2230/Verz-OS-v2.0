@@ -1,0 +1,15 @@
+[Unit]
+Description=Rehearse reading the newest Company Brain copy back, when one is owed
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Every value the service needs is read from the file `brain-install-backup` writes, for the reason
+# `brain-backup.service` gives: a unit carrying the values inline would put one install's names into
+# a file this repository ships.
+EnvironmentFile=/etc/brain-backup.env
+ExecStart=/usr/local/bin/brain-drill-service
+# A rehearsal of a large copy is the longest thing this server does on its own. Two hours is the
+# point past which the load is stuck and not slow.
+TimeoutStartSec=7200

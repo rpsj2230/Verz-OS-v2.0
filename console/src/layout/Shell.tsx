@@ -69,6 +69,7 @@ import { useResource, type Resource } from "../api/useResource";
 import { CallerProvider, readCallerId } from "../components/kit/caller";
 import { forgetAllFlows } from "../components/kit/flowMemory";
 import { SidebarProvider } from "../components/ui/sidebar";
+import { Toaster } from "../components/ui/sonner";
 import { ThemeControl } from "../theme/ThemeControl";
 import { signOut } from "../auth/session";
 import { StopControl } from "../pages/operations/StopControl";
@@ -157,6 +158,7 @@ function ShellFrame({ me }: { readonly me: Resource<unknown> }) {
           </Suspense>
         </main>
       </div>
+      <Toaster />
     </SidebarProvider>
   );
 }

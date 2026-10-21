@@ -26,7 +26,13 @@ passage a person followed is not in any request log. The route returns the docum
 to `brain.knowledge.document_tools.MAX_PASSAGES`, says when it stopped there, and the page marks the
 passage whose chunk the fragment names.
 
-Task ids: M8.1.2
+**Opening another department's document is written down (M27.15.1).** A cited document that sits
+in a department the reader does not belong to leaves an entry naming the document and the reader,
+once its text has been read for them, as the library's own passages route does, and a failure to
+write it fails the opening. A company-wide document leaves nothing. See
+`brain.ops.sensitive_read_store.record_document_opening`.
+
+Task ids: M8.1.2, M27.15.1
 """
 
 from __future__ import annotations
@@ -40,6 +46,7 @@ from pydantic import BaseModel, ConfigDict
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked
+from brain.attribution import trace_of_request
 from brain.core.envelope import TypedResult
 from brain.core.errors import Absent, BrainError, Failed
 from brain.core.redaction import ID_KEYS
@@ -51,6 +58,8 @@ from brain.knowledge.document_tools import (
     KnowledgePassage,
 )
 from brain.knowledge.item import ITEM_ID_PATTERN
+from brain.ops.sensitive_read_store import is_another_departments, record_document_opening
+from brain.routing_routes import sessions_of
 from brain.tools.registry import ToolRegistry
 
 log = structlog.get_logger()
@@ -162,4 +171,23 @@ async def cited_document(
     if document is None:
         log.info("cited_document.not_answerable")
         raise _not_found(document_id)
+    factory = sessions_of(request)
+    department = next(
+        (
+            str(one["department"])
+            for one in redacted.payload.records
+            if one.get("department") and one.get("document_id") == document_id
+        ),
+        None,
+    )
+    if factory is not None and is_another_departments(
+        department, asked.caller.principal.primary_department
+    ):
+        await record_document_opening(
+            factory,
+            reader_id=asked.caller.principal.id,
+            document_id=document_id,
+            ent_hash=asked.reach.ent_hash(),
+            trace_id=trace_of_request(),
+        )
     return document.model_copy(update={"truncated": redacted.payload.truncated})

@@ -253,6 +253,7 @@ async def _install(
         "M13.5.21",
         "M13.5.22",
         "M13.5.23",
+        "M27.11.7",
     ),
     sentence=(
         "Every built-in template is on file exactly as this release ships it, and each, installed "

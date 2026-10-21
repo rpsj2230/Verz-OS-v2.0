@@ -53,7 +53,7 @@ def test_the_template_withdrawal_check_is_listed_with_the_leaf_it_proves() -> No
     """Delete this and the check can drop out of the module, or claim a leaf it does not prove."""
     assert checks_in(MODULE) == [NAME]
     assert MODULE in check_modules()
-    assert mine()[NAME].leaves == ("M27.15.35",)
+    assert mine()[NAME].leaves == ("M27.15.35", "M27.11.7")
 
 
 @pytest.mark.needs_db

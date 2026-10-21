@@ -3,11 +3,13 @@
 `brain.console.usage_view` has decided since M27.4.2 which of the four axes a reader may break
 usage down by and which rows the usage grant admits, and it decides both over `UsageRow`, a row
 carrying a model and a token count. Measured on 2026-09-16, no ledger on any install holds one.
-`ops.spend_actual` is written by nothing: `brain.ops.spend_store.record` has no caller. And
-`obs.request_telemetry`, which is written for every request that finishes, left `tokens_in`,
-`tokens_out`, `model` and `agent_version` empty on every row until 2026-09-17, because nothing
-called a model. `brain.models.calls.ModelCalls` does now, and every call it makes is metered onto
-its request's row (`brain.models.metering`). So this screen has two measures: questions, and the
+`ops.spend_actual` was written by nothing then: `brain.ops.spend_store.record` had no caller, and
+`brain.ops.usage_store.UsageRecorder` writes each request's cost when the lane finishes it now
+(M27.12.5). And `obs.request_telemetry`, which is written for every request that finishes, left
+`tokens_in`, `tokens_out`, `model` and `agent_version` empty on every row until 2026-09-17, because
+nothing called a model. `brain.models.calls.ModelCalls` does now, and every call it makes is
+metered onto its request's row (`brain.models.metering`). So this screen has two measures:
+questions, and the
 tokens those questions' model calls consumed, broken down by the same four axes.
 
 **The figure that exists is questions, by person and by department.** `ops.question_asked` holds
@@ -126,9 +128,10 @@ QUESTIONS_ARE_THE_ONE_USAGE_FIGURE_A_LEDGER_HOLDS_TODAY: Final = (
     "The usage screen is asked for questions and tokens by person, department, model and agent. "
     "The question ledger holds the asker and their department for every question the answer "
     "lane finished, and it is written on every install. The token, model and agent columns of "
-    "the request ledger are empty on every row because nothing calls a model, and the cost "
-    "ledger has no writer at all. So questions by person and by department are shown, and the "
-    "rest are named as not measured rather than drawn as zero."
+    "the request ledger are filled only for a request that called a model, and a cost is "
+    "recorded only for a call to a model that has a price. So questions by person and by "
+    "department are shown whole, and anything a request did not measure is named as not "
+    "measured rather than drawn as zero."
 )
 
 #: Why the two tables cannot be told apart by subtraction.
