@@ -3631,7 +3631,7 @@ const PROGRESS = {
   },
   "M37.2.3.4": {
     status: "READY FOR TESTING",
-    why: "BUILT: POST /migration/audience maps each pasted agent's availability to who may see it here from the mapping the person gives, names the agents whose availability nobody mapped and never defaults one, and leaves what the agent may reach to its authority. PROOF ON THE INSTALL: paste two agents with one availability unmapped; the unmapped one is named. The check availability_is_mapped_and_never_defaulted passes.",
+    why: "BUILT: POST /migration/availability maps each pasted agent's availability to who may see it here from the mapping the person gives, names the agents whose availability nobody mapped and never defaults one, and leaves what the agent may reach to its authority. PROOF ON THE INSTALL: paste two agents with one availability unmapped; the unmapped one is named. The check availability_is_mapped_and_never_defaulted passes.",
     updated: "2026-10-20",
   },
   "M37.2.4.2": {

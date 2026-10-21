@@ -12,8 +12,8 @@ or imports from it. The skills, items, memory files and agents are made up and s
 migration's are pasted by the person doing it. Proving that a real export arrives is the
 rehearsal on a throwaway install (M37.7.6), which is a person's act.
 
-Task ids: M37.1.2.1, M37.1.2.2, M37.1.2.3, M37.1.2.4, M37.2.2.2, M37.2.2.4, M37.2.2.5, M37.2.3.4,
-M37.2.4.2, M37.2.4.3
+Task ids: M37.1.2.1, M37.1.2.2, M37.1.2.3, M37.1.2.4, M37.2.2.2, M37.2.2.4, M37.2.2.5, M37.2.3.4
+Task ids: M37.2.4.2, M37.2.4.3
 """
 
 from __future__ import annotations
@@ -255,12 +255,12 @@ async def a_conclusion_is_re_derived_and_a_widening_is_refused(h: Harness) -> No
     ),
 )
 async def availability_is_mapped_and_never_defaulted(h: Harness) -> None:
-    from brain.migration_convert_routes import PastedAudienceAsked, map_audience
+    from brain.migration_convert_routes import PastedAvailabilityAsked, map_availability
 
     administrator, _, console = await _begin(h)
-    answer = await map_audience(
+    answer = await map_availability(
         console.request("POST"),
-        PastedAudienceAsked.model_validate(
+        PastedAvailabilityAsked.model_validate(
             {
                 "agents": [
                     {"name": "made-up helper", "availability": "everyone"},

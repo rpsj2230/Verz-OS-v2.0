@@ -34,8 +34,8 @@ one at a time.
 switch, the same as the migration route. Refused before the database to anyone without the
 authority.
 
-Task ids: M37.1.2.1, M37.1.2.2, M37.1.2.3, M37.1.2.4, M37.2.2.2, M37.2.2.4, M37.2.2.5, M37.2.3.4,
-M37.2.4.2, M37.2.4.3
+Task ids: M37.1.2.1, M37.1.2.2, M37.1.2.3, M37.1.2.4, M37.2.2.2, M37.2.2.4, M37.2.2.5, M37.2.3.4
+Task ids: M37.2.4.2, M37.2.4.3
 """
 
 from __future__ import annotations
@@ -254,7 +254,7 @@ class PastedForeignAgentAsked(BaseModel):
     tools: list[str] = Field(default_factory=list, max_length=200)
 
 
-class PastedAudienceAsked(BaseModel):
+class PastedAvailabilityAsked(BaseModel):
     """The agents, what each availability means here, and whose agents they will be."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -266,17 +266,17 @@ class PastedAudienceAsked(BaseModel):
     department: str = ""
 
 
-class PastedAudienceView(BaseModel):
+class PastedAvailabilityView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
     level: str
 
 
-class PastedAudiencesView(BaseModel):
+class PastedAvailabilitiesView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    audiences: list[PastedAudienceView]
+    audiences: list[PastedAvailabilityView]
     #: Agents whose availability nobody mapped, in the package's words. Never defaulted.
     unmapped: list[PastedRefusedView]
     #: What this does not decide: what each agent may reach, which is its authority.
@@ -476,14 +476,16 @@ async def check_learning(
     )
 
 
-@router.post("/migration/audience", response_model=PastedAudiencesView, responses=COMMON_RESPONSES)
-async def map_audience(
-    request: Request, body: PastedAudienceAsked, asked: Asked
-) -> PastedAudiencesView:
+@router.post(
+    "/migration/availability", response_model=PastedAvailabilitiesView, responses=COMMON_RESPONSES
+)
+async def map_availability(
+    request: Request, body: PastedAvailabilityAsked, asked: Asked
+) -> PastedAvailabilitiesView:
     """Map each agent's availability over there onto who may see it here, from the mapping given,
     and name the agents whose availability the mapping does not cover. Never a default."""
     await _begin(request, asked)
-    audiences: list[PastedAudienceView] = []
+    audiences: list[PastedAvailabilityView] = []
     unmapped: list[PastedRefusedView] = []
     try:
         for one in body.agents:
@@ -500,7 +502,7 @@ async def map_audience(
             except rebuild.RebuildError as refused:
                 unmapped.append(PastedRefusedView(subject=one.name, because=str(refused)))
                 continue
-            audiences.append(PastedAudienceView(name=one.name, level=made.level.value))
+            audiences.append(PastedAvailabilityView(name=one.name, level=made.level.value))
     except (MigrationError, ValueError) as refused:
         raise _refused_because(str(refused)) from None
-    return PastedAudiencesView(audiences=audiences, unmapped=unmapped)
+    return PastedAvailabilitiesView(audiences=audiences, unmapped=unmapped)

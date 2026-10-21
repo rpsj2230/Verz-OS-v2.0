@@ -26,12 +26,12 @@ from tests.fixtures.console_http import Stub, console_client, headers, post
 from tests.fixtures.setting_rows import SettingRows
 from tests.unit.test_migration_routes import BASE, GRANTS, Records, a_register, held
 
-PATHS = ("/skills/convert", "/carry", "/learning", "/audience")
+PATHS = ("/skills/convert", "/carry", "/learning", "/availability")
 BODIES: dict[str, dict[str, Any]] = {
     "/skills/convert": {"skills": []},
     "/carry": {},
     "/learning": {"memories": []},
-    "/audience": {"agents": [], "mapping": {}, "owner_id": "u_example"},
+    "/availability": {"agents": [], "mapping": {}, "owner_id": "u_example"},
 }
 
 
@@ -409,7 +409,7 @@ def test_availability_is_mapped_by_the_mapping_given_and_an_unmapped_one_is_neve
     client, _ = served
     answer = ask(
         client,
-        "/audience",
+        "/availability",
         {
             "agents": [
                 {"name": "helper", "availability": "everyone"},
@@ -433,7 +433,7 @@ def test_a_level_this_system_does_not_have_is_refused_as_a_malformed_request(
     client, _ = served
     answer = ask(
         client,
-        "/audience",
+        "/availability",
         {
             "agents": [{"name": "a", "availability": "x"}],
             "mapping": {"x": "world"},
