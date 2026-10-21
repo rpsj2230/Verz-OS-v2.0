@@ -199,6 +199,12 @@ from brain.tables.tool_definition import ToolDefinitionRow, ToolSwitchRow
 from brain.tables.upgrade import UpgradeDeclineRow
 from brain.tables.vault_access import VaultAccessRow
 from brain.tables.webhook_change import WebhookChangeRow
+from brain.tables.workflow import (
+    WorkflowAssignmentRow,
+    WorkflowRunRow,
+    WorkflowStepRunRow,
+    WorkflowVersionRow,
+)
 
 #: Every table, in the order a migration must create them: a table appears after everything
 #: it points at. The order is the migrations' own tuples end to end - 0002's seven, 0003's
@@ -585,6 +591,12 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "agent.agent_callee",
     "agent.agent_fanout",
     "ops.coordinated_run",
+    # 0273_workflows. Points at nothing: an agent, a workflow and a person are values, so a version,
+    # a run and its steps outlive all three.
+    "ops.workflow_version",
+    "agent.workflow_assignment",
+    "ops.workflow_run",
+    "ops.workflow_step_run",
 )
 
 __all__ = [
@@ -767,5 +779,9 @@ __all__ = [
     "VaultAccessRow",
     "WebhookChangeRow",
     "WebhookSubscriberRow",
+    "WorkflowAssignmentRow",
+    "WorkflowRunRow",
+    "WorkflowStepRunRow",
+    "WorkflowVersionRow",
     "one_of",
 ]

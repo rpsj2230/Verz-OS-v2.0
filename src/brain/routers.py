@@ -604,6 +604,10 @@ from brain.welcome_routes import router as welcome_router
 # proved instead. See `brain.widget_routes`.
 from brain.widget_routes import router as widget_router
 
+# Stored workflows: written as versioned step data, assigned to agents and run through the gate
+# behind the `stored_workflows` switch, which ships off. See `brain.workflow_routes`.
+from brain.workflow_routes import router as workflow_router
+
 
 def routers_in(namespace: Mapping[str, object]) -> tuple[APIRouter, ...]:
     """Every router a module's namespace holds, in the order of the names they are held under."""
