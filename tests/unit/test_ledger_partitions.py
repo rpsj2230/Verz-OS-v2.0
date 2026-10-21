@@ -324,11 +324,15 @@ def test_the_worker_runs_it_on_the_retention_sweeps_schedule_under_the_same_rele
     monkeypatch.setattr(psycopg, "connect", connect)
     monkeypatch.setattr(schedule_runner, "run_retention_sweep", swept)
     monkeypatch.setattr(schedule_runner, "maintain_ledger_partitions", partitioned)
+    # The recordings sweep reports last and has its own tests (`test_browsing_recording_sweep.py`);
+    # here it is a line, so this test reads the partitions line where it sits above it.
+    monkeypatch.setattr(schedule_runner, "_recording_sweep", lambda *_: "recordings: stand-in")
 
     said = schedule_runner.retention_sweep(NOW, True, "postgresql://u@h/db")
 
     assert calls == [("sweep", True), ("partitions", True)]
-    assert said.splitlines()[-1].startswith("ledger partitions: created request_telemetry_p299911")
+    assert said.splitlines()[-2].startswith("ledger partitions: created request_telemetry_p299911")
+    assert said.splitlines()[-1] == "recordings: stand-in"
     assert call_sites("brain.ops.ledger_partitions:maintain") == ("brain.ops.schedule_runner",)
     assert runner_for("retention_sweep").run is not None
 
