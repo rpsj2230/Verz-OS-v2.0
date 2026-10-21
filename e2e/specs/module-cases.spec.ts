@@ -88,6 +88,7 @@ for (const group of MODULE_PAGES.keys()) {
     const [first] = targets;
     expect(section.entries.length, `the ${group} module has more than one entry to stand on and prove`).toBeGreaterThan(1);
     const searched: string[] = [];
+    const waiting: string[] = [];
 
     for (const target of targets) {
       reset(seen);
@@ -96,8 +97,11 @@ for (const group of MODULE_PAGES.keys()) {
       if (await proveSearchNarrowsAndClears(page, target)) {
         searched.push(target.label);
       }
-      await proveFailureIsSaid(page, target, targets);
+      const asking = await proveFailureIsSaid(page, target, targets);
       await proveUnreachableIsSaid(page, target, targets);
+      if (!asking) {
+        waiting.push(target.label);
+      }
       if (target === first) {
         await proveLoadingIsSaid(page, target, targets);
       }
@@ -107,6 +111,7 @@ for (const group of MODULE_PAGES.keys()) {
     if (group === "home") {
       await proveKeyboardSkipsTheMenu(page);
     }
+    info.annotations.push({ type: "asks nothing on opening", description: `${group}: ${waiting.join(", ") || "none"}` });
     info.annotations.push({ type: "searched", description: `${group}: ${searched.join(", ") || "no page held rows to search"}` });
   });
 }

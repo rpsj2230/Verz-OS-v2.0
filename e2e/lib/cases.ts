@@ -149,35 +149,65 @@ export async function proveLoadingIsSaid(page: Page, target: Target, others: rea
   });
 }
 
-/** A fault the API answers is said, under a heading of its own, with a reference. */
-export async function proveFailureIsSaid(page: Page, target: Target, others: readonly Target[]): Promise<void> {
+/**
+ * The pages that send no request when they are opened, and so have no failure to say.
+ *
+ * The same pages, for the same reason, as `ASKS_NOTHING_ON_ARRIVAL` in
+ * `console/tests/support/screenStateRules.tsx`, where each is mounted against an API that fails
+ * everything and fails the test if it sends a request, so the list cannot be added to to excuse a
+ * page. Fields and records waits to be told which table, and Memory whose memory.
+ */
+export const ASKS_NOTHING_ON_OPENING: ReadonlySet<string> = new Set(["/classification", "/memory"]);
+
+async function openingWith(
+  page: Page,
+  target: Target,
+  others: readonly Target[],
+  answer: (route: Route) => Promise<void>,
+): Promise<boolean> {
   await standElsewhere(page, target, others);
-  await intercepting(page, (route) =>
+  await intercepting(page, answer);
+  try {
+    await openTarget(page, target);
+    await expect(mainOf(page).getByRole("heading", { level: 1 }).first()).toBeVisible({ timeout: 20_000 });
+  } catch (error) {
+    await page.unroute(DATA);
+    throw error;
+  }
+  return !ASKS_NOTHING_ON_OPENING.has(target.to);
+}
+
+/** A fault the API answers is said, under a heading of its own, with a reference. */
+export async function proveFailureIsSaid(page: Page, target: Target, others: readonly Target[]): Promise<boolean> {
+  const asked = await openingWith(page, target, others, (route) =>
     route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ message: "A made-up fault.", trace_id: "e2e-fault" }) }),
   );
   try {
-    await openTarget(page, target);
-    const said = mainOf(page).getByText(new RegExp(`^(${FAULT_HEADINGS.join("|")})$`)).first();
-    await expect(said, `${target.label}: a fault is said under a heading of its own`).toBeVisible({ timeout: 20_000 });
-    await expect(mainOf(page).getByText(UNREACHABLE_HEADING, { exact: true }), `${target.label}: a fault is not an unreachable API`).toHaveCount(0);
+    if (asked) {
+      const said = mainOf(page).getByText(new RegExp(`^(${FAULT_HEADINGS.join("|")})$`)).first();
+      await expect(said, `${target.label}: a fault is said under a heading of its own`).toBeVisible({ timeout: 20_000 });
+      await expect(mainOf(page).getByText(UNREACHABLE_HEADING, { exact: true }), `${target.label}: a fault is not an unreachable API`).toHaveCount(0);
+    }
   } finally {
     await page.unroute(DATA);
   }
+  return asked;
 }
 
 /** An API that cannot be reached is said so, which is not the same as a fault. */
-export async function proveUnreachableIsSaid(page: Page, target: Target, others: readonly Target[]): Promise<void> {
-  await standElsewhere(page, target, others);
-  await intercepting(page, (route) => route.abort("failed"));
+export async function proveUnreachableIsSaid(page: Page, target: Target, others: readonly Target[]): Promise<boolean> {
+  const asked = await openingWith(page, target, others, (route) => route.abort("failed"));
   try {
-    await openTarget(page, target);
-    await expect(
-      mainOf(page).getByText(UNREACHABLE_HEADING, { exact: true }).first(),
-      `${target.label}: an unreachable API is said so`,
-    ).toBeVisible({ timeout: 20_000 });
+    if (asked) {
+      await expect(
+        mainOf(page).getByText(UNREACHABLE_HEADING, { exact: true }).first(),
+        `${target.label}: an unreachable API is said so`,
+      ).toBeVisible({ timeout: 20_000 });
+    }
   } finally {
     await page.unroute(DATA);
   }
+  return asked;
 }
 
 /**
