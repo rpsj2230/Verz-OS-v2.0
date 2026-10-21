@@ -86,7 +86,7 @@ ORGANISATION_NOTE: Final = (
 SWITCHED_OFF: Final = "Coverage by department is switched off on this install."
 
 
-class CoverageLineView(BaseModel):
+class AdoptionCoverageLineView(BaseModel):
     """One department's statement about one source, with no figure that adds lines together."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -102,7 +102,7 @@ class CoverageLineView(BaseModel):
     last_sync: datetime | None
 
 
-class ActionView(BaseModel):
+class AdoptionActionView(BaseModel):
     """One thing the champion could do next."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -114,18 +114,18 @@ class ActionView(BaseModel):
     words: str
 
 
-class CoverageView(BaseModel):
+class AdoptionCoverageView(BaseModel):
     """The coverage statement for one reader. `lines` is empty when the switch is off."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     switched_on: bool
-    lines: list[CoverageLineView]
-    shopping: list[ActionView]
+    lines: list[AdoptionCoverageLineView]
+    shopping: list[AdoptionActionView]
     note: str
 
 
-class StartView(BaseModel):
+class AdoptionStartView(BaseModel):
     """The source to connect first, or neither field when nothing can answer before an upload."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -155,13 +155,13 @@ async def coverage_is_on(request: Request) -> bool:
         return await is_on(session, ADOPTION_COVERAGE)
 
 
-def view_of(statement: CoverageStatement) -> CoverageView:
+def view_of(statement: CoverageStatement) -> AdoptionCoverageView:
     """The statement copied field by field, with the words in the install's language."""
     rules = default_locale()
-    return CoverageView(
+    return AdoptionCoverageView(
         switched_on=True,
         lines=[
-            CoverageLineView(
+            AdoptionCoverageLineView(
                 department=one.department,
                 source=one.source,
                 source_label=None if one.source is None else _label_of(one.source),
@@ -173,7 +173,7 @@ def view_of(statement: CoverageStatement) -> CoverageView:
             for one in statement.lines
         ],
         shopping=[
-            ActionView(
+            AdoptionActionView(
                 department=one.department,
                 source=one.source,
                 source_label=_label_of(one.source),
@@ -186,15 +186,15 @@ def view_of(statement: CoverageStatement) -> CoverageView:
     )
 
 
-@router.get(COVERAGE_PATH, response_model=CoverageView, responses=COMMON_RESPONSES)
-async def coverage(request: Request, asked: Asked) -> CoverageView:
+@router.get(COVERAGE_PATH, response_model=AdoptionCoverageView, responses=COMMON_RESPONSES)
+async def coverage(request: Request, asked: Asked) -> AdoptionCoverageView:
     """What is connected for each department this reader may read usage for, and what to do next.
 
     Every reader is answered, as the adoption page is: a reader the usage grant admits no department
     for gets an empty statement, because a refusal would tell them there is something to refuse.
     """
     if not await coverage_is_on(request):
-        return CoverageView(switched_on=False, lines=[], shopping=[], note=SWITCHED_OFF)
+        return AdoptionCoverageView(switched_on=False, lines=[], shopping=[], note=SWITCHED_OFF)
     await reviewed_now(request.app.state)
     factory = sessions_of(request)
     records = records_of(request)
@@ -236,8 +236,8 @@ def _reachable(departments: list[str], asked: Asking) -> frozenset[str]:
     return reachable_departments(departments, asked.reach, now=asked.now)
 
 
-@router.get(START_PATH, response_model=StartView, responses=COMMON_RESPONSES)
-async def connector_start(request: Request, asked: Asked) -> StartView:
+@router.get(START_PATH, response_model=AdoptionStartView, responses=COMMON_RESPONSES)
+async def connector_start(request: Request, asked: Asked) -> AdoptionStartView:
     """The source to connect first, for a reader of the Connectors screen.
 
     Refused with the screen's one refusal to everybody else. Departments here are the ones the
@@ -261,7 +261,7 @@ async def connector_start(request: Request, asked: Asked) -> StartView:
             _reachable(departments, asked),
         )
     )
-    return StartView(
+    return AdoptionStartView(
         source=None if chosen is None else chosen.name,
         label=None if chosen is None else _label_of(chosen.name),
     )

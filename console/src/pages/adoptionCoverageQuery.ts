@@ -20,13 +20,13 @@
 import type { components } from "../api/schema";
 
 /** One department's statement about one source, as the API sends it. */
-export type CoverageLine = components["schemas"]["CoverageLineView"];
+export type CoverageLine = components["schemas"]["AdoptionCoverageLineView"];
 
 /** One thing a champion could do next. */
-export type CoverageAction = components["schemas"]["ActionView"];
+export type CoverageAction = components["schemas"]["AdoptionActionView"];
 
 /** The whole statement for one reader. */
-export type CoverageBody = components["schemas"]["CoverageView"];
+export type CoverageBody = components["schemas"]["AdoptionCoverageView"];
 
 /** Where the statement is read. */
 export const COVERAGE_API_PATH = "/report/coverage";
