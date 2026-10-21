@@ -53,12 +53,13 @@ def mine() -> dict[str, Check]:
 
 
 def test_the_template_check_is_registered_with_the_leaves_it_proves() -> None:
-    """Every M13.5 leaf but the receivables chaser's, whose thirty-day review is no install.
+    """Every M13.5 leaf but the receivables chaser's, whose thirty-day review is no install, and the
+    console's M27.11.7, whose installing is this check's installing from the gallery.
     Delete this and the check can close a leaf it does not exercise, or name an id no task has."""
     leaves = mine()[NAME].leaves
     assert mine()[PINNED].leaves == ("M13.2.1", "M13.2.3", "M13.2.6", "M13.4.1")
     assert "M13.5.18" not in leaves
-    assert set(leaves) == {f"M13.5.{n}" for n in range(1, 24)} - {"M13.5.18"}
+    assert set(leaves) == ({f"M13.5.{n}" for n in range(1, 24)} - {"M13.5.18"}) | {"M27.11.7"}
     wbs = json.loads((ROOT / "docs" / "wbs.json").read_text(encoding="utf-8"))
     every = {one for module in wbs["modules"] for one in module["leaf_ids"]}
     assert set(leaves) <= every
