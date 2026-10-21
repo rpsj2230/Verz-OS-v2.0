@@ -52,6 +52,9 @@ A, _ = RESERVED_DEPARTMENTS
 #: Restated, so a change to the Spend report's authority fails this check and does not move it.
 READS_USAGE: Final = "read:usage"
 
+#: Why the check is not run where no currency is set, which the whole-suite acceptance test reads.
+NO_CURRENCY_SET: Final = "this install has no currency set, so no cost is recorded to follow"
+
 #: One minor unit a token, written as a price per million tokens.
 PER_TOKEN: Final = Decimal(1_000_000)
 
@@ -80,6 +83,7 @@ async def a_model_call_is_costed_and_a_used_up_budget_stops_the_next(h: Harness)
     from brain.ops.features import BUDGET_ENFORCEMENT, is_on
     from brain.ops.price_store import set_price_statement
     from brain.spend_detail_routes import stops_in_force
+    from brain.tables.audit import attributed_to
 
     try:
         code = install_currency()
@@ -88,7 +92,7 @@ async def a_model_call_is_costed_and_a_used_up_budget_stops_the_next(h: Harness)
             "this install's currency does not resolve, so no cost is recorded to follow"
         ) from None
     if code == NO_CURRENCY_CODE:
-        raise CheckNotRunError("this install has no currency set, so no cost is recorded to follow")
+        raise CheckNotRunError(NO_CURRENCY_SET)
 
     s = await standing_by(h)
     budgeter, spend_reader = h.principal(A, "budgeter"), h.principal(A, "spend")
@@ -101,8 +105,9 @@ async def a_model_call_is_costed_and_a_used_up_budget_stops_the_next(h: Harness)
         grants=((READS_USAGE, Scope.department(RESERVED_DEPARTMENTS[1])),),
     )
     await pinned(h, (step(ANSWERS),))
+    reach = await h.reach(budgeter)
     await h.execute(
-        *h.attributed(budgeter),
+        *attributed_to(actor_id=budgeter, ent_hash=reach.ent_hash(), trace_id=h.trace_id),
         set_price_statement(
             STAND_IN,
             ANSWERS,
@@ -139,7 +144,6 @@ async def a_model_call_is_costed_and_a_used_up_budget_stops_the_next(h: Harness)
         raise CheckFailedError("the cost recorded was not the tokens used at the price set")
 
     # 2. A ceiling that cost has used up: the next question leaves a stop, enforced or not.
-    reach = await h.reach(budgeter)
     async with h.sessions() as session:
         enforcing = await is_on(session, BUDGET_ENFORCEMENT)
         await append(
