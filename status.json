@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-21T09:12:37.994165+00:00",
-  "commit": "be439988",
-  "commit_subject": "A desktop application can be declared and its sandbox checked, switch off, nothing started (M19.8.1 partly built) (#665)",
+  "generated_at": "2026-10-21T10:06:20.142641+00:00",
+  "commit": "44fe5d8d",
+  "commit_subject": "Websites for agents' browsers can be declared, exceptions and exemptions signed and taken back, and a browser skill is refused over an API (M19.2.4, M19.6.7, M19.7.3, M19.9.7) (#664)",
   "total": 1626,
-  "done": 1193,
-  "percent": 73.4,
-  "built": 1378,
-  "built_percent": 84.7,
+  "done": 1197,
+  "percent": 73.6,
+  "built": 1382,
+  "built_percent": 85.0,
   "built_unproven": 185,
   "built_task_ids": [
     "M1.1.8",
@@ -278,16 +278,16 @@
       "wave": 5,
       "name": "Hands, delivery, go-live",
       "total": 217,
-      "done": 93,
-      "percent": 42.9,
-      "in_progress": 61,
+      "done": 97,
+      "percent": 44.7,
+      "in_progress": 57,
       "ready_for_testing": 33,
       "blocked": 19,
       "open": 11,
       "acts": 42,
       "decided": 18,
-      "built": 126,
-      "built_percent": 58.1
+      "built": 130,
+      "built_percent": 59.9
     },
     {
       "wave": 6,
@@ -501,10 +501,10 @@
       "name": "Browser and computer use",
       "wave": 5,
       "total": 47,
-      "done": 19,
+      "done": 23,
       "acts": 0,
       "decided": 1,
-      "built": 19
+      "built": 23
     },
     {
       "module": "M20",
@@ -1134,6 +1134,7 @@
     "M19.2.1",
     "M19.2.2",
     "M19.2.3",
+    "M19.2.4",
     "M19.3.5",
     "M19.5.1",
     "M19.5.3",
@@ -1143,9 +1144,12 @@
     "M19.6.4",
     "M19.6.5",
     "M19.6.6",
+    "M19.6.7",
+    "M19.7.3",
     "M19.8.1",
     "M19.9.11",
     "M19.9.3",
+    "M19.9.7",
     "M19.9.9",
     "M2.1.1",
     "M2.1.5",
@@ -2521,11 +2525,6 @@
       "why": "TRIAGE 2026-10-13 class 2 (partly built): browsing/observation.py:Snapshot has no picture field; wire.snapshot_from_accessibility builds it from the accessibility tree and playwright_browser.py supplies the tree; test_browsing_targets.py. Never run in a browser; no control-plane caller consumes snapshots. NEXT: After the driver exists, check a read-only run returns a tree snapshot and no image field; observation.vision_gaps() is the static half to name now.",
       "updated": "2026-10-13"
     },
-    "M19.2.4": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): browsing/targets.py has Target, Surface (declared verbs, read_back) and TargetRegistry with tests. Nothing stores targets: no table, route or console page declares one; website_check defaults to an empty registry and acceptance_audit builds one in memory. NEXT: Add a browser_target table, route and console page (or a setup step) to declare targets and surfaces, then load the registry from it into website_check and the driver.",
-      "updated": "2026-10-13"
-    },
     "M19.3.1": {
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 2 (partly built): browsing/enforcer.py:Policy is frozen and compiled once by compile_policy from the sealed envelope; wire.policy_of reads it at runner start; egress_addon receives its origins at proxy creation; test_browsing_enforcer.py. Runs only inside a container that has never started. NEXT: After the driver and rehearsal, check a run's policy digest equals its envelope digest; static half: enforcer.policy_gaps() and enforcement_gaps().",
@@ -2586,11 +2585,6 @@
       "why": "TRIAGE 2026-10-13 class 2 (partly built): verification.py:read_back and read_back_plan define the out-of-band read through ReadBackPort; test_browsing_verification.py. No ReadBackPort implementation exists and grading.verification_gaps says no target declares a read_back tool. NEXT: Implement a ReadBackPort that reads through the gate (a connector or tool), declare read_back on a registered surface, and call it from verify_run.",
       "updated": "2026-10-13"
     },
-    "M19.6.7": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): browsing/skill_gate.py:load_gaps and may_load refuse a browser skill when a registered API tool exists unless an Exemption names an approver and expiry (max 90 days); test_browsing_sessions.py. No skill import or load path imports skill_gate. NEXT: Call may_load from the skill import/pin path (tools/skills.py, ops/skill_store.py) with the target registry and an exemption source; exemption storage is also missing.",
-      "updated": "2026-10-13"
-    },
     "M19.7.1": {
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 2 (partly built): browsing/sessions.py defines READ_SURFACE (ToolDefinition), surface_scope and capability_gaps; ops/starter.py seeds BROWSE_SURFACE; test_browsing_sessions.py pins read-first ordering. No handler is registered, so no agent can run the tool (docstring: 'No handler is registered here'). NEXT: Register a handler in tools/startup.py that sends the read run to the driver; website_check's ReadOnlyBrowser seam is the same missing half.",
@@ -2599,11 +2593,6 @@
     "M19.7.2": {
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 2 (partly built): sessions.py:ACT_ON_SURFACE is the one write tool; approval.py raises the envelope as a leash suspension, console/approvals.py renders its terms, envelope_store and enforcer.compile_policy bind it by digest; tests in test_browsing_approval.py, _enforcer.py, _sessions.py. No caller raises an approval or runs the write. NEXT: Call approval.raise_approval and approved in the driver start path; add a readable envelope diff to the approval card (none exists).",
-      "updated": "2026-10-13"
-    },
-    "M19.7.3": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): browsing/autonomy.py:SurfaceException, sign and runs_unattended cap writes at Assisted unless a signed exception exists, applied in envelope.compile_envelope; test_browsing_autonomy.py. Docstring: nowhere to keep an exception and recording it as a leash change is not wired. NEXT: Add an exception store, a console grant screen and an audit-ledger leash_change entry (shared with M19.9.7), and pass stored exceptions to compile_envelope.",
       "updated": "2026-10-13"
     },
     "M19.9.1": {
@@ -2629,11 +2618,6 @@
     "M19.9.6": {
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 2 (partly built): docker-compose.browser.yml and launcher --check give a launcher whose health is gVisor present; agent browser tools are defined (sessions.READ_SURFACE) but no handler is registered, so no agent opens a page in the sandbox. Never run on a daemon. NEXT: Run the REHEARSAL.md first build on a runsc host, build the driver and register the read handler, then check an agent with the browse capability fetches one page.",
-      "updated": "2026-10-13"
-    },
-    "M19.9.7": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): autonomy.SurfaceException and skill_gate.Exemption are value types with sign and expiry rules (test_browsing_autonomy.py). No store, no console screen or route for an administrator to grant one, no ledger leash_change entry, no listing until lapse. NEXT: Build a table, routes and a console page for grants with approver and expiry, write the audit leash_change on grant, pass live grants into compile_envelope and may_load.",
       "updated": "2026-10-13"
     },
     "M19.9.8": {
@@ -3999,11 +3983,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 27,
+  "closed_today": 31,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "44fe5d8",
+      "at": "2026-10-21T09:56:29+00:00",
+      "subject": "Websites for agents' browsers can be declared, exceptions and exemptions signed and taken back, and a browser skill is refused over an API (M19.2.4, M19.6.7, M19.7.3, M19.9.7) (#664)",
+      "closed": "M19.2.4,M19.6.7,M19.7.3,M19.9.7"
+    },
     {
       "sha": "be43998",
       "at": "2026-10-21T08:55:25+00:00",
@@ -4117,12 +4107,6 @@
       "at": "2026-10-15T04:08:12+00:00",
       "subject": "Every grid in the console is drawn through TanStack Table, and the Artifacts list pages on the server (M32.5.2.1) (#605)",
       "closed": "M32.5.2.1"
-    },
-    {
-      "sha": "33065e9",
-      "at": "2026-10-14T14:34:09+00:00",
-      "subject": "The trace graph and the procedure canvas have keyboard-focusable steps, a list alternative and a skip link (M32.5.2.3) (#604)",
-      "closed": "M32.5.2.3"
     }
   ]
 }
