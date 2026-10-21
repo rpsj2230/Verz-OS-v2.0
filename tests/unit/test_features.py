@@ -108,6 +108,7 @@ def test_every_declared_reader_asks_about_its_feature_and_nothing_else_asks() ->
         "brain.staff_source_routes",
         "brain.resolution.merge_store",
         "brain.ops.budget_stop_store",
+        "brain.ops.acceptance_checks_model_spend",
         "brain.gate.suspension_store",
         "brain.ops.supervision_review",
         "brain.ops.shared_start",
@@ -140,6 +141,7 @@ def test_every_declared_reader_asks_about_its_feature_and_nothing_else_asks() ->
         "brain.settings_routes",
         "brain.agent_audience_routes",
         "brain.coordination_routes",
+        "brain.workflow_routes",
     }
 
 
@@ -288,6 +290,7 @@ def test_switching_a_feature_on_writes_its_row_and_the_next_read_sees_it(
         "job_redrive": False,
         "agent_audience_extras": False,
         "multi_agent_coordination": False,
+        "stored_workflows": False,
     }
 
 

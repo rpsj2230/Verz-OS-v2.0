@@ -437,7 +437,14 @@ def test_a_reader_is_listed_the_sources_they_may_connect_for_themselves_and_nobo
     listed = accounts(client, "u_none")
     assert listed.status_code == 200, listed.text
     assert listed.json()["accounts"] == [
-        {"connector": "xero", "label": "Xero", "connected": True, "told": ""}
+        {
+            "connector": "xero",
+            "label": "Xero",
+            "connected": True,
+            "told": "",
+            "provenance": "personal",
+            "disconnectable": True,
+        }
     ]
     own_rig(app, monkeypatch)
     assert accounts(client, "u_none").json()["accounts"][0]["connected"] is False

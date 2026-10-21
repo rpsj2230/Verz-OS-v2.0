@@ -86,6 +86,8 @@ class CandidateSource(enum.StrEnum):
     GOLDEN = "golden"
     CANARY = "canary"
     SAMPLED = "sampled"
+    #: A step of a stored workflow failed in each of its last runs (M17.6.7). `0273`.
+    WORKFLOW = "workflow"
 
 
 class ItemKind(enum.StrEnum):

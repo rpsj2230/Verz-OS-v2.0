@@ -255,10 +255,16 @@ class OAuthConsent:
     chosen_by: str = ""
     #: Each choice that setting may hold and the one scope it asks for, every scope one of `scopes`.
     scope_of_choice: tuple[tuple[str, str], ...] = ()
+    #: The vendor's revocation endpoint (RFC 7009), or empty when it publishes none. A person's
+    #: disconnect asks it before the kept token is destroyed. See
+    #: `THE_VENDOR_IS_ASKED_BEFORE_THE_KEPT_COPY_IS_REMOVED`.
+    revoke_url: str = ""
 
     def __post_init__(self) -> None:
         _https(self.authorize_url, "consent page")
         _https(self.token_url, "token endpoint")
+        if self.revoke_url:
+            _https(self.revoke_url, "revocation endpoint")
         if not _SETTING_RE.match(self.client_id_setting):
             msg = f"{self.client_id_setting!r} is not a setting a client id can be typed into"
             raise ConnectorContractError(msg)
@@ -518,6 +524,25 @@ def refresh_exchange(
         "client_secret": _secret(client_secret, "client secret"),
     }
     return TokenExchange(url=consent.token_url, headers=FORM, body=urlencode(body).encode())
+
+
+#: Why a disconnect asks the vendor before it removes the token it holds.
+THE_VENDOR_IS_ASKED_BEFORE_THE_KEPT_COPY_IS_REMOVED: Final = (
+    "Removing the kept refresh token and never telling the vendor leaves the person's account "
+    "open to anything that copied the token, and the page would say they had disconnected. So the "
+    "vendor's revocation endpoint is asked first, with the token alone, and the slot is removed "
+    "only once the vendor has said it is revoked; a refusal leaves both in place so the person "
+    "can try again."
+)
+
+
+def revocation(consent: OAuthConsent, *, refresh_token: str) -> TokenExchange | None:
+    """The post that asks the vendor to revoke a refresh token, or None when it publishes no
+    endpoint to ask (RFC 7009: the token and its kind, nothing else)."""
+    if not consent.revoke_url:
+        return None
+    body = {"token": _secret(refresh_token, "refresh token"), "token_type_hint": "refresh_token"}
+    return TokenExchange(url=consent.revoke_url, headers=FORM, body=urlencode(body).encode())
 
 
 # ------------------------------------------------------------------------ the failures

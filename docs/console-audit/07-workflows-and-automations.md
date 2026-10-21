@@ -1,9 +1,9 @@
 ### Workflows and automations
 
 - **Screens:** `/agents/:agentId/:tab`, `/automations`, `/automations/:automationId`, `/automations/:automationId/:view`
-- **Tables:** `agent.automation`, `agent.automation_run`, `agent.automation_schedule`, `agent.automation_change`, `gate.automation_owner`
+- **Tables:** `ops.workflow_version`, `agent.workflow_assignment`, `ops.workflow_run`, `ops.workflow_step_run`, `agent.automation`, `agent.automation_run`, `agent.automation_schedule`, `agent.automation_change`, `gate.automation_owner`
 - **Installation values:** none
-- **Measured here:** 17 routes, 0 called by no screen; 10 write routes, 10 with all three proofs; 3 gaps.
+- **Measured here:** 25 routes, 8 called by no screen; 10 write routes, 10 with all three proofs; 4 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -11,20 +11,29 @@
 | `GET /api/v1/agents/{agent_id}/automation-templates` | `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/automation-templates/{template_id}/preview` | `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/automations` | `/agents/:agentId` |
+| `GET /api/v1/agents/{agent_id}/workflows` | **no screen** |
 | `GET /api/v1/console/automations` | `/automations`, `/people/:personId` |
 | `GET /api/v1/console/automations/{automation_id}` | `/automations/:automationId`, `/automations/:automationId/:view` |
 | `GET /api/v1/console/automations/{automation_id}/stats` | `/automations/:automationId` |
+| `GET /api/v1/workflow-runs` | **no screen** |
+| `GET /api/v1/workflows` | **no screen** |
+| `GET /api/v1/workflows/{workflow_id}` | **no screen** |
 | `POST /api/v1/agents/{agent_id}/automation-authoring/preview` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/automations` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/automations/authored` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/automations/{automation_id}/start` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/automations/{automation_id}/stop` | `/agents/:agentId`, `/agents/:agentId/:tab` |
+| `POST /api/v1/agents/{agent_id}/workflow-runs` | **no screen** |
+| `POST /api/v1/agents/{agent_id}/workflows` | **no screen** |
+| `POST /api/v1/agents/{agent_id}/workflows/removals` | **no screen** |
 | `POST /api/v1/automations/{automation_id}/adopt` | `/automations/:automationId`, `/automations/:automationId/:view` |
 | `POST /api/v1/automations/{automation_id}/pause` | `/automations/:automationId`, `/automations/:automationId/:view` |
 | `POST /api/v1/automations/{automation_id}/remove` | `/automations/:automationId`, `/automations/:automationId/:view` |
 | `POST /api/v1/automations/{automation_id}/reschedule` | `/automations/:automationId`, `/automations/:automationId/:view` |
 | `POST /api/v1/automations/{automation_id}/resume` | `/automations/:automationId`, `/automations/:automationId/:view` |
+| `POST /api/v1/workflows` | **no screen** |
 
+- **Gap.** A stored workflow cannot be written, assigned to an agent or run, and its runs cannot be read, from the console. Open leaf `M17.6.1`.
 - **Gap.** A removed automation cannot be brought back, and installing the same outcome again for the same agent and person is refused. Recorded: A removal is a final row in agent.automation_change (brain.console.automations.A_REMOVAL_IS_FINAL_AND_KEEPS_ITS_HISTORY) and 0055's one-install-per-agent-template-and-person constraint still reads the removed install; the page draws Bring back as not available yet.
 - **Gap.** An automation registered to call the tool route with its own credential (gate.automation_owner) is not listed or adoptable on a screen. Recorded: Nothing on an install writes that registration yet: brain.ops.automation_owner_store.StoredAutomations.put has no caller, so there is no row to list; its adopt is kept for when one exists.
 - **Gap.** Three of the four automation templates cannot be started on any install. Recorded: brain.ops.automation_run.TASKS says what work_summary, source_freshness and approvals_waiting each still need, and the Automations tab shows that sentence instead of a Start control.
