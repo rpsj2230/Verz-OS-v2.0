@@ -92,6 +92,12 @@ WHERE_A_TOKEN_COULD_BE_LEFT: Final = (
     "obs.trace_step",
 )
 
+#: What the check says when its database login cannot read every row, so the search could not look.
+THE_LOGIN_CANNOT_READ_EVERY_ROW: Final = (
+    "this run's database login cannot read every row, so the search for a left-behind token could "
+    "not look; the worker's run can"
+)
+
 #: One sentence for each step of the disconnect check that talks to the database and can be refused
 #: by it. A database error is named by the step it stopped, never by what it quoted.
 DB_STAND_UP: Final = "the database refused the step that connects a source for the run"
@@ -164,13 +170,12 @@ async def _held_in(h: Harness, needle: str) -> tuple[str, ...]:
     from sqlalchemy import text
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from brain.ops.acceptance_checks_connectors import AUDIT_COULD_NOT_LOOK
     from brain.ops.index_audit import _quoted, every_table, sees_every_row
 
     async with AsyncSession(bind=h.connection, join_transaction_mode="create_savepoint") as session:
         await session.execute(text("RESET ROLE"))
         if not await sees_every_row(session):
-            raise CheckNotRunError(AUDIT_COULD_NOT_LOOK)
+            raise CheckNotRunError(THE_LOGIN_CANNOT_READ_EVERY_ROW)
         present = set(await every_table(session))
         as_hex = needle.encode("utf-8").hex()
         holding: list[str] = []
