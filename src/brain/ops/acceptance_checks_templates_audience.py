@@ -80,7 +80,7 @@ def _manifest(template_id: str, author: str, *, persona: str, summary: str = "A 
 
 # ------------------------------------------------- 1. a template draft that survives (M13.8.15)
 @check(
-    leaves=("M13.8.15",),
+    leaves=("M13.8.15", "M27.11.7"),
     sentence=(
         "An agent saved as a template is kept as a draft only its author reads, shown for review "
         "with every value hoisted out, refused publication while any item is undecided, written "

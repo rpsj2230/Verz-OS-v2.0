@@ -36,6 +36,8 @@ import {
   RUNS_AS_LABEL,
   SCHEDULE_LABEL,
   START_LABEL,
+  approvalSentence,
+  usesSentence,
   installedAsSentence,
   installedSentence,
   installQuestion,
@@ -94,6 +96,9 @@ function card(
     name,
     summary: `What ${templateId} is for.`,
     schedule: "every Friday at 15:00 UTC",
+    trigger: "schedule",
+    connectors: [],
+    approval: "",
     installed_as: null,
     installable: true,
     ...extra,
@@ -122,6 +127,9 @@ function previewWire(reach: readonly string[] = ["read:client.name"]): Record<st
     name: "I write you a summary of my week's work",
     summary: "What weekly_work_summary is for.",
     schedule: "every Friday at 15:00 UTC",
+    trigger: "schedule",
+    connectors: [],
+    approval: "",
     runs_as: "u_admin",
     runs_as_name: "Admin Person",
     starts_paused: true,
@@ -441,6 +449,37 @@ describe("reading what the API sends", () => {
     expect(declaredPropertyNames(asking)).toEqual(
       Object.keys(installBody(readPreview(previewWire())!)).sort(),
     );
+  });
+
+  test("a card says what starts it, which kinds of source it uses and who decides, and one that only reads says no approval", async () => {
+    // What breaks if this is deleted: a gallery that offers to draft customer records and does not
+    // say who approves them, or a read-only outcome drawn with an approval it never asks for.
+    const stand = await consoleAt("/agents/quote-helper/automations", {
+      ...ANSWERING,
+      [`GET ${GALLERY}`]: () => ({
+        body: {
+          items: [
+            card("daily_brief", "I send you a brief of the day ahead each morning", {
+              connectors: ["calendar", "tasks", "email"],
+            }),
+            card("deal_capture", "I draft customer records from deals mentioned in group chats", {
+              connectors: ["chat", "customer records"],
+              approval: "A person reads each draft and approves it.",
+            }),
+          ],
+          installing: "Installing writes the automation. Nothing runs it yet.",
+        },
+      }),
+    });
+    await galleryDrawn(stand.container);
+    const cards = [...stand.container.querySelectorAll('[aria-label="Automation templates"] > ul > li')];
+
+    expect(cards[0]?.textContent).toContain(usesSentence("schedule", ["calendar", "tasks", "email"]));
+    expect(cards[0]?.textContent).not.toContain("A person decides");
+    expect(cards[1]?.textContent).toContain(usesSentence("schedule", ["chat", "customer records"]));
+    expect(cards[1]?.textContent).toContain(approvalSentence("A person reads each draft and approves it."));
+    expect(usesSentence("connector_event", [])).toBe("Starts when a connected source changes.");
+    expect(usesSentence("webhook", ["email"])).toBe("Starts when another system calls it. Uses: email.");
   });
 
   test("a card or a preview missing a fact the person relies on is not drawn at all", () => {
