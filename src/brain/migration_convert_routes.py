@@ -482,8 +482,8 @@ async def check_learning(
 async def map_availability(
     request: Request, body: PastedAvailabilityAsked, asked: Asked
 ) -> PastedAvailabilitiesView:
-    """Map each agent's availability over there onto who may see it here, from the mapping given,
-    and name the agents whose availability the mapping does not cover. Never a default."""
+    """Translate each pasted agent's availability word into one of this system's audience levels,
+    from the mapping given, and name the agents the mapping does not cover. Never a default."""
     await _begin(request, asked)
     audiences: list[PastedAvailabilityView] = []
     unmapped: list[PastedRefusedView] = []
