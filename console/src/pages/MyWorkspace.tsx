@@ -51,6 +51,7 @@ import { MyProjects } from "../components/MyProjects";
 import type { GridColumn } from "../components/gridFeatures";
 import { GridTable } from "../components/kit/GridTable";
 import { MyPreferences } from "../components/MyPreferences";
+import { MySkills } from "../components/MySkills";
 import { BY_THE_INSTALL, ConfirmDialog, EmptyList } from "../components/kit";
 import { Button } from "../components/ui/button";
 import { FailureNotice } from "../ui/FailureNotice";
@@ -522,6 +523,7 @@ export function MyWorkspace() {
           </section>
           <MyChannels />
           <MyPreferences />
+          <MySkills />
           <MyDevices />
           <MyReads />
           <MyArtifacts />

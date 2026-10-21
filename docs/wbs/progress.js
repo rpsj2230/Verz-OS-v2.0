@@ -2246,8 +2246,8 @@ const PROGRESS = {
   },
   "M26.2.3": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): identity.lifecycle.reevaluate_delegations (suspend, never narrow) and Reconfirmation are built and tested but no caller; no delegation table or route exists on main (grep delegation in tables and routes). Nearest live object is an automation owner (M26.3.3). NEXT: Decide what a delegation is on this install (elevation, automation owner or a new object), then call reevaluate_delegations from the sync run when a move changes reach.",
-    updated: "2026-10-13",
+    why: "TRIAGE 2026-10-13 class 3 (built, not wired): identity.lifecycle.reevaluate_delegations (suspend, never narrow) and Reconfirmation are built and tested but no caller; no delegation table or route exists on main (grep delegation in tables and routes). Nearest live object is an automation owner (M26.3.3). NEXT: Decide what a delegation is on this install (elevation, automation owner or a new object), then call reevaluate_delegations from the sync run when a move changes reach. 2026-10-20 BUILT UNDER OPTIONS A AND B OF NEEDS ITEM 216, DEPUTY APPOINTMENTS UNBUILT: brain.ops.mover_automations watches every live automation's reach before the staff sync's Starter pack step and again after, and pauses (owner_lost_reach, a schedule row by the roster, a ledger entry) each one whose reach after does not cover its reach before, asked through EntitlementSet.intersect with the instant; listed on the owner's and the authority holder's Automations page; started again only by the existing confirmed start, which needs somebody other than the owner. Behind the off switch mover_pauses_automations. The deputy appointment, which only option A names, is not built, and option C (a delegation as its own object) is not touched; identity.lifecycle.reevaluate_delegations is still not called because a deputy appointment is the only RoleGrant it takes. Install check a_mover_s_automation_is_paused_and_a_stayer_s_is_not (acceptance_checks_mover_automations.py). Owner decides item 216. Not claimed done.",
+    updated: "2026-10-20",
   },
   "M26.2.4": {
     status: "READY FOR TESTING",
@@ -4105,24 +4105,24 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.3.2.1": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): member_library.my_skills/PersonalSkill/origin_of (source, version, review state) are built; only origin_of has callers (agent_routes). The skills library routes (skill_routes GET /skills/library) are the administrator's and show every skill, not a member's personal ones. NEXT: add GET /me/skills calling my_skills over ops.skill_store rows owned by the person",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built (M40/member-personal-skills): GET /me/skills lists a person's own skills with where each came from (written here, a repository, an address), its version, its review state and a sentence saying what it can do now, in a My skills card on My workspace; nobody else's skills are listed and nothing is counted. Behind the personal_skills switch for adding and offering; listing is never behind it. PRIOR WORK (2026-10-13 triage): member_library.my_skills was built and uncalled; it is now the list. PROVE ON THE INSTALL: (1) as an administrator open Features and switch on 'Let a person add skills of their own and offer them to the department'; (2) as a member open My workspace, find My skills, choose Write or paste it here, paste a SKILL.md and press Add this skill; (3) the skill is listed with its version, 'written here' and the sentence 'Only you can see this'; (4) as a colleague open My workspace: your skill is not there; (5) as an administrator open Skills: it is not in the library or the queue.",
+    updated: "2026-10-20",
   },
   "M40.3.2.2": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Import from repository at a commit, from a URL, pasted SKILL.md, zip and procedure files exist (skill_routes POST /skills, /skills/imports, /skills/procedures) but behind skill_library.may_add, an administrator's write. member_library.add_skill is called only from skill_routes/acceptance. No member-scoped personal import. NEXT: let a member add a personal skill: route calling add_skill at the person's own ownership, with a personal-state row",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built (M40/member-personal-skills): a member adds a skill of their own by pasting or writing a SKILL.md (POST /me/skills), or brings one from a repository at a full commit or from an address the install's host list admits (POST /me/skills/imports), through the same fetcher and parser the administrator's import uses, and it is stored as theirs alone, undecided. A person holds at most 25 skills they have not offered. PRIOR WORK (2026-10-13 triage): the administrator's import routes existed behind the skill authority; member_library.add_skill had no member caller and now has. PROVE ON THE INSTALL (switch on as for M40.3.2.1): (1) paste a SKILL.md in My skills and add it; (2) choose Bring it from an address, give an https address on GitHub's raw host holding a SKILL.md, and add it: it is listed 'from an address'; (3) choose Bring it from a repository, give owner/name and the full commit: it is listed 'from a repository'; (4) paste the same file again: it is answered with the skill you already have; (5) with the switch off the form is replaced by a sentence saying so and nothing is added.",
+    updated: "2026-10-20",
   },
   "M40.3.2.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): member_library.submit_for_review/Submission built, no caller. Skill review queue exists (POST /skills/{digest}/review, may_review) for administrators. NEXT: add POST /me/skills/{id}/submit calling submit_for_review and moving the row to the department's review queue in ops.skill_store",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built (M40/member-personal-skills): POST /me/skills/{digest}/offer, from an Offer to the department button that asks first, makes the person's own skill appear in the department's library and review queue, undecided, once; a colleague pressing it for a skill that is not theirs is answered exactly as for one nobody made. Nothing here approves anything. PRIOR WORK (2026-10-13 triage): member_library.submit_for_review had no caller and now has. PROVE ON THE INSTALL (switch on as for M40.3.2.1): (1) in My skills press Offer to the department on a skill and confirm; (2) the skill now reads 'Offered to the department'; (3) as an administrator open Skills: it is in the library and the queue, undecided; (4) as a second member, press nothing: their My skills does not list it.",
+    updated: "2026-10-20",
   },
   "M40.3.2.4": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): member_library.attach_refusals (personal skill only for own agents until approved) has no caller. Admin side: skill_library.assignment refuses an unapproved skill via attach_skill/pin_skill, but no personal-skill state exists. NEXT: wire attach_refusals into skill_library.assignment and the personal agent builder once personal skills are stored",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT (M40/member-personal-skills): a skill nobody offered is in no reading of the library (brain.ops.skill_store.library_of and one_skill carry one clause), so no administrator can list, review or assign it and no run can pin it; offered, it still needs a named person to approve the exact bytes before any agent can carry it. NOT BUILT, AND A QUESTION FOR THE OWNER: whether a person may run their own skill on their own personal agent BEFORE a reviewer has approved it (the leaf's words 'usable only by this person's own agents until approved'); today it is usable by no agent until approved, which is stronger than the leaf and narrower than it reads. member_library.attach_refusals stays unwired for that reason: its first refusal already forbids pinning an unapproved skill anywhere. The install check does not name this leaf for the same reason.",
+    updated: "2026-10-20",
   },
   "M40.3.3.1": {
     status: "READY FOR TESTING",
@@ -4705,9 +4705,9 @@ const PROGRESS = {
     updated: "2026-10-20",
   },
   "M19.8.1": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): Nothing found by subject (desktop, virtual desktop, computer use, xvfb) in src or ops; only register rows (ARC-B-028, OWN-98, CONA-25) name it, as 'deferred behind browser checks'.",
-    updated: "2026-10-13",
+    status: "IN PROGRESS",
+    why: "PARTLY BUILT 2026-10-21, not claimed. Built: brain.browsing.desktop_app declares a desktop application as a target (a name, one program under /opt/desktop-apps, windows as surfaces on https://<name>.desktop.invalid) so the browser's envelope, enforcer, approval and recording govern it unchanged, and builds its sandbox (gVisor, internal network with no other member, no proxy, no secret, only the declared program) held to the browser's own container gap list; the toolkit's widgets are read as the enforcer's tree; switch desktop_runs ships off; ops/desktop/ holds a Dockerfile and a runner that were never built or run; install check a_desktop_application_runs_in_a_sandbox_with_no_way_out is NOT_RUN on every install by design. NOT built: the launcher creating a desktop sandbox, the driver relaying a desktop run, the image on a host, so no desktop has ever been started and the Profile still says computer use is not offered. NEXT: a launcher message for desktop runs and ops/desktop/REHEARSAL.md on a host with gVisor, then the second half of the check.",
+    updated: "2026-10-21",
   },
   "M19.9.1": {
     status: "IN PROGRESS",
@@ -4810,14 +4810,14 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M26.2.7": {
-    status: "BLOCKED",
-    why: "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Roll-up test leaf: tests/unit/test_lifecycle.py covers the pure module, but several clauses it covers (provision, delegations, welcome) are not wired, so a test of every item above has nothing end to end to run.",
-    updated: "2026-10-13",
+    status: "IN PROGRESS",
+    why: "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Roll-up test leaf: tests/unit/test_lifecycle.py covers the pure module, but several clauses it covers (provision, delegations, welcome) are not wired, so a test of every item above has nothing end to end to run. 2026-10-20 ROLL-UP BUILT, NOT YET ABLE TO PASS: acceptance_checks_jml_roll_up.every_mover_leaf_is_shown_clause_by_clause_in_this_run reads the checks for M26.2.1 to M26.2.6 and is not run while any has none (M26.2.2 is on another branch and M26.2.5 has no install check). tests/unit/test_mover_end_to_end.py drives the staff run and asks the reach, cache key, memory, automation and knowledge rules of one mover on the state it leaves. A person runs the install checks; this closes when every clause check passes in one run.",
+    updated: "2026-10-20",
   },
   "M26.4.1": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Roll-up proof (a check can be written once clauses exist) across joiner, mover and leaver; clauses depend on unwired parts (delegations M26.2.3, personal knowledge disposition M26.3.4, ended grant mid-run, external person end date). NEXT: Waits on M26.2.3 and M26.3.4, then a person runs it and the checks are recorded.",
-    updated: "2026-10-13",
+    why: "TRIAGE 2026-10-13 class 2 (partly built): Roll-up proof (a check can be written once clauses exist) across joiner, mover and leaver; clauses depend on unwired parts (delegations M26.2.3, personal knowledge disposition M26.3.4, ended grant mid-run, external person end date). NEXT: Waits on M26.2.3 and M26.3.4, then a person runs it and the checks are recorded. 2026-10-20 ROLL-UP BUILT, NOT YET ABLE TO PASS: acceptance_checks_jml_roll_up.joiner_mover_leaver_is_shown_clause_by_clause_in_this_run reads the clause checks and names any clause with none: a personal agent following its owner (M26.2.2, another branch), memories of the old reach (M26.2.5), a run stopping on a revoked grant (M13.8.2, has a check), an external person's end date (M1.8.1) and a service key stopping with its owner (M1.8.2), neither of which has a check, and an owned item a person can no longer reach leaving their workspace, which no leaf names. It stays not run, never passed, until each is shown.",
+    updated: "2026-10-20",
   },
   "M29.3.1": {
     status: "READY FOR TESTING",

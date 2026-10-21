@@ -177,6 +177,12 @@ WHY: Final[Mapping[Repeat, str]] = MappingProxyType(
 #: Every public method of every protocol under `src/brain`, by `module:Class.method`.
 PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
     {
+        # A person's own skills: added under the digest of its bytes and offered once, in this
+        # system's own table, where a second add finds the first and a second offer is refused.
+        "brain.member_skill_routes:PersonalSkills.add": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.member_skill_routes:PersonalSkills.offer": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.member_skill_routes:PersonalSkills.mine": Repeat.READS,
+        "brain.member_skill_routes:PersonalSkills.one_of_mine": Repeat.READS,
         # A person's ask that their data be deleted: one waiting ask per person, kept by a partial
         # unique index and a conflict clause, so asking twice answers with the first; a decision
         # stamps the waiting row once. Both are this system's own table.

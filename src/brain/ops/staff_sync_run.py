@@ -156,6 +156,7 @@ from brain.ops.connector_sync_run import (
     worker_connector_keys,
 )
 from brain.ops.head_audit_store import bound_principals, known_from, rewrite_head_audit_reach
+from brain.ops.mover_automations import pause_what_lost_reach, watch
 from brain.ops.openbao import VaultUnreachableError
 from brain.ops.safe_error import redact
 from brain.ops.secrets import SecretsUnavailableError
@@ -801,7 +802,12 @@ async def _grant_starter_packs(
     sessions: async_sessionmaker[AsyncSession], roster: Roster, now: datetime
 ) -> None:
     """Each synced person's Starter pack, after the roster and the heads, in its own transaction,
-    for `A_HEADS_REACH_NEVER_UNDOES_THE_ROSTER`'s reason."""
+    for `A_HEADS_REACH_NEVER_UNDOES_THE_ROSTER`'s reason.
+
+    The packs are where a mover's reach changes, so what each live automation reaches is read
+    before and again after, and one that would reach less is paused (M26.2.3, behind its own
+    switch). See `brain.ops.mover_automations`."""
+    watched = await watch(sessions, now=now)
     try:
         async with sessions() as session, session.begin():
             plan = await grant_starter_packs(session, roster, read_at=now)
@@ -809,6 +815,9 @@ async def _grant_starter_packs(
         # Broad on purpose, as the heads' reach is: the roster is already committed.
         log.warning("staff_sync.starter_packs_unwritten", error=type(exc).__name__)
         return
+    await pause_what_lost_reach(
+        sessions, watched, source=roster.source, trace_id=sync_trace("staff-sync", now), now=now
+    )
     if plan.refusals or plan.withheld:
         # Sentences that name no person, so an operator reading the worker's log sees why a
         # department's people were given nothing.

@@ -132,8 +132,9 @@ STOPPED_BECAUSE: Final = {
     PausedBecause.AGENT_UNAVAILABLE.value: "Paused because its agent is not enabled.",
     PausedBecause.TASK_UNBUILT.value: "Paused because this install cannot perform it.",
     PausedBecause.OWNER_LOST_REACH.value: (
-        "Paused because the person it runs as, through this agent, can no longer read what it "
-        "reads."
+        "Paused because the reach of the person it runs as, through this agent, changed or no "
+        "longer holds what it reads. It stays paused until somebody with authority over it "
+        "confirms it should run at the reach they have now."
     ),
     ChangeKind.PAUSED.value: "Paused by a person.",
     ChangeKind.ADOPTED.value: "Adopted, and waiting for somebody else to start it.",

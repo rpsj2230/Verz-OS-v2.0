@@ -1482,7 +1482,7 @@ async def skill_library(request: Request, asked: Asked, listed: LibraryQuery) ->
     )
 
 
-def _package_bytes(body: SkillPackageAsked) -> bytes:
+def package_bytes(body: SkillPackageAsked) -> bytes:
     if body.encoding == "text":
         return body.content.encode("utf-8")
     try:
@@ -1600,7 +1600,7 @@ async def add_skill(request: Request, body: SkillPackageAsked, asked: Asked) -> 
     categories = _categories_or_refused(body.categories)
     try:
         package = runnable_here(
-            read_package(body.file_name, _package_bytes(body)), sandbox=sandbox_of(request)
+            read_package(body.file_name, package_bytes(body)), sandbox=sandbox_of(request)
         )
     except SkillLibraryError as refused:
         raise _refused_because(str(refused)) from None
@@ -1612,7 +1612,7 @@ def _adding(package: Package, asked: Asking) -> Making:
     return lambda _held: added(package, by=asked.caller.principal.id, at=asked.now)
 
 
-async def _fetched_package(request: Request, body: SkillImportAsked) -> Package:
+async def fetched_package(request: Request, body: SkillImportAsked) -> Package:
     """Fetch what the import names and read it, off the event loop, or refuse saying why.
 
     The source's shape is checked before anything is fetched, so a malformed commit or an http
@@ -1657,7 +1657,7 @@ async def import_skill(request: Request, body: SkillImportAsked, asked: Asked) -
         log.info("skill not importable", principal=asked.caller.principal.id)
         raise _not_answerable()
     categories = _categories_or_refused(body.categories)
-    package = await _fetched_package(request, body)
+    package = await fetched_package(request, body)
     try:
         runnable_here(package, sandbox=sandbox_of(request))
     except SkillLibraryError as refused:

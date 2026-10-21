@@ -642,6 +642,7 @@ WRITTEN_BY_CHECKS = (
     "agent.skill_review",
     "agent.skill_category",
     "agent.skill_assignment",
+    "agent.skill_personal",
     "agent.agent",
     "agent.template_instance",
     "agent.template_version",
@@ -818,12 +819,18 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert (
         outcomes.pop("a_joiner_gets_a_department_pack_and_a_mover_or_leaver_loses_it")[0] == NOT_RUN
     )
+    # Nor does it have a Starter pack for the mover's automations to be judged against; the check's
+    # own test furnishes one (`tests/unit/test_acceptance_checks_mover_automations.py`).
+    assert outcomes.pop("a_mover_s_automation_is_paused_and_a_stayer_s_is_not")[0] == NOT_RUN
     # The scratch database is not an install started from a release, so no image reference was
     # handed in; `tests/unit/test_acceptance_checks_install_template.py` hands it one.
     assert outcomes.pop("the_install_runs_one_published_image_at_a_named_release")[0] == NOT_RUN
     # Browser runs ship off and this database has no launcher, so the check that asks the host
     # what it made of a sandbox says it was not run; its own test answers for a host.
     assert outcomes.pop("a_browser_sandbox_is_made_for_one_run_and_removed_with_it")[0] == NOT_RUN
+    # A desktop has never been started anywhere: the launcher makes no desktop sandbox, so the check
+    # that describes one is never a pass and ends as not run on every install.
+    assert outcomes.pop("a_desktop_application_runs_in_a_sandbox_with_no_way_out")[0] == NOT_RUN
     # Nor the release check switched on, which no install ships with.
     assert (
         outcomes.pop("the_release_this_install_runs_says_what_changed_and_how_urgent")[0] == NOT_RUN

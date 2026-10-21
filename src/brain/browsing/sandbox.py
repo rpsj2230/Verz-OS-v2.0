@@ -473,3 +473,9 @@ def _env_value(body: dict[str, Any], variable: str) -> str | None:
         if name == variable:
             return value
     return None
+
+
+#: `_container_gaps` for a caller outside this module that builds a sandbox of another shape from
+#: the same hardening (`brain.browsing.desktop_app`). One list of what a container may not have, so
+#: a new kind of run is held to it by name and not by a copy that drifts.
+container_gaps = _container_gaps
