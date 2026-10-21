@@ -1716,8 +1716,8 @@ const PROGRESS = {
   },
   "M18.1.2": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): orchestration/contract.py SubtaskContract (objective, output schema as FieldSpec, tool hints, scope predicate) and subtask_ceiling() are tested in test_orchestration_contract.py. No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package. NEXT: build the orchestrator runtime that calls it: a coordinating-agent step in the run path (gate/runtime or a new orchestration runner) fed by the M18.5.3 planner and the M18.5.1 callee links",
-    updated: "2026-10-13",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M18.1.3": {
     status: "IN PROGRESS",
@@ -1726,8 +1726,8 @@ const PROGRESS = {
   },
   "M18.1.4": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): contract.py has no prose field kind and contract_gaps() refuses a contract that would let free prose be the output (tested). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package. NEXT: build the orchestrator runtime that calls it: a coordinating-agent step in the run path (gate/runtime or a new orchestration runner) fed by the M18.5.3 planner and the M18.5.1 callee links",
-    updated: "2026-10-13",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M18.2.1": {
     status: "IN PROGRESS",
@@ -1766,13 +1766,13 @@ const PROGRESS = {
   },
   "M18.3.4": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): delegation.depth_of(), chain_refusals(), concurrency_refusals() hold depth two and eight children (tested). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package. NEXT: call chain_refusals and concurrency_refusals when the orchestrator creates each child",
-    updated: "2026-10-13",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M18.3.5": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): delegation.fan_out_request() builds an ops.admission request per run and global_ceiling() reads the central budget (tested). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package. NEXT: submit fan_out_request to ops.admission before children start; refuse or queue when the global budget is spent",
-    updated: "2026-10-13",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M18.4.1": {
     status: "IN PROGRESS",
@@ -4620,19 +4620,19 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M18.5.1": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No coordinator concept exists: no table or route holds which agents an administrator allowed an agent to call (agent_link_routes.py is deep links only), and no call-another-agent step is in the run path. Reuse: delegation.Hop and chain_refusals.",
-    updated: "2026-10-13",
+    status: "IN PROGRESS",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M18.5.2": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No specialist runs on a subtask: nothing hands a subtask to an agent. Pieces exist: EntitlementSet.intersect via ops.automation.flow_reach (commit 4f1f1d6 fold test), delegation.child_hops, contract.validated.",
-    updated: "2026-10-13",
+    status: "IN PROGRESS",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M18.5.3": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No planner step: nothing asks a model for subtasks and dependencies. plan.read_proposal() and plan_refusals() are built to check a proposal but nothing produces or calls one; needs-rupash lists M18.1.1 merged into M18.5.3.",
-    updated: "2026-10-13",
+    status: "IN PROGRESS",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M18.6.1": {
     status: "OPEN",
@@ -4640,14 +4640,14 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M18.6.2": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No fan-out grant on an agent: nothing in tables/agent*, agents/model.py or the department admin console holds a fan-out switch, and no run records a reason for running single loop. fanout.Verdict.SINGLE_LOOP exists unwired.",
-    updated: "2026-10-13",
+    status: "IN PROGRESS",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M18.7.1": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): Not built: fanout.Verdict has only SINGLE_LOOP and PARALLEL, and nothing says SINGLE_LOOP for a coordinator means running specialists in sequence rather than the coordinator doing their work. No orchestrator exists to hold the rule (register OWN2-5).",
-    updated: "2026-10-13",
+    status: "IN PROGRESS",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M19.8.1": {
     status: "OPEN",
