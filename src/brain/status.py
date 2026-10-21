@@ -76,7 +76,8 @@ from pydantic import BaseModel
 from brain.ops.conventions import proofs_in
 from brain.ops.wbs_generate import missing_message, require
 
-TASK_ID_RE = re.compile(r"\bM\d+(?:\.\d+){1,4}\b")
+#: An id followed by `.x` is a wildcard over a group, not a claim on one; see `brain.ops.sweeps`.
+TASK_ID_RE = re.compile(r"\bM\d+(?:\.\d+){1,4}\b(?!\.[A-Za-z])")
 
 #: The first instant at which a claim counts only with proof on the same commit. Compared with
 #: the committer timestamp `git log` gives as `%ct`, which is in UTC seconds. The day after the
