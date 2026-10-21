@@ -177,6 +177,17 @@ WHY: Final[Mapping[Repeat, str]] = MappingProxyType(
 #: Every public method of every protocol under `src/brain`, by `module:Class.method`.
 PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
     {
+        # A person's ask that their data be deleted: one waiting ask per person, kept by a partial
+        # unique index and a conflict clause, so asking twice answers with the first; a decision
+        # stamps the waiting row once. Both are this system's own table.
+        "brain.ops.deletion_request_store:DeletionRequests.ask": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        "brain.ops.deletion_request_store:DeletionRequests.decide": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        "brain.ops.deletion_request_store:DeletionRequests.latest": Repeat.READS,
+        "brain.ops.deletion_request_store:DeletionRequests.waiting": Repeat.READS,
         # The automation gallery: an agent read, and installs in this system's own table, where a
         # second install is refused by the unique constraint and appends nothing.
         "brain.automation_gallery_routes:AgentRecords.agent": Repeat.READS,
