@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-21T01:52:07.238494+00:00",
-  "commit": "a8c2e6dd",
-  "commit_subject": "Two questions for the owner from the console package: a nothing-found question, and the first word of an answer (#651)",
+  "generated_at": "2026-10-21T02:27:26.141546+00:00",
+  "commit": "c40ddf89",
+  "commit_subject": "Every module of the console is proved in the browser under the situations that need no write (M27.14.x, part) (#648)",
   "total": 1626,
   "done": 1166,
   "percent": 71.7,
@@ -245,10 +245,10 @@
       "total": 599,
       "done": 474,
       "percent": 79.1,
-      "in_progress": 7,
+      "in_progress": 15,
       "ready_for_testing": 59,
       "blocked": 4,
-      "open": 55,
+      "open": 47,
       "acts": 1,
       "decided": 56,
       "built": 535,
@@ -2969,6 +2969,46 @@
       "why": "Waits on needs-rupash item 235: nothing the product runs can start the container a backup drill needs, so a Start button would reach nothing, which item 44 and docs/admin-console.md refuse. The item names three ways to make it real and recommends one.",
       "updated": "2026-10-14"
     },
+    "M27.14.1": {
+      "status": "IN PROGRESS",
+      "why": "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Home and People and access in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
+      "updated": "2026-10-21"
+    },
+    "M27.14.2": {
+      "status": "IN PROGRESS",
+      "why": "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Agents and AI in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
+      "updated": "2026-10-21"
+    },
+    "M27.14.3": {
+      "status": "IN PROGRESS",
+      "why": "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Knowledge and data in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
+      "updated": "2026-10-21"
+    },
+    "M27.14.4": {
+      "status": "IN PROGRESS",
+      "why": "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Channels and notifications in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
+      "updated": "2026-10-21"
+    },
+    "M27.14.5": {
+      "status": "IN PROGRESS",
+      "why": "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Operations in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
+      "updated": "2026-10-21"
+    },
+    "M27.14.6": {
+      "status": "IN PROGRESS",
+      "why": "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Governance in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
+      "updated": "2026-10-21"
+    },
+    "M27.14.7": {
+      "status": "IN PROGRESS",
+      "why": "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Reports in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
+      "updated": "2026-10-21"
+    },
+    "M27.14.8": {
+      "status": "IN PROGRESS",
+      "why": "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Platform (company scope only) in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
+      "updated": "2026-10-21"
+    },
     "M27.15.12": {
       "status": "READY FOR TESTING",
       "why": "BUILT AND TESTED: the Requirement checks screen names M27.15.12 as the leaf the Console area is checked for, and an install check passes only when every requirement of the register's Console area has a newest check recorded by a person that passed. Install proof, which only you can give: open Requirement checks, choose the Console area, open each requirement on its page, and record passed or failed with a sentence about what you did.",
@@ -4053,6 +4093,12 @@
   ],
   "recent": [
     {
+      "sha": "c40ddf8",
+      "at": "2026-10-21T02:17:34+00:00",
+      "subject": "Every module of the console is proved in the browser under the situations that need no write (M27.14.x, part) (#648)",
+      "closed": "M27.14"
+    },
+    {
       "sha": "a4465ea",
       "at": "2026-10-20T21:00:32+00:00",
       "subject": "6 more tasks are proved on the install by the newest complete acceptance run",
@@ -4165,12 +4211,6 @@
       "at": "2026-10-06T08:11:27+00:00",
       "subject": "A regression in the golden corpus blocks the merge, and a test keeps the three parts of that together (#454)",
       "closed": "M28.1.4"
-    },
-    {
-      "sha": "eea29de",
-      "at": "2026-10-06T02:26:38+00:00",
-      "subject": "Seventy-five tasks close on the install's own acceptance runs since the morning's deploys (#422)",
-      "closed": "M1.6.20,M1.6.21,M12.3.6,M13.1.1,M13.2.1,M13.2.3,M13.2.4,M13.2.6,M13.2.7,M13.4.1,M13.5.1,M13.5.10,M13.5.11,M13.5.12,M13.5.13,M13.5.14,M13.5.15,M13.5.16,M13.5.17,M13.5.19,M13.5.2,M13.5.20,M13.5.21,M13.5.22,M13.5.23,M13.5.3,M13.5.4,M13.5.5,M13.5.6,M13.5.7,M13.5.8,M13.5.9,M13.8.18,M13.9.4,M14.1.1,M14.1.2,M14.1.3,M14.1.4,M14.1.5,M14.1.6,M14.2.1,M14.2.2,M14.2.3,M14.2.4,M14.2.5,M14.3.2,M14.3.3,M14.3.4,M14.3.6,M14.3.7,M14.3.8,M14.5.1,M14.5.2,M14.5.3,M14.5.4,M14.5.5,M14.5.6,M14.6.1,M14.6.2,M14.6.3,M14.6.4,M14.7.3,M14.8.5,M16.7.2,M20.1.2,M20.1.5,M20.2.2,M20.2.3,M20.2.4,M20.4.6,M27.15.10,M27.15.15,M27.15.16,M27.15.2,M6.1.3"
     }
   ]
 }
