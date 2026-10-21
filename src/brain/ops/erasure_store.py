@@ -586,6 +586,13 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "agent.agent_callee",
         "agent.agent_fanout",
         "ops.coordinated_run",
+        # A workflow's saved versions, who it is assigned to and how each run went: agents,
+        # workflows and people named as values, an administrator or a runner an actor and not an
+        # owner, and `0273` grants no way for a row to leave (M17.6.1, M17.6.8, M17.7.7).
+        "ops.workflow_version",
+        "agent.workflow_assignment",
+        "ops.workflow_run",
+        "ops.workflow_step_run",
         # What the model server held at its peak for one batch: a part, a model's name, three
         # counts and three memory figures. `0250` keeps no request, person or passage, and grants
         # no way for a row to leave but the ring overwriting it.

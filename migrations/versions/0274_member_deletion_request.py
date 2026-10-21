@@ -40,8 +40,8 @@ undone, because that is the erasure queue's.
 
 Task ids: M40.4.2.3
 
-Revision ID: 0273
-Revises: 0272
+Revision ID: 0274
+Revises: 0273
 """
 
 from __future__ import annotations
@@ -49,10 +49,10 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0273"
+revision = "0274"
 # Follows 0272, the head of main when this was re-cut. The coordinator re-points it if another
 # migration lands first, as every migration landed in a train is.
-down_revision = "0272"
+down_revision = "0273"
 branch_labels = None
 depends_on = None
 

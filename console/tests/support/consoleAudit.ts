@@ -475,8 +475,16 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents/{agent_id}/automations/{automation_id}/stop",
       "/api/v1/console/automations*",
       "/api/v1/automations/{automation_id}/*",
+      "/api/v1/workflows*",
+      "/api/v1/workflow-runs",
+      "/api/v1/agents/{agent_id}/workflows*",
+      "/api/v1/agents/{agent_id}/workflow-runs",
     ],
     tables: [
+      "ops.workflow_version",
+      "agent.workflow_assignment",
+      "ops.workflow_run",
+      "ops.workflow_step_run",
       "agent.automation",
       "agent.automation_run",
       "agent.automation_schedule",
@@ -485,6 +493,10 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
     installation: [],
     gaps: [
+      {
+        what: "A stored workflow cannot be written, assigned to an agent or run, and its runs cannot be read, from the console.",
+        leaf: "M17.6.1",
+      },
       {
         what: "A removed automation cannot be brought back, and installing the same outcome again for the same agent and person is refused.",
         because:
@@ -522,6 +534,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       // A person's own accounts, listed and consented to from My workspace (M11.8.6).
       "/api/v1/me/accounts",
       "/api/v1/me/accounts/{connector}/consent",
+      "/api/v1/me/accounts/{connector}/disconnect",
       "/api/v1/connectors/{connector}/disconnect",
       "/api/v1/connectors/{connector}/edit",
       "/api/v1/connectors/{connector}/key",

@@ -185,7 +185,8 @@ MIGRATION_MODEL_SERVER = VERSIONS / "0250_model_server.py"
 MIGRATION_MIGRATION_RECORD = VERSIONS / "0241_migration_record.py"
 MIGRATION_TEMPLATE_WITHDRAWAL = VERSIONS / "0261_template_withdrawal.py"
 MIGRATION_AGENT_COORDINATION = VERSIONS / "0272_agent_coordination.py"
-MIGRATION_MEMBER_DELETION = VERSIONS / "0273_member_deletion_request.py"
+MIGRATION_MEMBER_DELETION = VERSIONS / "0274_member_deletion_request.py"
+MIGRATION_WORKFLOWS = VERSIONS / "0273_workflows.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -548,8 +549,15 @@ AGENT_COORDINATION_TABLES: tuple[str, ...] = (
     "agent.agent_fanout",
     "ops.coordinated_run",
 )
-#: And the one 0273 adds: a person's ask that their data be deleted, until the retention owner acts.
+#: And the one 0274 adds: a person's ask that their data be deleted, until the retention owner acts.
 MEMBER_DELETION_TABLES: tuple[str, ...] = ("ops.deletion_request",)
+#: And the four 0273 adds: stored workflows, who they are assigned to and how each run went.
+WORKFLOW_TABLES: tuple[str, ...] = (
+    "ops.workflow_version",
+    "agent.workflow_assignment",
+    "ops.workflow_run",
+    "ops.workflow_step_run",
+)
 
 #: And the one 0250 adds: the model server's measured peaks. Its two column additions on `know` are
 #: not tables and are held by the model-versus-migration comparison below.
@@ -663,6 +671,7 @@ ALL_TABLES = (
     + TEMPLATE_WITHDRAWAL_TABLES
     + AGENT_COORDINATION_TABLES
     + MEMBER_DELETION_TABLES
+    + WORKFLOW_TABLES
 )
 
 
@@ -1565,6 +1574,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert agent_coordination.TABLES == AGENT_COORDINATION_TABLES
     member_deletion = migration_module(MIGRATION_MEMBER_DELETION)
     assert member_deletion.TABLES == MEMBER_DELETION_TABLES
+    workflows = migration_module(MIGRATION_WORKFLOWS)
+    assert workflows.TABLES == WORKFLOW_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1696,6 +1707,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(template_withdrawal.TABLES)
         + tuple(agent_coordination.TABLES)
         + tuple(member_deletion.TABLES)
+        + tuple(workflows.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1808,6 +1820,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(template_withdrawal.TABLES),
         set(agent_coordination.TABLES),
         set(member_deletion.TABLES),
+        set(workflows.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

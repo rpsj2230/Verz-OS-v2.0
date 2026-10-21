@@ -119,6 +119,9 @@ export const AGENTS_CAPTION = "Agents I can call";
 export const ITEMS_CAPTION = "Knowledge I own";
 export const LEARNED_CAPTION = "What it learned about me";
 
+/** The caption of the list of what was noticed behind one learned line (M40.4.1.1). */
+export const EVIDENCE_CAPTION = "What was noticed behind";
+
 function Figures({ workspace }: { readonly workspace: Workspace }) {
   const budget = readBudget(workspace);
   const month = wasRead(budget) ? monthly(budget.panel) : null;
@@ -348,6 +351,14 @@ function WhatItLearned({
               <p className="note">
                 {`${one.stated ? "You said this" : "Inferred"}, ${when(one.formed_at)}`}
               </p>
+              {one.evidence_told === "" ? null : <p className="note">{one.evidence_told}</p>}
+              {one.evidence.length === 0 ? null : (
+                <ul aria-label={`${EVIDENCE_CAPTION} ${one.statement}`}>
+                  {one.evidence.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              )}
               {editing === one.memory_id ? null : (
                 <div>
                   <Button

@@ -71,7 +71,7 @@ system holds about one and the digest goes to everybody it learnt from. See
 is tested is the statements they compile to, every refusal and its order, and each decision
 reached through the real application.
 
-Task ids: M27.7.28, M16.4.2, M16.5.1
+Task ids: M27.7.28, M16.4.2, M16.5.1, M40.4.1.1
 """
 
 from __future__ import annotations
@@ -112,9 +112,17 @@ from brain.estate_routes import (
     remembered_about,
 )
 from brain.knowledge.search import PRINCIPAL_SETTING
+from brain.learning_told import SIGNAL_WORDS
 from brain.locale import currency_or_unset
 from brain.member.shell import disclosure_line, member_screen
-from brain.member_activity import MemberError, my_agents, personal_budget, undo_all
+from brain.member_activity import (
+    LearnedAboutMe,
+    MemberError,
+    learned_about_me,
+    my_agents,
+    personal_budget,
+    undo_all,
+)
 from brain.memory.digest import Learning
 from brain.memory.signals import Signal
 from brain.memory.turn import MAX_STATEMENT_CHARS, MEMORY_ID_DIGEST_CHARS, MEMORY_ID_PREFIX
@@ -283,6 +291,11 @@ class MineLearnedView(BaseModel):
     stated: bool
     confidence: float
     formed_at: datetime
+    #: What was noticed that led to it, in words, one line per kind of signal (M40.4.1.1). Never a
+    #: conversation, a message or a person. Empty for a statement the person made themselves.
+    evidence: list[str]
+    #: In one sentence, where it came from, so an empty list is never read as a hidden reason.
+    evidence_told: str
 
 
 class MineMemoryAsked(BaseModel):
@@ -347,6 +360,34 @@ class MineWorkspaceView(BaseModel):
     can_ask_about: str
     accounts: str
     staleness: StalenessBanner | None = None
+
+
+# ------------------------------------------------------------------ the evidence behind each
+#: What the learned card says of a line the person wrote themselves.
+YOU_SAID_IT_YOURSELF: Final = "You said this yourself, so nothing was inferred."
+
+#: What the learned card says above the lines of evidence for something the system inferred.
+WHAT_WAS_NOTICED: Final = "This was inferred from what was noticed in your own conversations."
+
+#: What it says when an inferred line has no record of what prompted it.
+NO_RECORD_OF_WHY: Final = (
+    "This was inferred, and no record was kept of what prompted it. Forget it if it is wrong."
+)
+
+
+def evidence_by_memory(told: LearnedAboutMe) -> dict[str, list[str]]:
+    """Each learned line's evidence in words, by memory id, from `learned_about_me` (M40.4.1.1).
+
+    The kinds are `brain.learning_told.SIGNAL_WORDS`, the same words the weekly message uses, so the
+    page and the message cannot describe one learning two ways. A memory whose learning carries no
+    kind is absent from the mapping, which the card says in `NO_RECORD_OF_WHY` rather than showing
+    an empty box.
+    """
+    return {
+        one.memory_id: [SIGNAL_WORDS.get(kind, kind.value) for kind in one.evidence]
+        for one in told.items
+        if one.evidence
+    }
 
 
 # ---------------------------------------------------------------- the statements
@@ -526,6 +567,9 @@ async def workspace(request: Request, asked: Asked) -> MineWorkspaceView:
 
     owned = [row for row in item_rows[:MAX_OWN_ITEMS] if is_own(me, row.owner_id)]
 
+    evidence = evidence_by_memory(
+        learned_about_me(stored.learnings, principal_id=me, reader=asked.reach, now=now)
+    )
     remembered = subject_memory(
         subject_id=me,
         entries=stored.entries,
@@ -567,6 +611,8 @@ async def workspace(request: Request, asked: Asked) -> MineWorkspaceView:
                     stated=True,
                     confidence=one.seen.confidence,
                     formed_at=one.seen.formation.formed_at,
+                    evidence=[],
+                    evidence_told=YOU_SAID_IT_YOURSELF,
                 )
                 for one in remembered.memory.curated
             ),
@@ -577,6 +623,10 @@ async def workspace(request: Request, asked: Asked) -> MineWorkspaceView:
                     stated=False,
                     confidence=one.seen.confidence,
                     formed_at=one.seen.formation.formed_at,
+                    evidence=evidence.get(one.memory_id, []),
+                    evidence_told=(
+                        WHAT_WAS_NOTICED if one.memory_id in evidence else NO_RECORD_OF_WHY
+                    ),
                 )
                 for one in remembered.memory.extracted
             ),

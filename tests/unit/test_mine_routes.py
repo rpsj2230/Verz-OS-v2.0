@@ -16,7 +16,7 @@ member surface's own since 2026-09-17: `read:member.content`, never the console'
 The present is the wall clock, because the route reads it through `brain.api_routes.asking` and a
 month, a day and recall are all measured from it. Rows here are an hour old, never dated.
 
-Task ids: M27.7.28, M16.4.2
+Task ids: M27.7.28, M16.4.2, M40.4.1.1
 """
 
 from __future__ import annotations
@@ -44,6 +44,7 @@ from brain.core.scope import Scope
 from brain.identity.bearer import TokenAuthority
 from brain.knowledge.item import RETRIEVABLE_STATES
 from brain.knowledge.search import PRINCIPAL_SETTING
+from brain.learning_told import SIGNAL_WORDS
 from brain.locale import currency_or_unset
 from brain.member.shell import DISCLOSURE_PREFIX
 from brain.memory.digest import Learning, Undo, undo
@@ -55,6 +56,9 @@ from brain.mine_routes import (
     LEARNING_UNDO_PATH,
     MAX_OWN_RUNS,
     MORE_SPEND_THAN_THIS_PAGE_READS,
+    NO_RECORD_OF_WHY,
+    WHAT_WAS_NOTICED,
+    YOU_SAID_IT_YOURSELF,
     month_start,
 )
 from brain.ops.budgets import BudgetLevel, BudgetPeriod
@@ -632,3 +636,75 @@ def test_undo_all_forgets_what_the_page_shows_about_the_person_and_nothing_of_an
         ("mem_guess", ME),
     }
     assert refused.status_code == 404
+
+
+# ------------------------------------------------------------ the evidence behind each line
+def test_an_inferred_line_says_what_was_noticed_and_a_stated_one_says_it_was_said(
+    client: TestClient, rows: dict[type, list[Any]]
+) -> None:
+    """**M40.4.1.1.** Every line learned about the person carries the evidence that produced it,
+    in the words the weekly message uses: an inferred line names the kind of signal its learning
+    record holds, and a line the person wrote themselves says so and names none.
+
+    Delete this and the page can list what was learnt with no reason beside it, which is the leaf
+    unbuilt with the page unchanged."""
+    memories_with_records(rows)
+
+    body = get(client, ME).json()
+
+    by_id = {one["memory_id"]: one for one in body["learned"]}
+    assert by_id["mem_guess"]["evidence"] == [SIGNAL_WORDS[Signal.REASKED]]
+    assert by_id["mem_guess"]["evidence_told"] == WHAT_WAS_NOTICED
+    assert by_id["mem_mine"]["evidence"] == []
+    assert by_id["mem_mine"]["evidence_told"] == YOU_SAID_IT_YOURSELF
+
+
+def test_an_inferred_line_with_no_record_of_why_says_so_rather_than_showing_a_blank(
+    client: TestClient, rows: dict[type, list[Any]]
+) -> None:
+    """The sibling: a memory with no learning record is still listed, with a sentence saying no
+    record was kept. Delete this and an empty evidence list reads as a reason somebody hid."""
+    two_people(rows)
+
+    guess = next(
+        one for one in get(client, ME).json()["learned"] if one["memory_id"] == "mem_guess"
+    )
+
+    assert guess["evidence"] == []
+    assert guess["evidence_told"] == NO_RECORD_OF_WHY
+
+
+def test_evidence_names_kinds_of_signal_and_nothing_of_anybody_elses_conversation(
+    client: TestClient, rows: dict[type, list[Any]]
+) -> None:
+    """The page carries no learning record that is not the asker's: the other person's learning,
+    with its own evidence, reaches neither their list nor the body. Delete this and the evidence
+    column could be filled from a learning record read for somebody else."""
+    memories_with_records(rows)
+    theirs = learnt("mem_theirs", agent_id=None)
+    theirs.evidence = ["escalated"]
+    rows[LearningRow] = [learnt("mem_guess", agent_id=None), theirs]
+
+    response = get(client, ME)
+
+    assert "mem_theirs" not in response.text
+    assert SIGNAL_WORDS[Signal.ESCALATED] not in response.text
+
+
+def test_a_learning_record_with_no_signal_kinds_is_said_to_have_no_record_of_why(
+    client: TestClient, rows: dict[type, list[Any]]
+) -> None:
+    """A learning whose evidence is empty is listed with the sentence that no record was kept, not
+    with the sentence that something was noticed over an empty list. Delete this and an inferred
+    line is told to have a reason it has no kinds for."""
+    memories_with_records(rows)
+    empty = learnt("mem_guess", agent_id=None)
+    empty.evidence = []
+    rows[LearningRow] = [empty]
+
+    guess = next(
+        one for one in get(client, ME).json()["learned"] if one["memory_id"] == "mem_guess"
+    )
+
+    assert guess["evidence"] == []
+    assert guess["evidence_told"] == NO_RECORD_OF_WHY
