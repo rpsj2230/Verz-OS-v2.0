@@ -309,12 +309,19 @@ async def _cited(h: Harness, app: FastAPI, principal_id: str, document_id: str) 
     from brain.cited_document_routes import cited_document
     from brain.gate.admission import Assurance, admit
     from brain.gate.context import Channel
+    from brain.identity.principal_store import StoredPrincipals
 
     reach = admit(await h.reach(principal_id), Channel.CONSOLE, Assurance.AUTHENTICATED)
     request = Request({"type": "http", "app": app, "headers": [], "method": "GET"})
-    # A cast at the route's boundary: it reads the reach and the instant of the caller the
-    # console admits, and a `Caller` can only be minted from a verified token.
-    asking = cast(Any, SimpleNamespace(reach=reach, now=h.now))
+    person = await StoredPrincipals(h.sessions).live_principal(principal_id)
+    if person is None:
+        raise CheckFailedError("a reserved person was not live in the directory")
+    # A cast at the route's boundary: it reads the reach, the instant and the person of the caller
+    # the console admits (the person, to say whether a document is in another department than
+    # theirs), and a `Caller` can only be minted from a verified token.
+    asking = cast(
+        Any, SimpleNamespace(reach=reach, now=h.now, caller=SimpleNamespace(principal=person))
+    )
     return await cited_document(request, document_id, asking)
 
 

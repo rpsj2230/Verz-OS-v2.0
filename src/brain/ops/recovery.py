@@ -386,6 +386,13 @@ class Backup:
     #: The latest moment this copy can restore the system to.
     recoverable_to: datetime
     size_bytes: int
+    #: What the taker declared about where the copy is kept, and `None` when its manifest says
+    #: nothing, which is a manifest older than the field and is a finding of its own
+    #: (`placement_findings`). Declared at setup and carried on every manifest, because neither is
+    #: visible from the copy: a name does not say it is another machine, and a file does not say
+    #: who holds the key.
+    off_host: bool | None = None
+    key_held_by: KeyHolder | None = None
 
     def __post_init__(self) -> None:
         if not self.backup_id.strip():
@@ -438,6 +445,49 @@ def latest(backups: Sequence[Backup], coverage: Coverage) -> Backup | None:
     if not of_kind:
         return None
     return max(of_kind, key=lambda one: (one.recoverable_to, one.backup_id))
+
+
+def placement_findings(backups: Sequence[Backup]) -> tuple[str, ...]:
+    """Where the newest copies are kept and who can read them (M30.3.3, M30.3.4).
+
+    Judged by `destination_gaps`, which until this function had no caller.
+
+    One declaration per destination, taken from the newest copy there, because the install's
+    placement is whatever its latest run said and an old copy kept somewhere else is history. A
+    destination whose newest manifest states neither fact is a finding in its own right and is not
+    judged as though it had stated the unsafe answers: it says nothing, and that is what the
+    sentence says. No copies at all is no findings, since the panel already says nothing has been
+    copied, and a second voice saying the same thing in other words is how a screen gets ignored.
+    """
+    newest: dict[str, Backup] = {}
+    covers: dict[str, set[Coverage]] = {}
+    for one in backups:
+        covers.setdefault(one.destination, set()).add(one.coverage)
+        held = newest.get(one.destination)
+        if held is None or one.recoverable_to > held.recoverable_to:
+            newest[one.destination] = one
+    findings: list[str] = []
+    declared: list[Destination] = []
+    for name in sorted(newest):
+        one = newest[name]
+        if one.off_host is None or one.key_held_by is None:
+            findings.append(
+                f"{name}: the newest copy does not say whether it is kept on another machine or "
+                "who can read it, so neither can be relied on"
+            )
+            continue
+        declared.append(
+            Destination(
+                name=name,
+                covers=frozenset(covers[name]),
+                off_host=one.off_host,
+                key_held_by=one.key_held_by,
+                because="declared on the copy's manifest by whoever installed the backup",
+            )
+        )
+    if declared:
+        findings.extend(destination_gaps(declared))
+    return tuple(findings)
 
 
 def exposure_seconds(

@@ -159,6 +159,11 @@ const PROGRESS = {
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
     updated: "2026-10-13",
   },
+  "M27.15.1": {
+    status: "READY FOR TESTING",
+    why: "BUILT AND TESTED: opening the text of a document that sits in a department the reader does not belong to writes one ledger entry naming the document and the reader, from both the library's text route and the page a citation opens, and a failure to write it fails the opening. Seeing a document listed and reading its text were already two reads (the department's read, which People grants and withdraws). A company-wide document, a reader's own department and a refused opening write nothing. An install check calls the route and fails in both directions. Install proof: with two departments, open a document in the other one from the Knowledge page as someone who holds the read there, then find the entry in the Audit log under the document.",
+    updated: "2026-10-20",
+  },
   "M27.15.3": {
     status: "READY FOR TESTING",
     why: "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
@@ -198,6 +203,46 @@ const PROGRESS = {
     status: "BLOCKED",
     why: "Waits on needs-rupash item 235: nothing the product runs can start the container a backup drill needs, so a Start button would reach nothing, which item 44 and docs/admin-console.md refuse. The item names three ways to make it real and recommends one.",
     updated: "2026-10-14",
+  },
+  "M27.14.1": {
+    status: "IN PROGRESS",
+    why: "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Home and People and access in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
+    updated: "2026-10-21",
+  },
+  "M27.14.2": {
+    status: "IN PROGRESS",
+    why: "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Agents and AI in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
+    updated: "2026-10-21",
+  },
+  "M27.14.3": {
+    status: "IN PROGRESS",
+    why: "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Knowledge and data in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
+    updated: "2026-10-21",
+  },
+  "M27.14.4": {
+    status: "IN PROGRESS",
+    why: "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Channels and notifications in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
+    updated: "2026-10-21",
+  },
+  "M27.14.5": {
+    status: "IN PROGRESS",
+    why: "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Operations in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
+    updated: "2026-10-21",
+  },
+  "M27.14.6": {
+    status: "IN PROGRESS",
+    why: "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Governance in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
+    updated: "2026-10-21",
+  },
+  "M27.14.7": {
+    status: "IN PROGRESS",
+    why: "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Reports in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
+    updated: "2026-10-21",
+  },
+  "M27.14.8": {
+    status: "IN PROGRESS",
+    why: "PART BUILT: e2e/specs/module-cases.spec.ts proves every page of Platform (company scope only) in the browser under the situations that need no write: a slow answer is said to be loading, a fault is said under its own heading, an unreachable API under another, a search that finds nothing says so and clears, the page fits a phone (375 wide, no sideways scroll, menu behind its button), and the keyboard gets past the menu. Run once against the real console, API and database with a stand-in sign-in; CI's Browser job is the run against Keycloak. NOT BUILT: the cases that make a change (create, edit, retire, import, export, duplicate, confirmation and the audit entry each leaves), which change an install the other specs read in order and are to be added screen by screen.",
+    updated: "2026-10-21",
   },
   "M27.12.8": {
     status: "READY FOR TESTING",
@@ -1606,8 +1651,8 @@ const PROGRESS = {
   },
   "M17.1.4": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): ops/jobs.py models interrupt, CANCELLING/ABORTED/CANCELLED and DEFAULT_TIMEOUT_SECONDS (test_jobs) but nothing calls interrupt and no timeout is enforced in ops/worker.py or queue.py; jobs_routes offers pause/resume/run now only (NO_RUN_CAN_BE_STOPPED_FROM_HERE). NEXT: enforce a per-task timeout in the worker and add a cancel control calling jobs.interrupt over the driver's abort, then a check",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT 2026-10-21. Every task of ours now has a deadline (brain.ops.queue.TASK_DEADLINE_SECONDS, one heartbeat inside the staleness window): register_task cancels a task that overruns and fails the attempt with TaskDeadlineExceededError, and refuses a deadline of nothing or one past the window. Not built: a cancel control that calls jobs.interrupt over the driver's abort, which needs a screen listing the queue's jobs (M17.1.1).",
+    updated: "2026-10-20",
   },
   "M17.1.5": {
     status: "READY FOR TESTING",
@@ -1711,8 +1756,8 @@ const PROGRESS = {
   },
   "M18.1.2": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): orchestration/contract.py SubtaskContract (objective, output schema as FieldSpec, tool hints, scope predicate) and subtask_ceiling() are tested in test_orchestration_contract.py. No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package. NEXT: build the orchestrator runtime that calls it: a coordinating-agent step in the run path (gate/runtime or a new orchestration runner) fed by the M18.5.3 planner and the M18.5.1 callee links",
-    updated: "2026-10-13",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M18.1.3": {
     status: "IN PROGRESS",
@@ -1721,8 +1766,8 @@ const PROGRESS = {
   },
   "M18.1.4": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): contract.py has no prose field kind and contract_gaps() refuses a contract that would let free prose be the output (tested). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package. NEXT: build the orchestrator runtime that calls it: a coordinating-agent step in the run path (gate/runtime or a new orchestration runner) fed by the M18.5.3 planner and the M18.5.1 callee links",
-    updated: "2026-10-13",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M18.2.1": {
     status: "IN PROGRESS",
@@ -1761,13 +1806,13 @@ const PROGRESS = {
   },
   "M18.3.4": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): delegation.depth_of(), chain_refusals(), concurrency_refusals() hold depth two and eight children (tested). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package. NEXT: call chain_refusals and concurrency_refusals when the orchestrator creates each child",
-    updated: "2026-10-13",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M18.3.5": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): delegation.fan_out_request() builds an ops.admission request per run and global_ceiling() reads the central budget (tested). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package. NEXT: submit fan_out_request to ops.admission before children start; refuse or queue when the global budget is spent",
-    updated: "2026-10-13",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M18.4.1": {
     status: "IN PROGRESS",
@@ -1785,9 +1830,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M19.1.1": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): browsing/sandbox.py:sandbox_for and sandbox_gaps build and re-check the gVisor (runsc) bodies; launcher.py creates and removes them; docker-compose.browser.yml deploys browser-launcher (opt-in, health = runsc present). Nothing calls the launcher; no body ever sent to a daemon. NEXT: Build the worker-side driver (compile an envelope, send wire start_fields to browser-launcher:7300, relay the run, call session_store.start/end and recording.write; launcher.py and recording.py say 'not built'), run ops/browser/REHEARSAL.md on a runsc host, then write a check reading launcher health and a labelled run's runtime.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-20 on browsing/sandbox.py and launcher.py (triage 2026-10-13 class 2): the launcher can rehearse a run (Launcher.rehearse): it makes the run's network, proxy and runner as a real run would, reads the Docker daemon's own description of them (browsing/inspection.py), removes them and counts what is left, starting no browser. The install check a_browser_sandbox_is_made_for_one_run_and_removed_with_it holds that description to the product's own expectations and reports NOT RUN, in one sentence, while browser runs are off or no launcher answers. This leaf: a gVisor container per run, named and labelled with the run id; the check requires the runner to report runtime runsc and two runs to get different names. INSTALL PROOF STEPS: 1. On the Features page switch on 'Let agents run a browser'. 2. Compose the browser overlay (docker-compose.browser.yml) on a host with gVisor as ops/browser/REHEARSAL.md sections 1 to 3 say, and confirm the browser-launcher container is healthy. 3. On the Install page press Run now and read the row a_browser_sandbox_is_made_for_one_run_and_removed_with_it: it must say Passed. NOT PROVED UNTIL a host with gVisor has run it.",
+    updated: "2026-10-20",
   },
   "M19.1.2": {
     status: "IN PROGRESS",
@@ -1805,14 +1850,14 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M19.1.5": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): sandbox.py declares a read-only root, tmpfs home/tmp/shm charged to the memory cap and no volumes (sandbox_gaps refuses one); launcher.py teardown removes the set; test_browsing_sandbox.py and test_browsing_launcher.py. Bodies never sent to a daemon. NEXT: Write a check that builds sandbox_for(...), requires sandbox_gaps()==() and a mutated body refused; the live half waits on the driver and REHEARSAL.md.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-20 on browsing/sandbox.py and launcher.py (triage 2026-10-13 class 2): the launcher can rehearse a run (Launcher.rehearse): it makes the run's network, proxy and runner as a real run would, reads the Docker daemon's own description of them (browsing/inspection.py), removes them and counts what is left, starting no browser. The install check a_browser_sandbox_is_made_for_one_run_and_removed_with_it holds that description to the product's own expectations and reports NOT RUN, in one sentence, while browser runs are off or no launcher answers. This leaf: a read-only root with only tmpfs writable and no bind or volume, destroyed with the run; the check requires the daemon to report exactly the declared tmpfs and nothing left behind. INSTALL PROOF STEPS: 1. On the Features page switch on 'Let agents run a browser'. 2. Compose the browser overlay (docker-compose.browser.yml) on a host with gVisor as ops/browser/REHEARSAL.md sections 1 to 3 say, and confirm the browser-launcher container is healthy. 3. On the Install page press Run now and read the row a_browser_sandbox_is_made_for_one_run_and_removed_with_it: it must say Passed. NOT PROVED UNTIL a host with gVisor has run it.",
+    updated: "2026-10-20",
   },
   "M19.1.6": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): sandbox.py gives each run an internal network named from the run id with the egress proxy as the only other member (egress_network_body); launcher.py removes it at teardown; test_browsing_sandbox.py, test_browsing_deployment.py. Never created on a daemon. NEXT: Static half as M19.1.5; live half is REHEARSAL.md plus the missing driver.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-20 on browsing/sandbox.py and launcher.py (triage 2026-10-13 class 2): the launcher can rehearse a run (Launcher.rehearse): it makes the run's network, proxy and runner as a real run would, reads the Docker daemon's own description of them (browsing/inspection.py), removes them and counts what is left, starting no browser. The install check a_browser_sandbox_is_made_for_one_run_and_removed_with_it holds that description to the product's own expectations and reports NOT RUN, in one sentence, while browser runs are off or no launcher answers. This leaf: a network of its own per run; the check requires the daemon to report it internal and the runner on no other network. INSTALL PROOF STEPS: 1. On the Features page switch on 'Let agents run a browser'. 2. Compose the browser overlay (docker-compose.browser.yml) on a host with gVisor as ops/browser/REHEARSAL.md sections 1 to 3 say, and confirm the browser-launcher container is healthy. 3. On the Install page press Run now and read the row a_browser_sandbox_is_made_for_one_run_and_removed_with_it: it must say Passed. NOT PROVED UNTIL a host with gVisor has run it.",
+    updated: "2026-10-20",
   },
   "M19.2.1": {
     status: "READY FOR TESTING",
@@ -1855,9 +1900,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M19.3.5": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): sandbox.py makes a mitmproxy container (EGRESS_IMAGE mitmproxy 11.1.3, unverified against a registry) the only member with a route out; egress_addon.py is the addon; test_browsing_sandbox.py covers its decisions. The proxy has never been started. NEXT: Pull and pin the proxy image, rehearse per REHEARSAL.md, then a check that a runner cannot reach an undeclared host.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-20 on browsing/sandbox.py and launcher.py (triage 2026-10-13 class 2): the launcher can rehearse a run (Launcher.rehearse): it makes the run's network, proxy and runner as a real run would, reads the Docker daemon's own description of them (browsing/inspection.py), removes them and counts what is left, starting no browser. The install check a_browser_sandbox_is_made_for_one_run_and_removed_with_it holds that description to the product's own expectations and reports NOT RUN, in one sentence, while browser runs are off or no launcher answers. This leaf: the proxy is the only route out; the check requires the proxy on exactly the run's network and the shared egress network and the runner on neither the shared one. Whether the proxy refuses an undeclared host is proved by the live read run, not by this check. INSTALL PROOF STEPS: 1. On the Features page switch on 'Let agents run a browser'. 2. Compose the browser overlay (docker-compose.browser.yml) on a host with gVisor as ops/browser/REHEARSAL.md sections 1 to 3 say, and confirm the browser-launcher container is healthy. 3. On the Install page press Run now and read the row a_browser_sandbox_is_made_for_one_run_and_removed_with_it: it must say Passed. NOT PROVED UNTIL a host with gVisor has run it.",
+    updated: "2026-10-20",
   },
   "M19.3.6": {
     status: "IN PROGRESS",
@@ -1925,9 +1970,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M19.6.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): sandbox.py:Caps sets memory (swap equal), pids and CPU quota for runner and proxy and refuses tmpfs sizes that leave no memory floor; test_browsing_sandbox.py, test_browsing_sessions.py. Figures are marked judgements; bodies never sent to a daemon. NEXT: Static check on sandbox_gaps with caps; measure real figures in the REHEARSAL.md run.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-20 on browsing/sandbox.py and launcher.py (triage 2026-10-13 class 2): the launcher can rehearse a run (Launcher.rehearse): it makes the run's network, proxy and runner as a real run would, reads the Docker daemon's own description of them (browsing/inspection.py), removes them and counts what is left, starting no browser. The install check a_browser_sandbox_is_made_for_one_run_and_removed_with_it holds that description to the product's own expectations and reports NOT RUN, in one sentence, while browser runs are off or no launcher answers. This leaf: memory, processor and process caps per session; the check requires the daemon to report the caps the product sets, which are judgements not yet measured under a real page. INSTALL PROOF STEPS: 1. On the Features page switch on 'Let agents run a browser'. 2. Compose the browser overlay (docker-compose.browser.yml) on a host with gVisor as ops/browser/REHEARSAL.md sections 1 to 3 say, and confirm the browser-launcher container is healthy. 3. On the Install page press Run now and read the row a_browser_sandbox_is_made_for_one_run_and_removed_with_it: it must say Passed. NOT PROVED UNTIL a host with gVisor has run it.",
+    updated: "2026-10-20",
   },
   "M19.6.5": {
     status: "IN PROGRESS",
@@ -2245,9 +2290,9 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.1.5": {
-    status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (gate.answer, gate.finish, models.metering +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #154's branch M21/record-usage-for-stats (may be replayed already); closed PR #167's branch M38/migration-train-0118-0138-0139 (may be replayed already); old backup branch recovery/from-windows-20260928-wt-w1-5b; +1 more",
-    updated: "2026-10-06",
+    status: "IN PROGRESS",
+    why: "15 of the 18 request fields are filled; three are declared unfillable in brain.ops.telemetry.UNFILLABLE_TODAY. Read on 2026-10-21: the policy epoch is already computed for the cache key (api_routes.policy_epoch_of) and could travel to the row; the tool latency could be read from the invoke step's time that stage_ms already records; time to first token cannot be measured because no model answer streams, and the only figure available is the time to the first frame, which the module refuses as a different measurement under this one's name. Nothing built yet. The first token is the question for the owner: record the first frame under its own name, or leave the field empty.",
+    updated: "2026-10-21",
   },
   "M27.1.6": {
     status: "OPEN",
@@ -2255,9 +2300,9 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.10.2": {
-    status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in agent_routes, components/kit/ConfirmDialog.tsx, components/kit/DetailPage.tsx +50 more; NOT wired: components/kit/index.ts, components/ui/badge.tsx, components/ui/card.tsx +8 more. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M13/wire-agent-upgrade, no PR; +23 more",
-    updated: "2026-10-06",
+    status: "READY FOR TESTING",
+    why: "BUILT AND TESTED: the toast region is mounted once, in the shell, and a Note of kind done announces its sentence in it while the page keeps its own line (console/tests/done-notes-announce.test.tsx), which gives the thirty-eight places that say a write took effect the toast without an edit to each. The other named parts were already drawn by the pages: sidebar, header, breadcrumbs, list page, detail page, tabs, drawer, empty, loading and failed states, bulk bar and the write-once secret field. Install proof: switch a feature on or off under Features and read the message that appears at the corner of the screen as well as the line on the page.",
+    updated: "2026-10-20",
   },
   "M27.11.1": {
     status: "OPEN",
@@ -2301,13 +2346,18 @@ const PROGRESS = {
   },
   "M27.11.2": {
     status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in console.govern, directory_routes, govern_routes +10 more; NOT wired: pages/People.tsx. MORE ELSEWHERE, read before building: closed PR #125's branch M27/people-grant-controls (may be replayed already); closed PR #169's branch M27/console-people-org (may be replayed already); closed PR #295's branch M1/departments-from (may be replayed already)",
-    updated: "2026-10-06",
+    why: "Built in the People pages: grant expiry, one grant to several people, pack assignment, disable and enable a person. Install checks cover a leaver's session, grants and automations (acceptance_checks_joiner_mover_leaver). No install check covers grant expiry, the bulk grant, the pack or reinstatement; the adoption plan and ownership transfer are agent routes not offered on the People page.",
+    updated: "2026-10-21",
   },
   "M27.11.3": {
     status: "OPEN",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (directory_routes, ops.acceptance_people_console, pages/Roles.tsx +12 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M33/role-nominations, no PR; closed PR #169's branch M27/console-people-org (may be replayed already)",
     updated: "2026-10-06",
+  },
+  "M27.11.4": {
+    status: "BLOCKED",
+    why: "Waits on needs-rupash item 188, point 2: the staff source and directory sync are managed from the console (built); the identity provider and the embedding size are read-only in Settings and the owner has not said whether to build the change or move it to the installer.",
+    updated: "2026-10-21",
   },
   "M27.11.5": {
     status: "OPEN",
@@ -2320,9 +2370,9 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.11.7": {
-    status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in agent_lifecycle_routes, agent_routes, agents.creation +8 more; NOT wired: pages/AgentTemplate.route.tsx, pages/AgentTemplate.tsx. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +9 more",
-    updated: "2026-10-06",
+    status: "READY FOR TESTING",
+    why: "BUILT: the Agent templates pages install a template from the gallery, withdraw a version and undo it, and save an agent as a template through the review that hoists every value out. Three install checks, each proving one clause on the install's own schema and routes, now name this leaf, so it closes when all three pass on the install's two newest runs: a built-in template installs as a disabled agent at Shadow (acceptance_checks_templates), an agent saved as a template is a draft only its author reads, reviewed with every value hoisted out and published once (acceptance_checks_templates_audience), and a withdrawn version is not offered while installed agents stay pinned (acceptance_checks_template_withdrawal). Install proof: open Agent templates, install one, withdraw a version with a reason and undo it.",
+    updated: "2026-10-21",
   },
   "M27.11.8": {
     status: "OPEN",
@@ -2355,9 +2405,9 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.12.5": {
-    status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (app, console.agent_profile, models.calls +11 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #154's branch M21/record-usage-for-stats (may be replayed already); closed PR #167's branch M38/migration-train-0118-0138-0139 (may be replayed already); closed PR #459's branch M21/budget-stops (may be replayed already)",
-    updated: "2026-10-06",
+    status: "READY FOR TESTING",
+    why: "Built and wired, and now followed end to end by the install check `a_model_call_is_costed_and_a_used_up_budget_stops_the_next`: a question answered by a priced stand-in model leaves one cost in its department equal to the tokens its request row recorded at the price set. To prove it on the install: open Install, run the checks, and read that check; the leaf closes when it passes on the install's two newest runs. It says it was not run, rather than failing, on an install with no currency set. Found on the way and fixed for every install: a question the checks ask was recorded with no trace on a budget stop, which the table refused, so the stop was silently not written.",
+    updated: "2026-10-21",
   },
   "M27.12.7": {
     status: "OPEN",
@@ -2404,6 +2454,11 @@ const PROGRESS = {
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.organisation, govern_people_routes, identity.organisation_store +5 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #126's branch M27/departments-page-writes (may be replayed already); closed PR #169's branch M27/console-people-org (may be replayed already); closed PR #241's branch M1/staff-sync-diagnostics (may be replayed already)",
     updated: "2026-10-06",
   },
+  "M27.15.23": {
+    status: "OPEN",
+    why: "Not built. The department page shows the lead, the people, the teams and the scopes; the lead history (gate.department_lead keeps ended rows), the agents addressed to the department and its knowledge coverage are not on it. Coverage today is read only by the department's head (department_view_routes) and would need a reading for an administrator of another department. Applying the staff source's organisation plan is built (ops.source_organisation) and has an install check.",
+    updated: "2026-10-21",
+  },
   "M27.15.24": {
     status: "OPEN",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in audit.ledger, audit.record, console.scoped_authority +6 more; NOT wired: pages/Packs.route.tsx. MORE ELSEWHERE, read before building: closed PR #169's branch M27/console-people-org (may be replayed already)",
@@ -2416,8 +2471,8 @@ const PROGRESS = {
   },
   "M27.15.26": {
     status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (service_account_routes, pages/ServiceAccounts.tsx, pages/service-accounts/AccountActs.tsx +3 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #124's branch M27/service-accounts-page (may be replayed already); closed PR #180's branch M27/console-platform (may be replayed already)",
-    updated: "2026-10-06",
+    why: "Not built: no route changes a service account after it is registered. Changing its end date needs an audit entry for the change, which is a trigger on auth.service_account and so a migration; the owner part waits on needs-rupash item 188, point 4. Under either answer the end date can change.",
+    updated: "2026-10-21",
   },
   "M27.15.27": {
     status: "READY FOR TESTING",
@@ -2466,8 +2521,8 @@ const PROGRESS = {
   },
   "M27.15.41": {
     status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (pages/classification/ClassificationPage.tsx); open for proof on the install or a decision, not for code",
-    updated: "2026-10-06",
+    why: "Partly: entity merges are approved or rejected from Possible duplicates and quick answers are listed. Not built: a classification applied only by a second person (CONA-39); today a mark is applied by the administrator who reviewed it, and nothing records a proposer.",
+    updated: "2026-10-21",
   },
   "M27.15.43": {
     status: "OPEN",
@@ -2559,10 +2614,20 @@ const PROGRESS = {
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (app, console.entity_stats, console_stats_routes +6 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #154's branch M21/record-usage-for-stats (may be replayed already); closed PR #167's branch M38/migration-train-0118-0138-0139 (may be replayed already); closed PR #209's branch M39/w3-agent-workspace (may be replayed already); +5 more",
     updated: "2026-10-06",
   },
+  "M27.15.11": {
+    status: "BLOCKED",
+    why: "Conflicts with a recorded design and needs the owner: the product keeps no text of an unanswered question (brain.adoption: a log of what people asked and did not get is a search history), so a knowledge owner can be shown a department and a source and never the question. Showing a nothing-found question only when the owner's reach covers the asker's and the owner's own search finds nothing needs either the text kept or a flag worked out at the moment of asking; neither is decided.",
+    updated: "2026-10-21",
+  },
+  "M27.15.12": {
+    status: "READY FOR TESTING",
+    why: "BUILT AND TESTED: the Requirement checks screen names M27.15.12 as the leaf the Console area is checked for, and an install check passes only when every requirement of the register's Console area has a newest check recorded by a person that passed. Install proof, which only you can give: open Requirement checks, choose the Console area, open each requirement on its page, and record passed or failed with a sentence about what you did.",
+    updated: "2026-10-20",
+  },
   "M27.16.1": {
-    status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): PARTLY WIRED: wired in access_request_routes, audit_routes, automations_routes +255 more; NOT wired: pages/AccessReview.route.tsx, pages/AgentTemplate.route.tsx, pages/AgentTemplate.tsx +36 more. MORE ELSEWHERE, read before building: branch M12/w2-skill-packages, no PR; branch M16/w3-learning-tables, no PR; branch M27/webhook-switch-on-and-replay, no PR; +28 more",
-    updated: "2026-10-06",
+    status: "READY FOR TESTING",
+    why: "BUILT AND TESTED: docs/console-pages.json lists the 42 primary pages (the 41 menu entries and the page of one agent) and console/tests/console-pages.test.ts holds its statement that each is built on the page kit against the source (all 42 are). /build/pages lists which pages are rebuilt, with what each still lacks. Install proof: open /build/pages after the next deploy and read the list; it says how many pages are rebuilt and names what each of the others waits on.",
+    updated: "2026-10-20",
   },
   "M27.2.1": {
     status: "OPEN",
@@ -2626,13 +2691,13 @@ const PROGRESS = {
   },
   "M27.5.2": {
     status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.reads); open for proof on the install or a decision, not for code",
-    updated: "2026-10-06",
+    why: "Read on 2026-10-21: console.reads.tagged and untagged_rows exist and are tested, and no console route builds its rows through them, because the reports built so far carry counts and names and no confidential field values. The leaf is true of the helper and unproven of any screen; it needs a screen that lists record fields to show it, and an install check on that screen.",
+    updated: "2026-10-21",
   },
   "M27.5.3": {
     status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.reads); open for proof on the install or a decision, not for code",
-    updated: "2026-10-06",
+    why: "Built and wired: console.reads.audience is the one intersect, called by the agent workspace capabilities. Held by unit tests that fail on a union and on a widening parameter. No install check names it yet.",
+    updated: "2026-10-21",
   },
   "M27.5.5": {
     status: "READY FOR TESTING",
@@ -2651,8 +2716,8 @@ const PROGRESS = {
   },
   "M27.5.9": {
     status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.screens); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-shell",
-    updated: "2026-10-06",
+    why: "Built: every registered screen carries the department and person axes (tests/unit/test_screens.py) and the department filter offers only what the reader reaches (install check on M27.5.8). No install check names this leaf.",
+    updated: "2026-10-21",
   },
   "M27.6.1": {
     status: "OPEN",
@@ -2685,9 +2750,9 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.7.15": {
-    status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.budget_stop_store, report_routes, tables.budget_stop +2 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #459's branch M21/budget-stops (may be replayed already)",
-    updated: "2026-10-06",
+    status: "READY FOR TESTING",
+    why: "Built and wired, and now followed end to end by the install check `a_model_call_is_costed_and_a_used_up_budget_stops_the_next`: a department whose daily ceiling is used up has a stop recorded for its next question, listed to a reader of that department's spend with whether the install enforced it, and shown to nobody in another department. The check reads the enforcement switch and never sets it, so it passes on an install with enforcement off (the stop is listed as not enforced) and on one with it on. To prove it on the install: open Install, run the checks and read that check; the leaf closes when it passes on the install's two newest runs.",
+    updated: "2026-10-21",
   },
   "M27.7.17": {
     status: "READY FOR TESTING",
@@ -2706,8 +2771,8 @@ const PROGRESS = {
   },
   "M27.7.2": {
     status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (console.staff_source_guide, ops.staff_connect, ops.staff_trial +8 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #180's branch M27/console-platform (may be replayed already); closed PR #241's branch M1/staff-sync-diagnostics (may be replayed already); closed PR #75's branch M1/staff-source-connect-leaver-stop (may be replayed already); +1 more",
-    updated: "2026-10-06",
+    why: "Built: the Staff sources page chooses a source, tests it before saving, and asks for a trial read the worker makes with nothing applied (ops.staff_connect, ops.staff_trial). The install proof needs the owner's own staff source; it is held with the other staff-list checks (needs-rupash 126).",
+    updated: "2026-10-21",
   },
   "M27.7.20": {
     status: "READY FOR TESTING",
@@ -2806,8 +2871,8 @@ const PROGRESS = {
   },
   "M27.8.17": {
     status: "OPEN",
-    why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (audit.ledger, audit.record); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: closed PR #163's branch M27/console-models-routing (may be replayed already)",
-    updated: "2026-10-06",
+    why: "The guard exists and is green in CI (console/tests/console-audit.test.ts). Its own report on 2026-10-21 lists write routes whose audit entry or behaviour has no named proof (docs/console-audit/*.md, rows marked None: staff source sync and trial, digest destination, install settings, model prices, profile, providers, tiers, residency, notices, relay, plugins, migration register, channel test, lark app, referrals). Each is a test to write; none is written.",
+    updated: "2026-10-21",
   },
   "M27.8.6": {
     status: "OPEN",
@@ -2843,6 +2908,11 @@ const PROGRESS = {
     status: "OPEN",
     why: "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_operations_console); open for proof on the install or a decision, not for code",
     updated: "2026-10-06",
+  },
+  "M27.9.8": {
+    status: "READY FOR TESTING",
+    why: "BUILT AND TESTED in the repository (no install step): the stale statements named in the console plan's W0.7 are corrected where they were still wrong, each behavioural one with a test: the schema count in brain.db (a test now reads the number it states), the stop-control sentence the runs route serves, the usage screen's account of what is measured, and the embedding queue's, chunk store's and streaming's statements about callers and routes that now exist. Proved by the Unit tests job.",
+    updated: "2026-10-20",
   },
   "M27.9.9": {
     status: "OPEN",
@@ -2965,9 +3035,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M30.3.11": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): recovery.alerts() ranks VERIFICATION_FAILED above BACKUP_AGED and last_attempt covers a drill that ran and did not verify (tested). Same gap: backup_exposure runner has no run, no drill records are written, no channel sends it. NEXT: same wiring as M30.3.10 plus the drill record writer (M30.3.8) so a failed verification exists to alert on",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: a rehearsal that did not verify is recorded by the drill service and is the first alert the existing report raises. PROOF ON THE INSTALL: the check a_rehearsal_that_did_not_verify_is_the_loudest_alert passes; to see it live, a failed record on the Recovery screen appears above a late copy.",
+    updated: "2026-10-20",
   },
   "M30.3.2": {
     status: "OPEN",
@@ -2975,14 +3045,14 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M30.3.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): recovery.destination_gaps() refuses an on-host destination (tested) but nothing calls it; brain-install-backup defaults the endpoint to the install's own SeaweedFS container, so copies stay on the host unless an operator sets another endpoint. Manifest has no off_host field. NEXT: require an off-host endpoint in brain-install-backup and the setup wizard, record it in the manifest, and call destination_gaps from the recovery panel route",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: the installer refuses a default and an address that is plainly this machine, copies declare off_host on the manifest, and the Recovery screen states a copy kept on the host (brain.ops.recovery.placement_findings). PROOF ON THE INSTALL: 1. Run ops/backup/brain-install-backup with BRAIN_BACKUP_ENDPOINT set to an object store on another machine and BRAIN_BACKUP_OFF_HOST=yes. 2. Take one copy (systemctl start brain-backup.service). 3. Open Backup and recovery: no finding says the copy is on the same host. The install check the_newest_copy_is_off_the_host_under_the_clients_key passes on the next run.",
+    updated: "2026-10-20",
   },
   "M30.3.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): recovery.KeyHolder and destination_gaps() refuse platform-held or no key (tested) but brain-backup and brain-install-backup contain no encryption step at all and the manifest records no key holder; nothing calls destination_gaps. NEXT: add client-held-key encryption (age or gpg public key from setup) to brain-backup before upload, record key holder in the manifest, surface in recovery panel",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: brain-backup-crypt encrypts each copy to the client's public key before it leaves the machine and the manifest names the client as key holder. PROOF ON THE INSTALL: 1. Generate a key pair on the client's own machine and copy only the public file to the server. 2. Run the installer with BRAIN_BACKUP_RECIPIENT set to that file. 3. Take a copy: the bucket holds a .dump.enc and a .dump.key and no plain .dump. 4. The Recovery screen lists no finding about the key. The install check the_newest_copy_is_off_the_host_under_the_clients_key passes.",
+    updated: "2026-10-20",
   },
   "M30.3.5": {
     status: "READY FOR TESTING",
@@ -2990,24 +3060,24 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M30.3.6": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): ops/backup/brain-restore-drill loads one copy into a named scratch database and compares counts and migration head; docs/install/restore-drill.md. Run by hand: schedule_runner Runner restore_drill has needs= and no run; no timer; it does not create the scratch container or write the drill record. NEXT: give Runner restore_drill a run that fetches the newest copy, drives the script, writes the drill record to the backups bucket, started weekly by the worker",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: ops/backup/brain-drill-service with brain-drill.timer rehearses the newest copy when a week has passed or one is asked for, behind the choice in needs-rupash 235 (option B). PROOF ON THE INSTALL: 1. Run the installer with BRAIN_DRILL_SERVICE=yes. 2. Wait ten minutes or press Start a rehearsal once its switch is on. 3. A record ending .drill.json appears beside the copy and the Recovery screen shows the rehearsal. The check the_newest_rehearsal_asked_all_three_questions passes on the next run.",
+    updated: "2026-10-20",
   },
   "M30.3.7": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): recovery.Check has SCHEMA_COMPLETE, SMOKE_QUERY, PERMISSION_CANARY as required checks (tested); brain-restore-drill does row counts and migration head only and says the schema check, RLS sweep and canary are manual steps in the drill document. NEXT: extend the drill runner to run schema, smoke and permission canary checks on the scratch copy and record each CheckRun in the drill record",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: python -m brain.ops.drill_checks asks the loaded copy for its schema and the permission canary (a stranger refused, the owner shown, role and fast lane attributes). PROOF ON THE INSTALL: the record written by the first rehearsal lists schema_complete, smoke_query and permission_canary as asked; the check the_newest_rehearsal_asked_all_three_questions passes.",
+    updated: "2026-10-20",
   },
   "M30.3.8": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): recovery.verification_of() refuses an RTO on an unverified drill and backup_manifest.read_drills() reads drill records (tested); nothing writes a drill record, the script leaves it to the person, so the install records no measured RTO. NEXT: have the drill runner time the restore and write the drill record; then GET /install/recovery shows the measured RTO against the profile target",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: the drill service writes the record the product reads, and a verified record carries its measured recovery time. PROOF ON THE INSTALL: after a rehearsal verifies, Backup and recovery shows how long the last restore took against the profile's promise. The check a_verified_rehearsal_states_its_measured_time passes.",
+    updated: "2026-10-20",
   },
   "M30.3.9": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): GET /install/recovery (install_routes.py) and console RecoveryPage show last backup, last verified restore, last attempt and drill due via console/recovery_view.py; tested. No one-click drill: install_routes.py says it is a write nothing performs. backup_ladder unwired. NEXT: add a POST drill route starting the drill runner (M30.3.6) under admin capability, and a Start rehearsal button on RecoveryPage",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: Start a rehearsal on Backup and recovery leaves a request for the server's drill service (POST /install/recovery/rehearsal), behind the backup_drill_requests switch which ships off; it says it asked and never that a rehearsal began. PROOF ON THE INSTALL: 1. Turn Ask the server for a restore rehearsal on under Features (this is your answer to needs-rupash 235). 2. Press Start a rehearsal and confirm. 3. Within about ten minutes the screen shows a new rehearsal record. Only a person pressing it with the drill service installed can close this leaf.",
+    updated: "2026-10-20",
   },
   "M30.4.2": {
     status: "IN PROGRESS",
@@ -3030,9 +3100,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M30.5.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): launch.service_level() builds the profile's RPO and RTO statement and refuses it without a verified drill (tested in test_launch.py, register DEC-31); reliability.RECOVERY_OBJECTIVES says nothing writes it into an agreement. Nothing calls service_level; no route or document serves it. NEXT: expose launch.service_level through a route on the handover or recovery page that renders the statement or its refusal reason",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: GET /handover returns the service level statement for the install's profile or the one sentence for why it cannot be made. PROOF ON THE INSTALL: 1. Call GET /api/v1/handover as the first administrator, or read it from the console once a page draws it. 2. Before any rehearsal has verified a copy it says no restore has ever verified. 3. After a rehearsal verifies and every copy is inside the recovery point it carries the profile's recovery point, time and the time measured. The check the_statement_is_made_only_after_a_rehearsal_verified passes.",
+    updated: "2026-10-20",
   },
   "M32.1.2.3": {
     status: "OPEN",
@@ -3526,23 +3596,23 @@ const PROGRESS = {
   },
   "M37.1.2.1": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): carry.py: Export record and export_gaps(agreed, exports) check what arrived against the agreed catalogue (tested). The exporter itself is a plugin that does not exist (src/brain/plugins has contract/points only); nothing calls carry. NEXT: define the exporter plugin point in brain.plugins, then route carry.export_gaps from a migration page; check names the leaf once an export can be handed over",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT: POST /migration/carry compares a pasted export with the agreed register in both directions (carry.export_gaps) and names what is promised and not delivered. NOT BUILT: the exporter itself, which is a plugin that does not exist (brain.plugins has contract and points only), so the export is pasted by the person who surveyed the old system. NEXT: define the exporter plugin point.",
+    updated: "2026-10-20",
   },
   "M37.1.2.2": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): carry.py: reparse_plan() and carried_vectors() refuse to reuse vectors and name each re-parse from original-bytes digest (tested). No caller feeds the ingest pipeline from reparse_plan; nothing imports carry. NEXT: call carry.reparse_plan from a migration route that queues knowledge ingest for each Reparse; then check names the leaf",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT: POST /migration/carry returns the plan to read every export again from its original bytes and names every vector as discarded (carry.reparse_plan, carried_vectors); there is no field for a vector. NOT BUILT: queueing the knowledge pipeline from that plan, which needs the original bytes held somewhere. NEXT: a store for the exported bytes and a call from the plan into ingest.",
+    updated: "2026-10-20",
   },
   "M37.1.2.3": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): carry.py: EntitySeed (no access field) and seed_gaps() report name collisions via resolution.normalise_name (tested). Nothing writes a seed into the entity registry and nothing imports carry. NEXT: wire seed_gaps then a registry-seeding route using the brain.resolution entity write path; then check",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT: POST /migration/carry reports seeds that collapse to one name and names a name the matcher will not match on (carry.seed_gaps). NOT BUILT: writing an approved seed into the entity registry through the resolution write path. NEXT: a registry-seeding route using brain.resolution after a person approves each seed.",
+    updated: "2026-10-20",
   },
   "M37.1.2.4": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): carry.py: archive(agreed, imports) returns an Archive with searchable empty by construction (tested). No store holds an archive and nothing calls it. NEXT: persist Archive in a migration table behind a route, never into knowledge search; then check that an archived conversation is not retrievable",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT: POST /migration/carry returns every catalogued conversation as archived, the ones kept for a stated reason by a named person, and an empty searchable list by construction (carry.archive). NOT BUILT: persisting the archive. NEXT: keep it in a migration record, never in knowledge search.",
+    updated: "2026-10-20",
   },
   "M37.1.3.1": {
     status: "IN PROGRESS",
@@ -3580,9 +3650,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M37.2.2.2": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): migration/skills.py: proposed_description() strips the 'Use the X skill to' preamble and router_descriptions() lists the rest (tested). Skill import route POST /skills/imports (skill_routes.py) does not call it; nothing imports migration.skills. NEXT: call proposed_description/router_descriptions from the skills import path in skill_routes.py (or console/skill_library.read_package) as a draft shown to the reviewer; then check",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: POST /migration/skills/convert returns each pasted skill's description with the router preamble stripped as a draft for the reviewer, and lists the ones still written at a router. PROOF ON THE INSTALL: switch Keep a migration on under Features, paste a skill whose description begins Use the X skill to, and read the draft back. The check pasted_skills_are_converted_and_nothing_is_imported passes.",
+    updated: "2026-10-20",
   },
   "M37.2.2.3": {
     status: "READY FOR TESTING",
@@ -3591,13 +3661,13 @@ const PROGRESS = {
   },
   "M37.2.2.4": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): migration/skills.py: BehaviourCheck and unproven() name skills with no real task run and answers that changed (tested). No store, route or caller; needs both systems to run the same task, which is person-run. NEXT: build a store and route for BehaviourCheck records and show unproven() on the skill review page; the comparison itself needs a person with the old system",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT: the same route takes the real-task checks a person recorded and names every skill no task was run through and every one whose answer changed (skills.unproven). NOT BUILT: running the same task on both systems, which needs a person with the old system, and keeping the checks. NEXT: a store for behaviour checks shown on the skill review page.",
+    updated: "2026-10-20",
   },
   "M37.2.2.5": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): migration/skills.py: to_retire(skills, now, after_days=90) lists skills not invoked in ninety days (tested). Retirement exists as POST /skills/{digest}/retirement and per-skill last_used in console_stats_routes, but nothing calls to_retire. NEXT: call to_retire over the imported foreign skill list from the migration page (needs last_invoked_at from the export) and route each to /skills/{digest}/retirement",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: POST /migration/skills/convert lists the pasted skills not invoked in ninety days and those never recorded as invoked, as ones to leave behind (skills.to_retire); retiring one is the existing retirement route. PROOF ON THE INSTALL: paste a skill with a last-invoked date a year old; it is listed. The check pasted_skills_are_converted_and_nothing_is_imported passes.",
+    updated: "2026-10-20",
   },
   "M37.2.3.1": {
     status: "READY FOR TESTING",
@@ -3615,24 +3685,24 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M37.2.3.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): agents/model.py has AgentAudience and AgentAuthority as separate fields, so the native model keeps availability and entitlement apart. The foreign mapping migration.rebuild.audience_for (refuses an unmapped availability) is unwired and takes a per-company mapping. NEXT: wire audience_for into a migration rebuild route that takes the person's mapping; native separation can be checked now by installing an agent and reading audience and authority separately",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: POST /migration/availability maps each pasted agent's availability to who may see it here from the mapping the person gives, names the agents whose availability nobody mapped and never defaults one, and leaves what the agent may reach to its authority. PROOF ON THE INSTALL: paste two agents with one availability unmapped; the unmapped one is named. The check availability_is_mapped_and_never_defaulted passes.",
+    updated: "2026-10-20",
   },
   "M37.2.4.2": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): migration/learning.py: ForeignMemory and re_derive() build a proposal through memory.tiers.propose and refuse session, promoted and gated changes (tested). Nothing imports migration.learning; the proposal queue exists (agent_memory_routes.py). NEXT: wire re_derive into a migration route that files each Derivation into the existing memory proposal queue; then check",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT: POST /migration/learning re-derives each conclusion a person drew from an old memory file through the ordinary tier rules and returns the derivations (learning.re_derive). NOT BUILT: filing each derivation into the memory proposal queue, which would put a proposal in front of a reviewer. NEXT: a call from the route into agent_memory_routes' queue behind its own switch.",
+    updated: "2026-10-20",
   },
   "M37.2.4.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): migration/learning.py: re_derive() refuses any change in CHANGES_WHAT_ANYBODY_MAY_SEE (tested). No caller outside the package, so nothing is discarded in practice. NEXT: same wiring as M37.2.4.2; check asserts a scope-widening derivation is refused by the route",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: the same route refuses, by name and in the package's words, any conclusion that would change who may see what, without stopping the others. PROOF ON THE INSTALL: paste a memory file with a preference and a scope-widening conclusion; only the preference is derived. The check a_conclusion_is_re_derived_and_a_widening_is_refused passes.",
+    updated: "2026-10-20",
   },
   "M37.2.4.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): migration/learning.py: learning_note() renders THE_SYSTEM_STARTS_WITHOUT_THEIR_ACCUMULATED_LEARNING from derivations (tested). launch.assemble handover pack does not include it and nothing imports learning. NEXT: add the learning note as a section of the handover pack (launch.assemble) and serve it; then check reads it",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: the handover carries the sentence that the new system starts without the old one's accumulated learning and why that is the right trade, with the counts of what was carried (none until a migration re-derives something). PROOF ON THE INSTALL: GET /handover shows the learning sentence.",
+    updated: "2026-10-20",
   },
   "M37.3.2.4": {
     status: "READY FOR TESTING",
@@ -3640,19 +3710,19 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M37.4.2.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): launch.py subprocessors() derives the list from provider slots that hold a key (ops.provider_keys.PROVIDER_SLOTS) and refuses an undeclared slot; tested in test_launch.py. Nothing outside launch.py calls it; no route or screen serves the subprocessor list. NEXT: expose launch.subprocessors() through a route on the data or handover page and render it; then check that a provider with a key appears and one without does not",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: GET /handover lists the model providers whose key this process holds, each with what it is for, and says in words when it holds none. PROOF ON THE INSTALL: the list matches the providers shown with a key on the Models screen. The check the_subprocessors_are_the_providers_whose_key_is_held passes.",
+    updated: "2026-10-20",
   },
   "M37.4.3.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): launch.py Owner/owner_gaps() refuses a handover pack where knowledge, grants or connectors lack a named client owner (tested). No caller outside launch.py; no table, route or page records owners (data steward appointment is a separate leaf). NEXT: add a handover owners table and route feeding launch.owner_gaps, or reuse the data steward record; then check",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: PUT /handover/owners records who owns knowledge, grants and connectors with a way to reach them, behind the handover_pack switch (ships off). PROOF ON THE INSTALL: 1. Turn Record the named owners and the review date on under Features. 2. PUT the three owners; GET /handover lists them and no gap. 3. Leave one out: the gap names it.",
+    updated: "2026-10-20",
   },
   "M37.4.3.5": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): launch.py review_gaps(launched_on, review_booked_for) refuses a review not within thirty days (tested). No caller outside launch.py; nothing books the review (no calendar, task or table). NEXT: record the review date in the handover route and surface review_gaps on the handover page; then check",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: PUT /handover/review books the thirty-day review and refuses launch day or past thirty days. PROOF ON THE INSTALL: with the switch on, book a review 30 days after launch and read it back; 31 days is refused.",
+    updated: "2026-10-20",
   },
   "M37.5.1.2": {
     status: "READY FOR TESTING",
@@ -3660,9 +3730,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M37.5.1.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops/controls.py overdue() builds the alert (tested), and ops/notices.py lists CONTROL_NOT_RUN with 'No channel is chosen for it yet, so nothing sends it'. Nothing calls controls.overdue; worker and schedule_runner do not. NEXT: call controls.overdue from a scheduled runner using schedule_store last-run times and deliver via the notice sender to the operations alert holder; the channel choice may need a needs-rupash item",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT (under M17.7.2) and now claimed by its install check: brain.control_not_run_told tells whoever holds the operations alert, once per episode, when a safety mechanism has not run in its window. PROOF ON THE INSTALL: 1. Turn Tell whoever holds the alert when a safety mechanism has not run on under Features (it ships off). 2. The check a_mechanism_that_has_not_run_is_told_to_whoever_holds_the_alert passes on the next run (it says not run until the switch is on). 3. To see it live, stop the worker for longer than a control's window: the holder is told once in the chat tool they last used.",
+    updated: "2026-10-20",
   },
   "M37.5.1.4": {
     status: "READY FOR TESTING",
@@ -3670,9 +3740,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M37.5.2.1": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): ops/alerting.py Severity, Route, route_for(), routing_gaps() and controls.py use route_for for each control's runbook (tested in test_alerting.py). No delivery path: notices CONTROL_NOT_RUN and BACKUP_EXPOSURE say no channel is chosen, so no alert is routed to anyone. NEXT: wire alert delivery: resolve route_for's role to people and send via a channel (ops.notices sender); likely needs an owner decision on the channel",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT (under M17.7.2): the severity of each control's alert decides who is told, through alerting.route_for: everyone holding the operations alert, and the incident capability's holders too for an alert that wakes somebody, each only if they may open Incidents. PROOF ON THE INSTALL: the same check as M37.5.1.3 passes; a holder who cannot open Incidents is told nothing.",
+    updated: "2026-10-20",
   },
   "M37.5.2.2": {
     status: "IN PROGRESS",
@@ -4545,9 +4615,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M17.7.5": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): Gallery ships weekly_work_summary, unanswered_questions and source_freshness (console/automation_gallery BUILT_IN); no daily brief, no deal capture from group chats, no drafted email replies. Reuse: ops/digest_delivery (evening digest), channels/email, hubspot connector, automation_run.TASKS.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-21. Install proof: sign in as an administrator, open an agent, open its Automations tab and look at the gallery. Three new cards are listed: a daily brief, drafting customer records from deals in group chats, and drafting replies to emails waiting on you. Each says what starts it and which kinds of source it uses; the two that draft say who decides before anything takes effect, and the brief says none. Open Install on one: the confirmation shows the same. None of the three can be started yet and the tab says what each still needs.",
+    updated: "2026-10-20",
   },
   "M17.7.6": {
     status: "IN PROGRESS",
@@ -4605,19 +4675,19 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M18.5.1": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No coordinator concept exists: no table or route holds which agents an administrator allowed an agent to call (agent_link_routes.py is deep links only), and no call-another-agent step is in the run path. Reuse: delegation.Hop and chain_refusals.",
-    updated: "2026-10-13",
+    status: "IN PROGRESS",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M18.5.2": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No specialist runs on a subtask: nothing hands a subtask to an agent. Pieces exist: EntitlementSet.intersect via ops.automation.flow_reach (commit 4f1f1d6 fold test), delegation.child_hops, contract.validated.",
-    updated: "2026-10-13",
+    status: "IN PROGRESS",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M18.5.3": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No planner step: nothing asks a model for subtasks and dependencies. plan.read_proposal() and plan_refusals() are built to check a proposal but nothing produces or calls one; needs-rupash lists M18.1.1 merged into M18.5.3.",
-    updated: "2026-10-13",
+    status: "IN PROGRESS",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M18.6.1": {
     status: "OPEN",
@@ -4625,14 +4695,14 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M18.6.2": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No fan-out grant on an agent: nothing in tables/agent*, agents/model.py or the department admin console holds a fan-out switch, and no run records a reason for running single loop. fanout.Verdict.SINGLE_LOOP exists unwired.",
-    updated: "2026-10-13",
+    status: "IN PROGRESS",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M18.7.1": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): Not built: fanout.Verdict has only SINGLE_LOOP and PARALLEL, and nothing says SINGLE_LOOP for a coordinator means running specialists in sequence rather than the coordinator doing their work. No orchestrator exists to hold the rule (register OWN2-5).",
-    updated: "2026-10-13",
+    status: "IN PROGRESS",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M19.8.1": {
     status: "OPEN",
@@ -4800,9 +4870,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M30.6.6": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): launch.service_level() is produced only with a verified Drill and a newest copy inside the RPO, otherwise raises with the reason (four refusals, tested in test_launch.py, DEC-31). Nothing calls it and no route serves the statement or its refusal. NEXT: same route as M30.5.4; the check asks for the statement on an install with no verified drill and expects the stated reason",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: the statement is produced only after a verified rehearsal and every copy inside the recovery point, and otherwise refused with the reason (launch.service_level, now served). PROOF ON THE INSTALL: the same steps as M30.5.4; the refusal names the coverage nothing has copied or the missing rehearsal.",
+    updated: "2026-10-20",
   },
   "M30.6.7": {
     status: "BLOCKED",
@@ -5043,6 +5113,16 @@ const PROGRESS = {
     status: "READY FOR TESTING",
     why: "Built on branch M27/console-lists-wizards-buttons. Prove it on the install. (1) Open Agents (or People, Skills, Connectors): the toolbar ends in Saved filters. Type a search, choose a filter, open Saved filters, give it a name and Save. Clear the search, reopen Saved filters and press the name: the list narrows to the same question. Reload the page and it is still there; sign in as somebody else and it is not. Audit and Logs have the same control beside their filters. (2) Every list table has Columns (hide one and it goes), Export (downloads a file of the rows shown, in the columns shown), a tick box on every row (Export selected appears), and a small panel button on each row that opens a drawer showing every column, including hidden ones. People, Sessions, Access review and the Library also offer an act on the ticked rows. (3) No list shows a total, a page count or an of N anywhere.",
     updated: "2026-10-14",
+  },
+  "M27.16.4": {
+    status: "READY FOR TESTING",
+    why: "BUILT AND TESTED: docs/screens.html draws a screen for every primary page, screens 15 to 45 being the thirty-one that had none (wireframes drawn from the built pages, example values in place of data) beside the fourteen designs it began with, and the agent page keeps screen 14. tests/unit/test_console_pages.py fails when a page has no screen, names a screen that is not drawn, or has a walk-through recorded before it has a screen. Install proof: open /build/screens and /build/pages; every page on the list links to a screen.",
+    updated: "2026-10-20",
+  },
+  "M27.16.5": {
+    status: "READY FOR TESTING",
+    why: "BUILT, and it waits on you: a page counts as rebuilt on /build/pages only when a walk-through of it has passed on your install, and every row starts without one, so the count of rebuilt pages is nought. To record one, open the page on your install, find it as its screen draws it, and set that row's walked in docs/console-pages.json to the day and the release it passed on. The register refuses a walk-through for a page that is not on the shared parts or has no screen.",
+    updated: "2026-10-20",
   },
   "M12.3.5": {
     status: "READY FOR TESTING",

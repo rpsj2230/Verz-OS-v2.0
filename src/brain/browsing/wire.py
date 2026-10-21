@@ -81,7 +81,12 @@ class WireError(Exception):
 
 
 class Kind(enum.StrEnum):
-    """Every message type. The first three go to a runner and the rest come from one."""
+    """Every message type. The first three go to a runner and the next four come from one.
+
+    The last two are the launcher's own and never reach a runner: `REHEARSE` asks it to make a run's
+    sandbox, describe what the daemon made of it and remove it with no browser started, and
+    `REHEARSED` is its answer (`brain.browsing.launcher.Launcher.rehearse`).
+    """
 
     START = "start"
     ACT = "act"
@@ -90,6 +95,8 @@ class Kind(enum.StrEnum):
     FRAME = "frame"
     RECORD = "record"
     ENDED = "ended"
+    REHEARSE = "rehearse"
+    REHEARSED = "rehearsed"
 
 
 #: The fields each message carries, beyond `kind`. Exactly these: see
@@ -115,6 +122,8 @@ FIELDS: Final[Mapping[Kind, frozenset[str]]] = {
     Kind.FRAME: frozenset({"sequence", "origin", "digest", "inputs_masked", "picture"}),
     Kind.RECORD: frozenset({"index", "surface", "verb", "origin", "ref", "sequence", "refusal"}),
     Kind.ENDED: frozenset({"reason"}),
+    Kind.REHEARSE: frozenset({"run_id", "origins"}),
+    Kind.REHEARSED: frozenset({"run_id", "runtime", "gaps", "left_behind"}),
 }
 
 

@@ -7,7 +7,7 @@ every development machine here; CI always has one. It holds the row's trigger to
 `brain.audit.record.AuditRecorder.record_read` builds, and a budget version to the `setting`
 entry `0098` writes for it.
 
-Task ids: M24.3.2, M24.3.7
+Task ids: M24.3.2, M24.3.7, M27.15.1
 """
 
 from __future__ import annotations
@@ -33,7 +33,9 @@ from brain.ops.sensitive_read_store import (
     SensitiveRead,
     SensitiveReadError,
     SensitiveReadRecorder,
+    is_another_departments,
     reads_of,
+    record_document_opening,
     row_values,
 )
 
@@ -186,6 +188,79 @@ def test_a_request_with_no_sensitive_read_never_opens_a_transaction() -> None:
     every answer depends on a write that only a sensitive read needs."""
     recorder = SensitiveReadRecorder(FailingSessions())  # type: ignore[arg-type]
     asyncio.run(recorder.finished(finished(answered(CLIENT))))
+
+
+# ------------------------------------------------------- another department's text (M27.15.1)
+
+
+@pytest.mark.parametrize(
+    ("document", "reader", "another"),
+    [
+        ("finance", "web", True),
+        ("finance", None, True),
+        ("web", "web", False),
+        (None, "web", False),
+        ("", "web", False),
+        (None, None, False),
+    ],
+)
+def test_only_a_named_department_the_reader_does_not_belong_to_is_another_departments(
+    document: str | None, reader: str | None, another: bool
+) -> None:
+    """The line the departments draw: a document in a named department and a reader elsewhere. A
+    company-wide document, one whose department was withheld, and the reader's own department are
+    each on the near side of it. Delete this and the rule is either every opening of every document
+    (Option B again) or none, and no test says which."""
+    assert is_another_departments(document, reader) is another
+
+
+def test_an_opening_whose_declaration_was_removed_is_refused_rather_than_written(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Asked of the declared set like every read: take the declaration away and the opening
+    refuses, and the sibling below shows it writes while the declaration stands. Delete this and a
+    removed declaration leaves rows nobody declared."""
+    monkeypatch.setattr("brain.ops.sensitive_read_store.written_down_because", lambda *_a: ())
+    with pytest.raises(SensitiveReadError):
+        asyncio.run(
+            record_document_opening(
+                FailingSessions(),  # type: ignore[arg-type]
+                reader_id="u_reader",
+                document_id="upload.doc1",
+                ent_hash=ENT,
+                trace_id="trace1",
+            )
+        )
+
+
+def test_an_opening_that_cannot_be_written_fails_the_opening() -> None:
+    """The declaration stands, so the write is attempted, and a database that went away raises
+    out of the call. Delete this and the opening can be changed to swallow the failure, and the
+    text is shown with nothing written down."""
+    with pytest.raises(ConnectionError):
+        asyncio.run(
+            record_document_opening(
+                FailingSessions(),  # type: ignore[arg-type]
+                reader_id="u_reader",
+                document_id="upload.doc1",
+                ent_hash=ENT,
+                trace_id="trace1",
+            )
+        )
+
+
+def test_an_opening_with_no_id_the_ledger_can_file_is_refused() -> None:
+    """Delete this and a blank document id is filed under nothing, an entry nobody can find."""
+    with pytest.raises(SensitiveReadError):
+        asyncio.run(
+            record_document_opening(
+                FailingSessions(),  # type: ignore[arg-type]
+                reader_id="u_reader",
+                document_id="",
+                ent_hash=ENT,
+                trace_id="trace1",
+            )
+        )
 
 
 # ------------------------------------------------------------------------ with a server
