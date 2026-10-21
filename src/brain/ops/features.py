@@ -204,7 +204,10 @@ BUDGET_ENFORCEMENT: Final = Feature(
         "No question is refused for a budget. A budget that runs out is recorded on the Spend "
         "screen as one the install would have stopped, with when its period ends."
     ),
-    read_by=("brain.ops.budget_stop_store:budget_refusal_for",),
+    read_by=(
+        "brain.ops.budget_stop_store:budget_refusal_for",
+        "brain.ops.acceptance_checks_model_spend:a_model_call_is_costed_and_a_used_up_budget_stops_the_next",
+    ),
 )
 
 #: Reviewing a supervised agent's pin on a schedule. Off until the owner decides needs-rupash 174:

@@ -2405,8 +2405,8 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.12.5": {
-    status: "OPEN",
-    why: "Built: a finished request is costed from the provider's counts and the price list by ops.usage_store.UsageRecorder, and budgets and stops are as for M27.7.15. No install check follows a model call to its spend row; one would use the stand-in model the routing checks use.",
+    status: "READY FOR TESTING",
+    why: "Built and wired, and now followed end to end by the install check `a_model_call_is_costed_and_a_used_up_budget_stops_the_next`: a question answered by a priced stand-in model leaves one cost in its department equal to the tokens its request row recorded at the price set. To prove it on the install: open Install, run the checks, and read that check; the leaf closes when it passes on the install's two newest runs. It says it was not run, rather than failing, on an install with no currency set. Found on the way and fixed for every install: a question the checks ask was recorded with no trace on a budget stop, which the table refused, so the stop was silently not written.",
     updated: "2026-10-21",
   },
   "M27.12.7": {
@@ -2750,8 +2750,8 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.7.15": {
-    status: "OPEN",
-    why: "Built: spend, department and person budgets are versioned and stops are listed with whether they were enforced (install checks M21.1.5 and M21.3.6 pass on the install). Enforcement ships off behind budget_enforcement by the owner's decision 169. No install check follows a real model call into a stop.",
+    status: "READY FOR TESTING",
+    why: "Built and wired, and now followed end to end by the install check `a_model_call_is_costed_and_a_used_up_budget_stops_the_next`: a department whose daily ceiling is used up has a stop recorded for its next question, listed to a reader of that department's spend with whether the install enforced it, and shown to nobody in another department. The check reads the enforcement switch and never sets it, so it passes on an install with enforcement off (the stop is listed as not enforced) and on one with it on. To prove it on the install: open Install, run the checks and read that check; the leaf closes when it passes on the install's two newest runs.",
     updated: "2026-10-21",
   },
   "M27.7.17": {
@@ -4135,9 +4135,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.4.1.1": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): MyWorkspace shows each learned statement with stated/inferred and confidence; the weekly digest (learning_told) names signal kinds as evidence. member_activity.learned_about_me (statement plus evidence) has no caller, so the page shows no evidence. NEXT: call learned_about_me from mine_routes and add evidence (signal kinds) to MineLearnedView",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: GET /me/workspace now calls member_activity.learned_about_me, so each learned line carries the evidence that produced it in the weekly message's words (mine_routes.evidence_by_memory over learning_told.SIGNAL_WORDS), a line the person wrote says so, and an inferred line with no record says no record was kept; MyWorkspace draws the evidence list. Tests: tests/unit/test_mine_routes.py, console/tests/my-workspace-page.test.tsx. To prove on the install: sign in, ask the same question twice in other words so a preference is inferred, open My workspace, and read the evidence under the inferred line; it must name what was noticed and nothing of any conversation.",
+    updated: "2026-10-20",
   },
   "M40.4.1.2": {
     status: "READY FOR TESTING",
@@ -4175,14 +4175,14 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.5.1.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): member.connections.disconnect (revoke first, refuse on failure) built but no TokenRevoker implementation exists and no route; MyAccounts.tsx has no disconnect control. Vault slot connector_person_oauth_slot exists to delete. NEXT: implement a vault-backed TokenRevoker (vendor revoke then slot delete), add DELETE /me/accounts/{connector}, then a check",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: POST /me/accounts/{connector}/disconnect (member_accounts_routes) revokes at the vendor then removes the person's slot through ops/person_token_revoker.VaultTokenRevoker, in the order member.connections.disconnect requires; Google Workspace now declares its revocation endpoint; the application vault policy gains delete on a person's own slot only. Check: a_member_disconnects_their_account_and_the_vendor_is_told_first in ops/acceptance_checks_member_accounts.py, over a recording vendor and vault. NOT provable in CI: that the vendor stops honouring the token, and that the install's vault holds the new policy line (the release applies it). To prove on the install: after the release, connect your own Google account from My workspace, press Disconnect my Google account and confirm; the card must show Not connected, and at your Google account's third-party access page the install must no longer be listed.",
+    updated: "2026-10-20",
   },
   "M40.5.1.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): member.connections.inherited/personally_connected built, no caller; /me/accounts lists only sources the person may connect, with no provenance field, so department-provided connections are not shown as inherited. NEXT: add provenance to MyAccountView from inherited() and render inherited ones without a disconnect control",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: GET /me/accounts lists a connected source that names the person's own department (and that each person does not consent to) with provenance department and no disconnect control, through member.connections.inherited; a person in another department is shown nothing. A department connection is defined here as a connected source naming a department the person holds a grant scoped to exactly (no separate department-connection object exists). Check: a_departments_connection_is_inherited_and_not_detachable in ops/acceptance_checks_member_accounts.py. To prove on the install: as a member of a department that has a source connected, open My workspace and read the Connected accounts card; the source must show as provided by the department with no button, and a member of another department must not see it.",
+    updated: "2026-10-20",
   },
   "M40.5.2.1": {
     status: "READY FOR TESTING",

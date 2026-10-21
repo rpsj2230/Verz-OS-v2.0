@@ -19,6 +19,7 @@ import {
   FORGET_LABEL,
   ITEMS_CAPTION,
   KEEP_IT,
+  EVIDENCE_CAPTION,
   LEARNED_CAPTION,
   NO_CEILING,
   READING_WORKSPACE,
@@ -68,6 +69,8 @@ function workspace(overrides: Partial<Workspace> = {}): Workspace {
         stated: false,
         confidence: 0.8,
         formed_at: "2019-02-28T00:00:00Z",
+        evidence: ["you asked again in other words"],
+        evidence_told: "NOTICED-SENTENCE",
       },
     ],
     learned_undo: "UNDO-SENTENCE",
@@ -151,6 +154,28 @@ describe("what the workspace shows", () => {
     ]) {
       expect(container.textContent).toContain(sentence);
     }
+  });
+
+  test("each learned line shows the evidence behind it, in words, beside the line", async () => {
+    // What breaks if this is deleted: the page lists what was learnt with no reason beside it, so
+    // nothing learnt can be checked against what was noticed (M40.4.1.1).
+    const { container } = await mount(workspace());
+
+    const list = container.querySelector(`ul[aria-label="${EVIDENCE_CAPTION} Hours before dates"]`);
+    expect(list?.textContent).toBe("you asked again in other words");
+    expect(container.textContent).toContain("NOTICED-SENTENCE");
+  });
+
+  test("a line with no evidence draws no empty list", async () => {
+    // What breaks if this is deleted: a line the person wrote themselves draws an empty box that
+    // reads as a reason somebody hid.
+    const base = workspace();
+    const { container } = await mount(
+      workspace({ learned: [{ ...base.learned[0]!, evidence: [], evidence_told: "SAID-BY-YOU" }] }),
+    );
+
+    expect(container.querySelector(`ul[aria-label^="${EVIDENCE_CAPTION}"]`)).toBeNull();
+    expect(container.textContent).toContain("SAID-BY-YOU");
   });
 
   test("a budget the API could not read says why and is never drawn as no budget", async () => {

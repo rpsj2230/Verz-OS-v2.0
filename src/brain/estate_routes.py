@@ -730,6 +730,10 @@ class RememberedAbout:
     #: Memory id to the agent its learning record names, for the memories that have one. A memory
     #: formed in a plain conversation or with no learning record is not in it (M27.15.34).
     formed_by: Mapping[str, str] = field(default_factory=dict)
+    #: The memories that have a learning record, as the domain's `Learning` beside the statement,
+    #: which is the pairing `brain.member_activity.learned_about_me` reads the evidence from
+    #: (M40.4.1.1). A memory with no record, or one the types refuse, is not in it.
+    learnings: tuple[tuple[Learning, str], ...] = ()
 
 
 async def remembered_about(session: AsyncSession, subject_id: str, limit: int) -> RememberedAbout:
@@ -753,10 +757,16 @@ async def remembered_about(session: AsyncSession, subject_id: str, limit: int) -
     entries = tuple(
         found for found in (stored_memory(row, records.get(row.id)) for row in rows) if found
     )
+    recorded = (
+        (recorded_learning(records[one.memory_id], one), statement)
+        for one, statement in entries
+        if one.memory_id in records
+    )
     return RememberedAbout(
         entries=entries,
         corrections=corrections_of(marks),
         formed_by={one.memory_id: one.agent_id for one in records.values() if one.agent_id},
+        learnings=tuple((found, statement) for found, statement in recorded if found is not None),
     )
 
 
