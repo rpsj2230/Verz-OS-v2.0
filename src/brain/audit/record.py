@@ -152,6 +152,7 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "deny": AuditAction.DENY,
         "revoke": AuditAction.REVOKE,
         "leash_change": AuditAction.LEASH_CHANGE,
+        "browser_grant": AuditAction.LEASH_CHANGE,
         "entity_merge": AuditAction.ENTITY_MERGE,
         "publish": AuditAction.PUBLISH,
         "break_glass": AuditAction.BREAK_GLASS,
@@ -528,6 +529,29 @@ class BrowserSessionChange(enum.StrEnum):
 
     STARTED = "started"
     ENDED = "ended"
+
+
+class BrowserGrantChange(enum.StrEnum):
+    """A signed browser permission signed or revoked, as `0275`'s trigger writes it (M19.9.7).
+
+    An `exception` lets one surface's writes run without the envelope waiting for a person and
+    moves it from the assisted rung to the autonomous one; an `exemption` lets a skill drive a
+    target that has an API and moves it from refused to exempted. A revocation moves it back.
+    """
+
+    EXCEPTION_SIGNED = "exception_signed"
+    EXCEPTION_REVOKED = "exception_revoked"
+    EXEMPTION_SIGNED = "exemption_signed"
+    EXEMPTION_REVOKED = "exemption_revoked"
+
+
+#: The two rungs each change moves between, `(from, to)`, as the trigger spells them.
+BROWSER_GRANT_RUNGS: Final[dict[BrowserGrantChange, tuple[str, str]]] = {
+    BrowserGrantChange.EXCEPTION_SIGNED: ("assisted", "autonomous"),
+    BrowserGrantChange.EXCEPTION_REVOKED: ("autonomous", "assisted"),
+    BrowserGrantChange.EXEMPTION_SIGNED: ("refused", "exempted"),
+    BrowserGrantChange.EXEMPTION_REVOKED: ("exempted", "refused"),
+}
 
 
 class ElevationChange(enum.StrEnum):
@@ -1540,6 +1564,26 @@ class AuditRecorder:
                 raise ValueError(msg)
             details["recording"] = recording
         return self._write(AuditAction.BROWSER_SESSION, subject("session", run_id), details)
+
+    def browser_grant(self, *, target: str, what: str, change: BrowserGrantChange) -> AuditEntry:
+        """Record that a browser exception or exemption was signed or revoked (M19.9.7).
+
+        Written in a deployed database by `0275`'s trigger on `agent.browser_grant`, and held to
+        these details by a test. A leash change about the target, naming the surface (or the
+        skill, its hyphens written as underscores because the ledger keeps names) and both rungs,
+        for the reason `leash_change` gives. The actor is whoever signed or
+        revoked it, which is the recorder's.
+        """
+        before, after = BROWSER_GRANT_RUNGS[change]
+        return self._write(
+            AuditAction.LEASH_CHANGE,
+            subject("connector", f"browser.{target}"),
+            {
+                "target": f"browser.{target}.{what.replace('-', '_')}",
+                "from_rung": before,
+                "to_rung": after,
+            },
+        )
 
     def elevation(
         self,

@@ -753,13 +753,27 @@ export const AREAS: Readonly<Record<string, Area>> = {
     routes: [
       "/api/v1/install/features*",
       "/api/v1/install/plugins*",
+      "/api/v1/install/browser*",
       "/api/v1/orchestration/weighed-plans",
       "/api/v1/orchestration/coordinated-runs",
       "/api/v1/migration*",
     ],
-    tables: ["ops.coordinated_run", "ops.fanout_gate", "ops.migration_record", "ops.plugin_install", "ops.plugin_version"],
+    tables: [
+      "agent.browser_grant",
+      "agent.browser_target",
+      "ops.coordinated_run",
+      "ops.fanout_gate",
+      "ops.migration_record",
+      "ops.plugin_install",
+      "ops.plugin_version",
+    ],
     installation: [],
     gaps: [
+      {
+        what: "Declaring, changing or retiring a website for an agent's browser is not an entry in the audit ledger.",
+        because:
+          "agent.browser_target keeps a row per change with who made it and when, and has no trigger that appends an entry; signing and revoking an exception or an exemption are ledger entries (a leash change, 0275). Declaring a website opens no browser.",
+      },
       {
         what: "A recorded plugin is not loaded: switching one on changes its record and nothing runs.",
         because:

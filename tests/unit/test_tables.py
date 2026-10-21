@@ -186,6 +186,7 @@ MIGRATION_MIGRATION_RECORD = VERSIONS / "0241_migration_record.py"
 MIGRATION_TEMPLATE_WITHDRAWAL = VERSIONS / "0261_template_withdrawal.py"
 MIGRATION_AGENT_COORDINATION = VERSIONS / "0272_agent_coordination.py"
 MIGRATION_WORKFLOWS = VERSIONS / "0273_workflows.py"
+MIGRATION_BROWSER_DECLARATIONS = VERSIONS / "0275_browser_declarations.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -549,6 +550,10 @@ AGENT_COORDINATION_TABLES: tuple[str, ...] = (
     "ops.coordinated_run",
 )
 #: And the four 0273 adds: stored workflows, who they are assigned to and how each run went.
+#: And the two 0275 adds: what a person declared about a system a browser may be pointed at, and the
+#: permissions signed for it.
+BROWSER_DECLARATION_TABLES: tuple[str, ...] = ("agent.browser_target", "agent.browser_grant")
+#: And the four 0273 adds, restated above.
 WORKFLOW_TABLES: tuple[str, ...] = (
     "ops.workflow_version",
     "agent.workflow_assignment",
@@ -668,6 +673,7 @@ ALL_TABLES = (
     + TEMPLATE_WITHDRAWAL_TABLES
     + AGENT_COORDINATION_TABLES
     + WORKFLOW_TABLES
+    + BROWSER_DECLARATION_TABLES
 )
 
 
@@ -1570,6 +1576,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert agent_coordination.TABLES == AGENT_COORDINATION_TABLES
     workflows = migration_module(MIGRATION_WORKFLOWS)
     assert workflows.TABLES == WORKFLOW_TABLES
+    browser_declarations = migration_module(MIGRATION_BROWSER_DECLARATIONS)
+    assert browser_declarations.TABLES == BROWSER_DECLARATION_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1701,6 +1709,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(template_withdrawal.TABLES)
         + tuple(agent_coordination.TABLES)
         + tuple(workflows.TABLES)
+        + tuple(browser_declarations.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1813,6 +1822,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(template_withdrawal.TABLES),
         set(agent_coordination.TABLES),
         set(workflows.TABLES),
+        set(browser_declarations.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

@@ -39,6 +39,14 @@ is the one that admits a look-alike.
 be asked, out of band, if a write on a surface landed is a fact about that system, and M19.5.5
 reads it from the declaration rather than from a list kept beside the verifier.
 
+**`controls` is the declared half of what the button says.** A write on a page needs an element
+reference, which only a reader of the page can supply, and the one reader the planner may not be is
+the planner. So the person who declares a surface also declares, for each write verb on it, the
+role and the accessible name of the one control it is done on (`Control`), and the actor that
+carries a run out looks that control up in the snapshot it was just given. A control the page no
+longer has is a run that fails, the staleness cost this module already names, and never a run that
+clicks something near it.
+
 Task ids: M19.2.4, M19.5.5
 """
 
@@ -49,6 +57,7 @@ import re
 from dataclasses import dataclass
 from typing import Final
 
+from brain.browsing.credentials import PLACEHOLDER_RE
 from brain.channels.widget import normalise_origin
 from brain.core.entitlement import Capability
 
@@ -112,6 +121,46 @@ def is_write(verb: Verb) -> bool:
 
 
 @dataclass(frozen=True)
+class Control:
+    """The one control a write verb is done on, declared by a person: its role and its name.
+
+    `text` is what a TYPE enters when it is not a credential, fixed in the declaration, because a
+    value typed into somebody else's form is part of what the person approved. `placeholder` is a
+    credential's name instead, never its value (`brain.browsing.credentials`). A TYPE names exactly
+    one of the two; any other verb names neither.
+    """
+
+    verb: Verb
+    role: str
+    label: str
+    text: str = ""
+    placeholder: str = ""
+
+    def __post_init__(self) -> None:
+        if not is_write(self.verb):
+            msg = f"a control is declared for a write, and {self.verb.value} only reads"
+            raise TargetError(msg)
+        if not self.role.strip() or not self.label.strip():
+            msg = (
+                "a control with no role or no name cannot be found in a snapshot, and a control "
+                "found by guessing is the click the declaration exists to prevent"
+            )
+            raise TargetError(msg)
+        if self.verb is Verb.TYPE:
+            if bool(self.text) == bool(self.placeholder):
+                msg = "a typing control declares the text it enters or the credential it names"
+                raise TargetError(msg)
+        elif self.text or self.placeholder:
+            msg = (
+                f"a {self.verb.value} control enters nothing, so it declares no text or credential"
+            )
+            raise TargetError(msg)
+        if self.placeholder and not PLACEHOLDER_RE.match(self.placeholder):
+            msg = "a credential is named {{secret:name}} and never given as a value"
+            raise TargetError(msg)
+
+
+@dataclass(frozen=True)
 class Surface:
     """One declared place on a target, and the only things a plan may do there.
 
@@ -134,11 +183,20 @@ class Surface:
     #: The tool that asks the system of record, rather than the page, whether a write here
     #: landed. Empty where the system offers no such read. See `brain.browsing.verification`.
     read_back: str = ""
+    #: The control each write verb is done on. See the module docstring.
+    controls: tuple[Control, ...] = ()
 
     def __post_init__(self) -> None:
         if not NAME_RE.match(self.name):
             msg = f"surface name {self.name!r} is not a lowercase slug"
             raise TargetError(msg)
+        for control in self.controls:
+            if control.verb not in self.verbs:
+                msg = (
+                    f"surface {self.name!r} declares a {control.verb.value} control and does not "
+                    "admit that verb, so the control could never be used"
+                )
+                raise TargetError(msg)
         if self.read_back and not self.writes():
             msg = (
                 f"surface {self.name!r} declares a read-back and no write, so the read-back "

@@ -130,6 +130,7 @@ def test_every_declared_reader_asks_about_its_feature_and_nothing_else_asks() ->
         "brain.handover_routes",
         "brain.migration_routes",
         "brain.browsing.driver",
+        "brain.browser_routes",
         "brain.tools.document_generation",
         "brain.control_not_run_told",
         "brain.learned_instruction_store",
@@ -289,6 +290,7 @@ def test_switching_a_feature_on_writes_its_row_and_the_next_read_sees_it(
         "agent_audience_extras": False,
         "multi_agent_coordination": False,
         "stored_workflows": False,
+        "browser_declarations": False,
     }
 
 
