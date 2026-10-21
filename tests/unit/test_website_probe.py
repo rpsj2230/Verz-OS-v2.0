@@ -229,7 +229,9 @@ def test_the_registry_carries_the_check_only_where_a_prober_was_handed_to_it() -
 def test_the_application_hands_the_registry_a_website_check_over_https() -> None:
     """The lifespan builds the registry with an `HttpsProber` over the system resolver. Read off
     the call in `brain.app`'s source, because the lifespan needs a database to run. Delete this
-    and the application can stop passing one with every other test here green."""
+    and the application can stop passing one with every other test here green. The keywords a
+    construction may carry beyond the transport are named, so a second transport cannot be added
+    beside the HTTPS one without this failing."""
     import ast
     import inspect
 
@@ -244,9 +246,25 @@ def test_the_application_hands_the_registry_a_website_check_over_https() -> None
     keywords = {one.arg: ast.unparse(one.value) for one in calls["build_registry"].keywords}
     assert keywords["website"] == "website"
     built = [
-        ast.unparse(node.value)
+        node.value
         for node in ast.walk(tree)
         if isinstance(node, ast.Assign)
         and [ast.unparse(one) for one in node.targets] == ["website"]
     ]
-    assert built == ["WebsiteCheckTool(resolver=SystemResolver(), prober=HttpsProber())"]
+    assert built, "the application builds no website check"
+    constructions: list[ast.Call] = []
+    for value in built:
+        assert isinstance(value, ast.Call) and ast.unparse(value.func) == "WebsiteCheckTool"
+        constructions.append(value)
+        assert not value.args
+        given = {one.arg: ast.unparse(one.value) for one in value.keywords}
+        # Over HTTPS to the address each hop was checked at, on every construction.
+        assert given["resolver"] == "SystemResolver()"
+        assert given["prober"] == "HttpsProber()"
+        # What else it may be given: the read-only browser and the stored registry it reads from
+        # (`brain.browsing.read_tool`), and nothing that could change how a hop is contacted.
+        assert set(given) <= {"resolver", "prober", "browser", "declared"}
+    # With a database the check also reads the declared websites, and both go together.
+    assert any(
+        {"browser", "declared"} <= {one.arg for one in value.keywords} for value in constructions
+    )
