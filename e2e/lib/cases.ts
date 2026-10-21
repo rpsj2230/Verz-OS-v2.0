@@ -120,6 +120,17 @@ function mainOf(page: Page) {
 }
 
 /**
+ * What a page that is waiting says, in words: the kit's loading state (a status region carrying
+ * its own sentence, which differs by page: "Reading the ledger.", "Counting refusals.") or a page
+ * that says "Loading" outright. Either is a sentence on the screen; skeleton bars alone are neither.
+ */
+function waitingOn(page: Page) {
+  return mainOf(page)
+    .locator('[data-slot="loading-state"]')
+    .or(mainOf(page).getByText(/\bLoading\b/i));
+}
+
+/**
  * A slow answer is said to be loading.
  *
  * The page's data is held for a few seconds before it is let through, and while it is held the
@@ -137,14 +148,14 @@ export async function proveLoadingIsSaid(page: Page, target: Target, others: rea
   });
   try {
     await openTarget(page, target);
-    await expect(mainOf(page).getByText(/\bLoading\b/i).first(), `${target.label}: says it is loading while it waits`).toBeVisible({
+    await expect(waitingOn(page).first(), `${target.label}: says it is loading while it waits`).toBeVisible({
       timeout: 3_500,
     });
     expect(held, `${target.label}: the page's data was held while it said so`).toBeGreaterThan(0);
   } finally {
     await page.unroute(DATA);
   }
-  await expect(mainOf(page).getByText(/\bLoading\b/i), `${target.label}: stops saying so once it has drawn`).toHaveCount(0, {
+  await expect(waitingOn(page), `${target.label}: stops saying so once it has drawn`).toHaveCount(0, {
     timeout: 20_000,
   });
 }
