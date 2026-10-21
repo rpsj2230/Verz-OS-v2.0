@@ -398,6 +398,14 @@ from brain.member_share_routes import router as member_share_router
 # and the `personal_skills` switch. See `brain.member_skill_routes`.
 from brain.member_skill_routes import router as member_skill_router
 
+# The three prompts an agent offers when it is opened, drawn from the example tasks of its skills
+# and only those the person's run could carry out. See `brain.member_starter_routes`.
+from brain.member_starter_routes import router as member_starter_router
+
+# Whether an approved skill can be tried from Ask, and its name when it can. One answer for every
+# reason it cannot. See `brain.member_try_skill_routes`.
+from brain.member_try_skill_routes import router as member_try_skill_router
+
 # What a person pastes from the old system, checked by the migration package before anything is done
 # with it: skills, exported items, memory files and agents' availability. Keeps nothing. See
 # `brain.migration_convert_routes`.

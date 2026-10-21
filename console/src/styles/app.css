@@ -614,6 +614,35 @@ code {
   font-size: var(--text-sm);
 }
 
+/* The two ways to start: a task, or a talk with an agent. Radios sit in a column, each with its note. */
+.ask__start {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.ask__start label {
+  min-height: 2.75rem;
+}
+
+/* The starter prompts, each a full-width button so a thumb finds it. */
+.ask__starters ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ask__starters button {
+  min-height: 2.75rem;
+  text-align: left;
+}
+
 /* A thumb is not a cursor. 2.75rem is 44 CSS pixels at the default root size. */
 .ask__question,
 .ask__submit,
