@@ -223,6 +223,20 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # Keeping a started run and the gate's decision for it: insert-only rows in this system's
         # own tables, in the asker's name, once for each run.
         "brain.coordination_routes:RunKeeper.keep": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # Stored workflows: reads, and insert-only rows in this system's own tables in the caller's
+        # name. A second save is the next version, a second assignment of a live one writes nothing,
+        # and a finished run is one row per run id, so a repeat is refused by the table's key.
+        "brain.workflow_routes:Workflows.save": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.workflow_routes:Workflows.latest": Repeat.READS,
+        "brain.workflow_routes:Workflows.listing": Repeat.READS,
+        "brain.workflow_routes:Workflows.assigned": Repeat.READS,
+        "brain.workflow_routes:Workflows.assign": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.workflow_routes:Workflows.unassign": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.workflow_routes:Workflows.finish": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.workflow_routes:Workflows.runs": Repeat.READS,
+        # A step of a workflow: the gate's own path for a tool call, which reads and leaves nothing
+        # behind, a write being held for a person under a key of the action's digest.
+        "brain.orchestration.workflow_run:StepDoor.carry_out": Repeat.NO_EFFECT_AT_THE_FAR_END,
         # The model call that splits a request: work done elsewhere that leaves nothing behind.
         "brain.coordination_routes:PlannerCalls.complete": Repeat.NO_EFFECT_AT_THE_FAR_END,
         # A specialist's run is the agent loop: its reads leave nothing behind and any write it asks

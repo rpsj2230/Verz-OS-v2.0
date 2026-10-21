@@ -31,6 +31,9 @@ from brain.tables.quality import CASE_KEYS, ItemKind, TierDecisionWord
 from tests.unit.test_tables import VERSIONS, migration_module, rendered, squash
 
 MIGRATION = VERSIONS / "0222_quality_and_learning.py"
+LATER = VERSIONS / "0273_workflows.py"
+#: The one word a later migration adds to `source`, which the model declares and `0222` does not.
+ADDED_LATER = ", 'workflow'"
 DIALECT = create_engine("postgresql+psycopg://", poolclass=NullPool).dialect
 WHEN = datetime(2999, 6, 1, 12, 0, tzinfo=UTC)
 
@@ -56,9 +59,25 @@ def test_the_migration_builds_each_table_exactly_as_the_model_declares_it() -> N
     emitted = squash(rendered("upgrade", MIGRATION))
     for name in TABLES:
         table = metadata.tables[name]
-        assert squash(str(CreateTable(table).compile(dialect=DIALECT))) in emitted, name
+        built = squash(str(CreateTable(table).compile(dialect=DIALECT)))
+        # `0273` widens the source check by one word; the model has it and `0222` rightly does not.
+        assert built.replace(ADDED_LATER, "") in emitted, name
         for index in table.indexes:
             assert squash(str(CreateIndex(index).compile(dialect=DIALECT))) in emitted, index.name
+
+
+def test_a_later_migration_widens_the_source_check_to_the_model_s_word_and_no_other() -> None:
+    """The word `0222` leaves out of the comparison above is the one `0273` adds, and the model's
+    list is exactly the two together. Delete this and the comparison above forgives a word that no
+    migration ever writes, so the model could declare a source the database refuses."""
+    first = squash(rendered("upgrade", MIGRATION))
+    later = squash(rendered("upgrade", LATER))
+    model = squash(
+        str(CreateTable(metadata.tables["ops.evaluation_candidate"]).compile(dialect=DIALECT))
+    )
+    assert "source IN ('canary', 'golden', 'sampled')" in first
+    assert "source IN ('canary', 'golden', 'sampled', 'workflow')" in later
+    assert "source IN ('canary', 'golden', 'sampled', 'workflow')" in model
 
 
 def test_every_table_enables_row_security_and_is_granted_select_and_insert_alone() -> None:

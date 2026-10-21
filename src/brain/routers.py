@@ -364,6 +364,10 @@ from brain.lark_sign_in_routes import router as lark_sign_in_router
 # paged, behind `admin:application_log` over everything. See `brain.log_routes`.
 from brain.log_routes import router as log_router
 
+# A member disconnecting their own account at a vendor, the vendor told first. Asked of the person
+# themselves. See `brain.member_accounts_routes`.
+from brain.member_accounts_routes import router as member_accounts_router
+
 # Asking for an agent you can see and cannot run. Gated on the member grant. See
 # `brain.member_agent_request_routes`.
 from brain.member_agent_request_routes import router as member_agent_request_router
@@ -608,6 +612,10 @@ from brain.welcome_routes import router as welcome_router
 # its questions are answered from knowledge marked public alone, with no sign-in and the origin
 # proved instead. See `brain.widget_routes`.
 from brain.widget_routes import router as widget_router
+
+# Stored workflows: written as versioned step data, assigned to agents and run through the gate
+# behind the `stored_workflows` switch, which ships off. See `brain.workflow_routes`.
+from brain.workflow_routes import router as workflow_router
 
 
 def routers_in(namespace: Mapping[str, object]) -> tuple[APIRouter, ...]:

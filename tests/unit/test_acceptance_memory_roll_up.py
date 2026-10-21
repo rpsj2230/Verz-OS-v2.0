@@ -143,7 +143,10 @@ def test_the_roll_ups_pass_where_every_clause_is_shown_and_say_what_is_missing_w
         # the roll-up names that check as the one it waits for.
         (PROMOTED, THE_TIER_THREE_CHECK),
         (MEMORY_AND_CONTEXT, "M16.4.3"),
-        (LEARNING, "M17.6.7"),
+        # A check names M17.6.7 now (the stored workflow's), so the roll-up waits on checks by
+        # name and no longer prints the leaf as one nothing proves. It also waits on the
+        # evaluation candidate's check, which is always in the printed part of the reason.
+        (LEARNING, "a_failed_case_opens_a_candidate_and_never_changes_the_agent"),
         (GATE, "M28.1.4"),
     ):
         outcome, reason = seen[name]
