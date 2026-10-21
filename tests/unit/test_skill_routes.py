@@ -107,6 +107,7 @@ from brain.skill_routes import (
     submitted,
 )
 from brain.tables.agent import AgentRow
+from brain.tables.browsing import BrowserGrantRow, BrowserTargetRow
 from brain.tables.identity import PrincipalRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
 from brain.tools.review import STALE_AFTER, QueueEntry
@@ -525,6 +526,16 @@ class StubResult:
 _SWITCHES = SettingRows()
 
 
+def _no_website_declared(statement: Any) -> StubResult | None:
+    """No website is declared on this install, so the assignment rule that asks about them asks
+    nothing (`brain.console.skill_library.browser_refusals`). Answered for the two browser tables
+    only; every other statement is the stub's own."""
+    entities = [one.get("entity") for one in statement.column_descriptions]
+    if entities and all(one in (BrowserTargetRow, BrowserGrantRow) for one in entities):
+        return StubResult([])
+    return None
+
+
 class StubSession(AsyncSession):
     """An `AsyncSession` answering the two statements this router makes, and no other.
 
@@ -540,6 +551,9 @@ class StubSession(AsyncSession):
         switches = _SWITCHES.answer(statement)
         if switches is not None:
             return switches
+        nothing_declared = _no_website_declared(statement)
+        if nothing_declared is not None:
+            return nothing_declared
         if len(statement.column_descriptions) == 2:
             asked = set(statement.whereclause.right.value)
             return StubResult(
@@ -826,6 +840,9 @@ def test_an_install_belonging_to_an_agent_outside_the_audience_is_dropped_by_the
             switches = _SWITCHES.answer(statement)
             if switches is not None:
                 return switches
+            nothing_declared = _no_website_declared(statement)
+            if nothing_declared is not None:
+                return nothing_declared
             if len(statement.column_descriptions) == 2:
                 return StubResult([_STORED.installs[key] for key in sorted(_STORED.installs)])
             return StubResult([_STORED.agents[key] for key in sorted(_STORED.agents)])

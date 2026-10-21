@@ -3,7 +3,7 @@
 - **Screens:** `/usage`, `/adoption`, `/spend`, `/questions`, `/quality`, `/service-levels`, `/me`, `/company/estate`, `/company/activity`, `/company/consumption`
 - **Tables:** `agent.artifact_share`, `agent.agent_request`, `auth.member_preference`, `ops.question_asked`, `ops.question_gap`, `ops.report_refresh`, `ops.spend_actual`, `obs.request_telemetry`, `ops.answer_flag`, `ops.regression_case`, `ops.quality_reading`, `ops.quality_annotation`, `ops.golden_score`, `ops.evaluation_candidate`, `ops.positive_example`, `ops.tier_decision`
 - **Installation values:** none
-- **Measured here:** 50 routes, 11 called by no screen; 16 write routes, 16 with all three proofs; 1 gaps.
+- **Measured here:** 52 routes, 13 called by no screen; 16 write routes, 16 with all three proofs; 1 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -12,6 +12,7 @@
 | `GET /api/v1/company/estate` | `/company/estate` |
 | `GET /api/v1/me/agent-requests` | **no screen** |
 | `GET /api/v1/me/agents/requestable` | `/me` |
+| `GET /api/v1/me/agents/{agent_id}/starters` | **no screen** |
 | `GET /api/v1/me/artifacts` | `/me` |
 | `GET /api/v1/me/devices` | `/me` |
 | `GET /api/v1/me/preferences` | `/me` |
@@ -22,6 +23,7 @@
 | `GET /api/v1/me/shared/{artifact_id}/download` | **no screen** |
 | `GET /api/v1/me/shares` | `/me` |
 | `GET /api/v1/me/skills` | `/me` |
+| `GET /api/v1/me/skills/{digest}/try` | **no screen** |
 | `GET /api/v1/me/stored` | `/me` |
 | `GET /api/v1/me/workspace` | `/me` |
 | `GET /api/v1/quality/candidates` | **no screen** |

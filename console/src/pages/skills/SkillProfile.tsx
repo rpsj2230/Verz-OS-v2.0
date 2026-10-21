@@ -40,7 +40,6 @@ import {
   Advanced,
   Chip,
   ConfirmDialog,
-  Explanation,
   Fact,
   FactList,
   Note,
@@ -493,7 +492,11 @@ function Version({
           {one.retirable === true ? <Retirement one={one} onTold={onTold} /> : null}
           {one.exportable === true ? <Export one={one} onTold={onTold} /> : null}
           {one.review === "approved" && one.retired !== true ? (
-            <Explanation form="action" act="skill.try_out" label={TRY_OUT} text={TRY_OUT} icon={<FlaskConical aria-hidden />} />
+            <Button size="sm" variant="outline" className="min-h-11 sm:min-h-8" asChild>
+              <Link to={`/ask?skill=${encodeURIComponent(one.digest)}`} aria-label={`${TRY_OUT}: ${one.name} ${one.version}`}>
+                <FlaskConical aria-hidden /> {TRY_OUT}
+              </Link>
+            </Button>
           ) : null}
         </div>
       ) : null}

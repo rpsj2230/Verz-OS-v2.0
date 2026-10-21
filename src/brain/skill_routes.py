@@ -176,6 +176,7 @@ from brain.api import API_PREFIX, COMMON_RESPONSES, Page
 from brain.api_routes import Asked, Asking
 from brain.audit.ledger import AuditChain
 from brain.audit.record import AuditRecorder
+from brain.browsing import declared
 from brain.console.agent_tabs import AgentTabError, Review, review_state
 from brain.console.govern import Placed
 from brain.console.govern_estate import skill_queue
@@ -186,6 +187,7 @@ from brain.console.skill_library import (
     SKILL_AUTHORITY,
     Assignment,
     AssignmentRecord,
+    BrowserNeeds,
     Detachment,
     DetachmentRecord,
     LibrarySkill,
@@ -1882,6 +1884,14 @@ async def assign_skill(
         async with pool() as session:
             if await is_on(session, SKILL_NEEDS):
                 needs_registry = _tool_registry(request) or ToolRegistry()
+    browser: BrowserNeeds | None = None
+    if pool is not None:
+        async with pool() as session:
+            browser = BrowserNeeds(
+                targets=await declared.registry_of(session),
+                tools=_tool_registry(request) or ToolRegistry(),
+                exemptions=await declared.live_exemptions(session, now),
+            )
     try:
         made = assignment(
             one,
@@ -1893,6 +1903,7 @@ async def assign_skill(
             recorder=recorder,
             now=now,
             needs_registry=needs_registry,
+            browser=browser,
         )
     except (SkillLibraryError, AgentTabError) as refused:
         raise _refused_because(str(refused)) from None

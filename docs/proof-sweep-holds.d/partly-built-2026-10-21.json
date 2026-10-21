@@ -1,0 +1,11 @@
+{
+  "held": {
+    "M34.1.1.3": "the builder reports it partly built: the starter questions name their source, and the part for a source with no live connection is not done",
+    "M37.1.2.1": "the builder reports it partly built: the comparison route exists and the exporter itself, a plugin, does not",
+    "M37.1.2.2": "the builder reports it partly built: the carry route returns the plan and the exporter it reads from does not exist",
+    "M37.1.2.3": "the builder reports it partly built: the carry route reports colliding seeds and the exporter does not exist",
+    "M37.1.2.4": "the builder reports it partly built: the carry route lists what is catalogued and the exporter does not exist",
+    "M37.2.2.4": "the builder reports it partly built: the route takes the real-task checks but the run of them is not done",
+    "M37.2.4.2": "the builder reports it partly built: the learning route re-derives conclusions and part of the leaf is not done"
+  }
+}

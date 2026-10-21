@@ -420,12 +420,13 @@ async def asking(
     n: int,
     *,
     agent: str | None = None,
+    try_skill: str | None = None,
 ) -> Answered | Degraded:
     """`asked`, with a refusal to answer returned rather than raised, as the route would say it."""
     from brain.core.errors import Degraded
 
     try:
-        return await asked(h, app, principal_id, question, n, agent=agent)
+        return await asked(h, app, principal_id, question, n, agent=agent, try_skill=try_skill)
     except Degraded as refused:
         return refused
 

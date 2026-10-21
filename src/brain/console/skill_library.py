@@ -101,7 +101,7 @@ Scope: domain logic. Nothing here opens a connection or reads a clock; rows, the
 instant arrive as arguments.
 
 Task ids: M42.6.4, M12.2.2, M12.2.3, M12.2.4, M12.2.6, M12.3.2, M12.4.6, M12.4.13, M27.15.55
-Task ids: M12.3.3, M12.4.10, M12.4.14
+Task ids: M12.3.3, M12.4.10, M12.4.14, M19.6.7
 Task ids: M12.3.1
 Task ids: M12.2.10
 """
@@ -126,6 +126,9 @@ from pydantic import JsonValue
 from brain.agents.model import AgentRecord, tool_ceiling
 from brain.agents.template import SignedManifest, TemplateInstance, materialise, set_field
 from brain.audit.record import AuditRecorder
+from brain.browsing.sessions import ACT_ON_SURFACE, READ_SURFACE, TARGET_FIELD
+from brain.browsing.skill_gate import Exemption, load_gaps
+from brain.browsing.targets import TargetRegistry
 from brain.console.agent_tabs import SKILL_CAPABILITY, SKILL_SCREEN, detach, register_skill
 from brain.console.govern import NOWHERE, Placed, _in_reach
 from brain.console.reads import permitted
@@ -134,6 +137,7 @@ from brain.console.workspace import Attachment, Composition, Part
 from brain.console.workspace_capabilities import run_reach
 from brain.core.department import DEPARTMENT_FIELD
 from brain.core.entitlement import Capability, EntitlementSet
+from brain.core.scope import Scope
 from brain.gate.catalogue import EmptyCatalogueError, within_ceiling
 from brain.tools.extract import MAX_MEMBERS, _is_regular
 from brain.tools.registry import ToolRegistry
@@ -1445,6 +1449,24 @@ AN_ASSIGNMENT_NAMES_WHAT_THE_AGENT_LACKS_AND_WIDENS_NOTHING: Final = (
 )
 
 
+#: The tools that drive a browser. A skill naming one is a browser skill (M19.6.7).
+BROWSER_TOOLS: Final = frozenset({READ_SURFACE.name, ACT_ON_SURFACE.name})
+
+
+@dataclass(frozen=True)
+class BrowserNeeds:
+    """What the browser rule is asked against: the websites declared and the exemptions in force.
+
+    Both are read by the caller at the instant of the assignment, so an exemption that lapsed
+    before this moment is not here. See `missing_for`.
+    """
+
+    targets: TargetRegistry
+    #: The install's tool registry, which says which of a website's API tools exist today.
+    tools: ToolRegistry
+    exemptions: tuple[Exemption, ...] = ()
+
+
 @dataclass(frozen=True)
 class Missing:
     """What a skill needs that an agent's own ceiling does not give it. Names, never a count."""
@@ -1489,6 +1511,27 @@ def missing_for(skill: Skill, record: AgentRecord, registry: ToolRegistry) -> Mi
         name for name in skill.knowledge if not scope.matches({DEPARTMENT_FIELD: name})
     )
     return Missing(tools=tools, departments=departments)
+
+
+def browser_refusals(
+    skill: Skill, scope: Scope, browser: BrowserNeeds, now: datetime
+) -> tuple[str, ...]:
+    """Why a browser skill may not run against a website this agent reaches (M19.6.7).
+
+    A browser skill is one that names a browser tool. The websites it could drive are the declared
+    ones the agent's own scope admits, and for each, `skill_gate.load_gaps` says whether a
+    registered API tool already does the work and no live exemption names this skill and this
+    website. `scope` is the agent's own, which is all the rule is asked of, and the refusal is at
+    assignment, where the author can still be told to use the connector. See
+    `brain.browsing.skill_gate.AN_API_THAT_IS_PLANNED_IS_NOT_AN_API`.
+    """
+    if not BROWSER_TOOLS & set(skill.tools):
+        return ()
+    gaps: list[str] = []
+    for target in sorted(browser.targets.targets, key=lambda one: one.name):
+        if scope.matches({TARGET_FIELD: target.name}):
+            gaps.extend(load_gaps(skill, target, browser.tools, browser.exemptions, now=now))
+    return tuple(gaps)
 
 
 # ------------------------------------------------------------------------ assigning a skill
@@ -1556,6 +1599,7 @@ def assignment(
     recorder: AuditRecorder,
     now: datetime,
     needs_registry: ToolRegistry | None = None,
+    browser: BrowserNeeds | None = None,
 ) -> Assignment:
     """Assign one approved skill to one agent through `register_skill`, or refuse.
 
@@ -1581,6 +1625,10 @@ def assignment(
                 f"nothing was assigned: {lacks.sentence(record.display_name)}. "
                 f"{AN_ASSIGNMENT_NAMES_WHAT_THE_AGENT_LACKS_AND_WIDENS_NOTHING}"
             )
+    if browser is not None:
+        refused = browser_refusals(one.imported.skill, record.authority.scope, browser, now)
+        if refused:
+            raise SkillLibraryError(f"nothing was assigned: {'; '.join(refused)}")
     before = materialise(signed, instance, audience=record.audience)
     composition = pins_on(signed, instance, record)
     same = [pin for pin in composition.attached_to(Part.SKILLS) if pin.ref == one.name]

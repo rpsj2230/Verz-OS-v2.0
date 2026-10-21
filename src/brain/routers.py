@@ -166,6 +166,10 @@ from brain.automations_routes import router as automations_router
 # `brain.binding_routes`.
 from brain.binding_routes import router as binding_router
 
+# The websites an agent's browser may be pointed at, and the exceptions and exemptions signed for
+# them. See `brain.browser_routes`.
+from brain.browser_routes import router as browser_router
+
 # Corrections carrying the right answer, decided as a new version of their document is.
 # See `brain.candidate_routes`.
 from brain.candidate_routes import router as candidate_router
@@ -397,6 +401,14 @@ from brain.member_share_routes import router as member_share_router
 # alone and offered to the department's library for a person to read. Gated on the member grant
 # and the `personal_skills` switch. See `brain.member_skill_routes`.
 from brain.member_skill_routes import router as member_skill_router
+
+# The three prompts an agent offers when it is opened, drawn from the example tasks of its skills
+# and only those the person's run could carry out. See `brain.member_starter_routes`.
+from brain.member_starter_routes import router as member_starter_router
+
+# Whether an approved skill can be tried from Ask, and its name when it can. One answer for every
+# reason it cannot. See `brain.member_try_skill_routes`.
+from brain.member_try_skill_routes import router as member_try_skill_router
 
 # What a person pastes from the old system, checked by the migration package before anything is done
 # with it: skills, exported items, memory files and agents' availability. Keeps nothing. See

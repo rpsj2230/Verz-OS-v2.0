@@ -102,7 +102,8 @@
  * ordinary text. Listening stops when the question is sent. See `askDictationCore.ts`.
  *
  * Task ids: M42.6.3, M35.2.1.3, M27.8.5, M3.9.8, M8.1.1, M8.1.2, M8.1.3, M7.4.7, M11.4.9, M7.6.1
- * Task ids: M9.1.1, M9.1.2, M9.1.3, M12.3.6, M16.2.2, M40.7.3, M40.7.7, M40.7.6
+ * Task ids: M9.1.1, M9.1.2, M9.1.3, M12.3.6, M16.2.2, M40.7.3, M40.7.7, M40.7.6, M40.7.5, M40.7.8
+ * Task ids: M40.7.2
  */
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
@@ -156,6 +157,9 @@ import {
 import { FailureNotice, NO_REFERENCE_CAME_BACK } from "../ui/FailureNotice";
 import { readRoster, ROSTER_API_PATH, type RosterEntryView } from "./agentsQuery";
 import { AskProject } from "./AskProject";
+import { AskStart, type StartMode } from "./AskStart";
+import { AskStarters } from "./AskStarters";
+import { useTrial } from "./AskTrial";
 import { addItemApiPath, itemBody } from "./myProjectsQuery";
 import { CANNOT_SAVE, saveDocument } from "./dataTransferQuery";
 
@@ -419,6 +423,10 @@ export function Ask() {
   const [asking, setAsking] = useState<Asking>(IDLE);
   const [agents, setAgents] = useState<readonly RosterEntryView[]>([]);
   const [agent, setAgent] = useState("");
+  // How this question starts: a task, which names no agent, or a talk with one (M40.7.5).
+  const [mode, setMode] = useState<StartMode>("task");
+  // A skill a card sent here to try, when it can be tried (M40.7.2).
+  const trial = useTrial();
   const [kind, setKind] = useState("");
   // The personal project the next question is asked inside, or none (M40.7.7).
   const [project, setProject] = useState("");
@@ -448,6 +456,20 @@ export function Ask() {
   useEffect(() => {
     void listThreads();
   }, [listThreads]);
+
+  // Trying a skill needs an agent to run through, so it opens the talk-to-an-agent start; starting
+  // a task names no agent.
+  useEffect(() => {
+    if (trial.digest !== "") {
+      setMode("agent");
+    }
+  }, [trial.digest]);
+  const chooseMode = useCallback((next: StartMode) => {
+    setMode(next);
+    if (next === "task") {
+      setAgent("");
+    }
+  }, []);
 
   // The agents this person may see, for the picker. A roster that did not come back is no
   // picker rather than an error: the question can still be asked, and the router chooses.
@@ -487,8 +509,8 @@ export function Ask() {
   const ask = useCallback(
     (submitted: FormEvent<HTMLFormElement>) => {
       submitted.preventDefault();
-      const body = askBody(question, agent, kind, thread, project);
-      if (body === null) {
+      const body = askBody(question, agent, kind, thread, project, trial.digest);
+      if (body === null || (trial.digest !== "" && agent === "")) {
         // Not a question the route would take. Doing nothing is the answer: a request known
         // to be refused is a round trip spent to be told what this console already knew.
         return;
@@ -539,7 +561,7 @@ export function Ask() {
         }
       })();
     },
-    [question, agent, kind, thread, project, listThreads],
+    [question, agent, kind, thread, project, trial.digest, listThreads],
   );
 
   const { view, busy, failure, traceId } = asking;
@@ -588,7 +610,9 @@ export function Ask() {
           disabled={busy}
           onSpoken={(words) => setQuestion((before) => appendSpoken(before, words, MAX_QUESTION_CHARS))}
         />
-        {agents.length > 0 ? (
+        {trial.banner}
+        {agents.length > 0 ? <AskStart mode={mode} onMode={chooseMode} disabled={busy} /> : null}
+        {agents.length > 0 && mode === "agent" ? (
           <>
             <label className="ask__label" htmlFor={AGENT_FIELD_ID}>
               {AGENT_LABEL}
@@ -609,6 +633,7 @@ export function Ask() {
             </select>
           </>
         ) : null}
+        <AskStarters agent={agent} disabled={busy} onPick={setQuestion} />
         <AskProject project={project} disabled={busy} onChange={setProject} />
         <label className="ask__label" htmlFor={KIND_FIELD_ID}>
           {KIND_LABEL}
@@ -631,7 +656,7 @@ export function Ask() {
           <button
             type="submit"
             className="button ask__submit"
-            disabled={busy || askBody(question) === null}
+            disabled={busy || askBody(question) === null || (trial.digest !== "" && agent === "")}
           >
             {ASK_LABEL}
           </button>

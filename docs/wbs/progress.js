@@ -1875,9 +1875,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M19.2.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): browsing/targets.py has Target, Surface (declared verbs, read_back) and TargetRegistry with tests. Nothing stores targets: no table, route or console page declares one; website_check defaults to an empty registry and acceptance_audit builds one in memory. NEXT: Add a browser_target table, route and console page (or a setup step) to declare targets and surfaces, then load the registry from it into website_check and the driver.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-21 (triage 2026-10-13 class 2/3, now wired): migration 0275 adds agent.browser_target and agent.browser_grant; brain.browsing.declared is the codec and the stores; brain.browser_routes (admin:browser, switch browser_declarations, ships off) and a 'Websites for agents' browsers' panel on the Features page declare a website, sign an exception or an exemption, list them and take them back. Install check a_website_is_declared_and_permissions_signed_for_it_are_read goes through those routes and then asks the readers (driver.prepare_run and skill_library.browser_refusals). This leaf: the target registry with declared surface maps is stored, shown and loaded (declared.registry_of). Not yet wired: website_check and the run tool still start with an empty registry until the read tool PR loads this one. INSTALL PROOF STEPS: 1. Features page: switch on 'Declare websites for agents' browsers and sign exceptions'. 2. In the Websites panel paste a declaration of a public page of your own (a name, its origin, one surface with verbs open and read and one field) and press Declare website: it is listed. 3. Install page: Run now, and read the row a_website_is_declared_and_permissions_signed_for_it_are_read: it must say Passed. ",
+    updated: "2026-10-21",
   },
   "M19.3.1": {
     status: "IN PROGRESS",
@@ -1985,9 +1985,9 @@ const PROGRESS = {
     updated: "2026-10-21",
   },
   "M19.6.7": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): browsing/skill_gate.py:load_gaps and may_load refuse a browser skill when a registered API tool exists unless an Exemption names an approver and expiry (max 90 days); test_browsing_sessions.py. No skill import or load path imports skill_gate. NEXT: Call may_load from the skill import/pin path (tools/skills.py, ops/skill_store.py) with the target registry and an exemption source; exemption storage is also missing.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-21 (triage 2026-10-13 class 2/3, now wired): migration 0275 adds agent.browser_target and agent.browser_grant; brain.browsing.declared is the codec and the stores; brain.browser_routes (admin:browser, switch browser_declarations, ships off) and a 'Websites for agents' browsers' panel on the Features page declare a website, sign an exception or an exemption, list them and take them back. Install check a_website_is_declared_and_permissions_signed_for_it_are_read goes through those routes and then asks the readers (driver.prepare_run and skill_library.browser_refusals). This leaf: assigning a skill that names a browser tool to an agent whose scope reaches a declared website with an API tool in the registry is refused, naming the website and the tool, unless a live exemption names this skill and that website (console/skill_library.browser_refusals, called by assignment). INSTALL PROOF STEPS: 1. Features page: switch on 'Declare websites for agents' browsers and sign exceptions'. 2. In the Websites panel paste a declaration of a public page of your own (a name, its origin, one surface with verbs open and read and one field) and press Declare website: it is listed. 3. Install page: Run now, and read the row a_website_is_declared_and_permissions_signed_for_it_are_read: it must say Passed. 4. Sign an exemption for a skill and a website that has an API and assign it.",
+    updated: "2026-10-21",
   },
   "M19.7.1": {
     status: "IN PROGRESS",
@@ -2000,9 +2000,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M19.7.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): browsing/autonomy.py:SurfaceException, sign and runs_unattended cap writes at Assisted unless a signed exception exists, applied in envelope.compile_envelope; test_browsing_autonomy.py. Docstring: nowhere to keep an exception and recording it as a leash change is not wired. NEXT: Add an exception store, a console grant screen and an audit-ledger leash_change entry (shared with M19.9.7), and pass stored exceptions to compile_envelope.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-21 (triage 2026-10-13 class 2/3, now wired): migration 0275 adds agent.browser_target and agent.browser_grant; brain.browsing.declared is the codec and the stores; brain.browser_routes (admin:browser, switch browser_declarations, ships off) and a 'Websites for agents' browsers' panel on the Features page declare a website, sign an exception or an exemption, list them and take them back. Install check a_website_is_declared_and_permissions_signed_for_it_are_read goes through those routes and then asks the readers (driver.prepare_run and skill_library.browser_refusals). This leaf: a write on a page is compiled to wait for a person at the Assisted rung unless a live, unrevoked exception names that page; the signer must be able to perform the write (autonomy.sign), the end is within ninety days, and driver.prepare_run reads the exceptions in force at the instant it compiles. INSTALL PROOF STEPS: 1. Features page: switch on 'Declare websites for agents' browsers and sign exceptions'. 2. In the Websites panel paste a declaration of a public page of your own (a name, its origin, one surface with verbs open and read and one field) and press Declare website: it is listed. 3. Install page: Run now, and read the row a_website_is_declared_and_permissions_signed_for_it_are_read: it must say Passed. 4. Sign an exception for a page that writes and read it in the list.",
+    updated: "2026-10-21",
   },
   "M20.1.1": {
     status: "READY FOR TESTING",
@@ -4640,9 +4640,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.7.2": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): Skills page shows 'Try it out' as UnavailableAction with 'Coming soon' (console/src/pages/skills/skillActions.ts tryOut). Rehearsal route exists for reviewers (skill_routes POST /skills/{digest}/rehearsals) but is not a conversation.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built (M40/ask-starting-points, behind the switch try_a_skill, which ships off): on the Skills page an approved skill's Try it out opens Ask with that skill to try (/ask?skill=<digest>). Ask asks GET /me/skills/{digest}/try whether it can be tried and names it, asks for an agent to run through, and sends the digest with the question for that question alone; the pin is built in memory from an approved, unchanged, unretired library row and never stored, the agent is assigned nothing, the answer cache is bypassed, and the skill is offered to the model only if every tool it names is within the run's reach (brain.api_routes.with_tried_skill, brain.gate.model_lane.skills_offered). It is the ordinary run, metered like any other. PRIOR WORK (2026-10-13 triage): the card showed 'Try it out' as an explanation of something coming soon; the rehearsal route is the reviewers' and is not a conversation. PROVE ON THE INSTALL: (1) as an administrator switch on 'Let a person try an approved skill from its card'; (2) open Skills, an approved skill, press Try it out: Ask opens saying 'Trying the skill <name>', with Talk to an agent chosen and the Ask button waiting for an agent; (3) choose an agent whose reach covers the skill's tools and ask: the answer is made with the skill's card shown to the model; (4) ask the next question without the skill: it is not carried; open the agent's Skills tab: the skill was not assigned; (5) open the address with a skill nobody approved: one sentence says it cannot be tried and the question goes as any other; (6) switch off: Try it out opens Ask with the same sentence.",
+    updated: "2026-10-21",
   },
   "M40.7.3": {
     status: "READY FOR TESTING",
@@ -4655,9 +4655,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.7.5": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Talk to an agent is built: Ask page agent picker (askQuery agent field, gate.select.select_agent, gate.roster). 'Start a task' as a distinct entry and gate routing a task to a callable agent is not: without an agent /answer uses the default agent at the person's own reach. NEXT: add a start-a-task entry on Ask posting without an agent, and a gate step choosing a callable agent from the roster; then a check",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built (M40/ask-starting-points, behind the switch task_routing, which ships off): Ask offers two starting points, Start a task and Talk to an agent (console/src/pages/AskStart.tsx). Start a task names no agent; with task routing on, the gate (brain.gate.select, stage 3, still no model call) matches the question to the one agent the person may call whose name and instruction share at least two distinct words with it, and answers at the person's own reach narrowed by that agent's ceiling; a tie, or nothing shared, falls through to the default as before, and an agent the person may not call is never read. PRIOR WORK (2026-10-13 triage): Talk to an agent, select_agent and the roster existed; the web route handed select_agent no rules, no bindings and no description of any agent, so a task always went to the default. PROVE ON THE INSTALL: (1) as an administrator open Features and switch on 'Send a task started with no agent to the agent whose purpose it matches'; (2) as a member who may call an agent whose instruction names a subject (for example 'domain renewals'), open Ask: 'Start a task' is chosen and no agent picker is drawn; (3) ask a question using two words from that instruction: in Audit, the request names that agent as selected, at the classifier stage; (4) ask an unrelated question: the default answers; (5) switch the feature off: the first question is answered by the default again; (6) choose Talk to an agent and pick one: it answers, as before.",
+    updated: "2026-10-21",
   },
   "M40.7.6": {
     status: "READY FOR TESTING",
@@ -4670,9 +4670,9 @@ const PROGRESS = {
     updated: "2026-10-20",
   },
   "M40.7.8": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No starter prompts: searched src and console for starter/suggested question, only Ask page exists. Inputs exist: agent skills (skill pins) and the knowledge reach.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built (M40/ask-starting-points, behind the switch agent_starter_prompts, which ships off): choosing an agent on Ask shows up to three starter prompts, the example tasks written in the Examples section of the approved skills pinned to that agent (brain.member_starters, GET /me/agents/{agent_id}/starters). A prompt is offered only when the skill would be offered to a run at this person's reach through this agent (every tool within E_run, brain.gate.model_lane.skills_offered) and every department's knowledge the skill needs is within that reach; nothing is said about what was left out, and an agent the person may not run answers as one that does not exist. PRIOR WORK (2026-10-13 triage): no starter prompts existed; the inputs, skill examples and the run's reach, did. PROVE ON THE INSTALL: (1) as an administrator switch on 'Offer three starter prompts when a person opens an agent'; (2) assign an approved skill whose SKILL.md has an Examples section to an agent; (3) as a member who may run the agent, open Ask, choose Talk to an agent and pick it: the example tasks appear under 'You could ask', at most three; pressing one fills the question box and asks nothing; (4) as a member whose access does not cover a tool the skill names: no prompts appear for that skill; (5) switch off: none appear.",
+    updated: "2026-10-21",
   },
   "M18.5.1": {
     status: "IN PROGRESS",
@@ -4740,9 +4740,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M19.9.7": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): autonomy.SurfaceException and skill_gate.Exemption are value types with sign and expiry rules (test_browsing_autonomy.py). No store, no console screen or route for an administrator to grant one, no ledger leash_change entry, no listing until lapse. NEXT: Build a table, routes and a console page for grants with approver and expiry, write the audit leash_change on grant, pass live grants into compile_envelope and may_load.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-21 (triage 2026-10-13 class 2/3, now wired): migration 0275 adds agent.browser_target and agent.browser_grant; brain.browsing.declared is the codec and the stores; brain.browser_routes (admin:browser, switch browser_declarations, ships off) and a 'Websites for agents' browsers' panel on the Features page declare a website, sign an exception or an exemption, list them and take them back. Install check a_website_is_declared_and_permissions_signed_for_it_are_read goes through those routes and then asks the readers (driver.prepare_run and skill_library.browser_refusals). This leaf: a grant is listed with who signed it and when it lapses, is a leash_change entry in the audit ledger when signed and when revoked (trigger in 0275, held to the shape of a leash change by a test), and a run compiled after the end or the revocation no longer has it. INSTALL PROOF STEPS: 1. Features page: switch on 'Declare websites for agents' browsers and sign exceptions'. 2. In the Websites panel paste a declaration of a public page of your own (a name, its origin, one surface with verbs open and read and one field) and press Declare website: it is listed. 3. Install page: Run now, and read the row a_website_is_declared_and_permissions_signed_for_it_are_read: it must say Passed. 4. Revoke the exception: it leaves the list and the Audit page shows two leash changes about the website.",
+    updated: "2026-10-21",
   },
   "M19.9.8": {
     status: "IN PROGRESS",

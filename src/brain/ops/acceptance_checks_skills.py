@@ -523,6 +523,7 @@ async def _an_agent(
     connectors: Sequence[str] = (),
     settled: tuple[ConnectorRegistry, ToolRegistry] | None = None,
     audience: AgentAudience | None = None,
+    persona: str = "Answers an install acceptance check and nobody else.",
 ) -> str:
     """An agent of acceptance_a installed from a template signed with a key made for this check.
 
@@ -567,7 +568,7 @@ async def _an_agent(
                 published_by=owner,
                 display_name="Acceptance check agent",
             ),
-            persona="Answers an install acceptance check and nobody else.",
+            persona=persona,
             tier=tier,
             authority=ManifestAuthority(
                 scope=Scope.department(A) if scope is None else scope,

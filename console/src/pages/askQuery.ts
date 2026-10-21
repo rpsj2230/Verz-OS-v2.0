@@ -137,12 +137,14 @@ export function askBody(
   kind = "",
   thread = "",
   project = "",
+  trySkill = "",
 ): {
   readonly question: string;
   readonly agent?: string;
   readonly kinds?: readonly string[];
   readonly thread?: string;
   readonly project?: string;
+  readonly try_skill?: string;
 } | null {
   const asked = question.trim();
   if (asked === "" || asked.length > MAX_QUESTION_CHARS) {
@@ -159,12 +161,16 @@ export function askBody(
   // The personal project the question is asked inside (M40.7.7), sent only when one is chosen. The
   // route judges it like any name: a project that is not theirs brings nothing and says nothing.
   const inside = project === "" ? {} : { project };
+  // The approved skill being tried for this question alone (M40.7.2), sent only when the page
+  // checked it can be tried. The route judges it again: anything else answers as if it were absent.
+  const trying = trySkill === "" ? {} : { try_skill: trySkill };
   return {
     question: asked,
     ...(named === "" ? {} : { agent: named }),
     ...narrowed,
     ...continued,
     ...inside,
+    ...trying,
   };
 }
 

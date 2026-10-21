@@ -605,6 +605,11 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # actor and the row is about a version, never about anybody, and `0261` grants no way for a
         # row to leave (M27.15.35).
         "agent.template_withdrawal",
+        # A system declared for the browser, and a permission signed for it: the person is an actor
+        # and the row is about a website or a surface, never about anybody, and `0275` grants no way
+        # for a row to leave (M19.2.4, M19.9.7).
+        "agent.browser_target",
+        "agent.browser_grant",
         # What a lead flagged, what was read of answers, how golden questions scored and who agreed
         # to a change: each names an actor and a reference and is a fact about a moment, not
         # anybody's record, and `0222` grants no way for a row to leave.

@@ -388,6 +388,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | `admin:agent_lifecycle` | running the system |
 | `admin:application_log` | running the system |
 | `admin:automation` | running the system |
+| `admin:browser` | running the system |
 | `admin:budget` | running the system |
 | `admin:compliance` | running the system |
 | `admin:connector` | running the system |

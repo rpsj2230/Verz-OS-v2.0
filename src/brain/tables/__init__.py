@@ -65,7 +65,7 @@ from brain.tables.automation_change import AutomationChangeRow
 from brain.tables.automation_run import AutomationRunRow, AutomationScheduleRow
 from brain.tables.binding_code import BindingCodeRow
 from brain.tables.break_glass_notice import BreakGlassNoticeRow
-from brain.tables.browsing import BrowserEnvelopeRow
+from brain.tables.browsing import BrowserEnvelopeRow, BrowserGrantRow, BrowserTargetRow
 from brain.tables.budget import BudgetVersionRow
 from brain.tables.budget_stop import BudgetStopRow
 from brain.tables.channel import ChannelDeliveryRow, ChannelRow
@@ -601,6 +601,10 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "agent.workflow_assignment",
     "ops.workflow_run",
     "ops.workflow_step_run",
+    # 0275_browser_declarations. Point at nothing: a person and a target are values, so a
+    # declaration and a signed permission outlive both.
+    "agent.browser_target",
+    "agent.browser_grant",
 )
 
 __all__ = [
@@ -636,6 +640,8 @@ __all__ = [
     "BreachCaseRow",
     "BreakGlassNoticeRow",
     "BrowserEnvelopeRow",
+    "BrowserGrantRow",
+    "BrowserTargetRow",
     "BudgetStopRow",
     "BudgetVersionRow",
     "CandidateEvidenceRow",

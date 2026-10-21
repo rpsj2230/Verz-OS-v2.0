@@ -1,17 +1,23 @@
 ### Feature and module enablement
 
 - **Screens:** `/features`
-- **Tables:** `ops.coordinated_run`, `ops.fanout_gate`, `ops.migration_record`, `ops.plugin_install`, `ops.plugin_version`
+- **Tables:** `agent.browser_grant`, `agent.browser_target`, `ops.coordinated_run`, `ops.fanout_gate`, `ops.migration_record`, `ops.plugin_install`, `ops.plugin_version`
 - **Installation values:** none
-- **Measured here:** 23 routes, 9 called by no screen; 10 write routes, 1 with all three proofs; 6 gaps.
+- **Measured here:** 29 routes, 9 called by no screen; 15 write routes, 4 with all three proofs; 7 gaps.
 
 | Route | Called by |
 | --- | --- |
+| `GET /api/v1/install/browser` | `/features` |
 | `GET /api/v1/install/features` | `/features` |
 | `GET /api/v1/install/plugins` | `/features` |
 | `GET /api/v1/migration` | `/features` |
 | `GET /api/v1/orchestration/coordinated-runs` | **no screen** |
 | `GET /api/v1/orchestration/weighed-plans` | `/features` |
+| `POST /api/v1/install/browser/exceptions` | `/features` |
+| `POST /api/v1/install/browser/exemptions` | `/features` |
+| `POST /api/v1/install/browser/grants/{seq}/revoke` | `/features` |
+| `POST /api/v1/install/browser/targets` | `/features` |
+| `POST /api/v1/install/browser/targets/{name}/retire` | `/features` |
 | `POST /api/v1/install/features/{name}` | `/features` |
 | `POST /api/v1/install/plugins` | `/features` |
 | `POST /api/v1/install/plugins/{plugin_id}/disable` | `/features` |
@@ -31,6 +37,7 @@
 | `PUT /api/v1/migration/parallel` | `/features` |
 | `PUT /api/v1/migration/register` | `/features` |
 
+- **Gap.** Declaring, changing or retiring a website for an agent's browser is not an entry in the audit ledger. Recorded: agent.browser_target keeps a row per change with who made it and when, and has no trigger that appends an entry; signing and revoking an exception or an exemption are ledger entries (a leash change, 0275). Declaring a website opens no browser.
 - **Gap.** A recorded plugin is not loaded: switching one on changes its record and nothing runs. Recorded: The points that take code run it in a sidecar or a sandbox and neither runner exists, so the panel says no_plugin_is_loaded; M29.2.4 (a drain on upgrade) and M29.2.5 (an isolation tier enforced by a host) wait on one.
 - **Gap.** A weighed plan starts nothing, and a request split between a coordinating agent's specialists has no page. Recorded: The panel says nothing_is_started because weighing is a rehearsal; splitting a request, running the specialists and listing the runs kept are POST and GET /orchestration/coordinated-runs (brain.coordination_routes), behind the multi_agent_coordination switch, and no page draws them yet (M18.5.3).
 - **Gap.** Nothing in a migration reaches the old system: a revocation, a job stopped and an act done are recorded as a person says they are. Recorded: brain.migration.decommission says nothing here can check any of them, so a cutover is refused only while an act with a security consequence is unrecorded; the exporter and the old system's side of the comparison are a plugin that does not exist (M37.1.2, M37.1.3.1).
@@ -42,6 +49,11 @@
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
+| `POST /api/v1/install/browser/exceptions` | `/features` | `test_the_check_passes_on_an_install_and_leaves_nothing_it_wrote` in `tests/unit/test_acceptance_checks_browser_declarations.py` (database, in CI) | `test_signing_and_revoking_are_leash_changes_in_the_ledger` in `tests/unit/test_browser_declarations.py` (database, in CI) | `test_the_check_passes_on_an_install_and_leaves_nothing_it_wrote` in `tests/unit/test_acceptance_checks_browser_declarations.py` (database, in CI) |
+| `POST /api/v1/install/browser/exemptions` | `/features` | `test_the_check_passes_on_an_install_and_leaves_nothing_it_wrote` in `tests/unit/test_acceptance_checks_browser_declarations.py` (database, in CI) | `test_signing_and_revoking_are_leash_changes_in_the_ledger` in `tests/unit/test_browser_declarations.py` (database, in CI) | `test_the_check_passes_on_an_install_and_leaves_nothing_it_wrote` in `tests/unit/test_acceptance_checks_browser_declarations.py` (database, in CI) |
+| `POST /api/v1/install/browser/grants/{seq}/revoke` | `/features` | `test_the_check_passes_on_an_install_and_leaves_nothing_it_wrote` in `tests/unit/test_acceptance_checks_browser_declarations.py` (database, in CI) | `test_signing_and_revoking_are_leash_changes_in_the_ledger` in `tests/unit/test_browser_declarations.py` (database, in CI) | `test_the_check_passes_on_an_install_and_leaves_nothing_it_wrote` in `tests/unit/test_acceptance_checks_browser_declarations.py` (database, in CI) |
+| `POST /api/v1/install/browser/targets` | `/features` | `test_the_check_passes_on_an_install_and_leaves_nothing_it_wrote` in `tests/unit/test_acceptance_checks_browser_declarations.py` (database, in CI) | **None.** agent.browser_target keeps a row per change with who made it and when, and declaring a website changes nobody's access and opens no browser, so no trigger appends an entry; signing and revoking an exception or an exemption do. | `test_the_check_passes_on_an_install_and_leaves_nothing_it_wrote` in `tests/unit/test_acceptance_checks_browser_declarations.py` (database, in CI) |
+| `POST /api/v1/install/browser/targets/{name}/retire` | `/features` | `test_the_check_passes_on_an_install_and_leaves_nothing_it_wrote` in `tests/unit/test_acceptance_checks_browser_declarations.py` (database, in CI) | **None.** agent.browser_target keeps a row per change with who made it and when, and declaring a website changes nobody's access and opens no browser, so no trigger appends an entry; signing and revoking an exception or an exemption do. | `test_the_check_passes_on_an_install_and_leaves_nothing_it_wrote` in `tests/unit/test_acceptance_checks_browser_declarations.py` (database, in CI) |
 | `POST /api/v1/install/features/{name}` | `/features` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_switching_schedule_control_on_from_the_features_screen_is_what_lets_a_job_be_paused` in `tests/unit/test_console_controls_reach_behaviour.py` |
 | `POST /api/v1/install/plugins` | `/features` | `test_every_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_plugin_registry.py` (database, in CI) | **None.** ops.plugin_install has no audit trigger, so a plugin's change leaves no ledger entry; the route logs who pressed it and the row keeps the versions it ran. A trigger is a migration that widens the ledger's action list. | `test_every_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_plugin_registry.py` (database, in CI) |
 | `POST /api/v1/install/plugins/{plugin_id}/disable` | `/features` | `test_every_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_plugin_registry.py` (database, in CI) | **None.** ops.plugin_install has no audit trigger, so a plugin's change leaves no ledger entry; the route logs who pressed it and the row keeps the versions it ran. A trigger is a migration that widens the ledger's action list. | `test_every_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_plugin_registry.py` (database, in CI) |

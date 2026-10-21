@@ -119,6 +119,8 @@ def test_every_declared_reader_asks_about_its_feature_and_nothing_else_asks() ->
         "brain.agent_builder_routes",
         "brain.ops.agent_item_use",
         "brain.skill_routes",
+        "brain.member_starter_routes",
+        "brain.api_routes",
         "brain.member_skill_routes",
         "brain.member_deletion_routes",
         "brain.skill_draft_routes",
@@ -133,6 +135,7 @@ def test_every_declared_reader_asks_about_its_feature_and_nothing_else_asks() ->
         "brain.handover_routes",
         "brain.migration_routes",
         "brain.browsing.driver",
+        "brain.browser_routes",
         "brain.tools.document_generation",
         "brain.control_not_run_told",
         "brain.learned_instruction_store",
@@ -279,6 +282,9 @@ def test_switching_a_feature_on_writes_its_row_and_the_next_read_sees_it(
         "automation_authoring": False,
         "automation_events": False,
         "load_test": False,
+        "agent_starter_prompts": False,
+        "task_routing": False,
+        "try_a_skill": False,
         "personal_skills": False,
         "member_deletion_requests": False,
         "document_generation": False,
@@ -305,6 +311,7 @@ def test_switching_a_feature_on_writes_its_row_and_the_next_read_sees_it(
         "starter_questions_from_data": False,
         "multi_agent_coordination": False,
         "stored_workflows": False,
+        "browser_declarations": False,
     }
 
 
