@@ -44,7 +44,7 @@ because nothing may delete one (`0056`).
 Task ids: M19.2.4, M19.7.3, M19.9.7, M19.6.7
 
 Revision ID: 0275
-Revises: 0273
+Revises: 0274
 """
 
 from __future__ import annotations
@@ -54,8 +54,8 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "0275"
-# Written over 0273, the head of main when it was written; #661 takes 0274, so the coordinator
-# re-points it when the migration train is built, as every migration landed in a train is.
+# Written over 0274, the head of main when this was last checked; if another migration lands first
+# it is re-pointed at that one, as every migration landed in a train is.
 down_revision = "0274"
 branch_labels = None
 depends_on = None
