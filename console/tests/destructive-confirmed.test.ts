@@ -44,6 +44,26 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "without a digest, parses the document and names what it holds and keeps no row, which " +
     "tests/unit/test_template_withdrawal.py holds. Adding it is the same address with the digest that was " +
     "shown, and is sent only from a confirmation.",
+  "src/pages/install/BrowserPanel.tsx TARGETS_API_PATH":
+    "Declaring a website adds a row to agent.browser_target and opens no browser: brain.browser_routes.declare_target " +
+    "is behind the browser_declarations switch, the table is insert-only so every earlier declaration is kept, and " +
+    "an agent runs a browser only under the separate browser_runs switch, which tests/unit/test_browser_declarations.py " +
+    "and tests/unit/test_acceptance_checks_browser_declarations.py hold.",
+  "src/pages/install/BrowserPanel.tsx retirePath(row.name)":
+    "Retiring a website writes a row that says it is retired and removes nothing: agent.browser_target is insert-only, " +
+    "the earlier declarations are kept, and declaring it again brings it back, which " +
+    "tests/unit/test_browser_declarations.py holds.",
+  "src/pages/install/BrowserPanel.tsx EXCEPTIONS_API_PATH":
+    "Signing an exception adds a signed row with an end within ninety days that the signer can end at once: " +
+    "brain.browser_routes.sign_exception is behind the browser_declarations switch, asks autonomy.sign (the signer " +
+    "must be able to perform the write) and is a ledger entry, which tests/unit/test_browser_declarations.py holds.",
+  "src/pages/install/BrowserPanel.tsx EXEMPTIONS_API_PATH":
+    "Signing an exemption adds a signed row with an end within ninety days that can be revoked at once, and it " +
+    "only lets a skill be assigned over a website that has an API: brain.browser_routes.sign_exemption is behind " +
+    "the browser_declarations switch and is a ledger entry, which tests/unit/test_browser_declarations.py holds.",
+  "src/pages/install/BrowserPanel.tsx revokePath(row.seq)":
+    "Revoking a permission takes a permission back and loses nothing: the row stays with who revoked it and when, " +
+    "and the way back is signing a new one, which tests/unit/test_browser_declarations.py holds.",
   "src/pages/install/PluginsPanel.tsx PLUGINS_API_PATH":
     "Recording a plugin writes a switched-off record and loads or runs nothing: brain.plugin_routes.install_plugin " +
     "arrives installed and is behind the plugin_registry switch, and enabling it is a separate act.",

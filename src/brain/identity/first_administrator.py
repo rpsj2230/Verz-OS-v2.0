@@ -314,6 +314,7 @@ ADMINISTRATION: Final[tuple[str, ...]] = (
     "admin:agent_lifecycle",
     "admin:application_log",
     "admin:automation",
+    "admin:browser",
     "admin:budget",
     "admin:compliance",
     "admin:connector",

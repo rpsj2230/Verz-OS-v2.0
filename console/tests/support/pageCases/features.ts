@@ -30,6 +30,23 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         plugins_have_no_loader: true,
         every_change_is_in_the_audit_trail: true,
       },
+      "/api/v1/install/browser": {
+        targets: [
+          {
+            name: "books",
+            origins: ["https://books.example"],
+            api_tools: [],
+            surfaces: [],
+            bindings: [],
+            declared_by: UNBROKEN,
+            declared_at: "2019-03-04T09:00:00Z",
+          },
+        ],
+        unreadable: [],
+        grants: [],
+        declarations_are_on: true,
+        most_days: 90,
+      },
       "/api/v1/migration": {
         inventory: { saved: null, document: null, agreed: false, gaps: [] },
         parallel: {

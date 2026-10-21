@@ -340,7 +340,7 @@ async def prepare_run(
     ceiling: AutonomyTier,
     trace_id: str,
     now: datetime,
-    exceptions: Sequence[SurfaceException] = (),
+    exceptions: Sequence[SurfaceException] | None = None,
 ) -> Envelope:
     """Compile a plan to an envelope, raise its approval if a write waits, and store both.
 
@@ -350,8 +350,14 @@ async def prepare_run(
     transaction, so a waiting envelope with no card, which `envelope_store.row_values` refuses,
     cannot be left behind by a failure between them.
     """
+    from brain.browsing.declared import live_exceptions
     from brain.gate.suspension_store import at_reach, put_suspension
 
+    # The exceptions in force at this instant, read here and nowhere later: one that lapsed or was
+    # revoked is not in the envelope this run is compiled to, and one signed afterwards is not in
+    # it either (`brain.browsing.autonomy`). A caller that hands a list in is deciding for itself.
+    if exceptions is None:
+        exceptions = await live_exceptions(session, now, target=target.name)
     envelope = compile_envelope(
         plan,
         target,

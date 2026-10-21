@@ -166,6 +166,10 @@ from brain.automations_routes import router as automations_router
 # `brain.binding_routes`.
 from brain.binding_routes import router as binding_router
 
+# The websites an agent's browser may be pointed at, and the exceptions and exemptions signed for
+# them. See `brain.browser_routes`.
+from brain.browser_routes import router as browser_router
+
 # Corrections carrying the right answer, decided as a new version of their document is.
 # See `brain.candidate_routes`.
 from brain.candidate_routes import router as candidate_router

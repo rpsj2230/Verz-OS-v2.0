@@ -1875,9 +1875,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M19.2.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): browsing/targets.py has Target, Surface (declared verbs, read_back) and TargetRegistry with tests. Nothing stores targets: no table, route or console page declares one; website_check defaults to an empty registry and acceptance_audit builds one in memory. NEXT: Add a browser_target table, route and console page (or a setup step) to declare targets and surfaces, then load the registry from it into website_check and the driver.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-21 (triage 2026-10-13 class 2/3, now wired): migration 0275 adds agent.browser_target and agent.browser_grant; brain.browsing.declared is the codec and the stores; brain.browser_routes (admin:browser, switch browser_declarations, ships off) and a 'Websites for agents' browsers' panel on the Features page declare a website, sign an exception or an exemption, list them and take them back. Install check a_website_is_declared_and_permissions_signed_for_it_are_read goes through those routes and then asks the readers (driver.prepare_run and skill_library.browser_refusals). This leaf: the target registry with declared surface maps is stored, shown and loaded (declared.registry_of). Not yet wired: website_check and the run tool still start with an empty registry until the read tool PR loads this one. INSTALL PROOF STEPS: 1. Features page: switch on 'Declare websites for agents' browsers and sign exceptions'. 2. In the Websites panel paste a declaration of a public page of your own (a name, its origin, one surface with verbs open and read and one field) and press Declare website: it is listed. 3. Install page: Run now, and read the row a_website_is_declared_and_permissions_signed_for_it_are_read: it must say Passed. ",
+    updated: "2026-10-21",
   },
   "M19.3.1": {
     status: "IN PROGRESS",
@@ -1985,9 +1985,9 @@ const PROGRESS = {
     updated: "2026-10-21",
   },
   "M19.6.7": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): browsing/skill_gate.py:load_gaps and may_load refuse a browser skill when a registered API tool exists unless an Exemption names an approver and expiry (max 90 days); test_browsing_sessions.py. No skill import or load path imports skill_gate. NEXT: Call may_load from the skill import/pin path (tools/skills.py, ops/skill_store.py) with the target registry and an exemption source; exemption storage is also missing.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-21 (triage 2026-10-13 class 2/3, now wired): migration 0275 adds agent.browser_target and agent.browser_grant; brain.browsing.declared is the codec and the stores; brain.browser_routes (admin:browser, switch browser_declarations, ships off) and a 'Websites for agents' browsers' panel on the Features page declare a website, sign an exception or an exemption, list them and take them back. Install check a_website_is_declared_and_permissions_signed_for_it_are_read goes through those routes and then asks the readers (driver.prepare_run and skill_library.browser_refusals). This leaf: assigning a skill that names a browser tool to an agent whose scope reaches a declared website with an API tool in the registry is refused, naming the website and the tool, unless a live exemption names this skill and that website (console/skill_library.browser_refusals, called by assignment). INSTALL PROOF STEPS: 1. Features page: switch on 'Declare websites for agents' browsers and sign exceptions'. 2. In the Websites panel paste a declaration of a public page of your own (a name, its origin, one surface with verbs open and read and one field) and press Declare website: it is listed. 3. Install page: Run now, and read the row a_website_is_declared_and_permissions_signed_for_it_are_read: it must say Passed. 4. Sign an exemption for a skill and a website that has an API and assign it.",
+    updated: "2026-10-21",
   },
   "M19.7.1": {
     status: "IN PROGRESS",
@@ -2000,9 +2000,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M19.7.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): browsing/autonomy.py:SurfaceException, sign and runs_unattended cap writes at Assisted unless a signed exception exists, applied in envelope.compile_envelope; test_browsing_autonomy.py. Docstring: nowhere to keep an exception and recording it as a leash change is not wired. NEXT: Add an exception store, a console grant screen and an audit-ledger leash_change entry (shared with M19.9.7), and pass stored exceptions to compile_envelope.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-21 (triage 2026-10-13 class 2/3, now wired): migration 0275 adds agent.browser_target and agent.browser_grant; brain.browsing.declared is the codec and the stores; brain.browser_routes (admin:browser, switch browser_declarations, ships off) and a 'Websites for agents' browsers' panel on the Features page declare a website, sign an exception or an exemption, list them and take them back. Install check a_website_is_declared_and_permissions_signed_for_it_are_read goes through those routes and then asks the readers (driver.prepare_run and skill_library.browser_refusals). This leaf: a write on a page is compiled to wait for a person at the Assisted rung unless a live, unrevoked exception names that page; the signer must be able to perform the write (autonomy.sign), the end is within ninety days, and driver.prepare_run reads the exceptions in force at the instant it compiles. INSTALL PROOF STEPS: 1. Features page: switch on 'Declare websites for agents' browsers and sign exceptions'. 2. In the Websites panel paste a declaration of a public page of your own (a name, its origin, one surface with verbs open and read and one field) and press Declare website: it is listed. 3. Install page: Run now, and read the row a_website_is_declared_and_permissions_signed_for_it_are_read: it must say Passed. 4. Sign an exception for a page that writes and read it in the list.",
+    updated: "2026-10-21",
   },
   "M20.1.1": {
     status: "READY FOR TESTING",
@@ -4740,9 +4740,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M19.9.7": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): autonomy.SurfaceException and skill_gate.Exemption are value types with sign and expiry rules (test_browsing_autonomy.py). No store, no console screen or route for an administrator to grant one, no ledger leash_change entry, no listing until lapse. NEXT: Build a table, routes and a console page for grants with approver and expiry, write the audit leash_change on grant, pass live grants into compile_envelope and may_load.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-21 (triage 2026-10-13 class 2/3, now wired): migration 0275 adds agent.browser_target and agent.browser_grant; brain.browsing.declared is the codec and the stores; brain.browser_routes (admin:browser, switch browser_declarations, ships off) and a 'Websites for agents' browsers' panel on the Features page declare a website, sign an exception or an exemption, list them and take them back. Install check a_website_is_declared_and_permissions_signed_for_it_are_read goes through those routes and then asks the readers (driver.prepare_run and skill_library.browser_refusals). This leaf: a grant is listed with who signed it and when it lapses, is a leash_change entry in the audit ledger when signed and when revoked (trigger in 0275, held to the shape of a leash change by a test), and a run compiled after the end or the revocation no longer has it. INSTALL PROOF STEPS: 1. Features page: switch on 'Declare websites for agents' browsers and sign exceptions'. 2. In the Websites panel paste a declaration of a public page of your own (a name, its origin, one surface with verbs open and read and one field) and press Declare website: it is listed. 3. Install page: Run now, and read the row a_website_is_declared_and_permissions_signed_for_it_are_read: it must say Passed. 4. Revoke the exception: it leaves the list and the Audit page shows two leash changes about the website.",
+    updated: "2026-10-21",
   },
   "M19.9.8": {
     status: "IN PROGRESS",
