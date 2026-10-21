@@ -206,6 +206,7 @@ def test_the_reach_is_computed_where_this_file_says_and_nowhere_else() -> None:
         "models/calls.py": ("complete",),
         "models/residency.py": ("requirement_for",),
         "ops/automation.py": ("flow_reach",),
+        "ops/mover_automations.py": ("lost_reach",),
         "ops/denial_alerts.py": ("reach",),
         "ops/feedback.py": ("may_flag",),
         "tools/run_skill.py": ("handler", "run_skill_script"),
@@ -277,6 +278,7 @@ def test_every_intersection_that_knows_the_instant_passes_it() -> None:
         "memory/review.py": ("agent_memory",),
         "ops/denial_alerts.py": ("reach",),
         "ops/feedback.py": ("may_flag",),
+        "ops/mover_automations.py": ("lost_reach",),
         "tools/run_skill.py": ("handler", "run_skill_script"),
     }
 
