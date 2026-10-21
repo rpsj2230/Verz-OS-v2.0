@@ -58,7 +58,6 @@ A_ROUTE_THAT_WOULD_RETIRE_IT: dict[str, str] = {
     "credential.check_source": f"{API_PREFIX}/connectors/{{connector}}/test",
     "knowledge.export_inventory": f"{API_PREFIX}/knowledge/inventory",
     "service_account.change_end": f"{API_PREFIX}/govern/service-accounts/{{client_id}}/end",
-    "skill.try_out": f"{API_PREFIX}/skills/{{digest}}/rehearsal",
 }
 
 #: A neighbouring route that must NOT retire it, so a pattern that matches everything is caught.

@@ -175,15 +175,6 @@ EXPLANATIONS: Final[tuple[Explanation, ...]] = (
             rf"^{API_PREFIX}/govern/service-accounts/\{{[^}}]+\}}/(end|lapse|expiry|not-after)\b"
         ),
     ),
-    Explanation(
-        "skill.try_out",
-        Form.ACTION,
-        f"{SOON}trying a skill out through an agent in practice mode, as a named person, before "
-        "it is assigned for real.",
-        retired_by=(
-            rf"^{API_PREFIX}/(skills/\{{[^}}]+\}}/(rehearsal|trial)|agents/\{{[^}}]+\}}/rehearse)\b"
-        ),
-    ),
     # Sentences in place of a control, for what this product does not offer at all.
     Explanation(
         "capability.vocabulary_declared",

@@ -431,6 +431,7 @@ async def asked(
     agent: str | None = None,
     at: datetime | None = None,
     kinds: Sequence[Any] = (),
+    try_skill: str | None = None,
 ) -> Answered:
     """One question through `/answer`'s own function, as `principal_id` in the console.
 
@@ -477,7 +478,7 @@ async def asked(
         # the time each step took (M27.15.6) exactly as one asked in the console does.
         open_trace(trace_of(h, n), now, Channel.CONSOLE, clock=lambda: wall.now(UTC)),
         Answering(principal=person, reach=reach, channel=Channel.CONSOLE, now=now),
-        Question(question=question, agent=agent, kinds=tuple(kinds)),
+        Question(question=question, agent=agent, kinds=tuple(kinds), try_skill=try_skill),
     )
     if not isinstance(outcome, Answered):
         raise CheckFailedError("a question was refused by a window the check never installs")
