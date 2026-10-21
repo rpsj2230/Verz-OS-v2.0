@@ -460,7 +460,16 @@ async def asked(
     if person is None:
         raise CheckFailedError("a reserved person was not live in the directory")
     reach = admit(await h.reach(principal_id), Channel.CONSOLE, Assurance.AUTHENTICATED)
-    request = Request({"type": "http", "app": app, "headers": [], "method": "POST"})
+    # The check's own trace is also the header the route's trace middleware would have bound, so a
+    # stop the budget records for this question carries the trace the request row does.
+    request = Request(
+        {
+            "type": "http",
+            "app": app,
+            "headers": [(b"x-trace-id", trace_of(h, n).encode())],
+            "method": "POST",
+        }
+    )
     now = h.now if at is None else at
     outcome = await answered_for(
         request,

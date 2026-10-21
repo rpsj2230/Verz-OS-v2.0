@@ -2405,8 +2405,8 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.12.5": {
-    status: "OPEN",
-    why: "Built: a finished request is costed from the provider's counts and the price list by ops.usage_store.UsageRecorder, and budgets and stops are as for M27.7.15. No install check follows a model call to its spend row; one would use the stand-in model the routing checks use.",
+    status: "READY FOR TESTING",
+    why: "Built and wired, and now followed end to end by the install check `a_model_call_is_costed_and_a_used_up_budget_stops_the_next`: a question answered by a priced stand-in model leaves one cost in its department equal to the tokens its request row recorded at the price set. To prove it on the install: open Install, run the checks, and read that check; the leaf closes when it passes on the install's two newest runs. It says it was not run, rather than failing, on an install with no currency set. Found on the way and fixed for every install: a question the checks ask was recorded with no trace on a budget stop, which the table refused, so the stop was silently not written.",
     updated: "2026-10-21",
   },
   "M27.12.7": {
@@ -2750,8 +2750,8 @@ const PROGRESS = {
     updated: "2026-10-06",
   },
   "M27.7.15": {
-    status: "OPEN",
-    why: "Built: spend, department and person budgets are versioned and stops are listed with whether they were enforced (install checks M21.1.5 and M21.3.6 pass on the install). Enforcement ships off behind budget_enforcement by the owner's decision 169. No install check follows a real model call into a stop.",
+    status: "READY FOR TESTING",
+    why: "Built and wired, and now followed end to end by the install check `a_model_call_is_costed_and_a_used_up_budget_stops_the_next`: a department whose daily ceiling is used up has a stop recorded for its next question, listed to a reader of that department's spend with whether the install enforced it, and shown to nobody in another department. The check reads the enforcement switch and never sets it, so it passes on an install with enforcement off (the stop is listed as not enforced) and on one with it on. To prove it on the install: open Install, run the checks and read that check; the leaf closes when it passes on the install's two newest runs.",
     updated: "2026-10-21",
   },
   "M27.7.17": {
