@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-21T05:52:20.088109+00:00",
-  "commit": "fc30e2ad",
-  "commit_subject": "8 more tasks are proved on the install by the newest complete acceptance run",
+  "generated_at": "2026-10-21T07:11:40.550832+00:00",
+  "commit": "9d620c27",
+  "commit_subject": "Adoption is wired: a first connector, starter questions from what indexed, and a per-department coverage statement (M34.1.1.1, M34.1.1.2, M34.1.2.1, M34.1.2.2, M34.1.2.3) (#660)",
   "total": 1626,
-  "done": 1176,
-  "percent": 72.3,
-  "built": 1361,
-  "built_percent": 83.7,
+  "done": 1181,
+  "percent": 72.6,
+  "built": 1366,
+  "built_percent": 84.0,
   "built_unproven": 185,
   "built_task_ids": [
     "M1.1.8",
@@ -263,16 +263,16 @@
       "wave": 4,
       "name": "Doing, lifecycle, extensions",
       "total": 232,
-      "done": 113,
-      "percent": 48.7,
-      "in_progress": 66,
+      "done": 118,
+      "percent": 50.9,
+      "in_progress": 61,
       "ready_for_testing": 32,
       "blocked": 16,
       "open": 5,
       "acts": 0,
       "decided": 23,
-      "built": 144,
-      "built_percent": 62.1
+      "built": 149,
+      "built_percent": 64.2
     },
     {
       "wave": 5,
@@ -651,10 +651,10 @@
       "name": "Onboarding and adoption",
       "wave": 4,
       "total": 19,
-      "done": 7,
+      "done": 12,
       "acts": 0,
       "decided": 4,
-      "built": 7
+      "built": 12
     },
     {
       "module": "M35",
@@ -1572,6 +1572,11 @@
     "M33.7.1.5",
     "M33.8.1",
     "M33.8.3",
+    "M34.1.1.1",
+    "M34.1.1.2",
+    "M34.1.2.1",
+    "M34.1.2.2",
+    "M34.1.2.3",
     "M34.2.2.3",
     "M34.3.1.1",
     "M34.3.1.2",
@@ -3309,35 +3314,10 @@
       "why": "An install check naming this task is merged on main; it closes when the install's two newest runs both pass it.",
       "updated": "2026-10-13"
     },
-    "M34.1.1.1": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): adoption.first_connector (picks the connector that answers a real question before any upload) is built and tested (test_adoption) but nothing outside adoption.py calls it; no setup or Connectors page recommends a first connector. NEXT: Call first_connector from the setup wizard's connector step or the Connectors screen's empty state, over ConnectorOffer rows from the manifests.",
-      "updated": "2026-10-13"
-    },
-    "M34.1.1.2": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): adoption.starter_questions (three department-scoped questions from entities that actually indexed) is built; its only importer is ops.guide_docs, which nothing imports. Ask.tsx suggests no question before the first ask. NEXT: Serve starter_questions from a route for the signed-in person's department (reader-scoped) and render them in the Ask empty state.",
-      "updated": "2026-10-13"
-    },
     "M34.1.1.3": {
       "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): Answers carry citations to the source record (provenance, cited_document_routes, CitedDocument.tsx). adoption.verification_targets, which picks what a person can check in a system they already trust, has no caller. NEXT: Call verification_targets from the answer view so each answer names where to verify it, or confirm citations already satisfy the leaf and write the check over them.",
-      "updated": "2026-10-13"
-    },
-    "M34.1.2.1": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): adoption.coverage_report/ScopeCoverage (records and last sync per department and source) is built; no route or page calls it. Connectors screens show per-source status, not a per-scope statement; department_view_routes coverage is knowledge freshness. NEXT: Add a per-department coverage route over connector sync state feeding adoption.coverage_report and show it on Adoption or Departments.",
-      "updated": "2026-10-13"
-    },
-    "M34.1.2.2": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): adoption.Coverage.NOT_CONNECTED per department is unwired; the Connectors dashboard already shows a source as Not connected (ConnectorDashboard.tsx NOT_CONNECTED_TITLE) but per source, not per department. NEXT: Show the per-department state through coverage_report (see M34.1.2.1).",
-      "updated": "2026-10-13"
-    },
-    "M34.1.2.3": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): adoption.shopping_list (actions for the champion, not a progress bar) is built and tested; nothing outside adoption.py calls it (locale.py only names its two work kinds). NEXT: Add it to the Adoption page for a champion, fed by coverage_report; reader-scoped.",
-      "updated": "2026-10-13"
+      "why": "PARTLY BUILT 2026-10-20 (branch M34/adoption-wiring): the starter questions built from data each name the system to check the answer in (adoption.StarterQuestion.check_in, drawn by AskWelcome as 'Check the answer in <source>'), and a source with no live lookup of a record by its id contributes none. An ordinary answer is checkable through its citation (CitedDocument) and, for a record, its source; adoption.verification_targets is not called from the answer view because it ranks documents by how often answers cite them and nothing records that (see M34.2.1.1). NEXT: decide whether citations already satisfy the leaf for ordinary answers and write the check over them.",
+      "updated": "2026-10-20"
     },
     "M34.2.1.1": {
       "status": "IN PROGRESS",
@@ -4067,11 +4047,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 10,
+  "closed_today": 15,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "9d620c2",
+      "at": "2026-10-21T06:30:05+00:00",
+      "subject": "Adoption is wired: a first connector, starter questions from what indexed, and a per-department coverage statement (M34.1.1.1, M34.1.1.2, M34.1.2.1, M34.1.2.2, M34.1.2.3) (#660)",
+      "closed": "M34.1.1.1,M34.1.1.2,M34.1.2.1,M34.1.2.2,M34.1.2.3"
+    },
     {
       "sha": "fc30e2a",
       "at": "2026-10-21T05:18:48+00:00",
@@ -4185,12 +4171,6 @@
       "at": "2026-10-07T01:21:58+00:00",
       "subject": "One hundred and forty-nine tasks close on the install's own acceptance runs since the deploys of 6 October (#473)",
       "closed": "M11.7.8,M11.8.10,M11.8.12,M11.8.6,M11.8.7,M11.8.8,M12.2.7,M13.1.2,M13.1.3,M13.2.2,M13.2.5,M13.4.2,M13.4.3,M13.4.4,M13.4.5,M13.7.3,M13.7.5,M13.7.6,M13.7.8,M13.8.1,M14.3.5,M14.4.2,M14.4.4,M14.6.5,M14.8.3,M15.3.4,M16.2.8,M16.5.1,M16.6.5,M16.6.6,M16.7.6,M20.1.3,M20.2.1,M20.4.1,M20.4.4,M27.1.3,M27.1.4,M27.1.6,M27.11.1,M27.11.11,M27.11.16,M27.11.3,M27.11.5,M27.11.8,M27.12.1,M27.12.2,M27.12.7,M27.13.1,M27.15.20,M27.15.21,M27.15.22,M27.15.24,M27.15.31,M27.15.36,M27.15.38,M27.15.39,M27.15.43,M27.15.48,M27.15.5,M27.15.51,M27.15.55,M27.15.56,M27.15.58,M27.15.60,M27.15.63,M27.15.66,M27.15.7,M27.15.8,M27.15.9,M27.2.1,M27.2.2,M27.2.4,M27.3.2,M27.3.7,M27.5.10,M27.5.6,M27.5.8,M27.6.1,M27.7.10,M27.7.11,M27.7.12,M27.7.13,M27.7.14,M27.7.18,M27.7.19,M27.7.24,M27.7.27,M27.7.28,M27.7.29,M27.7.3,M27.7.5,M27.7.7,M27.7.8,M27.7.9,M27.8.11,M27.8.15,M27.8.16,M27.8.6,M27.8.9,M27.9.1,M27.9.2,M27.9.3,M27.9.4,M27.9.5,M27.9.9,M28.2.1,M28.2.3,M33.1.2.2,M33.1.2.4,M33.2.1.1,M33.2.1.2,M33.2.2.1,M33.2.2.2,M33.2.2.3,M33.2.2.5,M33.3.1.1,M33.3.1.2,M33.3.1.5,M33.4.1.1,M33.4.1.2,M33.5.1.1,M33.5.1.2,M33.6.1.2,M33.6.1.4,M33.7.1.2,M33.7.1.4,M33.7.1.5,M33.8.1,M39.1.1.3,M39.1.2.1,M39.1.2.2,M39.1.2.3,M39.2.1.1,M39.2.1.2,M39.2.1.3,M39.2.1.5,M39.2.4.3,M39.3.2.1,M39.3.2.2,M39.3.2.3,M39.3.2.4,M39.3.2.5,M39.4.2.3,M39.8.2,M39.8.3,M39.8.6,M39.8.9,M5.7.3,M6.5.1"
-    },
-    {
-      "sha": "1c9a550",
-      "at": "2026-10-06T17:14:23+00:00",
-      "subject": "The browser harness proves two tabs refresh, no page leaks an internal name or another host, and a drawer works under the console's style policy (#451)",
-      "closed": "M27.15.13,M27.15.53,M27.15.81,M27.15.82"
     }
   ]
 }
