@@ -1756,8 +1756,8 @@ const PROGRESS = {
   },
   "M18.1.2": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): orchestration/contract.py SubtaskContract (objective, output schema as FieldSpec, tool hints, scope predicate) and subtask_ceiling() are tested in test_orchestration_contract.py. No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package. NEXT: build the orchestrator runtime that calls it: a coordinating-agent step in the run path (gate/runtime or a new orchestration runner) fed by the M18.5.3 planner and the M18.5.1 callee links",
-    updated: "2026-10-13",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M18.1.3": {
     status: "IN PROGRESS",
@@ -1766,8 +1766,8 @@ const PROGRESS = {
   },
   "M18.1.4": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): contract.py has no prose field kind and contract_gaps() refuses a contract that would let free prose be the output (tested). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package. NEXT: build the orchestrator runtime that calls it: a coordinating-agent step in the run path (gate/runtime or a new orchestration runner) fed by the M18.5.3 planner and the M18.5.1 callee links",
-    updated: "2026-10-13",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M18.2.1": {
     status: "IN PROGRESS",
@@ -1806,13 +1806,13 @@ const PROGRESS = {
   },
   "M18.3.4": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): delegation.depth_of(), chain_refusals(), concurrency_refusals() hold depth two and eight children (tested). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package. NEXT: call chain_refusals and concurrency_refusals when the orchestrator creates each child",
-    updated: "2026-10-13",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M18.3.5": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): delegation.fan_out_request() builds an ops.admission request per run and global_ceiling() reads the central budget (tested). No module outside brain.orchestration imports it (git grep), so no run uses it; the old proxy note said wired but only docstrings mention the package. NEXT: submit fan_out_request to ops.admission before children start; refuse or queue when the global budget is spent",
-    updated: "2026-10-13",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M18.4.1": {
     status: "IN PROGRESS",
@@ -3020,9 +3020,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M30.3.11": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): recovery.alerts() ranks VERIFICATION_FAILED above BACKUP_AGED and last_attempt covers a drill that ran and did not verify (tested). Same gap: backup_exposure runner has no run, no drill records are written, no channel sends it. NEXT: same wiring as M30.3.10 plus the drill record writer (M30.3.8) so a failed verification exists to alert on",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: a rehearsal that did not verify is recorded by the drill service and is the first alert the existing report raises. PROOF ON THE INSTALL: the check a_rehearsal_that_did_not_verify_is_the_loudest_alert passes; to see it live, a failed record on the Recovery screen appears above a late copy.",
+    updated: "2026-10-20",
   },
   "M30.3.2": {
     status: "OPEN",
@@ -3030,14 +3030,14 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M30.3.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): recovery.destination_gaps() refuses an on-host destination (tested) but nothing calls it; brain-install-backup defaults the endpoint to the install's own SeaweedFS container, so copies stay on the host unless an operator sets another endpoint. Manifest has no off_host field. NEXT: require an off-host endpoint in brain-install-backup and the setup wizard, record it in the manifest, and call destination_gaps from the recovery panel route",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: the installer refuses a default and an address that is plainly this machine, copies declare off_host on the manifest, and the Recovery screen states a copy kept on the host (brain.ops.recovery.placement_findings). PROOF ON THE INSTALL: 1. Run ops/backup/brain-install-backup with BRAIN_BACKUP_ENDPOINT set to an object store on another machine and BRAIN_BACKUP_OFF_HOST=yes. 2. Take one copy (systemctl start brain-backup.service). 3. Open Backup and recovery: no finding says the copy is on the same host. The install check the_newest_copy_is_off_the_host_under_the_clients_key passes on the next run.",
+    updated: "2026-10-20",
   },
   "M30.3.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): recovery.KeyHolder and destination_gaps() refuse platform-held or no key (tested) but brain-backup and brain-install-backup contain no encryption step at all and the manifest records no key holder; nothing calls destination_gaps. NEXT: add client-held-key encryption (age or gpg public key from setup) to brain-backup before upload, record key holder in the manifest, surface in recovery panel",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: brain-backup-crypt encrypts each copy to the client's public key before it leaves the machine and the manifest names the client as key holder. PROOF ON THE INSTALL: 1. Generate a key pair on the client's own machine and copy only the public file to the server. 2. Run the installer with BRAIN_BACKUP_RECIPIENT set to that file. 3. Take a copy: the bucket holds a .dump.enc and a .dump.key and no plain .dump. 4. The Recovery screen lists no finding about the key. The install check the_newest_copy_is_off_the_host_under_the_clients_key passes.",
+    updated: "2026-10-20",
   },
   "M30.3.5": {
     status: "READY FOR TESTING",
@@ -3045,24 +3045,24 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M30.3.6": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): ops/backup/brain-restore-drill loads one copy into a named scratch database and compares counts and migration head; docs/install/restore-drill.md. Run by hand: schedule_runner Runner restore_drill has needs= and no run; no timer; it does not create the scratch container or write the drill record. NEXT: give Runner restore_drill a run that fetches the newest copy, drives the script, writes the drill record to the backups bucket, started weekly by the worker",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: ops/backup/brain-drill-service with brain-drill.timer rehearses the newest copy when a week has passed or one is asked for, behind the choice in needs-rupash 235 (option B). PROOF ON THE INSTALL: 1. Run the installer with BRAIN_DRILL_SERVICE=yes. 2. Wait ten minutes or press Start a rehearsal once its switch is on. 3. A record ending .drill.json appears beside the copy and the Recovery screen shows the rehearsal. The check the_newest_rehearsal_asked_all_three_questions passes on the next run.",
+    updated: "2026-10-20",
   },
   "M30.3.7": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): recovery.Check has SCHEMA_COMPLETE, SMOKE_QUERY, PERMISSION_CANARY as required checks (tested); brain-restore-drill does row counts and migration head only and says the schema check, RLS sweep and canary are manual steps in the drill document. NEXT: extend the drill runner to run schema, smoke and permission canary checks on the scratch copy and record each CheckRun in the drill record",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: python -m brain.ops.drill_checks asks the loaded copy for its schema and the permission canary (a stranger refused, the owner shown, role and fast lane attributes). PROOF ON THE INSTALL: the record written by the first rehearsal lists schema_complete, smoke_query and permission_canary as asked; the check the_newest_rehearsal_asked_all_three_questions passes.",
+    updated: "2026-10-20",
   },
   "M30.3.8": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): recovery.verification_of() refuses an RTO on an unverified drill and backup_manifest.read_drills() reads drill records (tested); nothing writes a drill record, the script leaves it to the person, so the install records no measured RTO. NEXT: have the drill runner time the restore and write the drill record; then GET /install/recovery shows the measured RTO against the profile target",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: the drill service writes the record the product reads, and a verified record carries its measured recovery time. PROOF ON THE INSTALL: after a rehearsal verifies, Backup and recovery shows how long the last restore took against the profile's promise. The check a_verified_rehearsal_states_its_measured_time passes.",
+    updated: "2026-10-20",
   },
   "M30.3.9": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): GET /install/recovery (install_routes.py) and console RecoveryPage show last backup, last verified restore, last attempt and drill due via console/recovery_view.py; tested. No one-click drill: install_routes.py says it is a write nothing performs. backup_ladder unwired. NEXT: add a POST drill route starting the drill runner (M30.3.6) under admin capability, and a Start rehearsal button on RecoveryPage",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: Start a rehearsal on Backup and recovery leaves a request for the server's drill service (POST /install/recovery/rehearsal), behind the backup_drill_requests switch which ships off; it says it asked and never that a rehearsal began. PROOF ON THE INSTALL: 1. Turn Ask the server for a restore rehearsal on under Features (this is your answer to needs-rupash 235). 2. Press Start a rehearsal and confirm. 3. Within about ten minutes the screen shows a new rehearsal record. Only a person pressing it with the drill service installed can close this leaf.",
+    updated: "2026-10-20",
   },
   "M30.4.2": {
     status: "IN PROGRESS",
@@ -3715,9 +3715,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M37.5.1.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops/controls.py overdue() builds the alert (tested), and ops/notices.py lists CONTROL_NOT_RUN with 'No channel is chosen for it yet, so nothing sends it'. Nothing calls controls.overdue; worker and schedule_runner do not. NEXT: call controls.overdue from a scheduled runner using schedule_store last-run times and deliver via the notice sender to the operations alert holder; the channel choice may need a needs-rupash item",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT (under M17.7.2) and now claimed by its install check: brain.control_not_run_told tells whoever holds the operations alert, once per episode, when a safety mechanism has not run in its window. PROOF ON THE INSTALL: 1. Turn Tell whoever holds the alert when a safety mechanism has not run on under Features (it ships off). 2. The check a_mechanism_that_has_not_run_is_told_to_whoever_holds_the_alert passes on the next run (it says not run until the switch is on). 3. To see it live, stop the worker for longer than a control's window: the holder is told once in the chat tool they last used.",
+    updated: "2026-10-20",
   },
   "M37.5.1.4": {
     status: "READY FOR TESTING",
@@ -3725,9 +3725,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M37.5.2.1": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): ops/alerting.py Severity, Route, route_for(), routing_gaps() and controls.py use route_for for each control's runbook (tested in test_alerting.py). No delivery path: notices CONTROL_NOT_RUN and BACKUP_EXPOSURE say no channel is chosen, so no alert is routed to anyone. NEXT: wire alert delivery: resolve route_for's role to people and send via a channel (ops.notices sender); likely needs an owner decision on the channel",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT (under M17.7.2): the severity of each control's alert decides who is told, through alerting.route_for: everyone holding the operations alert, and the incident capability's holders too for an alert that wakes somebody, each only if they may open Incidents. PROOF ON THE INSTALL: the same check as M37.5.1.3 passes; a holder who cannot open Incidents is told nothing.",
+    updated: "2026-10-20",
   },
   "M37.5.2.2": {
     status: "IN PROGRESS",
@@ -4660,19 +4660,19 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M18.5.1": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No coordinator concept exists: no table or route holds which agents an administrator allowed an agent to call (agent_link_routes.py is deep links only), and no call-another-agent step is in the run path. Reuse: delegation.Hop and chain_refusals.",
-    updated: "2026-10-13",
+    status: "IN PROGRESS",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M18.5.2": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No specialist runs on a subtask: nothing hands a subtask to an agent. Pieces exist: EntitlementSet.intersect via ops.automation.flow_reach (commit 4f1f1d6 fold test), delegation.child_hops, contract.validated.",
-    updated: "2026-10-13",
+    status: "IN PROGRESS",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M18.5.3": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No planner step: nothing asks a model for subtasks and dependencies. plan.read_proposal() and plan_refusals() are built to check a proposal but nothing produces or calls one; needs-rupash lists M18.1.1 merged into M18.5.3.",
-    updated: "2026-10-13",
+    status: "IN PROGRESS",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M18.6.1": {
     status: "OPEN",
@@ -4680,14 +4680,14 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M18.6.2": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No fan-out grant on an agent: nothing in tables/agent*, agents/model.py or the department admin console holds a fan-out switch, and no run records a reason for running single loop. fanout.Verdict.SINGLE_LOOP exists unwired.",
-    updated: "2026-10-13",
+    status: "IN PROGRESS",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M18.7.1": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): Not built: fanout.Verdict has only SINGLE_LOOP and PARALLEL, and nothing says SINGLE_LOOP for a coordinator means running specialists in sequence rather than the coordinator doing their work. No orchestrator exists to hold the rule (register OWN2-5).",
-    updated: "2026-10-13",
+    status: "IN PROGRESS",
+    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-20",
   },
   "M19.8.1": {
     status: "OPEN",

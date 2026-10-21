@@ -1,0 +1,12 @@
+[Unit]
+Description=Look every ten minutes for a Company Brain restore rehearsal that is owed
+
+[Timer]
+# Ten minutes, not weekly: the service decides whether a rehearsal is owed (weekly, or asked for
+# from the console), and polling is how a button pressed at noon is answered before the weekend.
+OnBootSec=15min
+OnUnitInactiveSec=10min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

@@ -212,6 +212,25 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.agent_audience_routes:AudienceExtras.of": Repeat.READS,
         "brain.agent_audience_routes:AudienceExtras.add": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.agent_audience_routes:AudienceExtras.remove": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # What a coordinating agent may call and whether it may fan out: reads, and a link or a
+        # grant in this system's own tables, where a second allow of a live link writes nothing and
+        # a second withdrawal finds none live.
+        "brain.coordination_routes:Coordination.callees": Repeat.READS,
+        "brain.coordination_routes:Coordination.fan_out": Repeat.READS,
+        "brain.coordination_routes:Coordination.allow": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.coordination_routes:Coordination.withdraw": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.coordination_routes:Coordination.set_fan_out": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # Keeping a started run and the gate's decision for it: insert-only rows in this system's
+        # own tables, in the asker's name, once for each run.
+        "brain.coordination_routes:RunKeeper.keep": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # The model call that splits a request: work done elsewhere that leaves nothing behind.
+        "brain.coordination_routes:PlannerCalls.complete": Repeat.NO_EFFECT_AT_THE_FAR_END,
+        # A specialist's run is the agent loop: its reads leave nothing behind and any write it asks
+        # for is held for a person under a key of the action's digest, so a second run holds none.
+        "brain.orchestration.coordinator:Specialist.run": Repeat.NO_EFFECT_AT_THE_FAR_END,
+        # Slots of the global parallelism budget: a lease that lapses on its own, given back once.
+        "brain.orchestration.coordinator:Rooms.take": Repeat.EXPIRES_ON_ITS_OWN,
+        "brain.orchestration.coordinator:Rooms.give_back": Repeat.SAME_RESULT_WHEN_REPEATED,
         # The skill library: reads, and inserts into this system's own tables, where a second
         # import or decision is refused by the key and appends nothing, and an assignment writes
         # only when the install is the one it was decided about.

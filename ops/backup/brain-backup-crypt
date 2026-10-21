@@ -1,0 +1,136 @@
+#!/bin/sh
+# Encrypt a database copy to the client's public key, and read one back with their private key.
+#
+#   brain-backup-crypt encrypt --recipient PUBLIC.pem --in COPY --out COPY.enc --key-out COPY.key
+#   brain-backup-crypt decrypt --identity PRIVATE.pem --in COPY.enc --key COPY.key --out COPY
+#
+# WHY A PUBLIC KEY AND NOT A PASSPHRASE. The server that takes the nightly copy must be able to
+# encrypt it, and must not be able to read it back. A passphrase on the server is a key on the
+# server: whoever reaches the machine, or the bucket and the environment file together, holds
+# the copy's contents. With a public key the machine holds only the half that locks, so a copy
+# in a bucket is as unreadable to the machine that wrote it as to anybody else, and the client
+# who holds the private half is the only party able to open one. That is the whole of what
+# "encrypted with a client-held key" means in `brain.ops.recovery.KeyHolder`, and the platform
+# never holds either half.
+#
+# WHY TWO FILES. A copy is gigabytes and RSA encrypts a few hundred bytes. So a random data key
+# encrypts the copy with AES-256 (streamed, so memory does not grow with the database), and the
+# public key encrypts the data key. Both are uploaded, and a copy without its `.key` is as
+# unreadable as one without the private key, which is why the two are uploaded together.
+#
+# WHAT THIS DOES NOT DO. `openssl enc` is not authenticated encryption: a flipped bit in the
+# object decrypts to garbage rather than to a refusal. The copy is not trusted on its own
+# account. The manifest states its size and the drill compares it, the loader stops at the
+# first error, and the drill's row counts are compared with the manifest, so a corrupted copy is
+# a failed drill and never a verified one.
+#
+# The private key is never read by anything but `decrypt`, and `decrypt` is run on the client's
+# own machine or, for the weekly rehearsal, by the drill service with the identity the client
+# chose to leave on the server for it (`BRAIN_BACKUP_IDENTITY`). Leaving it there is the client's
+# decision to trade the strictest reading of "the server cannot read its own copies" for a
+# rehearsal nobody has to remember to do, and the Recovery screen says which it is.
+set -eu
+
+usage() {
+    cat <<'USAGE'
+usage: brain-backup-crypt encrypt --recipient PUBLIC.pem --in FILE --out FILE --key-out FILE
+       brain-backup-crypt decrypt --identity PRIVATE.pem --in FILE --key FILE --out FILE
+Exits 0 on success, 1 when a step failed, and 2 when it refuses before writing anything.
+USAGE
+}
+
+refuse() {
+    printf 'refused: %s\n' "$1" >&2
+    exit 2
+}
+
+fail() {
+    printf 'failed: %s\n' "$1" >&2
+    exit 1
+}
+
+command -v openssl >/dev/null || fail "openssl is not installed"
+
+[ "$#" -ge 1 ] || { usage >&2; refuse "no command"; }
+COMMAND="$1"
+shift
+case "$COMMAND" in
+    -h | --help)
+        usage
+        exit 0
+        ;;
+    encrypt | decrypt) ;;
+    *)
+        usage >&2
+        refuse "unknown command '$COMMAND'"
+        ;;
+esac
+
+RECIPIENT=
+IDENTITY=
+INPUT=
+OUTPUT=
+KEY_OUT=
+KEY_IN=
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --recipient | --identity | --in | --out | --key-out | --key)
+            [ "$#" -ge 2 ] || refuse "$1 needs a value"
+            case "$2" in
+                '' | -*) refuse "$1 needs a value, and was given '$2'" ;;
+            esac
+            case "$1" in
+                --recipient) RECIPIENT="$2" ;;
+                --identity) IDENTITY="$2" ;;
+                --in) INPUT="$2" ;;
+                --out) OUTPUT="$2" ;;
+                --key-out) KEY_OUT="$2" ;;
+                --key) KEY_IN="$2" ;;
+            esac
+            shift 2
+            ;;
+        *) refuse "unknown argument '$1'" ;;
+    esac
+done
+
+[ -f "$INPUT" ] || refuse "no input file at '$INPUT'"
+[ -n "$OUTPUT" ] || refuse "no --out"
+[ ! -e "$OUTPUT" ] || refuse "$OUTPUT already exists, and an output is never overwritten"
+
+umask 077
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/brain-backup-crypt.XXXXXX")"
+trap 'rm -rf "$WORK"' EXIT
+trap 'exit 1' INT TERM
+
+if [ "$COMMAND" = encrypt ]; then
+    [ -f "$RECIPIENT" ] || refuse "no public key at '$RECIPIENT'"
+    [ -n "$KEY_OUT" ] || refuse "no --key-out"
+    [ ! -e "$KEY_OUT" ] || refuse "$KEY_OUT already exists, and an output is never overwritten"
+    # A private key given as the recipient would encrypt to its public half and leave the private
+    # one on the server, which is the exact thing this script exists to keep off it.
+    if grep -q 'PRIVATE KEY' "$RECIPIENT"; then
+        refuse "$RECIPIENT holds a private key, and a recipient is the public half only"
+    fi
+    openssl pkey -pubin -in "$RECIPIENT" -noout 2>/dev/null \
+        || refuse "$RECIPIENT is not a public key in PEM form"
+    openssl rand -hex 32 > "$WORK/data-key" || fail "could not make a data key"
+    openssl enc -aes-256-cbc -pbkdf2 -md sha256 -pass "file:$WORK/data-key" \
+        -in "$INPUT" -out "$OUTPUT.partial" \
+        || { rm -f "$OUTPUT.partial"; fail "the copy could not be encrypted"; }
+    openssl pkeyutl -encrypt -pubin -inkey "$RECIPIENT" -pkeyopt rsa_padding_mode:oaep \
+        -in "$WORK/data-key" -out "$KEY_OUT.partial" \
+        || { rm -f "$OUTPUT.partial" "$KEY_OUT.partial"; fail "the data key could not be encrypted to the recipient"; }
+    mv "$OUTPUT.partial" "$OUTPUT"
+    mv "$KEY_OUT.partial" "$KEY_OUT"
+    exit 0
+fi
+
+[ -f "$IDENTITY" ] || refuse "no private key at '$IDENTITY'"
+[ -f "$KEY_IN" ] || refuse "no wrapped data key at '$KEY_IN'"
+openssl pkeyutl -decrypt -inkey "$IDENTITY" -pkeyopt rsa_padding_mode:oaep \
+    -in "$KEY_IN" -out "$WORK/data-key" 2>/dev/null \
+    || fail "the data key could not be opened with this private key, so this is not the key the copy was encrypted to"
+openssl enc -d -aes-256-cbc -pbkdf2 -md sha256 -pass "file:$WORK/data-key" \
+    -in "$INPUT" -out "$OUTPUT.partial" 2>/dev/null \
+    || { rm -f "$OUTPUT.partial"; fail "the copy could not be decrypted"; }
+mv "$OUTPUT.partial" "$OUTPUT"

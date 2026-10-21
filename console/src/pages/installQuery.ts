@@ -65,6 +65,11 @@ export type Recovery = components["schemas"]["RecoveryView"];
 export type RecoveryPanel = components["schemas"]["RecoveryPanelView"];
 /** How a rehearsal is done here and the figures it is judged against. Sent on both shapes. */
 export type Rehearsal = components["schemas"]["RehearsalView"];
+/** What pressing Start a rehearsal answered: that one was asked, and when, and never that it began. */
+export type RecoveryRehearsalAsked = components["schemas"]["RecoveryRehearsalAsked"];
+
+/** The address a rehearsal is asked for at. It leaves a request for the server's drill service. */
+export const REHEARSAL_ASK_PATH = "/install/recovery/rehearsal";
 
 /** The ceilings, and the throttling list when there is one. */
 export type Limits = components["schemas"]["LimitsView"];

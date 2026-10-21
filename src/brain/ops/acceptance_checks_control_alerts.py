@@ -25,7 +25,7 @@ unit test holds because the check cannot age a binding's last use inside its tra
 when an administrator has not switched `control_not_run_alerts` on, which is every install until
 somebody does: the check says so in those words and does not turn it on.
 
-Task ids: M17.7.2
+Task ids: M17.7.2, M37.5.1.3, M37.5.2.1
 """
 
 from __future__ import annotations
@@ -83,7 +83,7 @@ THE_EMAIL_SAID_SOMETHING_ELSE: Final = (
 
 
 @check(
-    leaves=("M17.7.2",),
+    leaves=("M17.7.2", "M37.5.1.3", "M37.5.2.1"),
     sentence=(
         "A mechanism that has not run in its window is told once, in their own Slack chat, to a "
         "person who holds the operations alert and may open Incidents, naming it and how long and "
