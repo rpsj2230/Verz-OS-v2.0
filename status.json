@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-22T03:18:52.901639+00:00",
-  "commit": "8f624751",
-  "commit_subject": "The disconnect check reads tables by their time column, and the menu check names the step the database refused (#675)",
+  "generated_at": "2026-10-22T03:32:13.507711+00:00",
+  "commit": "6197ef34",
+  "commit_subject": "A credential typed into a page is shown to reach the page and be kept nowhere, and a run's observation of a page is shown to be a tree (M19.4.4, M19.1.4) (#676)",
   "total": 1626,
-  "done": 1223,
-  "percent": 75.2,
-  "built": 1400,
-  "built_percent": 86.1,
+  "done": 1225,
+  "percent": 75.3,
+  "built": 1402,
+  "built_percent": 86.2,
   "built_unproven": 177,
   "built_task_ids": [
     "M1.1.8",
@@ -270,16 +270,16 @@
       "wave": 5,
       "name": "Hands, delivery, go-live",
       "total": 217,
-      "done": 108,
-      "percent": 49.8,
-      "in_progress": 50,
+      "done": 110,
+      "percent": 50.7,
+      "in_progress": 48,
       "ready_for_testing": 29,
       "blocked": 19,
       "open": 11,
       "acts": 42,
       "decided": 18,
-      "built": 137,
-      "built_percent": 63.1
+      "built": 139,
+      "built_percent": 64.1
     },
     {
       "wave": 6,
@@ -493,10 +493,10 @@
       "name": "Browser and computer use",
       "wave": 5,
       "total": 47,
-      "done": 30,
+      "done": 32,
       "acts": 0,
       "decided": 1,
-      "built": 30
+      "built": 32
     },
     {
       "module": "M20",
@@ -1128,6 +1128,7 @@
     "M18.5.3",
     "M18.7.1",
     "M19.1.1",
+    "M19.1.4",
     "M19.1.5",
     "M19.1.6",
     "M19.2.1",
@@ -1139,6 +1140,7 @@
     "M19.3.3",
     "M19.3.4",
     "M19.3.5",
+    "M19.4.4",
     "M19.5.1",
     "M19.5.3",
     "M19.5.4",
@@ -2503,11 +2505,6 @@
       "why": "TRIAGE 2026-10-13 class 2 (partly built): browsing/runner.py:drive owns the line protocol, playwright_browser.py the CDP session, wire.py:snapshot_fields serialises snapshots; test_browsing_runner.py and test_browsing_wire.py cover the decisions. The runner is never run on a Docker daemon, gVisor or Chromium (browsing/__init__.py, ops/browser/REHEARSAL.md). NEXT: Same step as M19.1.2: build the runner image, rehearse one run and check a snapshot line reaches the launcher.",
       "updated": "2026-10-13"
     },
-    "M19.1.4": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): browsing/observation.py:Snapshot has no picture field; wire.snapshot_from_accessibility builds it from the accessibility tree and playwright_browser.py supplies the tree; test_browsing_targets.py. Never run in a browser; no control-plane caller consumes snapshots. NEXT: After the driver exists, check a read-only run returns a tree snapshot and no image field; observation.vision_gaps() is the static half to name now.",
-      "updated": "2026-10-13"
-    },
     "M19.3.6": {
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 3 (built, not wired): browsing/enforcer.py:recheck re-judges every returned result in the control plane; test_browsing_enforcer.py. Nothing outside browsing/ calls recheck, because the control-plane relay that would receive results is not built. NEXT: Call enforcer.recheck from the worker-side driver (compile an envelope, send wire start_fields to browser-launcher:7300, relay the run, call session_store.start/end and recording.write; launcher.py and recording.py say 'not built') on each runner record line before it is accepted or recorded.",
@@ -2526,11 +2523,6 @@
     "M19.4.3": {
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 3 (built, not wired): credentials.py:totp computes the code server side from the stored seed and resolve returns only the code; test_browsing_credentials.py. No caller outside browsing/ and no seed storage UI. NEXT: Wire with M19.4.1; add the vault slot for a seed and a check that a code is produced without the seed leaving the control plane.",
-      "updated": "2026-10-13"
-    },
-    "M19.4.4": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): credentials.py:scrub_outbound is live on the request path via ops/log_capture.py (Logs screen) and gate/screening.py; scrub_history is used only by browsing/recording.py. No browser run's message history is scrubbed in practice because no run exists. NEXT: Call scrub_history over each run's message history in the driver and treat a hit as an incident; log_capture already gives a check target.",
       "updated": "2026-10-13"
     },
     "M19.4.5": {
@@ -3871,11 +3863,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 4,
+  "closed_today": 6,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "6197ef3",
+      "at": "2026-10-22T03:20:03+00:00",
+      "subject": "A credential typed into a page is shown to reach the page and be kept nowhere, and a run's observation of a page is shown to be a tree (M19.4.4, M19.1.4) (#676)",
+      "closed": "M19.1.4,M19.4.4"
+    },
     {
       "sha": "844f3a1",
       "at": "2026-10-22T02:35:15+00:00",
@@ -3989,12 +3987,6 @@
       "at": "2026-10-19T16:27:06+00:00",
       "subject": "11 more tasks are proved on the install by the newest complete acceptance run",
       "closed": "M13.7.9,M13.8.7,M13.8.8,M20.5.1,M27.11.12,M27.11.13,M27.11.14,M27.15.32,M27.15.34,M27.15.35,M27.15.75"
-    },
-    {
-      "sha": "28a5095",
-      "at": "2026-10-19T06:24:02+00:00",
-      "subject": "What a new automation may use is the agent's own, read for the person writing it (M39.9.2.3) (#624)",
-      "closed": "M39.9.2.3"
     }
   ]
 }
