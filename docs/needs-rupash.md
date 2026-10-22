@@ -6,6 +6,29 @@ Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
 # Open
 
+## 262. After an agent writes on a website, may the system of record be asked about one named record, so the write can be checked?
+
+**In plain terms:** when an agent changes something on a website, the product can check the change by asking
+the company's own system (the CRM, the ticket tool) whether the change is there. Today that question carries
+only which run it was, which site and which page. It cannot say which record the write made, so a check can
+only ask "is something like this there?" and cannot ask "is the record this run just created there, with
+these values?". Four tasks (M19.5.2, M19.5.5, M19.9.5 and M19.9.8) want the second, stronger check. This is a
+design choice because naming a record means the browser run must learn a record reference from the page the
+agent wrote on, and a page can say anything.
+
+**Option A: add an optional record reference to the question,** taken from what the page confirmed after
+the write (an id the page shows), and checked by the system of record under the asker's own access. If the
+page shows no reference, the check says it could not tell and does not pass.
+
+**Option B: keep the question as it is,** and accept a check that says only that a matching record exists.
+The four tasks are reworded to say that, and a duplicate or an older matching record could satisfy it.
+
+**My recommendation:** A. It is the check that actually shows this run's write, the reference is only ever
+used to ask a system the asker may already read, and a page that lies about it can make the check fail but
+never pass.
+
+**What I need from you:** reply "262: A" or "262: B".
+
 ## 261. May anyone say why an answer was wrong from a chat, or only a department lead?
 
 **In plain terms:** task M34.2.2.1 asks for a way to correct an answer in every channel, not only the
