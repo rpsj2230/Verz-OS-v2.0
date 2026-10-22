@@ -27,7 +27,7 @@ as `brain.console.spend_view.may_read_spend` asks of spend, and nothing is said 
 A reader who can reach nothing is sent no sentence rather than an empty one, which would tell them
 there is something to reach and that it is not theirs.
 
-Task ids: M34.4.1, M34.3.2.1, M34.3.1.1, M34.3.1.2
+Task ids: M34.4.1, M34.3.2.1, M34.3.1.1, M34.3.1.2, M34.3.1.3
 """
 
 from __future__ import annotations
@@ -62,6 +62,12 @@ log = structlog.get_logger()
 
 #: Where the runbooks ship. The image copies `docs` to the application's own root.
 RUNBOOKS: Final = Path(__file__).resolve().parents[2] / "docs" / "console" / "runbooks"
+
+#: Where the guide for everybody who asks ships, beside the runbooks.
+ASKING_GUIDE: Final = Path(__file__).resolve().parents[2] / "docs" / "guides" / "asking-well.md"
+
+#: Said when the image carries no asking guide, or one `served_asking_guide` cannot cut.
+THE_GUIDE_IS_NOT_HERE: Final = "the asking guide is not shipped whole with this install"
 
 #: The screens the alert runbooks and the playbook are the readers' of. The Scheduled jobs page
 #: is read with the queue screen's grant, as `brain.jobs_routes` reads it.
@@ -123,6 +129,15 @@ class RunbookIndexView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     runbooks: list[RunbookLink]
+
+
+class AskingGuideView(BaseModel):
+    """How to ask well, with the reader's own department's examples and nobody else's."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    title: str
+    markdown: str
 
 
 class RunbookView(BaseModel):
@@ -267,6 +282,33 @@ async def what_it_sees(request: Request, asked: Asked) -> WhatItSeesView:
         can_ask_about=[rendered(one) for one in visibility_summary(reached)] if reached else [],
         privacy=[statement(one) for one in privacy_posture()],
     )
+
+
+@router.get("/help/asking-well", response_model=AskingGuideView, responses=COMMON_RESPONSES)
+async def asking_well(request: Request, asked: Asked) -> AskingGuideView:
+    """The guide to asking well, with the questions the caller's own department can ask (M34.3.1.3).
+
+    Open to every signed-in person, because it is addressed to everybody who asks and describes no
+    screen. The examples are `GET /welcome/from-your-data`'s own answer, called rather than
+    restated: the caller's own department, the kinds of record they may read there, at most three,
+    each saying where to check it, and none while the switch for them is off. A reader with nothing
+    to be offered is served the sentence the shipped page uses for a department with nothing
+    indexed, which is the same sentence for the three reasons there might be nothing.
+    """
+    from brain.ops.guide_docs import GuideShapeError, served_asking_guide
+    from brain.welcome_routes import welcome_from_data
+
+    if not ASKING_GUIDE.is_file():
+        raise Failed(THE_GUIDE_IS_NOT_HERE)
+    offered = await welcome_from_data(request, asked)
+    try:
+        markdown = served_asking_guide(
+            ASKING_GUIDE.read_text(encoding="utf-8"),
+            examples=[(one.question, one.check_in) for one in offered.questions],
+        )
+    except GuideShapeError:
+        raise Failed(THE_GUIDE_IS_NOT_HERE) from None
+    return AskingGuideView(title=title_of(markdown), markdown=markdown)
 
 
 @router.get("/help/runbooks", response_model=RunbookIndexView, responses=COMMON_RESPONSES)

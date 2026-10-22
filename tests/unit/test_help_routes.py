@@ -9,7 +9,7 @@ by routes that refuse everybody, so each page is asked by a reader who may open 
 answered, and by one who may not and refused with the one refusal, the same one a screen that does
 not exist gets.
 
-Task ids: M34.4.1, M34.3.2.1, M34.3.1.1, M34.3.1.2
+Task ids: M34.4.1, M34.3.2.1, M34.3.1.1, M34.3.1.2, M34.3.1.3
 """
 
 from __future__ import annotations
@@ -171,3 +171,46 @@ def test_what_it_sees_names_the_readers_own_departments_and_the_install_s_postur
     assert none["can_ask_about"] == []
     assert none["privacy"] == narrow["privacy"]
     assert SECOND_FACTOR
+
+
+def test_every_signed_in_person_is_served_the_asking_guide_with_the_sentence_for_nothing_indexed(
+    client: TestClient,
+) -> None:
+    """The guide is addressed to everybody who asks, so a person who may open no screen is served
+    it, and with questions built from data off, or nothing indexed, the table says so. It carries
+    none of the demo company's departments and none of the shipped page's own working.
+
+    Delete this and the guide is served only to administrators, or to staff with the demo company's
+    tables in it."""
+    from brain.ops.guide_docs import NO_EXAMPLES_YET, YOUR_DEPARTMENT
+
+    client.app.state.starter_questions_from_data_on = False  # type: ignore[attr-defined]
+    for who in ("u_none", "u_admin", "u_narrow"):
+        page = _get(client, who, "/help/asking-well")
+        assert page.status_code == 200
+        body = page.json()
+        assert body["title"] == "How to ask well"
+        assert body["markdown"].startswith("# How to ask well")
+        assert YOUR_DEPARTMENT in body["markdown"] and NO_EXAMPLES_YET in body["markdown"]
+        assert "checked: examples from" not in body["markdown"]
+        assert "## Task ids" not in body["markdown"]
+
+
+def test_a_guide_this_install_cannot_cut_is_not_served(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    """A shipped page that lost the headings it is cut at, and an image carrying no page, are both
+    refused as a server fault rather than served as the demo company's page or as nothing. Delete
+    this and an edit to the guide serves staff something the check never looked at."""
+    from brain import help_routes
+
+    client.app.state.starter_questions_from_data_on = False  # type: ignore[attr-defined]
+    broken = tmp_path / "asking-well.md"
+    broken.write_text("# How to ask well\n\nNo examples here.\n", encoding="utf-8")
+    for path in (broken, tmp_path / "missing.md"):
+        monkeypatch.setattr(help_routes, "ASKING_GUIDE", path)
+        refused = _get(client, "u_none", "/help/asking-well")
+        # Failed is the server's fault and says so in the log only, with the generic body.
+        assert refused.status_code == 500
+        assert refused.json()["message"] == "Something went wrong."
+        assert "markdown" not in refused.json()

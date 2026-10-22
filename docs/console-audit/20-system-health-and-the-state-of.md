@@ -3,7 +3,7 @@
 - **Screens:** `/`, `/models`, `/runs`, `/stop`
 - **Tables:** `ops.halt`
 - **Installation values:** none
-- **Measured here:** 11 routes, 8 called by no screen; 2 write routes, 2 with all three proofs; 1 gaps.
+- **Measured here:** 12 routes, 9 called by no screen; 2 write routes, 2 with all three proofs; 1 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -12,6 +12,7 @@
 | `GET /api/v1/halts` | `/stop` |
 | `GET /api/v1/help/alerts` | **no screen** |
 | `GET /api/v1/help/alerts/{control}` | **no screen** |
+| `GET /api/v1/help/asking-well` | **no screen** |
 | `GET /api/v1/help/playbook` | **no screen** |
 | `GET /api/v1/help/runbooks` | **no screen** |
 | `GET /api/v1/help/runbooks/{key}` | **no screen** |

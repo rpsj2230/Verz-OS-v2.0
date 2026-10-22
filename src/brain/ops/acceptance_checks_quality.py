@@ -14,7 +14,7 @@ questions**: no caller writes `ops.quality_reading` from an answer, and the prod
 corpus outside `tests/fixtures`. Each check's sentence says so where it matters, and the leaves it
 names are the ones its sentence is true of.
 
-Task ids: M28.3.1, M28.3.2, M28.3.3, M28.4.1, M28.5.3, M16.6.7, M16.7.14
+Task ids: M28.3.1, M28.3.2, M28.3.3, M28.4.1, M28.5.3, M16.6.7, M16.7.14, M34.2.2.2
 """
 
 from __future__ import annotations
@@ -168,6 +168,45 @@ async def a_flag_becomes_a_case_that_holds_no_value(
     smuggled = json.dumps({**document, "answer": "14 Nov 2026"})
     if not await _refused_by_the_database(h, lead, extra, flag=made.id, doc=smuggled, who=lead):
         raise CheckFailedError("the database accepted a case carrying an answer")
+
+
+# ------------------------------------------- 1b. a wrong-sources flag is its own half (M34.2.2.2)
+@check(
+    leaves=("M34.2.2.2",),
+    sentence=(
+        "A department lead flags one answer as having the wrong sources and another as having a "
+        "wrong fact: the list tells them apart as retrieval and reasoning, each flag in its own "
+        "half, and a lead of another department is shown neither."
+    ),
+)
+async def a_wrong_sources_flag_is_told_apart_from_a_wrong_fact(h: Harness) -> None:
+    from brain.ops.feedback import FlagReason
+    from brain.quality_routes import FlagAsked, flag_an_answer, listed_flags
+
+    await h.found_departments()
+    lead, other = h.principal(A, "planes"), h.principal(B, "planes")
+    reads = screen_grants("quality")
+    await h.person(lead, department=A, grants=(*reads, (FLAGGER, _in(A))))
+    await h.person(other, department=B, grants=(*reads, (FLAGGER, _in(B))))
+    console = console_for(h)
+    sources, fact = f"sources{h.run[:8]}", f"fact{h.run[:8]}"
+
+    filed = {}
+    for trace, reason in ((sources, FlagReason.WRONG_SOURCES), (fact, FlagReason.WRONG_FACT)):
+        asked = FlagAsked(trace_ref=trace, question_id="q1", department=A, reason=reason)
+        filed[trace] = await flag_an_answer(
+            console.request("POST"), await asking_as(h, lead), asked
+        )
+    listed = await listed_flags(console.request(), await asking_as(h, lead))
+    planes = {one.trace_ref: (one.reason, one.plane) for one in listed.items}
+    if planes.get(sources) != ("wrong_sources", "retrieval"):
+        raise CheckFailedError("a wrong-sources flag was not listed as a retrieval fault")
+    if planes.get(fact) != ("wrong_fact", "reasoning"):
+        raise CheckFailedError("a wrong-fact flag was not listed as a reasoning fault")
+    if (filed[sources].plane, filed[fact].plane) != ("retrieval", "reasoning"):
+        raise CheckFailedError("a flag was not told which half of the system it blames when filed")
+    if (await listed_flags(console.request(), await asking_as(h, other))).items:
+        raise CheckFailedError("a lead of another department was shown a flag they may not file")
 
 
 # --------------------------------------------------------- 2. two tiers, apart
