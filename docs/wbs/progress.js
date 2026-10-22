@@ -4060,14 +4060,14 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.2.2.2": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): member_activity.open_workspace (calls console.workspace.resolve at the person's own reach) has no caller. MyWorkspace shows agent ids as plain code, no link. The agent page is gated on admin screens. NEXT: wire open_workspace into a /me route (or link each My agents row) so a member lands on the agent's workspace tabs; then a check",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: each agent in My agents is a link to the agent's own page (/agents/<id>, MyWorkspace.tsx), which answers through GET /agents/{id}/workspace: the audience first, then only the tabs the person holds a grant for, and an agent they may not see is refused as one never made. member_activity.open_workspace was not wired and is not needed: the route already calls console.workspace.tab_strip and visible_agent_ids. Install check: a_member_opens_their_agent_and_sees_only_their_tabs (ops/acceptance_checks_member_agent_open.py), not yet run on the install.",
+    updated: "2026-10-22",
   },
   "M40.2.2.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): member_activity.build_personal_agent (template materialise inside the person's own ceiling) has no caller. Agent building today is agent_builder_routes/agents.creation, which needs the admin: agent-install capability. NEXT: add a member route POST /me/agents from a template instance calling build_personal_agent; needs a store write via agents.install_store",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: a member builds a personal agent in the builder (switch personal_agents), and a caller with no install authority now publishes their own personal agent at once when widened_capabilities(own reach, ceiling) is empty (agent_builder_routes._owners_own_within_their_reach, the owner's 2026-10-12 direction on item 173). A ceiling beyond their reach still waits for a second person, and an administrator's publish keeps its second person. member_activity.build_personal_agent has no caller and is not the live path. Install check: a_member_s_own_agent_in_their_reach_goes_out_on_their_word, not yet run on the install.",
+    updated: "2026-10-22",
   },
   "M40.2.2.4": {
     status: "READY FOR TESTING",

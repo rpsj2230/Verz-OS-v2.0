@@ -11,6 +11,7 @@ Task ids: M39.10.1, M39.10.2
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 
@@ -22,6 +23,7 @@ from brain.agent_builder_routes import (
     PUBLISHED_NEW,
     REFUSED,
     SAVE_PATH,
+    WAITS_FOR_A_SECOND_PERSON,
 )
 from brain.agents.attachments import AttachmentError, connectors_after_attach, with_connectors
 from brain.agents.kinds import (
@@ -46,6 +48,7 @@ from brain.knowledge.visibility import Visibility
 from tests.unit import test_agent_builder_routes as builder
 from tests.unit.test_agent_builder_routes import (
     Console,
+    a_document,
     at,
     checked,
     not_changed,
@@ -156,6 +159,125 @@ def test_with_the_switch_on_a_person_makes_an_agent_only_they_can_find(
     record = console.memory.agents[made.json()["agent_id"]].record
     assert record.audience == AgentAudience(level=Visibility.PERSONAL, owner_id=MEMBER)
     assert kind_of(record.audience) is AgentKind.PERSONAL
+
+
+def _ready_reaching(console: Console, pid: str) -> tuple[str, int]:
+    """A new draft of `pid` holding an agent that reads invoices, saved and checked."""
+    draft = console.post(pid, DRAFTS_PATH, {}).json()
+    saved_as = console.post(
+        pid,
+        at(SAVE_PATH, draft_id=draft["draft_id"]),
+        {"document": a_document(), "base": draft["revision"]},
+    )
+    assert saved_as.status_code == 200, saved_as.text
+    revision: int = saved_as.json()["revision"]
+    return draft["draft_id"], revision
+
+
+def test_a_member_publishes_their_own_agent_at_once_when_it_reaches_no_further_than_they_do(
+    console: Console, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A member who reads invoices (`u_wide`) builds an agent that reads invoices: the check says
+    nobody else is needed and the publish goes out on their word, personal and theirs. The owner's
+    direction on needs item 173 is that a person makes their own agent without asking anybody.
+
+    Delete this and a member's own agent waits for a second person for every capability it names,
+    which is asking somebody."""
+    _on(monkeypatch, value=True)
+    draft_id, revision = _ready_reaching(console, "u_wide")
+
+    check = checked(console, draft_id, revision, "u_wide").json()
+    assert check["passed"] is True
+    assert check["second_person_needed"] is False and check["widened"] == []
+    made = console.post("u_wide", at(PUBLISH_PATH, draft_id=draft_id), {"revision": revision})
+
+    assert made.status_code == 201, made.text
+    record = console.memory.agents[made.json()["agent_id"]].record
+    assert record.audience == AgentAudience(level=Visibility.PERSONAL, owner_id="u_wide")
+    assert "read:invoice.reference" in {one.value for one in record.authority.capabilities}
+
+
+def test_a_member_whose_agent_reaches_further_than_they_do_still_waits_for_a_second_person(
+    console: Console, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The refusal side of the same rule: the same agent built by a member who reads nothing is
+    held for a second person, the check says so, and nothing is stored until one approves it.
+
+    Delete this and the exemption can be widened to every member, so a ceiling that outgrows its
+    author's reach ships on that author's word alone."""
+    _on(monkeypatch, value=True)
+    draft_id, revision = _ready_reaching(console, MEMBER)
+    before = set(console.memory.agents)
+
+    check = checked(console, draft_id, revision, MEMBER).json()
+    assert check["second_person_needed"] is True
+    assert "read:invoice.reference" in check["widened"]
+    asked = console.post(MEMBER, at(PUBLISH_PATH, draft_id=draft_id), {"revision": revision})
+
+    assert asked.status_code == 202, asked.text
+    assert asked.json()["sentence"] == WAITS_FOR_A_SECOND_PERSON
+    assert set(console.memory.agents) == before
+
+
+def test_an_administrators_publish_keeps_its_second_person_even_when_it_is_their_own_reach(
+    console: Console,
+) -> None:
+    """An administrator who holds the install authority and reads invoices builds the same agent
+    and it still waits, because they make both kinds and the kind is chosen at the publish.
+
+    Delete this and the member's exemption becomes everybody's, which removes the second person
+    from every administrator's publish."""
+    draft_id, revision = _ready_reaching(console, "u_admin")
+    assert checked(console, draft_id, revision, "u_admin").json()["passed"]
+
+    asked = console.post("u_admin", at(PUBLISH_PATH, draft_id=draft_id), {"revision": revision})
+
+    assert asked.status_code == 202, asked.text
+    assert asked.json()["sentence"] == WAITS_FOR_A_SECOND_PERSON
+
+
+def test_the_exemption_is_for_the_callers_own_personal_agent_in_their_reach_and_no_other() -> None:
+    """Asked directly of the rule: it holds for a member's own personal agent that reads what they
+    read, and not for someone else's personal agent, a department's agent, an agent reading what
+    the member does not, or a caller who holds the install authority.
+
+    Delete this and the rule can be loosened on any one of those four sides while the routes'
+    tests, which can only reach a member's own new agent, stay green."""
+    from types import SimpleNamespace
+
+    from brain.agent_builder_routes import _owners_own_within_their_reach
+    from brain.agents.creation import AGENT_INSTALL_CAPABILITY
+
+    reads = Grant(capability=Capability(value="read:invoice"), scope=Scope.unrestricted())
+    install = Grant(capability=AGENT_INSTALL_CAPABILITY, scope=Scope.unrestricted())
+
+    def asked(*grants: Grant) -> Any:
+        reach = EntitlementSet(principal_id="u_maker", grants=grants)
+        return SimpleNamespace(
+            reach=reach,
+            now=datetime(2019, 3, 1, 9, 0, tzinfo=UTC),
+            caller=SimpleNamespace(principal=SimpleNamespace(id="u_maker")),
+        )
+
+    mine = AgentAudience(level=Visibility.PERSONAL, owner_id="u_maker")
+    record = AgentRecord(
+        agent_id="invoice_helper",
+        display_name="Invoice helper",
+        persona="Answers questions about invoices the asker may read.",
+        audience=mine,
+        authority=AgentAuthority(
+            scope=Scope.unrestricted(), capabilities=(Capability(value="read:invoice"),)
+        ),
+        created_by="u_maker",
+    )
+    someone_elses = AgentAudience(level=Visibility.PERSONAL, owner_id="u_other")
+    a_departments = AgentAudience(level=Visibility.DEPARTMENT, owner_id="u_maker", department="web")
+
+    assert _owners_own_within_their_reach(mine, record, asked(reads)) is True
+    assert _owners_own_within_their_reach(someone_elses, record, asked(reads)) is False
+    assert _owners_own_within_their_reach(a_departments, record, asked(reads)) is False
+    assert _owners_own_within_their_reach(mine, record, asked()) is False
+    assert _owners_own_within_their_reach(mine, record, asked(reads, install)) is False
 
 
 def test_a_person_without_the_authority_cannot_publish_a_team_agent_by_either_spelling(
