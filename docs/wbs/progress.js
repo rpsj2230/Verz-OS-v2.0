@@ -1905,9 +1905,9 @@ const PROGRESS = {
     updated: "2026-10-20",
   },
   "M19.3.6": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): browsing/enforcer.py:recheck re-judges every returned result in the control plane; test_browsing_enforcer.py. Nothing outside browsing/ calls recheck, because the control-plane relay that would receive results is not built. NEXT: Call enforcer.recheck from the worker-side driver (compile an envelope, send wire start_fields to browser-launcher:7300, relay the run, call session_store.start/end and recording.write; launcher.py and recording.py say 'not built') on each runner record line before it is accepted or recorded.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-21 over a stand-in page. The control plane re-judges everything the container reported: driver._finish replays the run's records against the envelope this side sealed (enforcer.recheck), reading none of the container's verdicts, and returns what it found on the result. Shown by install check a_browser_run_is_held_to_the_envelope_it_was_sealed_with: a run inside its envelope replays clean, and a click outside it, an origin nobody declared, an undeclared verb and a second use are each reported as attempts even though the container refused them. A reference is not re-checked by design (the only trees are the container's own). The page is a stand-in; a compromised container is the rehearsal. INSTALL PROOF STEPS: 1. Install page: Run now. 2. Read that row: it must say Passed.",
+    updated: "2026-10-21",
   },
   "M19.4.1": {
     status: "IN PROGRESS",
