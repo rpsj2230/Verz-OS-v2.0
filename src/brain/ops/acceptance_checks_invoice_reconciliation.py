@@ -61,7 +61,7 @@ RATE: Final = "0.5"
 MATCHING_INVOICE: Final = 2_000
 MISSING_INVOICE: Final = 2_100
 
-NO_CURRENCY_HERE: Final = (
+NO_CURRENCY_SET: Final = (
     "this install has not set its currency, so metered spend is not compared with an invoice here"
 )
 THE_LINE_WAS_NOT_THE_CHECKS: Final = (
@@ -114,7 +114,7 @@ async def metered_spend_is_held_against_a_providers_invoice(
 
     code, _zone = money_and_clock()
     if code == "XXX":
-        raise CheckNotRunError(NO_CURRENCY_HERE)
+        raise CheckNotRunError(NO_CURRENCY_SET)
     await h.found_departments()
     asker = h.principal(A, "asker")
     company, department = h.principal(A, "company"), h.principal(A, "department")

@@ -1170,6 +1170,15 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         NOT_RUN,
         acceptance_checks_model_spend.NO_CURRENCY_SET,
     )
+    # And the invoice check, which holds metered spend against an invoice in the install's currency;
+    # its own test file sets a currency and runs it (`tests/unit/test_acceptance_checks_invoice_
+    # reconciliation.py`).
+    from brain.ops import acceptance_checks_invoice_reconciliation
+
+    assert outcomes.pop("metered_spend_is_held_against_a_providers_invoice") == (
+        NOT_RUN,
+        acceptance_checks_invoice_reconciliation.NO_CURRENCY_SET,
+    )
     # A roll-up reads what the checks before it came to, so on an install where some of those are
     # not run it is not run too, and it is never failed while they pass; each one's own test file
     # runs the checks it reads (`tests/unit/test_acceptance_roll_up.py`).
