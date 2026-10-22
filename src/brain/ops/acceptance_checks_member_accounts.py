@@ -18,17 +18,20 @@ their own token back.
 made for, as inherited and with no control, and to nobody else: a person in another department is
 listed nothing, and asking to disconnect it is the one refusal.
 
-**Why the token is looked for in the tables a disconnect and a keep write, and not in every table.**
+**Why the token is looked for in a few tables, and only in the rows this run could have written.**
 This check used to ask `brain.ops.index_audit.tables_holding`, which reads every row of every table
 as text, one statement each, under the statement timeout. The owner's install stopped the check on
-an `OperationalError` on 2026-10-21 with no traceback to read; a scan of that size outrunning the
-timeout on a table as large as the chunks, the trace or the ledger is the most likely cause and is
-not confirmed, and the per-step sentences below are there to confirm or refute it on the next run.
-The leaf's claim is that a disconnect leaves no token behind, and a token it leaves behind is in a
-place it wrote or its keep wrote, so the search is over exactly those
-(`WHERE_A_TOKEN_COULD_BE_LEFT`) and finishes in moments on any install. The claim is narrower than
-"no table anywhere", and the sentence says so; the whole-database canary scan is
-`brain.ops.index_audit`'s own job.
+an `OperationalError` on 2026-10-21, and the narrowed search over seven tables stopped on the same
+install again on the run after, with the search itself named as the failing step. The ledger, the
+telemetry and the trace tables are the large ones and were still cast to text row by row. The leaf's
+claim is that a disconnect leaves no token behind, and a token it leaves behind is in a row this run
+wrote or its keep wrote, so the search reads each table by its own time column
+(`WHERE_A_TOKEN_COULD_BE_LEFT`), from an hour before the run started, which is an index range on the
+ledger and the telemetry and never a cast of the whole table. `ops.setting` has no time column and
+is a handful of rows. The claim is narrower than "no table anywhere", and the sentence says so; the
+whole-database canary scan is `brain.ops.index_audit`'s own job. Rejected: a trace-id filter, which
+needs the id each of the route's writes was made under and so misses the ones that are not the
+check's; and `xmin`, which is not indexed and so reads the whole table to answer.
 
 **Each step that can fail on a database says which one it was.** A statement the install refused
 used to surface as the exception's type name alone. Each step now has its own sentence, so a failure
@@ -45,8 +48,9 @@ from __future__ import annotations
 
 import secrets
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Final
 from urllib.parse import parse_qs
 
@@ -81,16 +85,21 @@ A, B = RESERVED_DEPARTMENTS
 VENDOR_REVOKE: Final = "https://identity.oauth-vendor.example/connect/revocation"
 
 #: The tables a disconnect or the keep of a token writes, which are the only places this check can
-#: honestly say a token was left behind. See the module docstring.
-WHERE_A_TOKEN_COULD_BE_LEFT: Final = (
-    "ops.credential_write",
-    "ops.connector_connection",
-    "ops.oauth_consent",
-    "ops.setting",
-    "obs.audit_entry",
-    "obs.request_telemetry",
-    "obs.trace_step",
-)
+#: honestly say a token was left behind, each with the column its rows are bounded by. `None` is a
+#: table with no time column that is a handful of rows. See the module docstring.
+WHERE_A_TOKEN_COULD_BE_LEFT: Final = {
+    "ops.credential_write": "created_at",
+    "ops.connector_connection": "connected_at",
+    "ops.oauth_consent": "issued_at",
+    "ops.setting": None,
+    "obs.audit_entry": "at",
+    "obs.request_telemetry": "received_at",
+    "obs.trace_step": "recorded_at",
+}
+
+#: How long before the run started a row can still be one it wrote. A margin for a clock that is
+#: not the database's, and not a window onto the install's history.
+THE_RUN_STARTED_NO_EARLIER_THAN: Final = timedelta(hours=1)
 
 #: What the check says when its database login cannot read every row, so the search could not look.
 THE_LOGIN_CANNOT_READ_EVERY_ROW: Final = (
@@ -108,7 +117,10 @@ DB_REFUSED_DISCONNECT: Final = "the database refused a step of a disconnect that
 DB_FAILED_DISCONNECT: Final = "the database refused a step of a disconnect the vendor refused"
 DB_DISCONNECT: Final = "the database refused a step of the disconnect that was to go through"
 DB_RETIRE_GRANT: Final = "the database refused the step that withdraws a person's grant"
-DB_SEARCH: Final = "the database refused the step that looks for the token in the tables"
+DB_SEARCH_SETTINGS: Final = "the database refused the step that looks for the token in the settings"
+DB_SEARCH_RECENT: Final = (
+    "the database refused the step that looks for the token in the rows the run wrote"
+)
 
 #: What the check says where the install has Xero connected already.
 XERO_IS_CONNECTED_HERE_ALREADY: Final = (
@@ -160,34 +172,46 @@ async def _refused(call: Any) -> bool:
     return False
 
 
-async def _held_in(h: Harness, needle: str) -> tuple[str, ...]:
-    """The tables of `WHERE_A_TOKEN_COULD_BE_LEFT` holding `needle` anywhere in a row.
+async def _held_in(
+    h: Harness, needle: str, *, since: datetime, tables: Sequence[str]
+) -> tuple[str, ...]:
+    """The `tables` of `WHERE_A_TOKEN_COULD_BE_LEFT` holding `needle` in a row since `since`.
 
     As the worker's login inside the check's transaction, for `A_SEARCH_THAT_CANNOT_SEE_EVERY_ROW_
-    IS_NOT_RUN`, and bounded to a handful of tables so it ends inside the statement timeout on an
-    install with a year of data. A table this release does not have is skipped.
+    IS_NOT_RUN`. A table with a time column is read through a materialised subquery bounded by it,
+    so the cast to text is made on the rows of the window and the bound is the index's; a table
+    this release does not have is skipped, found by `to_regclass` and not by the catalogue's views.
     """
     from sqlalchemy import text
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from brain.ops.index_audit import _quoted, every_table, sees_every_row
+    from brain.ops.index_audit import _quoted, sees_every_row
 
     async with AsyncSession(bind=h.connection, join_transaction_mode="create_savepoint") as session:
         await session.execute(text("RESET ROLE"))
         if not await sees_every_row(session):
             raise CheckNotRunError(THE_LOGIN_CANNOT_READ_EVERY_ROW)
-        present = set(await every_table(session))
         as_hex = needle.encode("utf-8").hex()
         holding: list[str] = []
-        for qualified in WHERE_A_TOKEN_COULD_BE_LEFT:
-            if qualified not in present:
-                continue
+        for qualified in tables:
             schema, table = qualified.split(".", 1)
-            statement = text(
-                f"SELECT 1 FROM {_quoted(schema)}.{_quoted(table)} AS r "  # noqa: S608
-                "WHERE strpos(r::text, :needle) > 0 OR strpos(r::text, :as_hex) > 0 LIMIT 1"
+            there = await session.execute(
+                text("SELECT to_regclass(:name) IS NOT NULL"), {"name": f"{schema}.{table}"}
             )
-            found = await session.execute(statement, {"needle": needle, "as_hex": as_hex})
+            if not there.scalar_one():
+                continue
+            where = WHERE_A_TOKEN_COULD_BE_LEFT[qualified]
+            window = "" if where is None else f" WHERE r.{_quoted(where)} >= :since"
+            statement = text(
+                f"WITH recent AS MATERIALIZED (SELECT r::text AS body "  # noqa: S608
+                f"FROM {_quoted(schema)}.{_quoted(table)} AS r{window}) "
+                "SELECT 1 FROM recent "
+                "WHERE strpos(body, :needle) > 0 OR strpos(body, :as_hex) > 0 LIMIT 1"
+            )
+            values: dict[str, Any] = {"needle": needle, "as_hex": as_hex}
+            if where is not None:
+                values["since"] = since
+            found = await session.execute(statement, values)
             if found.first() is not None:
                 holding.append(qualified)
         await session.commit()
@@ -388,10 +412,20 @@ async def a_member_disconnects_their_account_and_the_vendor_is_told_first(h: Har
         raise CheckFailedError("a person without the reader capability was still listed the source")
     if getattr(taken_back, "vendor_revoked", False) is not True:
         raise CheckFailedError("a person who left the department could not take their token back")
+    since = h.now - THE_RUN_STARTED_NO_EARLIER_THAN
+    config = tuple(one for one, column in WHERE_A_TOKEN_COULD_BE_LEFT.items() if column is None)
+    written = tuple(
+        one for one, column in WHERE_A_TOKEN_COULD_BE_LEFT.items() if column is not None
+    )
     try:
-        left_behind = await _held_in(h, ada_token)
+        in_settings = await _held_in(h, ada_token, since=since, tables=config)
     except DBAPIError:
-        raise CheckFailedError(DB_SEARCH) from None
+        raise CheckFailedError(DB_SEARCH_SETTINGS) from None
+    try:
+        in_recent = await _held_in(h, ada_token, since=since, tables=written)
+    except DBAPIError:
+        raise CheckFailedError(DB_SEARCH_RECENT) from None
+    left_behind = (*in_settings, *in_recent)
     if left_behind:
         raise CheckFailedError("a person's token was found in a table a disconnect writes to")
 

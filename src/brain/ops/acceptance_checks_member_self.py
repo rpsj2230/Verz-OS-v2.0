@@ -34,6 +34,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Final
 
 from sqlalchemy import insert, update
+from sqlalchemy.exc import DBAPIError
 
 from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, check
 from brain.ops.acceptance_operations_console import traced
@@ -74,6 +75,14 @@ REVIEW_AHEAD: Final = timedelta(days=180)
 
 #: What the member's own page says about connecting an account, in the words that matter.
 CONNECTING_NEVER_WIDENS: Final = "never widens what you can see"
+
+#: One sentence for each step of the menu and route check that talks to the database and can be
+#: refused by it, so an install that stops it names the step and never quotes a row. The check
+#: stopped on an `OperationalError` on 2026-10-21 and the page could say only the type.
+DB_MENU_SET_UP: Final = "the database refused the step that places the member and the administrator"
+DB_MENU_READ: Final = "the database refused the step that reads the menu each of them is given"
+DB_MENU_REFUSALS: Final = "the database refused a step of a route the member was to be refused"
+DB_MENU_SWITCH: Final = "the database refused the step that switches a feature as the administrator"
 
 
 # ------------------------------------------------------------------------ the helpers
@@ -185,24 +194,30 @@ async def a_member_is_given_no_governance_menu_and_no_governance_route(h: Harnes
     from brain.ops.acceptance_operations_console_2 import a_job
     from brain.ops.features import SCHEDULE_CONTROL
 
-    await h.found_departments()
-    c = await console(h)
-    member = await _member(h, c, "member")
-    admin = h.principal(A, "admin")
-    # The feature switch is held over the whole install, as the Features screen asks it.
-    others = [one for one in administrator() if one != SWITCHES_FEATURES]
-    await h.person(
-        admin,
-        department=A,
-        grants=(*within(A, *others), *everywhere(SWITCHES_FEATURES)),
-    )
+    try:
+        await h.found_departments()
+        c = await console(h)
+        member = await _member(h, c, "member")
+        admin = h.principal(A, "admin")
+        # The feature switch is held over the whole install, as the Features screen asks it.
+        others = [one for one in administrator() if one != SWITCHES_FEATURES]
+        await h.person(
+            admin,
+            department=A,
+            grants=(*within(A, *others), *everywhere(SWITCHES_FEATURES)),
+        )
+    except DBAPIError:
+        raise CheckFailedError(DB_MENU_SET_UP) from None
 
     def entries(page: Any) -> int:
         return sum(len(section.entries) for section in page.sections)
 
-    with c.as_route():
-        small = await console_navigation(await c.asked(member, strong=False))
-        large = await console_navigation(await c.asked(admin))
+    try:
+        with c.as_route():
+            small = await console_navigation(await c.asked(member, strong=False))
+            large = await console_navigation(await c.asked(admin))
+    except DBAPIError:
+        raise CheckFailedError(DB_MENU_READ) from None
     if entries(small) != 0 or small.stop:
         raise CheckFailedError("a member who administers nothing was given a governance menu")
     if entries(large) == 0:
@@ -211,35 +226,43 @@ async def a_member_is_given_no_governance_menu_and_no_governance_route(h: Harnes
         )
 
     job = a_job().name
-    weak = await c.asked(member, strong=False)
-    strong = await c.asked(admin)
-    with c.as_route():
-        refused = [
-            await _refused(pause_job(c.request("POST"), job, weak)),
-            await _refused(
-                switch_feature(c.request("POST"), SCHEDULE_CONTROL.name, SwitchAsked(on=True), weak)
-            ),
-            await _refused(
-                grant(
-                    c.request("POST"),
-                    GrantProposal(
-                        principal_id=member,
-                        capability="read:document",
-                        scope_slug=A,
-                        reason="Asked by an install acceptance check",
-                        not_after=h.now + timedelta(minutes=30),
-                    ),
-                    weak,
-                )
-            ),
-        ]
+    try:
+        weak = await c.asked(member, strong=False)
+        strong = await c.asked(admin)
+        with c.as_route():
+            refused = [
+                await _refused(pause_job(c.request("POST"), job, weak)),
+                await _refused(
+                    switch_feature(
+                        c.request("POST"), SCHEDULE_CONTROL.name, SwitchAsked(on=True), weak
+                    )
+                ),
+                await _refused(
+                    grant(
+                        c.request("POST"),
+                        GrantProposal(
+                            principal_id=member,
+                            capability="read:document",
+                            scope_slug=A,
+                            reason="Asked by an install acceptance check",
+                            not_after=h.now + timedelta(minutes=30),
+                        ),
+                        weak,
+                    )
+                ),
+            ]
+    except DBAPIError:
+        raise CheckFailedError(DB_MENU_REFUSALS) from None
     if not all(refused):
         raise CheckFailedError("a member was not refused a governance route they asked for by URL")
-    async with traced(h, 1):
-        with c.as_route():
-            switched = await switch_feature(
-                c.request("POST"), SCHEDULE_CONTROL.name, SwitchAsked(on=True), strong
-            )
+    try:
+        async with traced(h, 1):
+            with c.as_route():
+                switched = await switch_feature(
+                    c.request("POST"), SCHEDULE_CONTROL.name, SwitchAsked(on=True), strong
+                )
+    except DBAPIError:
+        raise CheckFailedError(DB_MENU_SWITCH) from None
     if not switched.on:
         raise CheckFailedError("an administrator could not do what a member was refused")
 

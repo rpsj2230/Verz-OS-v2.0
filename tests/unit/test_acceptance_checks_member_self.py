@@ -139,6 +139,50 @@ def test_a_menu_given_to_a_member_or_a_route_open_to_one_fails_the_menu_check(
 
 
 @pytest.mark.needs_db
+@pytest.mark.parametrize(
+    ("module_name", "attribute", "sentence"),
+    [
+        ("brain.navigation_routes", "console_navigation", "DB_MENU_READ"),
+        ("brain.jobs_routes", "pause_job", "DB_MENU_REFUSALS"),
+        ("brain.feature_routes", "switch_feature", "DB_MENU_SWITCH"),
+    ],
+)
+def test_a_step_the_database_refuses_in_the_menu_check_is_named_by_the_step_and_quotes_nothing(
+    install: str,
+    issuer: None,
+    monkeypatch: pytest.MonkeyPatch,
+    module_name: str,
+    attribute: str,
+    sentence: str,
+) -> None:
+    """The install stopped this check on an OperationalError and the page could only say the type.
+    A refused step must fail with the sentence naming it, and the administrator's switch must be
+    told apart from the member's refused one. Delete this and a database error on an install is
+    again a type name, and the next run cannot say which statement it was."""
+    import importlib
+
+    from sqlalchemy.exc import OperationalError
+
+    from brain.ops import acceptance_checks_member_self as module
+
+    target = importlib.import_module(module_name)
+    real = getattr(target, attribute)
+
+    async def refuses(*args: Any, **kwargs: Any) -> Any:
+        asked = args[-1]
+        # The member's press on the switch is one of the refusals; only the administrator's is
+        # the step this case is about.
+        if attribute == "switch_feature" and not asked.caller.principal.id.endswith(".admin"):
+            return await real(*args, **kwargs)
+        raise OperationalError("statement", {}, Exception("a value that must not be quoted"))
+
+    monkeypatch.setattr(target, attribute, refuses)
+    reason = _failed(install, MENU)
+    assert reason == getattr(module, sentence)
+    assert "must not be quoted" not in reason
+
+
+@pytest.mark.needs_db
 def test_a_line_written_by_hand_fails_the_workspace_line_check(
     install: str, issuer: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:

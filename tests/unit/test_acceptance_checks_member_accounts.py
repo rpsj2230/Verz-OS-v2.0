@@ -8,7 +8,7 @@ Task ids: M40.5.1.3, M40.5.1.4
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -148,7 +148,8 @@ def test_a_listing_that_leaves_the_departments_connection_out_fails_the_check(
     [
         ("brain.connector_routes.my_accounts", "DB_LIST"),
         ("brain.govern_routes.retire_grant", "DB_RETIRE_GRANT"),
-        ("brain.ops.acceptance_checks_member_accounts._held_in", "DB_SEARCH"),
+        ("brain.ops.acceptance_checks_member_accounts._held_in", "DB_SEARCH_SETTINGS"),
+        ("brain.ops.acceptance_checks_member_accounts._held_in", "DB_SEARCH_RECENT"),
     ],
 )
 def test_a_step_the_database_refuses_is_named_by_the_step_and_quotes_nothing(
@@ -174,7 +175,14 @@ def test_a_step_the_database_refuses_is_named_by_the_step_and_quotes_nothing(
         raise OperationalError("statement", {}, Exception("a value that must not be quoted"))
 
     async def refuses_later(*args: Any, **kwargs: Any) -> Any:
-        raise OperationalError("statement", {}, Exception("a value that must not be quoted"))
+        # The search is two statements' worth of calls: the tables without a time column, then the
+        # ones read by theirs. Refuse only the one this case is about, and answer the other.
+        settings_only = all(
+            module.WHERE_A_TOKEN_COULD_BE_LEFT[one] is None for one in kwargs["tables"]
+        )
+        if settings_only == (sentence == "DB_SEARCH_SETTINGS"):
+            raise OperationalError("statement", {}, Exception("a value that must not be quoted"))
+        return ()
 
     monkeypatch.setattr(target, attribute, refuses_later if attribute == "_held_in" else refuses)
     reason = _failed(install, DISCONNECT)
@@ -193,7 +201,10 @@ def test_the_search_for_a_left_behind_token_finds_it_in_the_tables_it_looks_in(
     from sqlalchemy import text
 
     from brain.db import normalise_database_url
-    from brain.ops.acceptance_checks_member_accounts import _held_in
+    from brain.ops.acceptance_checks_member_accounts import (
+        WHERE_A_TOKEN_COULD_BE_LEFT,
+        _held_in,
+    )
     from brain.session import make_app_engine
     from tests.fixtures.scratch_postgres import sql
 
@@ -213,12 +224,15 @@ def test_the_search_for_a_left_behind_token_finds_it_in_the_tables_it_looks_in(
         hexed.encode("utf-8").hex(),
     )
 
-    async def look(needle: str) -> tuple[str, ...]:
+    everything = tuple(WHERE_A_TOKEN_COULD_BE_LEFT)
+    long_ago = datetime(2019, 1, 1, tzinfo=UTC)
+
+    async def look(needle: str, *, since: datetime = long_ago) -> tuple[str, ...]:
         engine = make_app_engine(normalise_database_url(install))
         try:
             async with engine.connect() as connection:
                 harness: Any = type("H", (), {"connection": connection})()
-                found = await _held_in(harness, needle)
+                found = await _held_in(harness, needle, since=since, tables=everything)
                 await connection.execute(text("SELECT 1"))
                 return found
         finally:
@@ -233,6 +247,55 @@ def test_the_search_for_a_left_behind_token_finds_it_in_the_tables_it_looks_in(
 
 
 @pytest.mark.needs_db
+def test_the_search_reads_a_table_with_a_time_column_only_from_the_start_of_the_window(
+    install: str,
+) -> None:
+    """A token in a connection row is found from a window that includes the row and not from one
+    that starts after it. Delete this and the bound can be dropped, which puts a cast of the
+    whole ledger back on an install with a year of rows, or tightened past the run so a token it
+    left is never looked for, and the search passes either way."""
+    import asyncio
+
+    from sqlalchemy import text
+
+    from brain.db import normalise_database_url
+    from brain.ops.acceptance_checks_member_accounts import _held_in
+    from brain.session import make_app_engine
+    from tests.fixtures.scratch_postgres import sql
+
+    planted = "CANARY-CONNECTION-5d9b2e-left-behind"
+    written = datetime(2999, 6, 1, tzinfo=UTC)
+    sql(
+        install,
+        "INSERT INTO ops.connector_connection "
+        "(connector, settings, digest, connected_by, connected_at) "
+        "VALUES ('canary_source', jsonb_build_object('note', %s::text), %s, 'test', %s)",
+        planted,
+        "0" * 64,
+        written,
+    )
+
+    async def look(since: datetime) -> tuple[str, ...]:
+        engine = make_app_engine(normalise_database_url(install))
+        try:
+            async with engine.connect() as connection:
+                harness: Any = type("H", (), {"connection": connection})()
+                found = await _held_in(
+                    harness, planted, since=since, tables=("ops.connector_connection",)
+                )
+                await connection.execute(text("SELECT 1"))
+                return found
+        finally:
+            await engine.dispose()
+
+    try:
+        assert asyncio.run(look(written - timedelta(hours=1))) == ("ops.connector_connection",)
+        assert asyncio.run(look(written + timedelta(hours=1))) == ()
+    finally:
+        sql(install, "DELETE FROM ops.connector_connection WHERE connector = 'canary_source'")
+
+
+@pytest.mark.needs_db
 def test_a_token_found_in_a_table_a_disconnect_writes_to_fails_the_check(
     install: str, issuer: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -240,8 +303,39 @@ def test_a_token_found_in_a_table_a_disconnect_writes_to_fails_the_check(
     this and a token a disconnect left behind passes the check."""
     from brain.ops import acceptance_checks_member_accounts as module
 
-    async def finds(h: Any, needle: str) -> tuple[str, ...]:
+    async def finds(h: Any, needle: str, **kwargs: Any) -> tuple[str, ...]:
         return ("ops.setting",)
 
     monkeypatch.setattr(module, "_held_in", finds)
     assert "was found in a table" in _failed(install, DISCONNECT)
+
+
+@pytest.mark.needs_db
+def test_the_search_is_asked_for_every_table_once_and_from_before_the_run_started(
+    install: str, issuer: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The window and the split the check hands the search: the tables with no time column on
+    their own, the others by theirs, together exactly the tables the leaf names, and a start that
+    is earlier than the run and not later. Delete this and the start can move past the run's own
+    rows, or a table can fall out of the split, and the check passes for a search that looks at
+    nothing."""
+    from datetime import timedelta
+
+    from brain.ops import acceptance_checks_member_accounts as module
+
+    asked: list[tuple[tuple[str, ...], datetime]] = []
+    asked_at: list[datetime] = []
+
+    async def records(h: Any, needle: str, *, since: datetime, tables: Any) -> tuple[str, ...]:
+        asked.append((tuple(tables), since))
+        asked_at.append(h.now)
+        return ()
+
+    monkeypatch.setattr(module, "_held_in", records)
+    assert run(install)[DISCONNECT] == (PASSED, "")
+
+    [(settings, early), (written, late)] = asked
+    assert settings == ("ops.setting",)
+    assert sorted((*settings, *written)) == sorted(module.WHERE_A_TOKEN_COULD_BE_LEFT)
+    assert early == late
+    assert asked_at[0] - timedelta(hours=2) < early < asked_at[0]
