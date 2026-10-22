@@ -1845,9 +1845,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M19.1.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): browsing/observation.py:Snapshot has no picture field; wire.snapshot_from_accessibility builds it from the accessibility tree and playwright_browser.py supplies the tree; test_browsing_targets.py. Never run in a browser; no control-plane caller consumes snapshots. NEXT: After the driver exists, check a read-only run returns a tree snapshot and no image field; observation.vision_gaps() is the static half to name now.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-21 over a stand-in page. What a run observes of a page is a tree: the snapshot a runner sends has the sequence, the origin and the nodes and no other field (the wire refuses any other), and vision_gaps finds no field a picture could arrive in on the observation types. Shown by install check a_credential_reaches_the_page_and_is_kept_nowhere over the stored transcript. The page is a stand-in; a real Chromium tree is the rehearsal. INSTALL PROOF STEPS: 1. Install page: Run now. 2. Read that row: it must say Passed.",
+    updated: "2026-10-21",
   },
   "M19.1.5": {
     status: "READY FOR TESTING",
@@ -1925,9 +1925,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M19.4.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): credentials.py:scrub_outbound is live on the request path via ops/log_capture.py (Logs screen) and gate/screening.py; scrub_history is used only by browsing/recording.py. No browser run's message history is scrubbed in practice because no run exists. NEXT: Call scrub_history over each run's message history in the driver and treat a hit as an incident; log_capture already gives a check target.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-21 over a stand-in vault and page. Install check a_credential_reaches_the_page_and_is_kept_nowhere sends a sealed typing step through driver.run_envelope to the product's own runner: the value reaches the page it is bound to, the lease is revoked, neither the stored transcript nor the run's result holds the value (plain or as a line escapes it), a page that shows the value back is reported as an incident and is still scrubbed, and a binding for another origin issues no lease and types nothing. Found on the way and fixed: the driver's own search of the runner's lines looked for the plain value only, so a password with a quote or a backslash in it was missed by that second check (the recording still caught it). No OpenBao and no Chromium: the vault and the page are stand-ins. INSTALL PROOF STEPS: 1. Install page: Run now. 2. Read the row a_credential_reaches_the_page_and_is_kept_nowhere: it must say Passed.",
+    updated: "2026-10-21",
   },
   "M19.4.5": {
     status: "IN PROGRESS",

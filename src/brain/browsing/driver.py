@@ -82,6 +82,7 @@ from brain.browsing.observation import Snapshot
 from brain.browsing.recording import (
     Direction,
     Recording,
+    as_written,
     record,
     recording_gaps,
     write,
@@ -644,7 +645,9 @@ async def _finish(
         if direction is Direction.FROM_RUNNER
     ]
     # The line this side sent holds the value by design, so only what came back is searched.
-    _, hits = scrub_history([text for _, text in from_runner], values)
+    # Searched for as a line holds a value as well as plain, as the recording does: a password with
+    # a quote or a backslash in it is escaped in the line and a search for the plain form misses it.
+    _, hits = scrub_history([text for _, text in from_runner], list(as_written(values)))
     leaked = tuple(sorted(set(recording.leaked) | {from_runner[one][0] for one in hits}))
     gaps = recording_gaps(recording)
     keys = write(deps.backend, recording) if deps.backend is not None else ()
