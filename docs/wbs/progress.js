@@ -3080,19 +3080,19 @@ const PROGRESS = {
     updated: "2026-10-20",
   },
   "M30.4.2": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops/reliability.py RetryClass (safe, after verification, unsafe, needs a human), OperationClass, retry_class_for(), classification_gaps() are tested; nothing outside reliability.py calls retry_class_for (effects.py PORTS is a separate classification). NEXT: consult retry_class_for in ops.recovery_run.sweep_queue and queue verdict_for for the task name, so the class decides redrive versus person",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT AND WIRED: which of our queue tasks a recovery sweep may put back is now read off the class its work is given in brain.ops.reliability (embed and ingest are safe; a scheduled control is unsafe), and anything not classified safe is set aside for a person. PROOF ON THE INSTALL: the check the sweep puts back safe jobs and sets aside the unsafe (acceptance_checks_recovery, queue check) passes on the next run. NOT in scope: the other two classes (after verification, needs a human) are not yet used by any queue task; they classify connector writes and migrations, which no queue task does.",
+    updated: "2026-10-20",
   },
   "M30.4.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): 429 and malformed handling exists: models/routing.py maps 429 to FallbackTrigger.RATE_LIMITED, models/calls.py walks the ladder, gate/runtime.py counts a malformed reply as a turn; unit tests in test_model_calls, test_routing, test_agent_runtime. ops/crash.py is about worker crashes. No injection suite on an install. NEXT: write install check with a stub provider returning 429 then a malformed reply, asserting fallback and the stated stop reason through the real answer route",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: two install checks inject the two shapes through the real answer route with stand-ins in the process (nothing leaves the server): a 429 is walked past, counted as one fallback, recorded as a rate limit and leaves the step's breaker closed after three in a row; a reply that is not JSON stops the chain at its step, and one with no choices is told as an answer not composed, with the next step never sent the question. PROOF ON THE INSTALL: the checks a_rate_limit_is_walked_past_and_does_not_open_the_breaker and a_reply_that_is_not_a_completion_is_not_shopped_to_another_step pass on the next run; they say not run on an install that keeps text on its own hardware.",
+    updated: "2026-10-20",
   },
   "M30.4.5": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Disk full is handled by name only in deployment/database.py (create, migrate, seed raise DiskFullError via reliability.is_disk_full); the request path, ledger writes and uploads do not catch it, and no test fills a disk. NEXT: call is_disk_full on answer-path writes and object store puts and return the stated refusal; add an install check with a tiny tmpfs volume",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT: a write that meets a full disk on the request path is now answered with a stated 503 sentence (WriteRefusedForSpace, from a handler for the database driver's and the operating system's errors that is_disk_full recognises); any other such error fails as before. The sentence does not claim nothing was saved, since a request may have kept an earlier step. NOT BUILT: a ledger write or an object-store put that meets a full disk inside a stream is not translated, and no install check can fill a disk. To prove on the install: a person fills the volume on a throwaway install and asks a question that saves something; the answer is the stated sentence.",
+    updated: "2026-10-20",
   },
   "M30.5.2": {
     status: "READY FOR TESTING",

@@ -50,6 +50,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -155,6 +156,7 @@ from brain.ops.overlays import OverlayError, components_switched_on, switched_on
 from brain.ops.pii import analyzer_address
 from brain.ops.question_gap_store import GapRecorder
 from brain.ops.question_store import QuestionRecorder
+from brain.ops.reliability import WriteRefusedForSpace, is_disk_full
 from brain.ops.replica_store import console_reads_for
 from brain.ops.sandbox import sandbox_address
 from brain.ops.secrets import VaultRole
@@ -1366,6 +1368,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             second_factor_needed=weak,
         )
         return JSONResponse(status_code=status, content=body.model_dump())
+
+    async def handle_full_disk(request: Request, exc: Exception) -> JSONResponse:
+        """A write that met a full disk, in a sentence, and every other such error left alone.
+
+        Registered for the database driver's errors and the operating system's, the two ways a
+        full disk arrives, and it re-raises anything `is_disk_full` does not recognise so a
+        different fault is the same 500 it always was. Answers 503 through the one handler that
+        turns an outcome into text, so the body is `api.ErrorBody` with the reference.
+        """
+        if not is_disk_full(exc):
+            raise exc
+        log.error("a write met a full disk", path=request.url.path, error=type(exc).__name__)
+        return await handle_brain_error(request, WriteRefusedForSpace())
+
+    app.add_exception_handler(DBAPIError, handle_full_disk)
+    app.add_exception_handler(OSError, handle_full_disk)
 
     @app.exception_handler(RequestValidationError)
     async def handle_refused_request(request: Request, exc: RequestValidationError) -> Response:

@@ -103,9 +103,11 @@ wrapped in SQLAlchemy's. See `A_FULL_DISK_REFUSES_THE_WRITE_RATHER_THAN_HALF_WRI
 **Recognising it is not the same as handling it everywhere, and this says where it is
 handled.** `brain.deployment.database` translates it into `DiskFullError` on create, migrate
 and seed, each of which writes in one transaction, so the refusal is true when it says nothing
-was written. The request path does not translate it: a disk filling while the application
-serves still surfaces as a generic failure, and that is why the row's `response` names the
-writers that refuse rather than claiming the system does.
+was written. The request path answers it with a stated sentence and a 503
+(`WriteRefusedForSpace`, raised by `brain.app`'s handler for a database or operating system error
+that `is_disk_full` recognises) and **does not claim nothing was saved**, because a request may have
+committed an earlier step before the write that met the full disk. Any other database or operating
+system error is left to fail as it did.
 
 Task ids: M30.4.1, M30.4.2, M30.4.5, M30.5.1, M30.5.2
 """
@@ -118,6 +120,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
 
+from brain.core.errors import Degraded
 from brain.core.lane import Lane
 from brain.ops.telemetry import TELEMETRY_FIELDS, UNFILLABLE_TODAY, RequestStatus
 from brain.ops.wiring import COMPONENTS, PROFILES, assert_known_profile
@@ -835,6 +838,35 @@ OPERATION_CLASSES: Final[tuple[OperationClass, ...]] = (
         ),
     ),
     OperationClass(
+        name="embed a knowledge chunk",
+        has_side_effect=False,
+        retry=RetryClass.SAFE,
+        because=(
+            "an embedding is kept under its content and the model that made it alone, so a "
+            "second attempt at the same text writes the same row, and the cost is a budget's "
+            "problem and not a retry classification's"
+        ),
+    ),
+    OperationClass(
+        name="ingest a document into knowledge",
+        has_side_effect=False,
+        retry=RetryClass.SAFE,
+        because=(
+            "the document is kept under the digest of its original bytes, so reading it again "
+            "finds the item already there; nothing outside this install is told"
+        ),
+    ),
+    OperationClass(
+        name="run a scheduled control",
+        has_side_effect=True,
+        retry=RetryClass.UNSAFE,
+        because=(
+            "a control may remove rows, send a message or ask a source, and the schedule "
+            "decides when it runs next from the last attempt it recorded; a recovery sweep "
+            "putting it back would run it twice inside one window"
+        ),
+    ),
+    OperationClass(
         name="deploy a release",
         has_side_effect=True,
         retry=RetryClass.NEEDS_A_HUMAN,
@@ -996,6 +1028,20 @@ def sqlstate_in(error: BaseException, state: str) -> bool:
     )
 
 
+class WriteRefusedForSpace(Degraded):
+    """A request's write met a full disk (M30.4.5). The sentence says what a person can do.
+
+    Not `DiskFullError`, which is raised only where nothing was written. A request can have
+    committed an earlier step, so this says it could not be completed and may not have been saved,
+    and names no table, path or size: the log holds those.
+    """
+
+    public_message = (
+        "This install's disk is full, so that could not be completed and may not have been "
+        "saved. Tell whoever looks after the install, and ask again once space has been freed."
+    )
+
+
 def is_disk_full(error: BaseException) -> bool:
     """Whether a full disk is anywhere in this exception's chain (M30.4.5).
 
@@ -1096,8 +1142,9 @@ MATRIX: Final[tuple[FailureMode, ...]] = (
         response=(
             "free space before anything else, then re-run what failed. brain.deployment."
             "database create, migrate and seed recognise it, name it, and write in one "
-            "transaction, so they are safe to run again; a write on the request path is not "
-            "translated and has to be checked against the record it was writing"
+            "transaction, so they are safe to run again; a write on the request path is "
+            "refused with a stated sentence, and has to be checked against the record it was "
+            "writing because an earlier step of the request may have been kept"
         ),
     ),
     FailureMode(

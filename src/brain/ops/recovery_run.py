@@ -50,7 +50,7 @@ guess settling a record. No shipped connector issues a side effect with a declar
 so every interrupted operation goes to a person, which is the honest answer and the one
 `brain.ops.idempotency.NO_READ_BACK_MEANS_READ_ONLY` already gives for issuing.
 
-Task ids: M23.3.1
+Task ids: M23.3.1, M30.4.2
 """
 
 from __future__ import annotations
@@ -78,6 +78,7 @@ from brain.ops.idempotency import (
 )
 from brain.ops.queue import InFlight, Redrive, Verdict
 from brain.ops.redrive_control import Redriven, carry_out_asks
+from brain.ops.reliability import RetryClass, retry_class_for
 from brain.tables.operation import OperationRow
 
 # ------------------------------------------------------------------ written-down reasons
@@ -104,13 +105,37 @@ A_RECOVERY_SWEEP_IN_REPORT_ONLY_MODE_MOVES_NOTHING: Final = (
     "anyway when told to report would ignore the mode it was given."
 )
 
-#: What each task of ours declares about running twice, as its own job builder declares it.
-#: Held to the builders by `tests/unit/test_recovery_run.py`, so the two cannot drift.
+#: What kind of work each task of ours does, by the name `brain.ops.reliability` classifies it
+#: under (M30.4.2). A task is added here with the operation it performs, and its re-drive follows
+#: from the class: nobody types SAFE beside a task.
+OPERATION_BY_TASK: Final[Mapping[str, str]] = {
+    "brain.controls.run": "run a scheduled control",
+    EMBED_TASK: "embed a knowledge chunk",
+    REEMBED_TASK: "embed a knowledge chunk",
+    INGEST_TASK: "ingest a document into knowledge",
+}
+
+#: Why only the first class of the four lets a job be run again without asking anybody.
+ONLY_A_SAFE_OPERATION_IS_PUT_BACK_BLIND: Final = (
+    "A job is put back on its queue without a person only when the work it does is classified safe "
+    "to repeat. Repeating it after verification needs the far side asked first, which a queue "
+    "cannot do; an unsafe operation is a second effect; and one that needs a human is "
+    "by definition not decided by a rule. All three are set aside for a person."
+)
+
+
+def redrive_of_class(retry: RetryClass) -> Redrive:
+    """What a queue may do with a job whose work is classified this way. See
+    `ONLY_A_SAFE_OPERATION_IS_PUT_BACK_BLIND`."""
+    return Redrive.SAFE if retry is RetryClass.SAFE else Redrive.UNSAFE
+
+
+#: What each task of ours declares about running twice, read off its operation's class and held to
+#: the job each task's own builder declares by `tests/unit/test_recovery_run.py`, so the three
+#: cannot drift.
 REDRIVE_BY_TASK: Final[Mapping[str, Redrive]] = {
-    "brain.controls.run": Redrive.UNSAFE,
-    EMBED_TASK: Redrive.SAFE,
-    REEMBED_TASK: Redrive.SAFE,
-    INGEST_TASK: Redrive.SAFE,
+    task: redrive_of_class(retry_class_for(operation))
+    for task, operation in OPERATION_BY_TASK.items()
 }
 
 #: States a crash can leave an operation in that nobody has settled.
