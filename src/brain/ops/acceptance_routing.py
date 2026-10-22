@@ -397,7 +397,12 @@ class StandingBy:
     app: FastAPI
 
 
-async def standing_by(h: Harness, *, clock: Callable[[], datetime] | None = None) -> StandingBy:
+async def standing_by(
+    h: Harness,
+    *,
+    clock: Callable[[], datetime] | None = None,
+    responder: StandIns | None = None,
+) -> StandingBy:
     """A member of acceptance_a with a document, no residency rule, and the stand-ins held.
 
     Not run on an install keeping text on its own hardware: every stand-in is a hosted provider as
@@ -405,7 +410,7 @@ async def standing_by(h: Harness, *, clock: Callable[[], datetime] | None = None
     """
     reader, paired = await a_reader_with_a_document(h)
     await constrained(h, ())
-    responder = StandIns()
+    responder = StandIns() if responder is None else responder
     models = await models_for(h, standing=stand_in_drivers(h, responder), clock=clock)
     askable(await models.calls.planned(), STAND_IN)
     return StandingBy(reader, paired, responder, models, await asking_app(h, models))

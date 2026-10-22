@@ -32,7 +32,7 @@ is rolled back with the check.
 wrote, so a real interrupted operation on the install is neither read back by a stand-in nor
 listed in the check's comparison.
 
-Task ids: M23.3.1, M17.2.2, M17.2.4
+Task ids: M23.3.1, M17.2.2, M17.2.4, M30.4.2
 """
 
 from __future__ import annotations
@@ -147,7 +147,7 @@ class OnlyThese:
 
 # ------------------------------------------------------------------- 1. the queue
 @check(
-    leaves=("M23.3.1", "M17.2.2"),
+    leaves=("M23.3.1", "M17.2.2", "M30.4.2"),
     sentence=(
         "The worker's schedule last ran the job redrive recently and it acted; and the sweep, "
         "handed jobs carrying the install's own task names, puts back an orphaned and a failed "

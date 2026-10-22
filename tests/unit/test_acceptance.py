@@ -908,6 +908,7 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         (
             "brain.ops.acceptance_models",
             "brain.ops.acceptance_routing",
+            "brain.ops.acceptance_checks_fault_injection",
             "brain.ops.acceptance_answers",
         )
     ):
