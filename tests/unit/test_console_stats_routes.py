@@ -491,8 +491,8 @@ def test_cost_is_not_recorded_rather_than_nought_until_a_run_writes_one(
     client, _ = served
     monkeypatch.setattr(console_stats_routes, "RUN_SPEND_IS_RECORDED", False)
     unrecorded = AgentStatsView.model_validate(stats(client, "u_admin", "agents", AGENT).json())
-    assert [one.cost_minor for one in unrecorded.periods] == [None] * 4
-    assert [one.callers for one in unrecorded.periods] == [[]] * 4
+    assert [one.cost_minor for one in unrecorded.periods] == [None] * 5
+    assert [one.callers for one in unrecorded.periods] == [[]] * 5
     assert [one.figure for one in unrecorded.unrecorded] == ["model_cost"]
 
     monkeypatch.setattr(console_stats_routes, "RUN_SPEND_IS_RECORDED", True)
@@ -520,8 +520,9 @@ def test_an_agents_figures_are_given_over_seven_thirty_and_ninety_days_and_the_m
     client, _ = served
     body = AgentStatsView.model_validate(stats(client, "u_admin", "agents", AGENT).json())
 
-    assert [one.range for one in body.periods] == ["7d", "30d", "90d", "mtd"]
-    week, month, quarter, to_date = body.periods
+    assert [one.range for one in body.periods] == ["7d", "30d", "90d", "mtd", "all"]
+    week, month, quarter, to_date, ever = body.periods
+    assert ever.runs is not None and ever.runs >= quarter.runs
     assert (week.runs, month.runs, quarter.runs) == (3, 4, 5)
     assert to_date.since == _month_start()
     since_first = sum(
@@ -539,7 +540,7 @@ def test_an_agents_messages_are_the_runs_a_person_sent_and_never_an_automations(
     client, _ = served
     body = AgentStatsView.model_validate(stats(client, "u_admin", "agents", AGENT).json())
 
-    week, month, quarter, _ = body.periods
+    week, month, quarter, *_ = body.periods
     assert (week.runs, week.messages) == (3, 2)
     assert (month.runs, month.messages) == (4, 3)
     assert (quarter.runs, quarter.messages) == (5, 4)
