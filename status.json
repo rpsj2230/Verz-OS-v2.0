@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-22T13:16:34.939641+00:00",
-  "commit": "2b4f7208",
-  "commit_subject": "4 more tasks are proved on the install by the newest complete acceptance run",
+  "generated_at": "2026-10-22T13:25:58.052193+00:00",
+  "commit": "4a8aadad",
+  "commit_subject": "6 more tasks are proved in CI, because each one is a property of the repository",
   "total": 1626,
-  "done": 1241,
-  "percent": 76.3,
+  "done": 1247,
+  "percent": 76.7,
   "built": 1423,
   "built_percent": 87.5,
-  "built_unproven": 182,
+  "built_unproven": 176,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -91,13 +91,11 @@
     "M27.15.12",
     "M27.15.19",
     "M27.15.50",
-    "M27.15.52",
     "M27.15.57",
     "M27.15.68",
     "M27.15.69",
     "M27.15.70",
     "M27.15.71",
-    "M27.15.72",
     "M27.15.79",
     "M27.16.1",
     "M27.16.2",
@@ -106,7 +104,6 @@
     "M27.16.5",
     "M27.7.23",
     "M27.7.26",
-    "M27.9.8",
     "M28.5.2",
     "M29.3.1",
     "M3.7.2",
@@ -137,11 +134,8 @@
     "M35.2.2.4",
     "M35.3.1.1",
     "M36.1.2.3",
-    "M36.2.4.1",
     "M36.2.4.3",
-    "M37.5.1.2",
     "M37.5.1.3",
-    "M37.5.1.4",
     "M37.5.2.1",
     "M38.2.2.3",
     "M38.2.2.4",
@@ -245,10 +239,10 @@
       "wave": 3,
       "name": "Agents, knowledge, console",
       "total": 599,
-      "done": 477,
-      "percent": 79.6,
+      "done": 480,
+      "percent": 80.1,
       "in_progress": 16,
-      "ready_for_testing": 59,
+      "ready_for_testing": 56,
       "blocked": 6,
       "open": 41,
       "acts": 1,
@@ -275,10 +269,10 @@
       "wave": 5,
       "name": "Hands, delivery, go-live",
       "total": 217,
-      "done": 117,
-      "percent": 53.9,
+      "done": 120,
+      "percent": 55.3,
       "in_progress": 37,
-      "ready_for_testing": 32,
+      "ready_for_testing": 29,
       "blocked": 20,
       "open": 11,
       "acts": 42,
@@ -578,7 +572,7 @@
       "name": "Console, reports, observability",
       "wave": 3,
       "total": 216,
-      "done": 167,
+      "done": 170,
       "acts": 0,
       "decided": 22,
       "built": 188
@@ -668,7 +662,7 @@
       "name": "Scaling triggers and performance",
       "wave": 5,
       "total": 23,
-      "done": 9,
+      "done": 10,
       "acts": 0,
       "decided": 3,
       "built": 12
@@ -678,7 +672,7 @@
       "name": "Migration, launch and handover",
       "wave": 5,
       "total": 45,
-      "done": 30,
+      "done": 32,
       "acts": 41,
       "decided": 4,
       "built": 34
@@ -1319,6 +1313,7 @@
     "M27.15.48",
     "M27.15.5",
     "M27.15.51",
+    "M27.15.52",
     "M27.15.53",
     "M27.15.54",
     "M27.15.55",
@@ -1333,6 +1328,7 @@
     "M27.15.66",
     "M27.15.67",
     "M27.15.7",
+    "M27.15.72",
     "M27.15.73",
     "M27.15.74",
     "M27.15.75",
@@ -1414,6 +1410,7 @@
     "M27.9.5",
     "M27.9.6",
     "M27.9.7",
+    "M27.9.8",
     "M27.9.9",
     "M28.1.1",
     "M28.1.3",
@@ -1639,6 +1636,7 @@
     "M36.2.1.1",
     "M36.2.1.2",
     "M36.2.2.1",
+    "M36.2.4.1",
     "M36.2.4.2",
     "M37.1.1.1",
     "M37.1.1.2",
@@ -1666,6 +1664,8 @@
     "M37.4.3.4",
     "M37.4.3.5",
     "M37.5.1.1",
+    "M37.5.1.2",
+    "M37.5.1.4",
     "M37.5.2.2",
     "M37.5.2.3",
     "M37.6.1.3",
@@ -2786,11 +2786,6 @@
       "why": "The guard exists and is green in CI (console/tests/console-audit.test.ts). Its own report on 2026-10-21 lists write routes whose audit entry or behaviour has no named proof (docs/console-audit/*.md, rows marked None: staff source sync and trial, digest destination, install settings, model prices, profile, providers, tiers, residency, notices, relay, plugins, migration register, channel test, lark app, referrals). Each is a test to write; none is written.",
       "updated": "2026-10-21"
     },
-    "M27.9.8": {
-      "status": "READY FOR TESTING",
-      "why": "BUILT AND TESTED in the repository (no install step): the stale statements named in the console plan's W0.7 are corrected where they were still wrong, each behavioural one with a test: the schema count in brain.db (a test now reads the number it states), the stop-control sentence the runs route serves, the usage screen's account of what is measured, and the embedding queue's, chunk store's and streaming's statements about callers and routes that now exist. Proved by the Unit tests job.",
-      "updated": "2026-10-20"
-    },
     "M27.10.2": {
       "status": "READY FOR TESTING",
       "why": "BUILT AND TESTED: the toast region is mounted once, in the shell, and a Note of kind done announces its sentence in it while the page keeps its own line (console/tests/done-notes-announce.test.tsx), which gives the thirty-eight places that say a write took effect the toast without an edit to each. The other named parts were already drawn by the pages: sidebar, header, breadcrumbs, list page, detail page, tabs, drawer, empty, loading and failed states, bulk bar and the write-once secret field. Install proof: switch a feature on or off under Features and read the message that appears at the corner of the screen as well as the line on the page.",
@@ -2911,11 +2906,6 @@
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (credential_routes, ops.acceptance_operations_console_6, ops.credential_catalogue +8 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: branch M13/w3-actions-stack, no PR; branch M13/w3-runtime-side-effects, no PR; branch M16/w3-learning-tables, no PR; +6 more",
       "updated": "2026-10-06"
     },
-    "M27.15.52": {
-      "status": "READY FOR TESTING",
-      "why": "built: console/tests/destructive-labels.test.ts refuses any label that starts Delete, Remove, Take it out and the like (thirty-four became Withdraw, Retire, Detach, Disconnect, End membership and Supersede) and holds that the console sends no DELETE, and tests/unit/test_hard_deletes.py derives from the migrations the tables the application may delete from and holds them to the six that brain.ops.hard_deletes argues (it found obs.trace_step, granted by 0226 through a constant the old text scan could not see). Proved in CI: the console job (Console types, boundaries, tests, build) and the Unit tests shards run them. On the install: open a person's Grants view and read the button beside a grant, which says Withdraw, and an agent's Memory, which says Retire.",
-      "updated": "2026-10-15"
-    },
     "M27.15.57": {
       "status": "READY FOR TESTING",
       "why": "PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (ops.acceptance_checks_skills); open for proof on the install or a decision, not for code",
@@ -2945,11 +2935,6 @@
       "status": "READY FOR TESTING",
       "why": "Built on branch M27/console-lists-wizards-buttons. Prove it on the install. (1) On any page with both a Cancel and an act that removes or stops something (Stop, a retention hold, a review decision), the main act is the filled accent button, Cancel is the quiet button with no border, and the removing act is the red-washed danger button, each visibly different. (2) Open the console home: the figures are tiles, Needs you and Recent activity are each a card with its own heading, as on the first screen of the key screens design. The Overview already drew these; this task names the three button variants, moves every page onto them and holds that with a check.",
       "updated": "2026-10-14"
-    },
-    "M27.15.72": {
-      "status": "READY FOR TESTING",
-      "why": "built: console/tests/styled-classes.test.ts compiles the component layer's stylesheet and refuses any class in the markup with no selector and no emitted utility (it found bg-surface, text-ink-3 and text-danger, which nothing defined, and two dozen unstyled hooks), and console/tests/one-failure-component.test.ts refuses a failure drawn by hand, a failure heading typed anywhere but ui/FailureNotice, and a private failure component (it found twelve writes drawing failure.message with no reference). Proved in CI: the console job (Console types, boundaries, tests, build) in .github/workflows/ci.yml runs both through npm run test. On the install: make a write fail, for example set an agent's monthly budget while holding no budget role, and read the heading, the sentence and the reference under the form.",
-      "updated": "2026-10-15"
     },
     "M27.15.79": {
       "status": "READY FOR TESTING",
@@ -3326,11 +3311,6 @@
       "why": "TRIAGE 2026-10-13 class 3 (built, not wired): scaling.may_share compares gate.cache_key parts and requires equal entitlement hash, never similarity (tested). The answer cache key itself already carries ent_hash, but nothing calls may_share, so no sharing happens. federation.flight_key omits reach on purpose. NEXT: wire may_share with M36.2.3.1; an existing cache check (ARC-A-051) already proves the key carries the hash",
       "updated": "2026-10-13"
     },
-    "M36.2.4.1": {
-      "status": "READY FOR TESTING",
-      "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): tests/load/test_admission_at_peak.py drives the admission controller at LOAD_TEST_TARGET (two arrivals a second for ten minutes) and ops/load_peak.py is the owner's command for a live install. Concurrency, not daily volume, is the unit. NEXT: repo-only leaf: close as Proved-in-ci naming the load test job; the live run is M36.3.1",
-      "updated": "2026-10-13"
-    },
     "M36.2.4.3": {
       "status": "READY FOR TESTING",
       "why": "built: the Service levels page lists the peak load runs this install has kept (GET /report/service-levels/load-runs), each lane's measured p95 and success rate beside the objective that lane promises, whether the run held, and whether it was smaller than the stated peak. A reader the service levels are withheld from is sent an empty list. Install check a_kept_peak_run_is_listed_beside_the_service_levels. NOT done: the first real result at the company's stated peak waits on the owner running the command (needs 194). On the install: after an operator has run python -m brain.ops.load_peak with the load test switched on, open Reports, Service levels and read the Peak load runs card; with no run it says none has been kept.",
@@ -3376,20 +3356,10 @@
       "why": "PARTLY BUILT: POST /migration/learning re-derives each conclusion a person drew from an old memory file through the ordinary tier rules and returns the derivations (learning.re_derive). NOT BUILT: filing each derivation into the memory proposal queue, which would put a proposal in front of a reviewer. NEXT: a call from the route into agent_memory_routes' queue behind its own switch.",
       "updated": "2026-10-20"
     },
-    "M37.5.1.2": {
-      "status": "READY FOR TESTING",
-      "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): ops/controls.py registry plus ops/schedule.py (imports CONTROLS) give the worker its schedule; tests/invariants/test_no_safety_mechanism_lacks_a_caller.py and tests/unit/test_schedule.py assert every control is scheduled or named orphan. Jobs and Live runs routes list controls (jobs_routes.py, operate_routes.py). NEXT: install check names M37.5.1.2: GET the Jobs route and assert each scheduled control from CONTROLS appears; or close it as Proved-in-ci naming the invariant job",
-      "updated": "2026-10-13"
-    },
     "M37.5.1.3": {
       "status": "READY FOR TESTING",
       "why": "BUILT (under M17.7.2) and now claimed by its install check: brain.control_not_run_told tells whoever holds the operations alert, once per episode, when a safety mechanism has not run in its window. PROOF ON THE INSTALL: 1. Turn Tell whoever holds the alert when a safety mechanism has not run on under Features (it ships off). 2. The check a_mechanism_that_has_not_run_is_told_to_whoever_holds_the_alert passes on the next run (it says not run until the switch is on). 3. To see it live, stop the worker for longer than a control's window: the holder is told once in the chat tool they last used.",
       "updated": "2026-10-20"
-    },
-    "M37.5.1.4": {
-      "status": "READY FOR TESTING",
-      "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): tests/invariants/test_no_safety_mechanism_lacks_a_caller.py asserts no control lacks a caller unless the registry says so; backed by controls.orphans(), call_sites(), registry_gaps(). Runs in CI on every push. NEXT: repo-only leaf: close with Proved-in-ci naming the invariants job; optional install check calling controls.registry_gaps() and asserting empty",
-      "updated": "2026-10-13"
     },
     "M37.5.2.1": {
       "status": "READY FOR TESTING",
@@ -3804,11 +3774,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 22,
+  "closed_today": 28,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "4a8aada",
+      "at": "2026-10-22T13:24:44+00:00",
+      "subject": "6 more tasks are proved in CI, because each one is a property of the repository",
+      "closed": "M27.15.52,M27.15.72,M27.9.8,M36.2.4.1,M37.5.1.2,M37.5.1.4"
+    },
     {
       "sha": "2b4f720",
       "at": "2026-10-22T13:15:10+00:00",
@@ -3922,12 +3898,6 @@
       "at": "2026-10-21T06:30:05+00:00",
       "subject": "Adoption is wired: a first connector, starter questions from what indexed, and a per-department coverage statement (M34.1.1.1, M34.1.1.2, M34.1.2.1, M34.1.2.2, M34.1.2.3) (#660)",
       "closed": "M34.1.1.1,M34.1.1.2,M34.1.2.1,M34.1.2.2,M34.1.2.3"
-    },
-    {
-      "sha": "fc30e2a",
-      "at": "2026-10-21T05:18:48+00:00",
-      "subject": "8 more tasks are proved on the install by the newest complete acceptance run",
-      "closed": "M18.1.2,M18.1.4,M18.3.4,M18.3.5,M18.5.2,M18.5.3,M18.7.1,M30.3.11"
     }
   ]
 }
