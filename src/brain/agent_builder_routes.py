@@ -56,7 +56,7 @@ draft can be written, saved, checked and rehearsed meanwhile.
 exists and this one makes and changes one; they share its three questions and its 409 body.
 
 Task ids: M27.11.6, M27.15.31, M20.1.4, M20.4.6, M13.7.4, M20.4.1, M20.4.4
-Task ids: M13.9.2, M20.5.2, M20.5.3
+Task ids: M13.9.2, M20.5.2, M20.5.3, M40.2.2.3
 """
 
 from __future__ import annotations
@@ -119,7 +119,13 @@ from brain.agents.kinds import (
     refusal_for,
 )
 from brain.agents.lifecycle import ARCHIVE_IS_TERMINAL
-from brain.agents.model import AgentAudience, AgentRecord, AgentState, EnabledChannels
+from brain.agents.model import (
+    AgentAudience,
+    AgentRecord,
+    AgentState,
+    EnabledChannels,
+    entitlement_ceiling,
+)
 from brain.agents.template import SignedManifest, TemplateManifest, materialise, publish
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked, Asking
@@ -172,7 +178,7 @@ from brain.builder.drafts import (
 )
 from brain.builder.form import SET_ELSEWHERE, form_document
 from brain.builder.procedure import read_drawing, skill_markdown
-from brain.builder.publish import Check, PublishDecision, blocking_failures
+from brain.builder.publish import Check, PublishDecision, blocking_failures, widened_capabilities
 from brain.builder.run_cost import HELD_FOR_ITS_COST, CostHold, cost_hold
 from brain.console.govern import _in_reach
 from brain.console.reads import permitted
@@ -192,6 +198,20 @@ from brain.tools.registry import ToolRegistry
 log = structlog.get_logger()
 
 # ------------------------------------------------------------------ written-down reasons
+#: Why a person's own agent, reaching no further than they do, waits for nobody.
+A_PERSONAL_AGENT_WITHIN_ITS_OWNERS_REACH_WAITS_FOR_NOBODY: Final = (
+    "The owner's direction on needs item 173 is that a person makes their own agent without asking "
+    "anybody. A new agent is compared with one that reaches nothing, so every capability it names "
+    "is a widening and, left alone, every personal agent with a capability waited for a second "
+    "person, which is asking somebody. The second person exists because a ceiling can outgrow the "
+    "reach of the person who wrote it, and a personal agent's ceiling can outgrow its owner's only "
+    "if it names something its owner does not hold. So the wait is kept for exactly that, which "
+    "brain.builder.publish.widened_capabilities answers over the owner's own reach on both axes, "
+    "and an agent that is the owner's alone and reaches no further than they do goes out on their "
+    "word. It is still a lens: a run is its caller's reach intersected with the ceiling, so it "
+    "cannot read what its owner cannot."
+)
+
 #: Why the rehearsal says what it did not do.
 A_REHEARSAL_RUNS_NO_MODEL_YET: Final = (
     "Rehearsing ran this draft through the real permission checks as you, at Shadow, and nothing "
@@ -1550,6 +1570,27 @@ async def save_agent_draft(
     return JSONResponse(status_code=200, content=view.model_dump(mode="json"))
 
 
+def _owners_own_within_their_reach(
+    audience: AgentAudience, record: AgentRecord, asked: Asking
+) -> bool:
+    """Whether this person makes only their own agents and this one reaches no further than them.
+
+    See `A_PERSONAL_AGENT_WITHIN_ITS_OWNERS_REACH_WAITS_FOR_NOBODY`. Three things are asked of the
+    agent being published. The caller holds no install authority, so the personal switch is the
+    only thing that lets them build at all and their word is the whole of what they have; an
+    administrator's publish keeps the second person it always had (M27.15.31), because they make
+    both kinds and the kind is chosen at the publish. The audience is personal and it is theirs. And
+    what the ceiling admits that their own reach does not is empty, which is the question
+    `widened_capabilities` already answers for a template built into a person's agent.
+    """
+    return (
+        asked.reach.scope_for(AGENT_INSTALL_CAPABILITY, asked.now) is None
+        and audience.level is Visibility.PERSONAL
+        and audience.owner_id == asked.caller.principal.id
+        and not widened_capabilities(asked.reach, entitlement_ceiling(record), now=asked.now)
+    )
+
+
 async def _check(
     request: Request, draft: AgentDraft, found: FoundAgent | None, asked: Asking
 ) -> tuple[DraftCheckView, Installation | None, PublishDecision | None]:
@@ -1616,6 +1657,10 @@ async def _check(
         )
         stops = decision.refusals
         widened = decision.widenings
+        # Told what a publish will do. A person who makes only their own agents, and whose agent
+        # reaches no further than they do, is told nobody else is needed.
+        if _owners_own_within_their_reach(audience, settled.record, asked):
+            widened = ()
     view = DraftCheckView(
         revision=revision.number,
         passed=not stops,

@@ -29,10 +29,11 @@
  * The Connected accounts card also lists the sources a person may connect their own account with,
  * and sends them to the vendor to do it (`components/MyAccounts.tsx`, M11.8.6).
  *
- * Task ids: M27.7.28, M16.4.2, M11.8.6, M40.4.1.4, M40.5.2.1, M40.5.2.2, M40.5.2.3, M40.5.2.4, M40.1.1.3, M40.4.2.4, M40.3.3.1, M40.4.2.1, M40.3.3.3, M40.2.2.5, M40.4.1.2, M40.7.7
+ * Task ids: M27.7.28, M16.4.2, M11.8.6, M40.4.1.4, M40.5.2.1, M40.5.2.2, M40.5.2.3, M40.5.2.4, M40.1.1.3, M40.4.2.4, M40.3.3.1, M40.4.2.1, M40.3.3.3, M40.2.2.5, M40.4.1.2, M40.7.7, M40.2.2.2
  */
 
 import { useCallback, useState } from "react";
+import { Link } from "react-router-dom";
 import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
@@ -172,7 +173,18 @@ type OwnAgent = Workspace["agents"][number];
 type OwnItem = Workspace["knowledge"][number];
 
 const AGENT_COLUMNS: GridColumn<OwnAgent>[] = [
-  { id: "agent", header: "Agent", cell: ({ row }) => <code>{row.original.agent_id}</code> },
+  {
+    id: "agent",
+    header: "Agent",
+    // The agent's own page. What opens there is the API's answer for this person's reach (the
+    // audience first, then only the tabs they hold a grant for), so the link offers nothing the
+    // page would not give, and an agent that has gone reads as one that never existed.
+    cell: ({ row }) => (
+      <Link to={`/agents/${encodeURIComponent(row.original.agent_id)}`}>
+        <code>{row.original.agent_id}</code>
+      </Link>
+    ),
+  },
   {
     id: "source",
     header: "Source",

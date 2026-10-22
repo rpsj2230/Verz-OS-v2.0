@@ -99,12 +99,13 @@ READS = tuple(
 #: `u_admin` (web) builds everywhere, reads the gallery and reads invoices. `u_prefix` (web) builds
 #: everywhere and reads invoices: the second person. `u_narrow` (web) builds in web and reads
 #: nothing, so their reach cannot cover an agent that reads invoices. `u_wide` reads the gallery and
-#: builds nothing. `u_none` holds nothing.
+#: invoices and builds nothing, so is a member who may build only their own agent. `u_none` holds
+#: nothing.
 GRANTS: Mapping[str, tuple[Grant, ...]] = {
     "u_admin": (*GALLERY, BUILDS, *READS),
     "u_prefix": (BUILDS, *READS),
     "u_narrow": (Grant(capability=AGENT_INSTALL_CAPABILITY, scope=Scope.department("web")),),
-    "u_wide": GALLERY,
+    "u_wide": (*GALLERY, *READS),
     "u_none": (),
     "u_elsewhere": (),
     "u_admin_only": (),

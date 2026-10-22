@@ -34,6 +34,7 @@ Task ids: M39.10.1, M39.10.2, M39.10.6
 from __future__ import annotations
 
 import secrets
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Final
 
 from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, check
@@ -80,8 +81,12 @@ def _published(answered: Any) -> tuple[int, dict[str, Any]]:
     return int(answered.status_code), dict(body)
 
 
-async def _made(h: Harness, app: FastAPI, who: str, kind: str) -> tuple[int, dict[str, Any], str]:
-    """A new draft of `who`, saved, checked and published as this kind, and what the route said."""
+async def _made(
+    h: Harness, app: FastAPI, who: str, kind: str, *, capabilities: Sequence[str] = ()
+) -> tuple[int, dict[str, Any], str]:
+    """A new draft of `who`, saved, checked and published as this kind, and what the route said.
+
+    The agent names `capabilities` in its ceiling, none unless asked."""
     from brain.agent_builder_routes import (
         DraftPublishAsked,
         DraftRevisionAsked,
@@ -106,7 +111,8 @@ async def _made(h: Harness, app: FastAPI, who: str, kind: str) -> tuple[int, dic
                 _request(app),
                 started["draft_id"],
                 DraftSaveAsked(
-                    document=_document(agent_id, persona=persona), base=started["revision"]
+                    document=_document(agent_id, persona=persona, capabilities=capabilities),
+                    base=started["revision"],
                 ),
                 asking,
             )

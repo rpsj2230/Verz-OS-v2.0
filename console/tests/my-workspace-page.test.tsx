@@ -129,6 +129,16 @@ describe("what the workspace asks for", () => {
 });
 
 describe("what the workspace shows", () => {
+  test("each agent in My agents is a link to that agent's own page", async () => {
+    // What breaks if this is deleted: the rows go back to plain text, and a person who may call an
+    // agent has no way from their own page to the agent's, so the tabs the API would show them
+    // are reachable only by typing an address.
+    const { container } = await mount(workspace());
+    const links = [...container.querySelectorAll("a")].map((one) => one.getAttribute("href"));
+    expect(links).toContain("/agents/support_ticket");
+    expect(links).toContain("/agents/renewal_chaser");
+  });
+
   test("the design's four figures and four cards, from what the API sent", async () => {
     // What breaks if this is deleted: a card drops off, or a figure is drawn from something other
     // than the person's own rows, and SCREEN 12 stops being the page it was built to.
