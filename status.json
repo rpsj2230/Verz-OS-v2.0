@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-21T19:16:07.925273+00:00",
-  "commit": "ea7aa433",
-  "commit_subject": "An agent can read the declared fields of a declared page, and the website check opens the browser for declared websites, switch off (M19.7.1, M19.9.6, M19.9.4 partly built) (#670)",
+  "generated_at": "2026-10-22T02:51:30.597450+00:00",
+  "commit": "844f3a1a",
+  "commit_subject": "A browser run is shown, through the driver and the runner, to be held to the envelope it was sealed with (M19.3.1, M19.3.2, M19.3.3, M19.3.4) (#674)",
   "total": 1626,
-  "done": 1219,
-  "percent": 75.0,
-  "built": 1396,
-  "built_percent": 85.9,
+  "done": 1223,
+  "percent": 75.2,
+  "built": 1400,
+  "built_percent": 86.1,
   "built_unproven": 177,
   "built_task_ids": [
     "M1.1.8",
@@ -270,16 +270,16 @@
       "wave": 5,
       "name": "Hands, delivery, go-live",
       "total": 217,
-      "done": 104,
-      "percent": 47.9,
-      "in_progress": 54,
+      "done": 108,
+      "percent": 49.8,
+      "in_progress": 50,
       "ready_for_testing": 29,
       "blocked": 19,
       "open": 11,
       "acts": 42,
       "decided": 18,
-      "built": 133,
-      "built_percent": 61.3
+      "built": 137,
+      "built_percent": 63.1
     },
     {
       "wave": 6,
@@ -493,10 +493,10 @@
       "name": "Browser and computer use",
       "wave": 5,
       "total": 47,
-      "done": 26,
+      "done": 30,
       "acts": 0,
       "decided": 1,
-      "built": 26
+      "built": 30
     },
     {
       "module": "M20",
@@ -1134,6 +1134,10 @@
     "M19.2.2",
     "M19.2.3",
     "M19.2.4",
+    "M19.3.1",
+    "M19.3.2",
+    "M19.3.3",
+    "M19.3.4",
     "M19.3.5",
     "M19.5.1",
     "M19.5.3",
@@ -2504,26 +2508,6 @@
       "why": "TRIAGE 2026-10-13 class 2 (partly built): browsing/observation.py:Snapshot has no picture field; wire.snapshot_from_accessibility builds it from the accessibility tree and playwright_browser.py supplies the tree; test_browsing_targets.py. Never run in a browser; no control-plane caller consumes snapshots. NEXT: After the driver exists, check a read-only run returns a tree snapshot and no image field; observation.vision_gaps() is the static half to name now.",
       "updated": "2026-10-13"
     },
-    "M19.3.1": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): browsing/enforcer.py:Policy is frozen and compiled once by compile_policy from the sealed envelope; wire.policy_of reads it at runner start; egress_addon receives its origins at proxy creation; test_browsing_enforcer.py. Runs only inside a container that has never started. NEXT: After the driver and rehearsal, check a run's policy digest equals its envelope digest; static half: enforcer.policy_gaps() and enforcement_gaps().",
-      "updated": "2026-10-13"
-    },
-    "M19.3.2": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): browsing/enforcer.py:authorise refuses an element reference absent from the snapshot just produced (observation.is_current); runner.py calls it per instruction; test_browsing_enforcer.py. Inside the runner only; never run. NEXT: Check via a rehearsed run that a stale or invented reference is refused; static half is the unit test over authorise.",
-      "updated": "2026-10-13"
-    },
-    "M19.3.3": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): enforcer.authorise checks the action origin against the policy and Target.allows_origin; egress_addon.py kills any other host at the proxy; test_browsing_enforcer.py, test_browsing_plan.py, test_browsing_sandbox.py. Runs inside the never-started sandbox. NEXT: Live check needs the driver and a runsc host; a static check can call egress_addon's decision over an undeclared origin.",
-      "updated": "2026-10-13"
-    },
-    "M19.3.4": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): enforcer.authorise holds the envelope's verbs and per-verb counts in Spend and refuses an undeclared write verb or an extra use; test_browsing_enforcer.py. Used by runner.py only; no run has happened. NEXT: As M19.3.3: needs the driver; static half can call authorise over a sealed sample envelope.",
-      "updated": "2026-10-13"
-    },
     "M19.3.6": {
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 3 (built, not wired): browsing/enforcer.py:recheck re-judges every returned result in the control plane; test_browsing_enforcer.py. Nothing outside browsing/ calls recheck, because the control-plane relay that would receive results is not built. NEXT: Call enforcer.recheck from the worker-side driver (compile an envelope, send wire start_fields to browser-launcher:7300, relay the run, call session_store.start/end and recording.write; launcher.py and recording.py say 'not built') on each runner record line before it is accepted or recorded.",
@@ -3887,11 +3871,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 53,
+  "closed_today": 4,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "844f3a1",
+      "at": "2026-10-22T02:35:15+00:00",
+      "subject": "A browser run is shown, through the driver and the runner, to be held to the envelope it was sealed with (M19.3.1, M19.3.2, M19.3.3, M19.3.4) (#674)",
+      "closed": "M19.3.1,M19.3.2,M19.3.3,M19.3.4"
+    },
     {
       "sha": "ea7aa43",
       "at": "2026-10-21T19:06:43+00:00",
@@ -4005,12 +3995,6 @@
       "at": "2026-10-19T06:24:02+00:00",
       "subject": "What a new automation may use is the agent's own, read for the person writing it (M39.9.2.3) (#624)",
       "closed": "M39.9.2.3"
-    },
-    {
-      "sha": "312c509",
-      "at": "2026-10-19T06:23:28+00:00",
-      "subject": "The running automation canvas is proved sandboxed on the install (M32.6.1.1, M32.6.1.2, M32.6.1.4) (#620)",
-      "closed": "M32.6.1.1,M32.6.1.2,M32.6.1.4"
     }
   ]
 }
