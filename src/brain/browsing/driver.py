@@ -77,14 +77,15 @@ from brain.browsing.credentials import Bindings, CredentialError, resolve, scrub
 from brain.browsing.enforcer import Action, ActionRecord, recheck, stopped_now
 from brain.browsing.envelope import Envelope, compile_envelope
 from brain.browsing.envelope_store import last_approved_parts, load_envelope, put_envelope
-from brain.browsing.grading import Rubric, build_rubric
-from brain.browsing.observation import Snapshot
+from brain.browsing.grading import Rubric, Trajectory, build_rubric
+from brain.browsing.observation import Frame, ObservationError, Snapshot
 from brain.browsing.recording import (
     Direction,
     Recording,
     as_written,
     record,
     recording_gaps,
+    secrets_seen,
     write,
 )
 from brain.browsing.recording import transcript_digest as _digest_of
@@ -297,6 +298,17 @@ class RunResult:
     digest: str | None = None
     rubric: Rubric | None = None
     actions: int = 0
+    #: What the container reported it did, in order, with the placeholder this side sent for each.
+    #: Values-free: an action names a surface, a verb, an origin and a reference, never text typed.
+    records: tuple[ActionRecord, ...] = ()
+    #: One entry per picture the run took, named by digest and never carrying it.
+    frames: tuple[Frame, ...] = ()
+    #: The snapshots in which a bound credential value was found in the text the runner sent.
+    echoed_sequences: frozenset[int] = frozenset()
+
+    def trajectory(self) -> Trajectory:
+        """What the run did as the grader and the judge's frame admission read it."""
+        return Trajectory(run_id=self.run_id, records=self.records)
 
     @property
     def clean(self) -> bool:
@@ -531,6 +543,9 @@ async def _relay(
     last: Snapshot | None = None
     index = 0
     stopping = ""
+    # The placeholder this side sent with each instruction, which is what the replay trusts and not
+    # whatever the container says it was sent.
+    placeholders: dict[int, str] = {}
     while True:
         index += 1
         if stopped_now(deps.halts()):
@@ -549,6 +564,7 @@ async def _relay(
             exchanged.append((Direction.TO_RUNNER, stop))
             await _until_ended(link, exchanged)
             return "a credential was refused for this action"
+        placeholders[index] = instruction.placeholder
         act = encode(
             Kind.ACT,
             index=index,
@@ -574,7 +590,7 @@ async def _relay(
                 if message.kind is Kind.SNAPSHOT:
                     last = snapshot_of(message, run_id=run_id)
                 elif message.kind is Kind.RECORD:
-                    records.append(_record_of(message.fields, run_id))
+                    records.append(_record_of(message.fields, run_id, placeholders.get(index, "")))
                     if message.fields["refusal"] is not None:
                         # The first refusal ends a run inside the container, so what is read
                         # next is its last line and not an answer to another instruction.
@@ -619,8 +635,13 @@ def _value_for(
     return value
 
 
-def _record_of(fields: Mapping[str, object], run_id: str) -> ActionRecord:
-    """One reported action, with the container's own verdict carried and never read."""
+def _record_of(fields: Mapping[str, object], run_id: str, placeholder: str = "") -> ActionRecord:
+    """One reported action, with the container's own verdict carried and never read.
+
+    `placeholder` is the one this side sent for the instruction, because the record line carries no
+    such field and a container's word about whether it was typing a credential is the one thing the
+    judge's frame admission must not rest on.
+    """
     try:
         action = Action(
             run_id=run_id,
@@ -629,11 +650,40 @@ def _record_of(fields: Mapping[str, object], run_id: str) -> ActionRecord:
             origin=str(fields["origin"]),
             ref=str(fields["ref"]),
             sequence=int(str(fields["sequence"])),
+            placeholder=placeholder,
         )
     except ValueError as exc:
         msg = "a record line named a verb or a position the protocol does not have"
         raise WireError(msg) from exc
     return ActionRecord(action=action, claimed_allowed=fields["refusal"] is None)
+
+
+def frames_of(exchanged: list[tuple[Direction, bytes]], run_id: str) -> tuple[Frame, ...]:
+    """The pictures a run took, from the lines the runner sent: named by digest, never carried.
+
+    A frame whose line cannot be read, or whose digest is not one a stored picture could have, is
+    left out here and is reported by the recording (`Recording.mismatched`), so a judge is never
+    offered a picture nothing can find.
+    """
+    found: list[Frame] = []
+    for _, line in exchanged:
+        # Only the runner sends a frame; `decode` and the kind are the whole of that rule.
+        try:
+            message = decode(line)
+            if message.kind is not Kind.FRAME:
+                continue
+            found.append(
+                Frame(
+                    run_id=run_id,
+                    sequence=int(str(message.fields["sequence"])),
+                    origin=str(message.fields["origin"]),
+                    digest=str(message.fields["digest"]),
+                    inputs_masked=message.fields["inputs_masked"] is True,
+                )
+            )
+        except (WireError, ObservationError, ValueError):
+            continue
+    return tuple(found)
 
 
 async def _finish(
@@ -675,4 +725,7 @@ async def _finish(
         digest=digest or _digest_of(recording),
         rubric=rubric,
         actions=len(records),
+        records=tuple(records),
+        frames=frames_of(exchanged, run_id),
+        echoed_sequences=secrets_seen(exchanged, values),
     )

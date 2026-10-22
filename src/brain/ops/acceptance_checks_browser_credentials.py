@@ -145,23 +145,22 @@ class _Quiet:
         return None
 
 
-@check(
-    leaves=("M19.4.4", "M19.1.4"),
-    sentence=(
-        "A credential named by a placeholder is typed into the page it is bound to and no other, "
-        "its lease is revoked, and neither the stored transcript nor the run's result holds the "
-        "value, even when the page shows it back; and what a run observes of a page is a tree."
-    ),
-)
-async def a_credential_reaches_the_page_and_is_kept_nowhere(h: Harness) -> None:
+async def typing_run(
+    h: Harness, page: _Page, vault: _Vault, bound: str, *, then: Sequence[Any] = ()
+) -> tuple[Any, _Objects]:
+    """One sealed typing step through the driver to the product's own runner, and what it stored.
+
+    The envelope opens the login surface and types the bound credential into its one field; `then`
+    are instructions sent after, for a check that wants the run to go on (open the page again). The
+    page, the vault and the origin the binding is for are the caller's, so each check chooses what
+    is wrong with them.
+    """
     from brain.browsing.credentials import Binding, Bindings
     from brain.browsing.driver import Instruction, RunDeps, Substitution, run_envelope
     from brain.browsing.envelope import compile_envelope
-    from brain.browsing.observation import vision_gaps
     from brain.browsing.planning import Goal, PlanRequest, plan
     from brain.browsing.sessions import ACT_ON_SURFACE_CAPABILITY, BROWSE_SURFACE
     from brain.browsing.targets import Control, Surface, Target, TargetRegistry, Verb
-    from brain.browsing.wire import WireError, decode
     from brain.core.entitlement import EntitlementSet, Grant
     from brain.core.scope import Scope
     from brain.gate.injection import AutonomyTier
@@ -216,34 +215,50 @@ async def a_credential_reaches_the_page_and_is_kept_nowhere(h: Harness) -> None:
     steps = [
         Instruction(surface="login", verb=Verb.OPEN),
         Instruction(surface="login", verb=Verb.TYPE, ref=FIELD, placeholder=PLACEHOLDER),
+        *then,
     ]
 
-    async def run(page: _Page, vault: _Vault, bound: str) -> tuple[Any, _Objects]:
-        runner = InProcessRunner(page)  # type: ignore[arg-type]
-        objects = _Objects()
+    runner = InProcessRunner(page)  # type: ignore[arg-type]
+    objects = _Objects()
 
-        async def connect() -> _Link:
-            return _Link(runner)
+    async def connect() -> _Link:
+        return _Link(runner)
 
-        result = await run_envelope(
-            envelope,
-            target,
-            approval=approval,
-            deps=RunDeps(
-                connect=connect,
-                ledger=_Quiet(),
-                actor=_Script(steps),
-                clock=lambda: h.now,
-                halts=lambda: NOTHING_HALTED,
-                backend=objects,
-                substitution=Substitution(
-                    bindings=Bindings(bindings=(Binding(PLACEHOLDER, ref, bound),)),
-                    vault=vault,
-                ),
+    result = await run_envelope(
+        envelope,
+        target,
+        approval=approval,
+        deps=RunDeps(
+            connect=connect,
+            ledger=_Quiet(),
+            actor=_Script(steps),
+            clock=lambda: h.now,
+            halts=lambda: NOTHING_HALTED,
+            backend=objects,
+            substitution=Substitution(
+                bindings=Bindings(bindings=(Binding(PLACEHOLDER, ref, bound),)),
+                vault=vault,
             ),
-            trace_id=h.trace_id,
-        )
-        return result, objects
+        ),
+        trace_id=h.trace_id,
+    )
+    return result, objects
+
+
+@check(
+    leaves=("M19.4.4", "M19.1.4"),
+    sentence=(
+        "A credential named by a placeholder is typed into the page it is bound to and no other, "
+        "its lease is revoked, and neither the stored transcript nor the run's result holds the "
+        "value, even when the page shows it back; and what a run observes of a page is a tree."
+    ),
+)
+async def a_credential_reaches_the_page_and_is_kept_nowhere(h: Harness) -> None:
+    from brain.browsing.observation import vision_gaps
+    from brain.browsing.wire import WireError, decode
+
+    async def run(page: _Page, vault: _Vault, bound: str) -> tuple[Any, _Objects]:
+        return await typing_run(h, page, vault, bound)
 
     def holds_value(objects: _Objects, result: Any) -> bool:
         """Whether the value, plain or as a line holds it, is in a stored line or the result.

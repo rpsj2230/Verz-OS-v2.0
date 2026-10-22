@@ -1905,9 +1905,9 @@ const PROGRESS = {
     updated: "2026-10-20",
   },
   "M19.3.6": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): browsing/enforcer.py:recheck re-judges every returned result in the control plane; test_browsing_enforcer.py. Nothing outside browsing/ calls recheck, because the control-plane relay that would receive results is not built. NEXT: Call enforcer.recheck from the worker-side driver (compile an envelope, send wire start_fields to browser-launcher:7300, relay the run, call session_store.start/end and recording.write; launcher.py and recording.py say 'not built') on each runner record line before it is accepted or recorded.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-21 over a stand-in page. The control plane re-judges everything the container reported: driver._finish replays the run's records against the envelope this side sealed (enforcer.recheck), reading none of the container's verdicts, and returns what it found on the result. Shown by install check a_browser_run_is_held_to_the_envelope_it_was_sealed_with: a run inside its envelope replays clean, and a click outside it, an origin nobody declared, an undeclared verb and a second use are each reported as attempts even though the container refused them. A reference is not re-checked by design (the only trees are the container's own). The page is a stand-in; a compromised container is the rehearsal. INSTALL PROOF STEPS: 1. Install page: Run now. 2. Read that row: it must say Passed.",
+    updated: "2026-10-21",
   },
   "M19.4.1": {
     status: "IN PROGRESS",
@@ -1930,9 +1930,9 @@ const PROGRESS = {
     updated: "2026-10-21",
   },
   "M19.4.5": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): observation.py:Snapshot carries no picture and vision_gaps() asserts it; verification.admit_frames withholds frames beside a typed credential; tests in test_browsing_targets.py, test_browsing_grading.py, test_browsing_verification.py. No actor or judge runs, so nothing consumes either. NEXT: A static check can call vision_gaps() and admit_frames over a sample; the live half waits on the driver.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-21 over a stand-in page and vault. The actor has no field a picture could arrive in (observation.vision_gaps) and the judge of a finished run is shown only what verification.admit_frames lets through. Newly joined: driver.run_envelope now returns the run's records (with the placeholder this side sent for each instruction, not the container's word), its frames (by digest, never the picture) and the snapshots in which a bound value appeared, so admit_frames is given a real run. Install check a_judge_is_shown_no_picture_beside_a_credential shows the picture of the opening admitted, the pictures from the typing onwards withheld until the run opens a page again, and a picture whose tree held the value withheld, with a reason that never quotes the value. The second-pass judge itself is not built; what is shown is its input. A canvas that draws a value with no text behind it is not caught, as admit_frames says. INSTALL PROOF STEPS: 1. Install page: Run now. 2. Read the row a_judge_is_shown_no_picture_beside_a_credential: it must say Passed.",
+    updated: "2026-10-21",
   },
   "M19.5.1": {
     status: "IN PROGRESS",
