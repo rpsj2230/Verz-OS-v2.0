@@ -3500,9 +3500,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M36.1.2.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): replica_store.measure_lag and console/read_replica.banner_for put a staleness field on estate, directory and govern route bodies (tested). The console UI renders it only on LearningPage and MemoryDetailPage; the other pages ignore the field. Not verified further. NEXT: render StalenessBanner on the pages whose routes carry it (estate, directory, people, govern); then check with a stubbed lag",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: the real lag measurement (replica_store.measure_lag) is asked of the install's own server by the install check a_console_read_goes_to_the_replica_and_a_decision_never_does, which also holds the banner the routing puts on a page read from a copy that is behind; the console frame draws that banner on every page (StalenessBanner in the Shell). No replica is configured on a single-box install, so a real banner can be seen only where one is: the check proves the measurement and the routing with the lag stood in. On the install with a replica: stop replication for a minute and open any console page; it says how far behind the copy is.",
+    updated: "2026-10-22",
   },
   "M36.1.2.4": {
     status: "IN PROGRESS",
@@ -4945,9 +4945,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M36.2.4.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): ops/load_peak.judge compares each lane's p95 and success rate with reliability.LANE_OBJECTIVES (tested) and prints them; no store keeps a run's result and no screen shows it. A run needs the owner's sign-off (needs-rupash item 194). NEXT: add a table and route that record a load_peak result per run and show it beside the service level table; the first real result waits on item 194",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: the Service levels page lists the peak load runs this install has kept (GET /report/service-levels/load-runs), each lane's measured p95 and success rate beside the objective that lane promises, whether the run held, and whether it was smaller than the stated peak. A reader the service levels are withheld from is sent an empty list. Install check a_kept_peak_run_is_listed_beside_the_service_levels. NOT done: the first real result at the company's stated peak waits on the owner running the command (needs 194). On the install: after an operator has run python -m brain.ops.load_peak with the load test switched on, open Reports, Service levels and read the Peak load runs card; with no run it says none has been kept.",
+    updated: "2026-10-22",
   },
   "M36.3.1": {
     status: "BLOCKED",

@@ -18,7 +18,7 @@
  * What was removed from the old page: lower-case column headings that were field names, and the
  * one fixed window of a day (now the period every Report page offers).
  *
- * Task ids: M27.7.16, M27.16.1, M27.16.3
+ * Task ids: M27.7.16, M27.16.1, M27.16.3, M36.2.4.3
  */
 
 import { useState } from "react";
@@ -27,6 +27,7 @@ import { BY_THE_INSTALL, EmptyList, EntityTable, FailureState, KpiStrip, Loading
 import { cn } from "../../lib/utils";
 import { countWords } from "../agents/agentStats";
 import { milliseconds, ratePercent, readServiceLevels, serviceLevelsPathFor, type LaneReadingRow } from "../serviceLevelsQuery";
+import { LoadRuns } from "./LoadRuns";
 import { BarList, DEFAULT_PERIOD, REPORTS_CRUMB, ReportHeader, periodWords, sheetOf, type ReportPeriod } from "./reportParts";
 
 export const SERVICE_LEVELS_HEADING = "Service levels";
@@ -186,6 +187,7 @@ export function ServiceLevelsPage() {
         }
       />
       {content}
+      {answer.busy || answer.failure !== null ? null : <LoadRuns />}
     </div>
   );
 }
