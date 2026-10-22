@@ -1930,9 +1930,9 @@ const PROGRESS = {
     updated: "2026-10-21",
   },
   "M19.4.5": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): observation.py:Snapshot carries no picture and vision_gaps() asserts it; verification.admit_frames withholds frames beside a typed credential; tests in test_browsing_targets.py, test_browsing_grading.py, test_browsing_verification.py. No actor or judge runs, so nothing consumes either. NEXT: A static check can call vision_gaps() and admit_frames over a sample; the live half waits on the driver.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-21 over a stand-in page and vault. The actor has no field a picture could arrive in (observation.vision_gaps) and the judge of a finished run is shown only what verification.admit_frames lets through. Newly joined: driver.run_envelope now returns the run's records (with the placeholder this side sent for each instruction, not the container's word), its frames (by digest, never the picture) and the snapshots in which a bound value appeared, so admit_frames is given a real run. Install check a_judge_is_shown_no_picture_beside_a_credential shows the picture of the opening admitted, the pictures from the typing onwards withheld until the run opens a page again, and a picture whose tree held the value withheld, with a reason that never quotes the value. The second-pass judge itself is not built; what is shown is its input. A canvas that draws a value with no text behind it is not caught, as admit_frames says. INSTALL PROOF STEPS: 1. Install page: Run now. 2. Read the row a_judge_is_shown_no_picture_beside_a_credential: it must say Passed.",
+    updated: "2026-10-21",
   },
   "M19.5.1": {
     status: "IN PROGRESS",
