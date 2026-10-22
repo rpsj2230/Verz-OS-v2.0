@@ -171,7 +171,7 @@ export function AgentDashboard({
         <h2 className="m-0 text-sm font-semibold text-ink">{HEADLINE_LABEL}</h2>
         <PeriodSwitch period={period} onChange={onPeriod} />
       </div>
-      <p data-slot="partial-day" className="m-0 text-[12.5px] text-ink-3">
+      <p data-slot="partial-day" className="m-0 text-[12.5px] text-dim">
         {TODAY_IS_NOT_OVER}
       </p>
       <StatsStrip label={HEADLINE_LABEL} busy={stats.busy} failure={stats.failure} count={3}>

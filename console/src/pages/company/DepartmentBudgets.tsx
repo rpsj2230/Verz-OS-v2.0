@@ -25,7 +25,7 @@ import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { request, type ApiResult } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
-import { ConfirmDialog, FailureState, Note, SectionCard } from "../../components/kit";
+import { ConfirmDialog, EmptyList, FailureState, Note, SectionCard } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
@@ -422,7 +422,12 @@ export function DepartmentBudgets({ refresh }: { readonly refresh: number }) {
           </p>
         )}
         {found.lines.length === 0 ? (
-          <p className="m-0 text-sm text-dim">{NO_DEPARTMENT_BUDGETS}</p>
+          <EmptyList
+            compact
+            title={NO_DEPARTMENT_BUDGETS}
+            adds="A department is listed here once the company's month is shared with it, by the form below."
+            by={["super_admin"]}
+          />
         ) : (
           <ul aria-label={DEPARTMENT_BUDGETS_HEADING} className="m-0 flex list-none flex-col gap-4 p-0">
             {found.lines.map((line) => (
