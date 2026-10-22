@@ -249,6 +249,30 @@ export function spendDetailPath(reading: "cost-per-answer" | "shapes" | "stops",
   return days === null ? `${SPEND_API_PATH}/${reading}` : `${SPEND_API_PATH}/${reading}?days=${String(days)}`;
 }
 
+export type SpendByProviderBody = components["schemas"]["SpendByProviderView"];
+
+/** The fields of one invoice a person types to hold it against a provider's metered spend. */
+export interface InvoiceAsked {
+  readonly provider: string;
+  readonly invoiceMinor: number;
+  readonly currency: string;
+  readonly rate: string;
+}
+
+/**
+ * Metered spend per provider for a billing period, and one provider's invoice held against it
+ * when `invoice` is given (M21.4.1). Both ends are UTC days, the start included and the end not,
+ * which is how a provider bills.
+ */
+export function providersPath(since: string, until: string, invoice?: InvoiceAsked): string {
+  const base = `${SPEND_API_PATH}/providers?since=${since}&until=${until}`;
+  if (invoice === undefined) {
+    return base;
+  }
+  const rate = invoice.rate.trim() === "" ? "" : `&rate=${encodeURIComponent(invoice.rate.trim())}`;
+  return `${base}&provider=${encodeURIComponent(invoice.provider)}&invoice_minor=${String(invoice.invoiceMinor)}&invoice_currency=${encodeURIComponent(invoice.currency)}${rate}`;
+}
+
 /** The whole request for one dimension over the last `days`, ending today. */
 export function spendReportPath(dimension: string, days: number, now: Date): string {
   return `${SPEND_API_PATH}?${DIMENSION_PARAMETER}=${dimension}&${SINCE_PARAMETER}=${daysBefore(now, days)}`;

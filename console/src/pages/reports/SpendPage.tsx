@@ -18,7 +18,7 @@
  * **Under the breakdown are the report's other three readings** (`SpendDetail`): what one answer costs,
  * the question shapes that cost most and the budgets that are stopped (M21.3.3, M21.3.4, M21.3.6).
  *
- * Task ids: M27.7.15, M27.16.1, M21.3.3, M21.3.4, M21.3.6
+ * Task ids: M27.7.15, M27.16.1, M21.3.3, M21.3.4, M21.3.6, M21.4.1
  */
 
 import { useState } from "react";
@@ -37,6 +37,7 @@ import {
   type SpendReportBody,
 } from "../spendQuery";
 import { SpendDetail } from "./SpendDetail";
+import { SpendReconcile } from "./SpendReconcile";
 import { USAGE_AND_COST } from "./UsagePage";
 import {
   BarList,
@@ -213,6 +214,9 @@ export function SpendPage() {
       {content}
       {answer.busy || answer.failure !== null ? null : (
         <SpendDetail days={period} currency={report?.currency ?? "XXX"} recorded={report !== null && report.built && costNotRecorded(report) === null} />
+      )}
+      {answer.busy || answer.failure !== null || report === null || !report.built || costNotRecorded(report) !== null ? null : (
+        <SpendReconcile />
       )}
     </div>
   );

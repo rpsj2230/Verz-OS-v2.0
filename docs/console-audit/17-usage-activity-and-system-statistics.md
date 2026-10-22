@@ -38,6 +38,7 @@
 | `GET /api/v1/report/service-levels/load-runs` | `/service-levels` |
 | `GET /api/v1/report/spend` | `/spend` |
 | `GET /api/v1/report/spend/cost-per-answer` | `/spend` |
+| `GET /api/v1/report/spend/providers` | `/spend` |
 | `GET /api/v1/report/spend/shapes` | `/spend` |
 | `GET /api/v1/report/spend/stops` | `/spend` |
 | `GET /api/v1/report/usage` | `/adoption`, `/department`, `/usage` |
