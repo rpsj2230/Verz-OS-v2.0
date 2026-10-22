@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-22T12:35:17.664403+00:00",
-  "commit": "f13612b7",
-  "commit_subject": "The last step of every alert's runbook is the supplier, with the contact the company entered, and the owner is asked where cost projections come from (#693)",
+  "generated_at": "2026-10-22T13:16:34.939641+00:00",
+  "commit": "2b4f7208",
+  "commit_subject": "4 more tasks are proved on the install by the newest complete acceptance run",
   "total": 1626,
-  "done": 1237,
-  "percent": 76.1,
+  "done": 1241,
+  "percent": 76.3,
   "built": 1423,
   "built_percent": 87.5,
-  "built_unproven": 186,
+  "built_unproven": 182,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -117,8 +117,6 @@
     "M30.3.7",
     "M30.3.8",
     "M30.3.9",
-    "M30.4.2",
-    "M30.4.4",
     "M30.6.10",
     "M32.1.1.1",
     "M32.1.1.2",
@@ -145,8 +143,6 @@
     "M37.5.1.3",
     "M37.5.1.4",
     "M37.5.2.1",
-    "M37.5.2.2",
-    "M37.5.2.3",
     "M38.2.2.3",
     "M38.2.2.4",
     "M38.2.2.5",
@@ -279,10 +275,10 @@
       "wave": 5,
       "name": "Hands, delivery, go-live",
       "total": 217,
-      "done": 113,
-      "percent": 52.1,
+      "done": 117,
+      "percent": 53.9,
       "in_progress": 37,
-      "ready_for_testing": 36,
+      "ready_for_testing": 32,
       "blocked": 20,
       "open": 11,
       "acts": 42,
@@ -612,7 +608,7 @@
       "name": "Hosting, delivery and recovery",
       "wave": 5,
       "total": 36,
-      "done": 14,
+      "done": 16,
       "acts": 1,
       "decided": 10,
       "built": 24
@@ -682,7 +678,7 @@
       "name": "Migration, launch and handover",
       "wave": 5,
       "total": 45,
-      "done": 28,
+      "done": 30,
       "acts": 41,
       "decided": 4,
       "built": 34
@@ -1493,6 +1489,8 @@
     "M30.3.11",
     "M30.3.5",
     "M30.4.1",
+    "M30.4.2",
+    "M30.4.4",
     "M30.4.6",
     "M30.4.7",
     "M30.5.1",
@@ -1668,6 +1666,8 @@
     "M37.4.3.4",
     "M37.4.3.5",
     "M37.5.1.1",
+    "M37.5.2.2",
+    "M37.5.2.3",
     "M37.6.1.3",
     "M37.7.5",
     "M38.1.1.1",
@@ -3061,20 +3061,10 @@
       "why": "TRIAGE 2026-10-13 class 3 (built, not wired): recovery.alerts() raises BACKUP_AGED against the profile RPO from real manifests (tested); schedule_runner Runner backup_exposure has needs= and no run, controls.backup_exposure is invoked_by NOTHING, and ops/notices BACKUP_EXPOSURE says no channel is chosen. Nothing calls alerts(). NEXT: give Runner backup_exposure a run that lists manifests with backup_manifest.read_manifests, calls recovery.alerts and sends the notice to the operations alert holder; channel may need an owner decision",
       "updated": "2026-10-13"
     },
-    "M30.4.2": {
-      "status": "READY FOR TESTING",
-      "why": "BUILT AND WIRED: which of our queue tasks a recovery sweep may put back is now read off the class its work is given in brain.ops.reliability (embed and ingest are safe; a scheduled control is unsafe), and anything not classified safe is set aside for a person. PROOF ON THE INSTALL: the check the sweep puts back safe jobs and sets aside the unsafe (acceptance_checks_recovery, queue check) passes on the next run. NOT in scope: the other two classes (after verification, needs a human) are not yet used by any queue task; they classify connector writes and migrations, which no queue task does.",
-      "updated": "2026-10-20"
-    },
     "M30.4.3": {
       "status": "OPEN",
       "why": "TRIAGE 2026-10-13 class 4 (unbuilt): No chaos suite exists: nothing in src, tests, ops or CI matches chaos, and no script kills Postgres, provider, connector, browser or worker. Related: ops/crash.py durable_machines, ops/recovery_run.py, ops.reliability.MATRIX.",
       "updated": "2026-10-13"
-    },
-    "M30.4.4": {
-      "status": "READY FOR TESTING",
-      "why": "BUILT: two install checks inject the two shapes through the real answer route with stand-ins in the process (nothing leaves the server): a 429 is walked past, counted as one fallback, recorded as a rate limit and leaves the step's breaker closed after three in a row; a reply that is not JSON stops the chain at its step, and one with no choices is told as an answer not composed, with the next step never sent the question. PROOF ON THE INSTALL: the checks a_rate_limit_is_walked_past_and_does_not_open_the_breaker and a_reply_that_is_not_a_completion_is_not_shopped_to_another_step pass on the next run; they say not run on an install that keeps text on its own hardware.",
-      "updated": "2026-10-20"
     },
     "M30.4.5": {
       "status": "IN PROGRESS",
@@ -3405,16 +3395,6 @@
       "status": "READY FOR TESTING",
       "why": "BUILT (under M17.7.2): the severity of each control's alert decides who is told, through alerting.route_for: everyone holding the operations alert, and the incident capability's holders too for an alert that wakes somebody, each only if they may open Incidents. PROOF ON THE INSTALL: the same check as M37.5.1.3 passes; a holder who cannot open Incidents is told nothing.",
       "updated": "2026-10-20"
-    },
-    "M37.5.2.2": {
-      "status": "READY FOR TESTING",
-      "why": "BUILT AND WIRED: GET /help/alerts/{control} serves a check and a step for every way each control can be reported as missed (controls.runbook_for), to a reader of the Overview, Queue or Incidents screens, and a stranger gets the one refusal. PROOF ON THE INSTALL: the help-pages install check 'every alert has steps and a ladder ending at the supplier' passes on the next run.",
-      "updated": "2026-10-22"
-    },
-    "M37.5.2.3": {
-      "status": "READY FOR TESTING",
-      "why": "BUILT AND WIRED: the runbook of every alert now ends with the escalation ladder (the installation owner, then the supplier), and the supplier rung shows the contact the company entered under Install, Settings, How to reach the supplier (INSTALL_SUPPORT_CONTACT, ships unset). While none is entered the rung says nobody is named there, and never shows a placeholder. PROOF ON THE INSTALL: the same help-pages check passes; then enter a contact on Install, Settings and open any alert's runbook to see it on the last step. NOT built: sending a message to the supplier. The module's own rule is that nothing here delivers, and a person reads the step and makes the contact.",
-      "updated": "2026-10-22"
     },
     "M37.5.3.1": {
       "status": "IN PROGRESS",
@@ -3824,11 +3804,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 18,
+  "closed_today": 22,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "2b4f720",
+      "at": "2026-10-22T13:15:10+00:00",
+      "subject": "4 more tasks are proved on the install by the newest complete acceptance run",
+      "closed": "M30.4.2,M30.4.4,M37.5.2.2,M37.5.2.3"
+    },
     {
       "sha": "d2f302c",
       "at": "2026-10-22T11:13:15+00:00",
@@ -3942,12 +3928,6 @@
       "at": "2026-10-21T05:18:48+00:00",
       "subject": "8 more tasks are proved on the install by the newest complete acceptance run",
       "closed": "M18.1.2,M18.1.4,M18.3.4,M18.3.5,M18.5.2,M18.5.3,M18.7.1,M30.3.11"
-    },
-    {
-      "sha": "4b04ac9",
-      "at": "2026-10-21T02:18:23+00:00",
-      "subject": "The gallery offers a daily brief, deal capture and drafted email replies, each declaring what starts it, what it uses and who decides; every task of ours has a deadline (M17.7.5, M17.1.4) (#649)",
-      "closed": "M17.1.4,M17.7.5"
     }
   ]
 }
