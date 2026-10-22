@@ -25,7 +25,7 @@ transaction read-only, which is the end of anything it would still write.
 check's transaction, the report is read at once and says it is live, and read again at an instant
 past the stale threshold and says so, with the instant it is as of on the figure each time.
 
-Task ids: M36.1.1.1, M36.1.2.2, M36.1.3.2
+Task ids: M36.1.1.1, M36.1.2.2, M36.1.2.3, M36.1.3.2
 """
 
 from __future__ import annotations
@@ -56,6 +56,10 @@ A_CHECK_READS_THE_PARTITIONS_THE_WORKER_MADE_AND_MAKES_NONE: Final = (
 )
 
 # ----------------------------------------------------------------------- the sentences
+THE_SERVER_WAS_NOT_A_PRIMARY: Final = (
+    "the lag measurement of the install's own server reported a replica, or a replay age on a "
+    "server that replays nothing"
+)
 THE_MONTHS_ARE_NOT_MADE_YET: Final = (
     "the worker has not made this install's ledger partitions for the months ahead yet, which its "
     "daily retention run does; this check reads them and never makes one"
@@ -114,17 +118,24 @@ async def the_ledger_has_a_partition_for_this_month_and_each_one_ahead(h: Harnes
 
 # ------------------------------------------------------------- 2. the console read replica
 @check(
-    leaves=("M36.1.2.2",),
+    leaves=("M36.1.2.2", "M36.1.2.3"),
     sentence=(
-        "With a replica configured, a console page's read is served from it and carries no banner "
-        "while it is within a page's threshold, carries a banner saying how far behind it is "
-        "when it is behind, and is answered by the primary when the copy is further behind than a "
-        "page may be; a read that decides something is answered by the primary whatever the copy."
+        "The server asked for its own lag says it is not a replica; with a replica configured, a "
+        "console read is served from it with no banner within a page's threshold and a banner "
+        "saying how far behind it is when behind, and the primary answers when the copy is too "
+        "far behind or the read decides something."
     ),
 )
 async def a_console_read_goes_to_the_replica_and_a_decision_never_does(h: Harness) -> None:
     from brain.console.read_replica import LagReading, Purpose
-    from brain.ops.replica_store import ConsoleReads
+    from brain.ops.replica_store import ConsoleReads, measure_lag
+
+    # The real measurement, asked of the install's own server: a primary says it is not in recovery
+    # and has no replay age, which is the reading the console takes to mean no banner at all.
+    async with h.sessions() as session:
+        own = await measure_lag(session)
+    if own.in_recovery or own.replay_age is not None:
+        raise CheckFailedError(THE_SERVER_WAS_NOT_A_PRIMARY)
 
     def labelled(name: str) -> Any:
         def make() -> Any:

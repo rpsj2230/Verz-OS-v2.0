@@ -373,6 +373,10 @@ from brain.lark_connect_routes import router as lark_connect_router
 # an install that brokers sign-in to Lark. See `brain.lark_sign_in_routes`.
 from brain.lark_sign_in_routes import router as lark_sign_in_router
 
+# The peak load runs this install has kept, beside the service levels they are judged against, for a
+# reader of the Service levels screen. See `brain.load_run_routes`.
+from brain.load_run_routes import router as load_run_router
+
 # Logs: the warnings and errors this install kept, redacted on their way in, searchable and
 # paged, behind `admin:application_log` over everything. See `brain.log_routes`.
 from brain.log_routes import router as log_router

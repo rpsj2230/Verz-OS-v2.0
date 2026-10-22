@@ -32,6 +32,29 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
           },
         ],
       },
+      // The peak runs kept on the install, one with a lane whose name is unbroken.
+      "/api/v1/report/service-levels/load-runs": {
+        runs: [
+          {
+            run_id: "r1",
+            started_at: "2019-03-04T09:00:00Z",
+            commit: "abc1234",
+            profile: "check",
+            seconds_run: 1,
+            planned: 80,
+            sent: 80,
+            not_sent: 0,
+            most_in_flight: 9,
+            at_stated_peak: false,
+            held: true,
+            interactive_shed: 0,
+            lanes: [
+              { lane: UNBROKEN, requests: 40, p95_ms: 12, success_rate: 1, shed: 0, objective_p95_ms: 500, objective_success_rate: 0.995 },
+            ],
+            findings: [UNBROKEN],
+          },
+        ],
+      },
     },
   },
 };

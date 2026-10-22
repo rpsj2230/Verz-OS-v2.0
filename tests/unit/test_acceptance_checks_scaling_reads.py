@@ -38,7 +38,7 @@ def test_the_module_names_each_leaf_in_one_check() -> None:
     never looked at it, with the Install page showing the same rows."""
     assert [(one.name, one.leaves) for one in registered((MODULE,))] == [
         (PARTITIONS, ("M36.1.1.1",)),
-        (REPLICA, ("M36.1.2.2",)),
+        (REPLICA, ("M36.1.2.2", "M36.1.2.3")),
         (AGE, ("M36.1.3.2",)),
     ]
     assert checks_in(MODULE) == [PARTITIONS, REPLICA, AGE]
@@ -117,6 +117,24 @@ def test_a_ledger_missing_a_month_fails_the_partition_check(install: str) -> Non
     finally:
         sql(install, "DROP TABLE IF EXISTS obs." + ahead_name)
         _the_worker_makes_the_months(install)
+
+
+@pytest.mark.needs_db
+def test_a_server_that_reports_itself_a_replica_fails_the_replica_check(
+    install: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The real lag measurement made to say the install's own server replays another's log. Delete
+    this and M36.1.2.3 closes on a measurement nothing here ever asked the real server for."""
+    from datetime import timedelta
+
+    from brain.console.read_replica import LagReading
+    from brain.ops import replica_store
+
+    async def replica(_session: Any) -> LagReading:
+        return LagReading(in_recovery=True, replay_age=timedelta(seconds=3), caught_up=False)
+
+    monkeypatch.setattr(replica_store, "measure_lag", replica)
+    assert "reported a replica" in _failed(install, REPLICA)
 
 
 @pytest.mark.needs_db
