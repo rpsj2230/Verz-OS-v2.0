@@ -882,6 +882,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/me/agents/*",
       "/api/v1/me/agent-requests",
       "/api/v1/company/*",
+      "/api/v1/departments/{department}/budget/run-ceiling",
+      "/api/v1/departments/{department}/budget/allowances",
       "/api/v1/quality/*",
     ],
     tables: [
