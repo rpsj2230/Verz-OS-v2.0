@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-22T07:44:38.465209+00:00",
-  "commit": "b86b5945",
-  "commit_subject": "The peak load runs are listed beside the service levels they are judged against, and the replica's lag is measured on the real server (#687)",
+  "generated_at": "2026-10-22T10:01:24.818976+00:00",
+  "commit": "e80a6a53",
+  "commit_subject": "3 more tasks are proved on the install by the newest complete acceptance run",
   "total": 1626,
-  "done": 1233,
-  "percent": 75.8,
-  "built": 1414,
-  "built_percent": 87.0,
-  "built_unproven": 181,
+  "done": 1236,
+  "percent": 76.0,
+  "built": 1419,
+  "built_percent": 87.3,
+  "built_unproven": 183,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -74,8 +74,10 @@
     "M2.3.2",
     "M20.5.2",
     "M20.5.3",
-    "M21.1.2",
-    "M21.1.3",
+    "M21.1.1",
+    "M21.2.5",
+    "M21.2.6",
+    "M21.4.1",
     "M24.3.6",
     "M25.4.1",
     "M26.1.1",
@@ -259,16 +261,16 @@
       "wave": 4,
       "name": "Doing, lifecycle, extensions",
       "total": 232,
-      "done": 142,
-      "percent": 61.2,
+      "done": 145,
+      "percent": 62.5,
       "in_progress": 37,
-      "ready_for_testing": 33,
+      "ready_for_testing": 31,
       "blocked": 18,
-      "open": 2,
+      "open": 1,
       "acts": 0,
       "decided": 23,
-      "built": 173,
-      "built_percent": 74.6
+      "built": 178,
+      "built_percent": 76.7
     },
     {
       "wave": 5,
@@ -517,10 +519,10 @@
       "name": "Cost, budgets and metering",
       "wave": 4,
       "total": 22,
-      "done": 9,
+      "done": 12,
       "acts": 0,
       "decided": 0,
-      "built": 11
+      "built": 16
     },
     {
       "module": "M22",
@@ -1185,6 +1187,8 @@
     "M20.4.4",
     "M20.4.6",
     "M20.5.1",
+    "M21.1.2",
+    "M21.1.3",
     "M21.1.4",
     "M21.1.5",
     "M21.2.3",
@@ -1194,6 +1198,7 @@
     "M21.3.4",
     "M21.3.5",
     "M21.3.6",
+    "M21.4.4",
     "M22.1.1",
     "M22.1.2",
     "M22.1.3",
@@ -2584,17 +2589,7 @@
     },
     "M21.1.1": {
       "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): Ceiling stored and versioned: PUT company budget (company_routes.set_company_budget, ops.budgets.BudgetRow, test_company_routes). Hard stop is ops.budget_stop_store.budget_refusal_for in api_routes, flag budget_enforcement off (needs 169 A). alert_fractions stored, nothing fires them. NEXT: Wire alert_fractions to a notice when spend crosses one (spend.alerts_for exists but is only called by unwired preflight); then write a check naming M21.1.1 that sets a ceiling with alerts and reads the stop record.",
-      "updated": "2026-10-13"
-    },
-    "M21.1.2": {
-      "status": "READY FOR TESTING",
-      "why": "built: brain.department_budget_routes (PUT /company/budget/departments through allocate, POST .../transfer through apply_transfers, PUT /departments/{d}/budget/run-ceiling) and a Department budgets section on the Consumption page; install check department_shares_and_transfers_are_versions_and_nothing_else. Nothing stops a question: budget_enforcement is still the install's own switch (needs 169). Which of the two answers to needs 242 stands does not change this screen. On the install: set the company's monthly budget on Whole company, Consumption, share it between two departments there, move an amount from one to the other, set one department's per-run ceiling, and read the versions on the audit log; a department's own budget administrator sees only their department's line and no allocation or transfer.",
-      "updated": "2026-10-22"
-    },
-    "M21.1.3": {
-      "status": "READY FOR TESTING",
-      "why": "built: POST /departments/{d}/budget/allowances gives every live member of a department the daily and monthly allowance ops.budgets.user_allowances works out from the department's monthly budget and headcount, capped at a quarter of the department; a person whose figure would not change gets no new version; install check a_departments_people_are_given_capped_allowances. Allowances do not follow the department's budget afterwards: asking again is the recorded act of working them out again. No person is stopped by one until budget_enforcement is switched on (needs 169). On the install: after the department has a monthly budget, press Give everyone an allowance on its line, then My workspace shows a person's daily and monthly allowance; press it again and no new version appears.",
+      "why": "partly built, not claimed: the company budget now stores warnings at 70 and 90 per cent by default (the owner's wording) and brain.budget_told tells whoever administers a company or department budget once per period about the highest fraction reached, in the chat each last used, behind the switch Tell a budget's administrators when it is nearing its ceiling or has run out (ships off). Left open because what it proves is a message arriving in a real person's chat, which no install check can do, and because the hard stop still waits for the owner to switch budget_enforcement on (needs 169). NEXT: the owner switches the sending on for one test administrator and a budget at 70 per cent, and reads the message; then a person records it.",
       "updated": "2026-10-22"
     },
     "M21.2.1": {
@@ -2614,18 +2609,18 @@
     },
     "M21.2.5": {
       "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): Used-up budget stop is wired (budget_stop_store.judged, records BudgetStopRow, refuses with no degradation) but flag budget_enforcement ships off (needs 169 A). Admin warning is recorded (addressed_to) and not delivered: the module says delivery is the next change. NEXT: Deliver the recorded warning through the notice channel to the admin; owner switches the flag after a week of would-have-stopped rows; then check naming M21.2.5.",
-      "updated": "2026-10-13"
+      "why": "partly built, not claimed: a used-up budget is recorded with who was to be told, and brain.budget_told now delivers that warning (once per stop, saying whether questions are being refused) behind the same switch, which ships off. Left open because the leaf's other half, questions refused until the next period, waits for the owner to switch budget_enforcement on after a week of would-have-stopped rows (needs 169), and delivery to a real chat cannot be proved by an install check. NEXT: owner switches both on for a test department.",
+      "updated": "2026-10-22"
     },
     "M21.2.6": {
       "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): The refused person gets SPENDING_LIMIT_REACHED (budget_stop_store), which deliberately names no budget and no person who can raise it; console.spend_view.told_about names level and period but has no caller. Leaf wording is narrowed by design with no needs item. NEXT: Raise a needs-rupash question on the narrowing, or call spend_view.told_about from the refusal path for readers entitled to it; then check.",
-      "updated": "2026-10-13"
+      "why": "partly built, not claimed, and waiting on the owner (needs 224): the sentence a stopped person is told names no budget on purpose. Behind the switch Tell a stopped person which budget, and who can raise it, when they may know (ships off), brain.console.spend_view.told_about names the budget and who raises it to a person whose reach admits that spend, and the plain sentence stays for everybody else. Switching it on is the owner's answer to 224 (B); nothing changes while it is off.",
+      "updated": "2026-10-22"
     },
     "M21.4.1": {
-      "status": "OPEN",
-      "why": "TRIAGE 2026-10-13 class 4 (unbuilt): No code reconciles spend to a provider invoice. models/pricing.py holds the install's own prices; no invoice figure input, tolerance or difference display found (grep invoice/reconcil in src).",
-      "updated": "2026-10-13"
+      "status": "READY FOR TESTING",
+      "why": "built: GET /report/spend/providers sums what the ledger recorded for a billing period (UTC days) by the provider each model is priced under, and with one provider's invoice typed in holds it against the metered spend in the invoice's own currency (the rate typed, never fetched), shows the difference and whether it is inside the stated two per cent, and a card under the Spend report draws it. What no provider can be given is its own line. Nothing is stored. Install check metered_spend_is_held_against_a_providers_invoice. On the install: open Spend, press nothing, read last month per provider; type a provider's real invoice total for the same month, its currency and, if it is not the install's currency, the rate the invoice states; the card says whether it reconciles and by how much it differs. Needs the install's currency set and a price set for the provider's models.",
+      "updated": "2026-10-22"
     },
     "M21.4.2": {
       "status": "IN PROGRESS",
@@ -2636,11 +2631,6 @@
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 2 (partly built): Roll-up proof (a check can be written once clauses exist) across M21.1 and M21.2; several parts are unbuilt or unwired (department and user budgets M21.1.2/3, estimate refusal M21.2.1, enforcement flag off per needs 169 A, skill-body load check). NEXT: Waits on M21.1.2, M21.1.3, M21.2.1 and the owner switching budget_enforcement on (needs 169); then record the demonstration.",
       "updated": "2026-10-13"
-    },
-    "M21.4.4": {
-      "status": "READY FOR TESTING",
-      "why": "built: the agent figures offer All time beside 7, 30 and 90 days and the month to date (workspace.Range.ALL_TIME, from a fixed instant before the product existed, so it does not move when retention removes a row), and say once above the figures that today is not over. The page draws figures and no per-day chart, so the unfinished day is a sentence and not a differently drawn bar. The agent figures install check now holds a run and a cost from 400 days ago to the all-time period. On the install: open an agent's Dashboard, choose All time, and read a total larger than the 90 day one if the agent is older than that.",
-      "updated": "2026-10-22"
     },
     "M21.4.5": {
       "status": "BLOCKED",
@@ -3835,11 +3825,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 14,
+  "closed_today": 17,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "e80a6a5",
+      "at": "2026-10-22T08:49:28+00:00",
+      "subject": "3 more tasks are proved on the install by the newest complete acceptance run",
+      "closed": "M21.1.2,M21.1.3,M21.4.4"
+    },
     {
       "sha": "708c9c6",
       "at": "2026-10-22T05:34:36+00:00",
@@ -3953,12 +3949,6 @@
       "at": "2026-10-20T21:00:32+00:00",
       "subject": "6 more tasks are proved on the install by the newest complete acceptance run",
       "closed": "M30.5.4,M30.6.6,M37.2.4.4,M37.4.2.4,M37.4.3.3,M37.4.3.5"
-    },
-    {
-      "sha": "9b668ad",
-      "at": "2026-10-20T11:49:46+00:00",
-      "subject": "Opening the text of another department's document leaves an entry naming the document and the reader (M27.15.1) (#640)",
-      "closed": "M27.15.1"
     }
   ]
 }
