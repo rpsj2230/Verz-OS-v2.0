@@ -480,9 +480,9 @@ class Tier(enum.IntEnum):
 
 
 #: The setting holding how the supplier is reached. A name, never a value; see
-#: `THE_SUPPLIER_IS_A_CONTACT_IN_CONFIGURATION_AND_NEVER_A_VALUE_HERE`. Spelled in
-#: `brain.config`'s own lower-case style so a deployment's settings read consistently.
-SUPPLIER_CONTACT_SETTING: Final = "support_contact"
+#: `THE_SUPPLIER_IS_A_CONTACT_IN_CONFIGURATION_AND_NEVER_A_VALUE_HERE`. It is an installation
+#: setting, read in the one place installation values are read (`brain.install.value_of`).
+SUPPLIER_CONTACT_SETTING: Final = "INSTALL_SUPPORT_CONTACT"
 
 
 @dataclass(frozen=True)

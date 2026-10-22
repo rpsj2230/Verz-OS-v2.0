@@ -6,6 +6,33 @@ Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
 # Open
 
+## 266. What is the thirty-day cost review compared with: a figure you type at go-live, the department budgets added up, or the estimator's own forecast?
+
+**In plain terms:** tasks M37.5.3.1 and M37.5.3.3 ask for the first thirty days of real spend to be set
+against a projection, and for the budget thresholds to be re-tuned from how questions actually cost.
+The comparison itself is built (`brain.console.spend_view.cost_review`) and nothing feeds it, because
+two inputs do not exist. There is no stored projection to compare with, and no per-question record of
+what the estimator said a question would cost beside what it did cost (the Usage screen only keeps
+what was spent). I will not invent a projection, because a review against a made-up number reads as a
+finding.
+
+**Option A: you type the projection at go-live.** One figure per month, entered once on the Usage screen
+with who entered it and when, and the review compares thirty days of spend with it. Simple, and it is
+your number.
+
+**Option B: the department budgets added up.** The projection is the sum of the monthly budgets already
+set, so there is nothing to type. It says how close spending runs to what you allowed, which is a
+different question from what you expected to spend.
+
+**Option C: the estimator's own forecast.** The product records each question's estimate beside its
+actual cost from now on (a new column and a migration), and the review compares the two. It is what the
+re-tuning task needs anyway, but it only has data from the day it ships.
+
+**My recommendation:** A for M37.5.3.1 now, and C for M37.5.3.3 because re-tuning needs estimate and
+actual side by side. They are separate changes, A first.
+
+**What I need from you:** reply "266: A", "266: B" or "266: C", or "266: A and C".
+
 ## 263. Should the product declare one company-wide ceiling on source calls running at the same time?
 
 **In plain terms:** when one question needs answers from several connected systems, the product asks

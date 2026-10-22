@@ -138,6 +138,7 @@ def test_an_alert_runbook_is_every_reason_a_control_can_be_missed(client: TestCl
     reasons = [one["reason"] for one in page.json()["steps"]]
     assert reasons == [one.value for one in Missed]
     assert all(one["first_check"] and one["then_do"] for one in page.json()["steps"])
+    assert [one["who"] for one in page.json()["escalation"]] == ["installation owner", "supplier"]
     listed = _get(client, "u_admin", "/help/alerts").json()["alerts"]
     assert [one["control"] for one in listed] == [one.name for one in CONTROLS]
     assert _get(client, "u_none", f"/help/alerts/{named}").status_code == 404

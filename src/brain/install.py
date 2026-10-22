@@ -618,6 +618,19 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         ),
         default="unset",
     ),
+    # --- the last rung of the escalation ladder, M37.5.2.3 (brain.ops.alerting.ESCALATION)
+    Setting(
+        name="INSTALL_SUPPORT_CONTACT",
+        belongs=Belongs.CONNECTORS,
+        meaning=(
+            "How the company reaches whoever supplies this product when a safety mechanism has "
+            "not run and nobody at the company can fix it: an email address, a web address or "
+            "a name and number, written as the supplier gave it. Shown on the runbook of every "
+            "alert as the last step. Changed on Install, Settings. `unset` shows the step with "
+            "no way to reach them, and says so."
+        ),
+        default="unset",
+    ),
     Setting(
         name="INSTALL_ACCEPTANCE_SKILL_SOURCE",
         belongs=Belongs.CONNECTORS,

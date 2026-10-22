@@ -2,7 +2,7 @@
 
 - **Screens:** `/subscribers`, `/notifications`
 - **Tables:** `ops.outbox_event`, `ops.outbox_delivery`
-- **Installation values:** `INSTALL_SENDER_ADDRESS`, `INSTALL_ALERT_EMAIL`
+- **Installation values:** `INSTALL_SENDER_ADDRESS`, `INSTALL_ALERT_EMAIL`, `INSTALL_SUPPORT_CONTACT`
 - **Measured here:** 7 routes, 0 called by no screen; 5 write routes, 2 with all three proofs; 2 gaps.
 
 | Route | Called by |

@@ -13,7 +13,7 @@ the playbook has a row for every declared failure. What is added here is that a 
 them from the install and a stranger is refused with the one refusal. See
 `A_HELP_PAGE_IS_AS_OPEN_AS_THE_SCREEN_IT_IS_ABOUT` in `brain.help_routes`.
 
-Task ids: M34.4.1, M34.3.2.1, M34.3.1.1, M34.3.1.2
+Task ids: M34.4.1, M34.3.2.1, M34.3.1.1, M34.3.1.2, M37.5.2.2, M37.5.2.3
 """
 
 from __future__ import annotations
@@ -145,3 +145,47 @@ async def what_a_person_may_ask_about_and_what_is_done_is_said_plainly(h: Harnes
         raise CheckFailedError("a person who reaches nothing was told something about reach")
     if posture != list(privacy_posture()) or blind_posture != posture:
         raise CheckFailedError("the privacy statements were not the install's own, for everybody")
+
+
+@check(
+    leaves=("M37.5.2.2", "M37.5.2.3"),
+    sentence=(
+        "A reader of the Overview, Queue and Incidents screens is given, for every control the "
+        "install alerts on, a check and a step for every way it can be missed, then the ladder "
+        "those steps climb when nobody can fix it, ending at the supplier with the contact the "
+        "company entered and, while none is entered, a sentence saying nobody is yet named "
+        "there."
+    ),
+)
+async def every_alert_has_steps_and_a_ladder_ending_at_the_supplier(h: Harness) -> None:
+    from brain.help_routes import alert_runbook, escalation_rungs
+    from brain.ops.alerting import ESCALATION
+    from brain.ops.controls import CONTROLS, Missed
+
+    await h.found_departments()
+    reader = h.principal(A, "laddered")
+    grants = tuple(
+        dict.fromkeys(g for key in ("overview", "queue", "incidents") for g in screen_grants(key))
+    )
+    await h.person(reader, department=A, grants=grants)
+    wanted = await asking_as(h, reader)
+
+    for control in CONTROLS:
+        page = await alert_runbook(control.name, wanted)
+        if [one.reason for one in page.steps] != [one.value for one in Missed]:
+            raise CheckFailedError("an alert's runbook did not cover every way a control is missed")
+        if any(not one.first_check or not one.then_do for one in page.steps):
+            raise CheckFailedError("an alert's runbook had a way of being missed with no step")
+        if [one.who for one in page.escalation] != [
+            one.tier.name.replace("_", " ").lower() for one in ESCALATION[1:]
+        ]:
+            raise CheckFailedError("an alert's runbook did not carry the whole escalation ladder")
+    entered = "the supplier's own address, as they gave it"
+    if entered not in escalation_rungs(entered)[-1].reached_by:
+        raise CheckFailedError("the contact the company entered was not shown on the last rung")
+    for none_yet in ("unset", "", "  "):
+        said = escalation_rungs(none_yet)[-1].reached_by
+        # Held against words written here rather than the constant the route uses, which would
+        # move with it and agree with itself whatever it said.
+        if "nobody" not in said or "Install, Settings" not in said or "unset" in said:
+            raise CheckFailedError("a ladder with no contact entered did not say so")
