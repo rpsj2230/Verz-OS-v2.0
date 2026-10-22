@@ -26,6 +26,17 @@ everywhere else in the leash: a person reads it first, and the person may be the
 surface exception compiled to run unattended do not either; see `brain.browsing.autonomy`. A
 card asking somebody to approve reading teaches them that approving is a formality.
 
+**A card says what changed since this person's last approved run, so the approver reads a difference
+and not a list.** Every card lists the writes that wait and the origins, and a person who approved
+the same ten writes yesterday reads the list again without reading it. `envelope_changes` compares
+the sealed parts with the ones the asker's last approved envelope for this agent and website
+stored, and says in a sentence which writes are new, which are gone and which origins moved, or that
+nothing did. It is an argument of the action, so it is in the digest the approval binds to: a card
+whose difference was edited after it was shown is a different action. **It is a comparison with what
+was approved before, not a judgement of whether the difference is safe**, and it says so by being
+only a sentence. Not compared (no previous looked up) is no `changes` line at all, because "first
+approval" said when nobody looked would be false.
+
 **One answer to "is this approved", and two ways to arrive at it.** A suspension in memory and
 a row read back from `agent.browser_envelope` both reduce to the fields `approved` takes, so
 the rule about state, digest, run and window is written once.
@@ -36,13 +47,15 @@ Task ids: M19.7.2, M19.2.3
 from __future__ import annotations
 
 import re
+from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Final
+from typing import Any, Final
 
 from brain.browsing.envelope import Envelope
 from brain.browsing.sessions import ACT_ON_SURFACE, TARGET_FIELD
-from brain.browsing.targets import Target
+from brain.browsing.targets import Target, Verb, is_write
 from brain.core.entitlement import EntitlementSet
 from brain.gate.leash import (
     DEFAULT_APPROVAL_WINDOW,
@@ -55,6 +68,19 @@ from brain.gate.leash import (
 
 #: The argument an approval action carries the envelope's digest under.
 ENVELOPE_DIGEST_ARGUMENT: Final = "envelope_digest"
+
+#: The argument a card says what changed under, when it was compared with a previous approval.
+CHANGES_ARGUMENT: Final = "changes"
+
+#: The longest the sentence is. A card is read, and a sentence that does not fit one line of a
+#: card is read as noise; the rest is in the stored envelope.
+MAX_CHANGES_CHARS: Final = 300
+
+#: What the card says when there was no earlier approved run to compare with.
+FIRST_APPROVAL: Final = "the first approved run of this agent's writes on this website"
+
+#: What it says when there is nothing to report.
+NOTHING_CHANGED: Final = "no write and no origin differs from the last approved run"
 
 #: Why an approval is of the envelope and not of each action.
 A_PERSON_APPROVES_THE_CONTRACT_BEFORE_THE_CONTAINER_STARTS: Final = (
@@ -100,7 +126,74 @@ class EnvelopeApproval:
             raise ApprovalError(msg)
 
 
-def approval_action(envelope: Envelope, target: Target, *, agent_id: str) -> Action:
+@dataclass(frozen=True)
+class Previous:
+    """The sealed parts of the asker's last approved envelope for this agent and website, or none.
+
+    A value of its own so that "nobody looked" (no `Previous` at all) and "looked and found none"
+    (`Previous(None)`) are not the same thing. See the module docstring.
+    """
+
+    parts: Mapping[str, Any] | None
+
+
+def _waiting_writes(parts: Mapping[str, Any]) -> dict[str, int]:
+    """The writes that wait for a person in sealed parts, counted by surface and verb."""
+    unattended = {(str(surface), str(verb)) for surface, verb in parts.get("unattended", [])}
+    counts: dict[str, int] = {}
+    for surface, verb in parts.get("steps", []):
+        if is_write(Verb(str(verb))) and (str(surface), str(verb)) not in unattended:
+            name = f"{surface} {verb}"
+            counts[name] = counts.get(name, 0) + 1
+    return counts
+
+
+def _list(counts: Mapping[str, int]) -> str:
+    return ", ".join(f"{name} x{count}" for name, count in sorted(counts.items()))
+
+
+def envelope_changes(previous: Previous, envelope: Envelope) -> str:
+    """What differs between this envelope and the last approved one, in one sentence.
+
+    Writes by surface and verb with their counts, and origins; read steps are not mentioned, for
+    the reason `A_CARD_THAT_ASKS_NOTHING_TEACHES_APPROVERS_TO_STOP_READING` gives. A count that
+    went up is a write that was added and one that went down is one that was removed, so the
+    sentence is a difference and not two lists to compare by eye.
+    """
+    if previous.parts is None:
+        return FIRST_APPROVAL
+    # The same shape `envelope_store.sealed_parts` writes, so the two cannot be compared wrongly.
+    from brain.browsing.envelope_store import sealed_parts
+
+    now = sealed_parts(envelope)
+    # Counter subtraction keeps the positive differences only: what rose is added, what fell is
+    # dropped, and there is no comparison here to get the wrong way round.
+    before_writes = Counter(_waiting_writes(previous.parts))
+    now_writes = Counter(_waiting_writes(now))
+    added = dict(now_writes - before_writes)
+    removed = dict(before_writes - now_writes)
+    before_origins = {str(one) for one in previous.parts.get("origins", [])}
+    now_origins = {str(one) for one in now["origins"]}
+    parts: list[str] = []
+    if added:
+        parts.append(f"adds {_list(added)}")
+    if removed:
+        parts.append(f"drops {_list(removed)}")
+    if now_origins - before_origins:
+        parts.append(f"reaches {', '.join(sorted(now_origins - before_origins))} as well")
+    if before_origins - now_origins:
+        parts.append(f"no longer reaches {', '.join(sorted(before_origins - now_origins))}")
+    if not parts:
+        return NOTHING_CHANGED
+    sentence = "since the last approved run it " + "; ".join(parts)
+    if len(sentence) > MAX_CHANGES_CHARS:
+        return sentence[: MAX_CHANGES_CHARS - 3] + "..."
+    return sentence
+
+
+def approval_action(
+    envelope: Envelope, target: Target, *, agent_id: str, previous: Previous | None = None
+) -> Action:
     """The one leash action a person approves for this envelope.
 
     The arguments are what the card shows, so they are the things a person can judge: the run,
@@ -128,6 +221,8 @@ def approval_action(envelope: Envelope, target: Target, *, agent_id: str) -> Act
         "origins": ", ".join(sorted(envelope.origins)),
         ENVELOPE_DIGEST_ARGUMENT: envelope.digest(),
     }
+    if previous is not None:
+        args[CHANGES_ARGUMENT] = envelope_changes(previous, envelope)
     return Action(
         agent_id=agent_id,
         tool=ACT_ON_SURFACE,
@@ -147,6 +242,7 @@ def raise_approval(
     trace_id: str,
     now: datetime,
     window: timedelta = DEFAULT_APPROVAL_WINDOW,
+    previous: Previous | None = None,
 ) -> SuspendedAction:
     """Suspend a run's envelope for a person, exactly as the leash suspends an action.
 
@@ -167,7 +263,7 @@ def raise_approval(
             "raised under"
         )
         raise ApprovalError(msg)
-    action = approval_action(envelope, target, agent_id=agent_id)
+    action = approval_action(envelope, target, agent_id=agent_id, previous=previous)
     return SuspendedAction(
         id=envelope.run_id,
         trace_id=trace_id,

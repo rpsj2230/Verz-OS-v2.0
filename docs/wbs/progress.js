@@ -1995,9 +1995,9 @@ const PROGRESS = {
     updated: "2026-10-21",
   },
   "M19.7.2": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): sessions.py:ACT_ON_SURFACE is the one write tool; approval.py raises the envelope as a leash suspension, console/approvals.py renders its terms, envelope_store and enforcer.compile_policy bind it by digest; tests in test_browsing_approval.py, _enforcer.py, _sessions.py. No caller raises an approval or runs the write. NEXT: Call approval.raise_approval and approved in the driver start path; add a readable envelope diff to the approval card (none exists).",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-21. A browser write waits for a person through the leash: driver.prepare_run compiles the envelope, raises the card (browser.act_on_surface, bound to the envelope digest) and stores both, a different person approves it through the approvals route, and the run starts only on the stored approval (install check a_browser_write_waits_for_a_person_and_runs_are_counted). New: the card now says what changed since the last run the same asker had approved for this agent on this website, or that it is the first, in one sentence in the card's arguments and so in the digest the approval binds to (install check a_card_says_what_changed_since_the_last_approved_run). A write only runs through a scripted actor and a stand-in page: the model actor that would choose element references is not built. INSTALL PROOF STEPS: 1. Install page: Run now. 2. Read the rows a_browser_write_waits_for_a_person_and_runs_are_counted and a_card_says_what_changed_since_the_last_approved_run: both must say Passed.",
+    updated: "2026-10-21",
   },
   "M19.7.3": {
     status: "READY FOR TESTING",
@@ -4716,8 +4716,8 @@ const PROGRESS = {
   },
   "M19.9.2": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Read-only website check exists and is wired (tools/website_check.py, app.py HttpsProber); envelope approval primitives exist (approval.py). No readable diff of an envelope on the card and no in-envelope or out-of-envelope run, so approve-once and ask-again cannot be shown. NEXT: Needs the driver plus an envelope diff in the approval card; then a check that runs a read, an approved write and a breach and records each.",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT 2026-10-21, not claimed. The card for a browser write now carries a readable difference from the last approved run (install check a_card_says_what_changed_since_the_last_approved_run), and the in-envelope run and the refused out-of-envelope run are shown over a stand-in page (a_browser_run_is_held_to_the_envelope_it_was_sealed_with). Still missing: suspending a run that breaches its envelope and asking again naming the breach (needs-rupash 230 decides whether a breach asks or ends), and a real run. NEXT: the owner's answer to 230, then the breach card.",
+    updated: "2026-10-21",
   },
   "M19.9.3": {
     status: "READY FOR TESTING",
