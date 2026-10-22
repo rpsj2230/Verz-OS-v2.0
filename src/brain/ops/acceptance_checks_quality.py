@@ -74,8 +74,7 @@ async def _refused_by_the_database(
         nested = await session.begin_nested()
         try:
             await session.execute(text(statement), values)
-        except DBAPIError as exc:
-            print("TEMPDBG", exc.orig)
+        except DBAPIError:
             return True
         finally:
             await nested.rollback()
