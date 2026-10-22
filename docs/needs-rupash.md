@@ -6,6 +6,35 @@ Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
 # Open
 
+## 261. May anyone say why an answer was wrong from a chat, or only a department lead?
+
+**In plain terms:** task M34.2.2.1 asks for a way to correct an answer in every channel, not only the
+console. Today a person who reads an answer in a chat can reply "helpful" or "unhelpful" with its reference,
+and that is counted. The finer correction (the answer had the wrong sources, a wrong fact, was stale,
+incomplete, should have been refused, or was refused wrongly) is built and tested but wired to nothing,
+because it files a flag, and a flag is a department lead's finding: only someone holding the flag grant for
+that department may file one. So if the correction line were offered under every answer, a member of staff
+who replied "wrong_sources" would be thanked and nothing would be kept, which is a false thank-you. A flag
+also needs the department the answer belongs to, and the record of a request keeps no question and no
+department, so a chat reference does not say which department's lead it concerns.
+
+**Option A: leads only.** Offer the line only to a person who holds the flag grant, file it against their own
+department, and leave everybody else with helpful and unhelpful.
+
+**Option B: anyone, as a reason on their mark.** Add one of the closed reasons to an unhelpful mark (no free
+text, as now), count it by reason and by which half of the system it points at (sources and freshness against
+reasoning, with refusals kept apart), and leave flags as the lead's review of the cases that matter. A person
+is thanked only for what was kept. This needs a small stored change to marks.
+
+**Option C: keep chat to helpful and unhelpful.** The reasons stay a console action for leads, and the task is
+rewritten to say a chat reader marks an answer and does not explain why.
+
+**My recommendation:** B. It is the only option where the person who read the answer can say what was wrong
+with it, it keeps the "no free text" rule, and it gives the retrieval-versus-reasoning split the data it was
+built for. A keeps the split but only from leads, who see few answers; C loses it.
+
+**What I need from you:** reply "261: A", "261: B" or "261: C". Until then M34.2.2.1 is not claimed.
+
 ## 258. May the release build and sign two more images, one for browser runs and one for desktop runs?
 
 **In plain terms:** tasks M19 let an agent drive a website in a locked box and, later, a desktop program. The

@@ -22,7 +22,7 @@ three and no route, function or column takes a candidate to an agent's configura
 No console page draws any of it yet; the routes are listed in the console audit as called by no
 screen.
 
-Task ids: M28.3.1, M28.3.2, M28.3.3, M28.4.1
+Task ids: M28.3.1, M28.3.2, M28.3.3, M28.4.1, M34.2.2.2
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ from brain.console.screens import screen
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.errors import Absent, Failed
 from brain.core.scope import Scope
-from brain.ops.feedback import FeedbackError, FlagReason, capture, flag_answer, may_flag
+from brain.ops.feedback import FeedbackError, FlagReason, capture, flag_answer, may_flag, plane_of
 from brain.ops.quality_store import (
     DecisionError,
     annotate,
@@ -100,6 +100,10 @@ class FlagView(BaseModel):
     question_id: str
     department: str
     reason: str
+    #: The half of the system the reason sends somebody to: `retrieval` for wrong sources or stale
+    #: material, `reasoning` for a wrong or incomplete answer over the right material, `permission`
+    #: for a refusal either way (M34.2.2.2). Derived from the reason by `plane_of` and never filed.
+    plane: str
     flagged_at: datetime
     captured: bool
 
@@ -238,6 +242,7 @@ async def flag_an_answer(request: Request, asked: Asked, body: FlagAsked) -> Fla
         question_id=one.question_id,
         department=one.department,
         reason=one.reason.value,
+        plane=plane_of(one.reason).value,
         flagged_at=one.at,
         captured=False,
     )
@@ -259,6 +264,7 @@ async def listed_flags(request: Request, asked: Asked) -> FlagsView:
                 question_id=one.flag.question_id,
                 department=one.flag.department,
                 reason=one.flag.reason.value,
+                plane=plane_of(one.flag.reason).value,
                 flagged_at=one.flag.at,
                 captured=one.captured,
             )

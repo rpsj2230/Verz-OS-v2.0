@@ -636,6 +636,62 @@ def asking_gaps(
     return tuple(findings)
 
 
+#: Where the page staff are served stops being general and starts showing one department's
+#: examples, and what in the shipped page is the demo company's worked case and the repository's
+#: own account of what is checked. See `served_asking_guide`.
+EXAMPLES_HEADING: Final = "## Examples from your own department"
+DEMO_CASE_BEGINS: Final = "On your own install"
+NOT_FOR_STAFF: Final = ("## What is checked and what is not", "## Task ids")
+
+#: The heading over the one table a reader is served, which names no department.
+YOUR_DEPARTMENT: Final = "### Your department"
+
+#: What the served page is built from, and so what cannot be missing from the shipped one.
+THE_SHIPPED_GUIDE_HAS_LOST_ITS_SHAPE: Final = (
+    "the asking guide no longer has the headings the served page is cut at, so it cannot be "
+    "served without the demo company's examples or this repository's account of its own checks"
+)
+
+
+class GuideShapeError(Exception):
+    """Raised when the shipped asking guide is not the page `served_asking_guide` cuts."""
+
+
+def served_asking_guide(page: str, *, examples: Sequence[tuple[str, str]]) -> str:
+    """The asking guide as staff read it, with their own department's examples (M34.3.1.3).
+
+    **Cut from the shipped page, and not a second copy of it.** The page keeps its seven habits and
+    its worked case for the demo company's four departments, held to the derivation by
+    `asking_gaps`. A member of staff is served the habits and the introduction to the examples as
+    they stand, then one table, their own department's, in place of the demo's, and nothing after
+    it: what follows the tables is this repository's account of which tests hold the page. Cutting
+    keeps one copy of the prose, so editing a habit edits what is served. Rejected: a separate
+    staff page, which is the second copy that stops agreeing with the first.
+
+    **The table has no department name.** It is headed `YOUR_DEPARTMENT` for every reader, so the
+    page says nothing about which departments exist, and the rows are the ones the caller has been
+    given, already narrowed to what they may read. An empty list is the same sentence the shipped
+    page uses for a department with nothing indexed. See
+    `AN_EXAMPLE_FROM_ANOTHER_DEPARTMENT_TEACHES_THAT_THE_SYSTEM_CANNOT_ANSWER`.
+
+    Raises `GuideShapeError` when the shipped page has lost a heading this cuts at, or keeps a
+    table of examples before the cut, so a page edited without this is a failure and not a served
+    page with the demo company's questions in it.
+    """
+    start = page.find(EXAMPLES_HEADING)
+    cut = page.find(DEMO_CASE_BEGINS, max(start, 0))
+    if start < 0 or cut < 0:
+        raise GuideShapeError(THE_SHIPPED_GUIDE_HAS_LOST_ITS_SHAPE)
+    kept = page[:cut].rstrip()
+    if EXAMPLES_MARKER.search(kept) or any(one in kept for one in NOT_FOR_STAFF):
+        raise GuideShapeError(THE_SHIPPED_GUIDE_HAS_LOST_ITS_SHAPE)
+    rows = [f"| {ask.replace('|', chr(92) + '|')} | `{check}` |" for ask, check in examples] or [
+        f"| {NO_EXAMPLES_YET} | {NOWHERE_TO_CHECK} |"
+    ]
+    table = "\n".join(("| Ask | Check it in |", "| --- | --- |", *rows))
+    return f"{kept}\n\n{YOUR_DEPARTMENT}\n\n{table}\n"
+
+
 # ------------------------------------------------------------ a runbook per screen (M34.3.2.1)
 #: Where a runbook states what the registry says about its screen.
 RUNBOOK_FACTS_MARKER: Final = "<!-- checked: what the registry says about this screen -->"

@@ -3376,13 +3376,13 @@ const PROGRESS = {
   },
   "M34.2.2.1": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Chat marks (helpful or unhelpful) are wired in channels: marks.mark_line in chat_answer and read_mark in channels.inbound. The reason-bearing path channels.correction (send_with_correction, read_correction, file_correction) has no caller. NEXT: Call send_with_correction where adapters send an answer and read_correction in channels.inbound; then check naming M34.2.2.1 per channel.",
-    updated: "2026-10-13",
+    why: "partly built, held on the owner: chat marks (helpful or unhelpful) are wired in channels (marks.mark_line in chat_answer, read_mark in channels.inbound). The reason-bearing correction (channels.correction: send_with_correction, read_correction, file_correction) is built and still has no caller, because it files a flag and a flag is a department lead's finding (write:answer_flag), so offering it to everyone would thank people for a correction that is kept nowhere, and the request ledger holds no question or department to file a flag against. Decision asked for in needs-rupash 261 (leads only, a reason on anybody's unhelpful mark, or helpful and unhelpful only). Not claimed until it is answered.",
+    updated: "2026-10-22",
   },
   "M34.2.2.2": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops.feedback.FlagReason.WRONG_SOURCES vs WRONG_FACT, plane_of and by_plane are built and tested (test_flag_planes); flag_answer is called only by the unwired channels.correction, and no route or console control files a flag. NEXT: Add a flag route (POST on an answer's trace with a FlagReason) and a console control, or wire channels.correction; then check.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: the flags listing (GET /quality/flags and the POST that files one) now carries the half each reason sends somebody to (plane: retrieval for wrong_sources and stale, reasoning for wrong_fact and incomplete, permission for the two refusals), derived by ops.feedback.plane_of and never filed. Install check: a_wrong_sources_flag_is_told_apart_from_a_wrong_fact (ops/acceptance_checks_quality.py), not yet run on the install. No console control files a flag: the route is the door, and the chat door is needs-rupash 261.",
+    updated: "2026-10-22",
   },
   "M34.2.2.3": {
     status: "READY FOR TESTING",
@@ -3400,9 +3400,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M34.3.1.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): docs/guides/asking-well.md exists with per-department examples marker; ops.guide_docs.asking_examples and asking_gaps check it (test_guide_docs). Nothing imports guide_docs and no route serves the guide to staff. NEXT: Serve the guide from a help route that fills the examples marker with asking_examples for the reader's department.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: GET /help/asking-well (help_routes.asking_well) serves docs/guides/asking-well.md to every signed-in person, cut by guide_docs.served_asking_guide: the habits as written, then one table of the reader's own department's questions from GET /welcome/from-your-data (the reader's reach, up to three, each saying where to check), the sentence for nothing indexed while that switch is off, and nothing of the demo company's tables or this repository's account of its tests. Install check: staff_are_served_the_asking_guide_with_their_own_examples (ops/acceptance_checks_asking_guide.py), not yet run on the install. No console screen or channel message shows it yet.",
+    updated: "2026-10-22",
   },
   "M34.3.2.1": {
     status: "READY FOR TESTING",

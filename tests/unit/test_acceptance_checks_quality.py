@@ -9,7 +9,7 @@ see, and an example in effect before it was promoted.
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M28.3.1, M28.3.2, M28.3.3, M28.4.1, M28.5.3, M16.6.7, M16.7.14
+Task ids: M28.3.1, M28.3.2, M28.3.3, M28.4.1, M28.5.3, M16.6.7, M16.7.14, M34.2.2.2
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from tests.unit.test_acceptance import at_head, checks_in, counts
 
 MODULE = "brain.ops.acceptance_checks_quality"
 FLAGS = "a_flag_becomes_a_case_that_holds_no_value"
+PLANES = "a_wrong_sources_flag_is_told_apart_from_a_wrong_fact"
 TIERS = "readings_are_sampled_annotated_and_reported_as_two_tiers"
 CANDIDATES = "a_failed_case_opens_a_candidate_and_never_changes_the_agent"
 GOLDEN = "golden_scores_are_kept_by_release_and_a_regression_is_shown"
@@ -45,16 +46,17 @@ QUALITY_TABLES = (
 
 
 def test_the_module_declares_one_check_per_group_of_leaves() -> None:
-    """Five checks, each closing its own leaves. Delete this and a check can lose a leaf with the
+    """Six checks, each closing its own leaves. Delete this and a check can lose a leaf with the
     page showing the same rows, and the leaf closes on a check that never looked."""
     assert [(one.name, one.leaves) for one in registered((MODULE,))] == [
         (FLAGS, ("M28.3.1", "M28.3.2")),
+        (PLANES, ("M34.2.2.2",)),
         (TIERS, ("M28.3.3",)),
         (CANDIDATES, ("M28.4.1",)),
         (GOLDEN, ("M28.5.3",)),
         (EXAMPLES, ("M16.6.7", "M16.7.14")),
     ]
-    assert checks_in(MODULE) == [FLAGS, TIERS, CANDIDATES, GOLDEN, EXAMPLES]
+    assert checks_in(MODULE) == [FLAGS, PLANES, TIERS, CANDIDATES, GOLDEN, EXAMPLES]
 
 
 @pytest.fixture(scope="module")
@@ -91,13 +93,13 @@ def _counts(url: str) -> dict[str, int]:
 
 @pytest.mark.needs_db
 def test_every_quality_check_passes_on_an_install_and_leaves_nothing(install: str) -> None:
-    """**The module as the worker runs it.** All five pass and no flag, reading, score, candidate or
+    """**The module as the worker runs it.** All six pass and no flag, reading, score, candidate or
     decision is left. Delete this and a check that can never pass on a real schema, or one that
     leaves a candidate for an agent on the owner's install, reaches it."""
     before = _counts(install)
     outcomes = run_quality(install)
     assert outcomes == dict.fromkeys(outcomes, (PASSED, "")), outcomes
-    assert len(outcomes) == 5
+    assert len(outcomes) == 6
     assert _counts(install) == before
 
 
@@ -129,6 +131,51 @@ def test_a_flag_filed_in_a_department_the_lead_does_not_reach_fails_the_flags_ch
 
     monkeypatch.setattr(quality_routes, "flag_answer", anyone)
     assert "do not reach" in _failed(install, FLAGS)
+
+
+@pytest.mark.needs_db
+def test_a_listing_that_puts_every_reason_in_one_half_fails_the_planes_check(
+    install: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The half read from the reason collapsed to one value, so wrong sources and a wrong fact are
+    one figure again. Delete this and M34.2.2.2 closes on a list that does not separate the two
+    kinds of bug, which is what the leaf is for."""
+    from brain import quality_routes
+    from brain.ops.feedback import FaultPlane
+
+    monkeypatch.setattr(quality_routes, "plane_of", lambda reason: FaultPlane.REASONING)
+    assert "retrieval fault" in _failed(install, PLANES)
+
+
+@pytest.mark.needs_db
+def test_a_listing_that_puts_every_reason_in_the_retrieval_half_fails_the_planes_check(
+    install: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The positive sibling: everything sent to retrieval. Delete this and a listing that blames
+    retrieval for every flag satisfies the check that only looks for wrong sources."""
+    from brain import quality_routes
+    from brain.ops.feedback import FaultPlane
+
+    monkeypatch.setattr(quality_routes, "plane_of", lambda reason: FaultPlane.RETRIEVAL)
+    assert "reasoning fault" in _failed(install, PLANES)
+
+
+@pytest.mark.needs_db
+def test_a_flag_that_is_not_told_its_half_when_filed_fails_the_planes_check(
+    install: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The half dropped from the answer to filing while the listing still has it. Delete this and
+    M34.2.2.2 closes on a filing that says nothing about which half of the system was blamed."""
+    from brain import quality_routes
+
+    real = quality_routes.flag_an_answer
+
+    async def wrong_on_filing(*args: Any, **kwargs: Any) -> Any:
+        done = await real(*args, **kwargs)
+        return done.model_copy(update={"plane": "reasoning"})
+
+    monkeypatch.setattr(quality_routes, "flag_an_answer", wrong_on_filing)
+    assert "when filed" in _failed(install, PLANES)
 
 
 @pytest.mark.needs_db

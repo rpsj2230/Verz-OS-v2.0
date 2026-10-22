@@ -116,9 +116,11 @@ examples are never built from another department's records.
 **Not checked, and kept true by hand:** the seven habits. Each is written from how the product
 behaves, and none of them is a sentence a test can hold.
 
-**Not built yet:** nothing shows a member of staff their own department's examples on a screen
-or in a channel today. The rule that chooses them exists and is tested, and this page is where
-they are shown.
+**Served, and not yet drawn:** `GET /help/asking-well` serves this page to every signed-in person with
+the habits as written and, in place of the tables above, one table of their own department's
+questions, built from what they may read there (and the sentence for nothing indexed while
+questions built from data are switched off). `tests/unit/test_guide_docs.py` holds the cut. **Not built
+yet:** a screen in the console or a message in a channel that shows it; today it is the route.
 
 ## Task ids
 

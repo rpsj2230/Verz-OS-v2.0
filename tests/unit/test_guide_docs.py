@@ -42,12 +42,16 @@ from brain.ops.guide_docs import (
 )
 from brain.ops.guide_docs import (
     COOKBOOK_EXAMPLES,
+    EXAMPLES_HEADING,
     GRANTS_MARKER,
     NO_EXAMPLES_YET,
+    NOT_FOR_STAFF,
     NOWHERE_TO_CHECK,
     OUTCOMES_MARKER,
     RUNBOOK_SECTIONS,
+    YOUR_DEPARTMENT,
     GuideDocsError,
+    GuideShapeError,
     asking_examples,
     asking_gaps,
     cookbook_gaps,
@@ -57,6 +61,7 @@ from brain.ops.guide_docs import (
     runbook_facts,
     runbook_gaps,
     scope_of,
+    served_asking_guide,
 )
 from brain.tools.startup import build_registry
 
@@ -701,3 +706,61 @@ def test_the_three_leaves_are_the_three_the_work_breakdown_names() -> None:
     assert texts["M34.3.1.3"] == "How to ask well, with examples from their own department"
     assert texts["M34.3.2.1"] == "Runbook per console screen"
     assert {one.key for one in SCREENS} == set(runbooks())
+
+
+# ============================================================ served_asking_guide (M34.3.1.3)
+def test_the_page_staff_are_served_keeps_the_habits_and_shows_one_table_of_their_own() -> None:
+    """**M34.3.1.3.** The habits as written, then `Your department` with the rows given and nothing
+    else: none of the demo company's departments, no marker, and nothing of this repository's
+    account of its own tests.
+
+    Delete this and the served page can carry the demo company's questions to a client's staff, or
+    this repository's test names to people who never see the repository."""
+    page = guide("asking-well.md")
+    served = served_asking_guide(page, examples=[("How many ticket are there?", "Freshdesk")])
+
+    assert served.startswith("# How to ask well")
+    assert "## Ask about something a system of yours holds" in served
+    assert "## Say when an answer is wrong" in served
+    assert f"{YOUR_DEPARTMENT}\n\n| Ask | Check it in |" in served
+    assert "| How many ticket are there? | `Freshdesk` |" in served
+    assert "checked: examples from" not in served
+    assert not any(f"### {name.capitalize()}" in served for name in DEPARTMENTS)
+    assert not any(one in served for one in NOT_FOR_STAFF)
+    assert "demo" not in served
+
+
+def test_a_reader_with_nothing_to_be_offered_is_served_the_sentence_for_nothing_indexed() -> None:
+    """No rows is the shipped page's own sentence, not an empty table and not another
+    department's questions.
+
+    Delete this and a reader whose department has nothing, or whose switch is off, is served a
+    table with no body, which reads as a page that failed to load."""
+    served = served_asking_guide(guide("asking-well.md"), examples=[])
+
+    assert f"| {NO_EXAMPLES_YET} | {NOWHERE_TO_CHECK} |" in served
+    assert served.count("| --- | --- |") == 1
+
+
+def test_a_cell_cannot_break_out_of_its_table() -> None:
+    """A question containing a pipe stays in its cell. Delete this and one entity name with a
+    pipe in it splits the row and shifts the check-in into the wrong column."""
+    served = served_asking_guide(guide("asking-well.md"), examples=[("a | b", "System")])
+
+    assert "| a \\| b | `System` |" in served
+
+
+def test_a_page_that_lost_the_headings_it_is_cut_at_is_not_served() -> None:
+    """Each heading removed in turn is refused. Delete this and an edit to the shipped page serves
+    the demo company's questions, or the account of this repository's tests, to everybody."""
+    page = guide("asking-well.md")
+    for broken in (
+        page.replace(EXAMPLES_HEADING, "## Examples"),
+        page.replace("On your own install", "On the install"),
+        page.replace("The questions use", f"{NOT_FOR_STAFF[0]}\n\nThe questions use", 1),
+        page.replace(
+            "The questions use", f"{examples_marker('operations')}\n\nThe questions use", 1
+        ),
+    ):
+        with pytest.raises(GuideShapeError):
+            served_asking_guide(broken, examples=[])
