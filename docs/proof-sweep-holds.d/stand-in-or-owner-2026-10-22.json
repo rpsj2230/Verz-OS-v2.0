@@ -1,0 +1,6 @@
+{
+  "held": {
+    "M36.1.2.3": "the check proves the lag measurement and the routing with the lag stubbed, and no replica exists on a single-box install, so the staleness banner is not shown on an install; held until an install with a replica shows it",
+    "M36.2.4.3": "the check lists a peak run it planted; the first real result at the stated peak waits on the owner running the load command (needs-rupash 194), which is what the leaf is for"
+  }
+}
