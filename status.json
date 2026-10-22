@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-22T12:08:59.567231+00:00",
-  "commit": "36c6bd34",
-  "commit_subject": "What a queue sweep puts back is read off the class of work, a 429 and a malformed reply are injected through the answer route, and a full disk on the request path gets a stated sentence (#692)",
+  "generated_at": "2026-10-22T12:35:17.664403+00:00",
+  "commit": "f13612b7",
+  "commit_subject": "The last step of every alert's runbook is the supplier, with the contact the company entered, and the owner is asked where cost projections come from (#693)",
   "total": 1626,
   "done": 1237,
   "percent": 76.1,
-  "built": 1421,
-  "built_percent": 87.4,
-  "built_unproven": 184,
+  "built": 1423,
+  "built_percent": 87.5,
+  "built_unproven": 186,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -145,6 +145,8 @@
     "M37.5.1.3",
     "M37.5.1.4",
     "M37.5.2.1",
+    "M37.5.2.2",
+    "M37.5.2.3",
     "M38.2.2.3",
     "M38.2.2.4",
     "M38.2.2.5",
@@ -279,14 +281,14 @@
       "total": 217,
       "done": 113,
       "percent": 52.1,
-      "in_progress": 39,
-      "ready_for_testing": 34,
+      "in_progress": 37,
+      "ready_for_testing": 36,
       "blocked": 20,
       "open": 11,
       "acts": 42,
       "decided": 18,
-      "built": 147,
-      "built_percent": 67.7
+      "built": 149,
+      "built_percent": 68.7
     },
     {
       "wave": 6,
@@ -683,7 +685,7 @@
       "done": 28,
       "acts": 41,
       "decided": 4,
-      "built": 32
+      "built": 34
     },
     {
       "module": "M38",
@@ -3405,24 +3407,24 @@
       "updated": "2026-10-20"
     },
     "M37.5.2.2": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): ops/controls.py runbook_for(), runbook_gaps() and Control.runbook text give each alert a runbook, checked by alerting.runbook_gaps (tested). Only registry_gaps and handover_lines call them; no route or console page serves a runbook, and no alert carries it. NEXT: serve the per-control runbook on the Jobs screen or in the alert body (jobs_routes.py) via controls.runbook_for; then check",
-      "updated": "2026-10-13"
+      "status": "READY FOR TESTING",
+      "why": "BUILT AND WIRED: GET /help/alerts/{control} serves a check and a step for every way each control can be reported as missed (controls.runbook_for), to a reader of the Overview, Queue or Incidents screens, and a stranger gets the one refusal. PROOF ON THE INSTALL: the help-pages install check 'every alert has steps and a ladder ending at the supplier' passes on the next run.",
+      "updated": "2026-10-22"
     },
     "M37.5.2.3": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): ops/alerting.py escalation_path(), supplier_step(), escalation_gaps() build the ladder ending at the supplier contact setting (tested). No caller outside alerting.py and no code reads SUPPLIER_CONTACT_SETTING into a sent escalation. NEXT: wire escalation_path into the overdue alert flow after Runbook.escalate_after, with the supplier contact read from configuration",
-      "updated": "2026-10-13"
+      "status": "READY FOR TESTING",
+      "why": "BUILT AND WIRED: the runbook of every alert now ends with the escalation ladder (the installation owner, then the supplier), and the supplier rung shows the contact the company entered under Install, Settings, How to reach the supplier (INSTALL_SUPPORT_CONTACT, ships unset). While none is entered the rung says nobody is named there, and never shows a placeholder. PROOF ON THE INSTALL: the same help-pages check passes; then enter a contact on Install, Settings and open any alert's runbook to see it on the last step. NOT built: sending a message to the supplier. The module's own rule is that nothing here delivers, and a person reads the step and makes the contact.",
+      "updated": "2026-10-22"
     },
     "M37.5.3.1": {
       "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): console/spend_view.py cost_review() renders variance(projected, measured) beside post_launch_correction (tested in test_spend_view.py) but only tests call cost_review; no route in report_routes.py or spend routes serves it. NEXT: add cost review to GET /report/spend (report_routes.py), reading the projection from the install record and thirty days of measured spend; then check",
-      "updated": "2026-10-13"
+      "why": "NEEDS THE OWNER (needs-rupash 266): the comparison is built (spend_view.cost_review) but there is no stored projection to compare with and no per-question estimate beside the actual cost. Not built until the owner says where the projection comes from; nothing is claimed.",
+      "updated": "2026-10-20"
     },
     "M37.5.3.3": {
       "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): ops/retune.py post_launch_correction() recomputes the estimator from observed distribution, returning the prior while the window is short (tested). Called only by spend_view.cost_review, which no route serves; the spend_correction control has no runner (schedule_runner.py Runner has needs=). NEXT: give spend_correction a runner assembling estimate vs actual per period and call retune.post_launch_correction; surface via cost review route",
-      "updated": "2026-10-13"
+      "why": "NEEDS THE OWNER (needs-rupash 266): re-tuning thresholds from the real distribution needs each question's estimate kept beside its actual cost, which is a new column and a migration, and the spend_correction runner has nothing to read until then. Not built; nothing is claimed.",
+      "updated": "2026-10-20"
     },
     "M37.7.6": {
       "status": "BLOCKED",
