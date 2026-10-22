@@ -348,7 +348,7 @@ def _request(agent_id: str, principal: str, at: Any, traffic: str, trace: str) -
 
 
 @check(
-    leaves=("M39.1.3.1", "M39.1.3.2", "M39.1.3.3", "M39.1.3.4"),
+    leaves=("M39.1.3.1", "M39.1.3.2", "M39.1.3.3", "M39.1.3.4", "M21.4.4"),
     sentence=(
         "An agent's spend, runs and messages are counted over seven, thirty and ninety days and "
         "the month to date, an automation's run counting as a run and not a message; its cost is "
@@ -395,11 +395,13 @@ async def an_agents_figures_follow_the_period_and_project_to_its_budget(
         (light, h.now - timedelta(hours=2), person),
         (heavy, h.now - timedelta(hours=3), scheduled),
         (heavy, h.now - timedelta(days=45), person),
+        (heavy, h.now - timedelta(days=400), person),
     ]
     spends = [
         (heavy, 300, h.now - timedelta(hours=1)),
         (light, 100, h.now - timedelta(hours=2)),
         (heavy, 50, h.now - timedelta(days=60)),
+        (heavy, 7, h.now - timedelta(days=400)),
     ]
     async with h.sessions() as session:
         await session.execute(
@@ -455,6 +457,12 @@ async def an_agents_figures_follow_the_period_and_project_to_its_budget(
         raise CheckFailedError("the cost per person was not everybody's, heaviest first")
     if [one.spend_minor for one in quarter.callers] != [350, 100]:
         raise CheckFailedError("the ninety days did not hold the cost the week does not")
+    ever = by_range[Range.ALL_TIME.value]
+    if (ever.runs, ever.messages) != (5, 4) or [one.spend_minor for one in ever.callers] != [
+        357,
+        100,
+    ]:
+        raise CheckFailedError("all time did not hold what is older than the ninety days")
     own = agent_period_views(
         agent_id,
         runs=runs,

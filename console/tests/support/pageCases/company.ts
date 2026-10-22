@@ -56,6 +56,16 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         ceiling_set: false,
         may_set_budget: true,
       },
+      // The departments' budgets: one line, so the section is drawn with its forms, and the
+      // authority over everything, so the allocation and the transfer are drawn too.
+      "/api/v1/company/budget/departments": {
+        currency: "XXX",
+        lines: [
+          { department: UNBROKEN, monthly_minor: 500, monthly_version: 1, run_ceiling_minor: null, run_version: null },
+        ],
+        may_allocate: true,
+        unallocated_minor: 200,
+      },
     },
   },
 };

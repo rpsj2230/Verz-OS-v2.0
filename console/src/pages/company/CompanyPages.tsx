@@ -55,6 +55,7 @@ import {
 } from "../companyQuery";
 import { moneyWords } from "../spendQuery";
 import { CompanyBudgetForm, SET_COMPANY_BUDGET } from "./CompanyBudgetForm";
+import { DepartmentBudgets } from "./DepartmentBudgets";
 
 export const COMPANY_CRUMB = "Whole company";
 
@@ -459,6 +460,7 @@ export function ConsumptionPage() {
             />
           </SectionCard>
         ) : null}
+        <DepartmentBudgets refresh={saved} />
         <SectionCard title={BY_DEPARTMENT}>
           {found.lines.length === 0 ? (
             <p className="m-0 text-sm text-dim">{NOTHING_SPENT}</p>
