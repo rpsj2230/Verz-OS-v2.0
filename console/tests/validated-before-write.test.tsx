@@ -113,6 +113,10 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   // The company's monthly budget, drawn for a reader the consumption says may set it, under the
   // period filter, which is the page's first form.
   "src/pages/company/CompanyBudgetForm.tsx": [{ pattern: "/company/consumption", index: 1, writes: true }],
+  // The departments' budgets follow it. One frame is every form there (a department's per-run
+  // ceiling and allowances, the share and the transfer), so the first, the per-run ceiling, stands
+  // for the four; tests/department-budgets.test.tsx submits each of the four blank.
+  "src/pages/company/DepartmentBudgets.tsx": [{ pattern: "/company/consumption", index: 2, writes: true }],
   // A model's price opens on its row in the prices card, under the providers and the matrix, which
   // draw no form of their own (M27.12.5).
   "src/components/ModelPrices.tsx": [{ pattern: "/models", opener: "Set price", index: 0, writes: true }],

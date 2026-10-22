@@ -2060,14 +2060,14 @@ const PROGRESS = {
     updated: "2026-10-22",
   },
   "M21.1.2": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops.budgets.allocate, Transfer and apply_transfers are built and unit-tested (test_budgets) but have no caller outside budgets.py; no route writes a department budget row (only company_routes and agent_workspace_routes call budget_store.append). NEXT: Add a department budget set/transfer route (beside company_routes.set_company_budget) that calls allocate/apply_transfers and budget_store.append, then a check.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: brain.department_budget_routes (PUT /company/budget/departments through allocate, POST .../transfer through apply_transfers, PUT /departments/{d}/budget/run-ceiling) and a Department budgets section on the Consumption page; install check department_shares_and_transfers_are_versions_and_nothing_else. Nothing stops a question: budget_enforcement is still the install's own switch (needs 169). Which of the two answers to needs 242 stands does not change this screen. On the install: set the company's monthly budget on Whole company, Consumption, share it between two departments there, move an amount from one to the other, set one department's per-run ceiling, and read the versions on the audit log; a department's own budget administrator sees only their department's line and no allocation or transfer.",
+    updated: "2026-10-22",
   },
   "M21.1.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops.budgets.user_allowances (daily and monthly, fair share) has no caller; mine_routes and member_activity only read user rows via budget_store.in_force. No route or job writes a user-level row, so no person ever has an allowance. NEXT: Call user_allowances from a route or sync that appends user rows via budget_store.append, with the fair-share cap; then write a check.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: POST /departments/{d}/budget/allowances gives every live member of a department the daily and monthly allowance ops.budgets.user_allowances works out from the department's monthly budget and headcount, capped at a quarter of the department; a person whose figure would not change gets no new version; install check a_departments_people_are_given_capped_allowances. Allowances do not follow the department's budget afterwards: asking again is the recorded act of working them out again. No person is stopped by one until budget_enforcement is switched on (needs 169). On the install: after the department has a monthly budget, press Give everyone an allowance on its line, then My workspace shows a person's daily and monthly allowance; press it again and no new version appears.",
+    updated: "2026-10-22",
   },
   "M21.1.4": {
     status: "READY FOR TESTING",
@@ -2180,14 +2180,14 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M25.2.1": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops.erasure.assemble and member_activity.stored_about_me (store by store, disposition per store) are built and tested but no route or page calls them; the data-transfer catalogue lists subject_access with runs=False (not available yet). NEXT: Add a subject access route over member_activity.stored_about_me wired to PostgresEraser.count_for per store (EstateEraser) and flip DataSet subject_access runs=True; then check.",
-    updated: "2026-10-13",
+    status: "BLOCKED",
+    why: "waits on the owner (needs-rupash 265): ops.erasure.assemble is built and tested, and counting every store for one person needs the worker's database-owner connection, so a request has to be filed, answered by the worker and kept, which is a new table (a migration). 265 asks whether to build that or a screen that counts only what the web application can see.",
+    updated: "2026-10-22",
   },
   "M25.2.2": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): The queue (erasure_store.drain_erasure_queue via schedule_runner, EstateEraser) erases rows, projection, knowledge and memory (plus session memory and own vault tokens). Cache, index, recordings and attachments are NOT reached (NO_CACHE_ERASER, NO_INDEX_ERASER, NO_OBJECT_STORE_ERASER; erasure_routes ERASING text). NEXT: Build erasers for the answer cache and retrieval index, and an object-store eraser over ops.object_store; pass them as objects= in schedule_runner; then check.",
-    updated: "2026-10-13",
+    status: "BLOCKED",
+    why: "waits on the owner (needs-rupash 264): an erasure reaches the database, projections, knowledge and memory (and a person's session memory and own vault tokens); the answer cache and the search index are reported as not reached, so every erasure finishes incomplete. Whether they are emptied or stated as running out is 264. The recordings the browser keeps are removed on schedule since #663; an object-store eraser for attachments and exports is still to build behind the same decision about what the object store holds per person.",
+    updated: "2026-10-22",
   },
   "M25.2.3": {
     status: "READY FOR TESTING",
@@ -2195,9 +2195,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M25.2.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops.erasure.Certificate and certify (with backup horizon) are built and tested but have no caller; drain_erasure_queue stores outcome and per-store counts on ops.erasure_request only, and erasure_routes.request_view carries no certificate or horizon. NEXT: Call certify in drain_erasure_queue, persist it on the request row (migration) and return it in request_view; then check.",
-    updated: "2026-10-13",
+    status: "BLOCKED",
+    why: "waits on the owner (needs-rupash 264): ops.erasure.Certificate and certify are built and tested and refuse to certify while any store was not reached, which is every erasure until the answer cache and the search index are settled. Nothing else is missing but the call from drain_erasure_queue and the field on the request view.",
+    updated: "2026-10-22",
   },
   "M25.3.1": {
     status: "READY FOR TESTING",
@@ -3545,9 +3545,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M36.2.1.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): live_read.py enforces CallBudget.assert_affordable and per-connector concurrency under gather (tested). Missing: a global ceiling; scaling.scaling_gaps and fanout_refusals say per-connector rows have no global row, up to the sum may be in flight, and are not called. NEXT: wire scaling.fanout_refusals and a declared global SOURCE_CALLS budget into live_read admission; then check parallel calls respect both",
-    updated: "2026-10-13",
+    status: "BLOCKED",
+    why: "waits on the owner (needs-rupash 263): per-source budgets are enforced under parallelism (live_read, CallBudget) and the Capacity screen reports the implied total, but nobody has declared a company-wide ceiling, and declaring one is the owner's number. scaling.admitted_from takes a stated global ceiling and is tested; once 263 is answered the build is wiring it into live_read's admission and a check that parallel calls respect both.",
+    updated: "2026-10-22",
   },
   "M36.2.2.2": {
     status: "IN PROGRESS",
@@ -4775,9 +4775,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M21.4.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): console.workspace.Range has 7d, 30d, 90d and mtd only; no all-time range and no marking of the incomplete current day in console/src/pages/agents/AgentDashboard.tsx or agentStats.ts. NEXT: Add Range.ALL_TIME to console/workspace.py and the period selector, and a partial-day marker on the last chart bar; then check.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: the agent figures offer All time beside 7, 30 and 90 days and the month to date (workspace.Range.ALL_TIME, from a fixed instant before the product existed, so it does not move when retention removes a row), and say once above the figures that today is not over. The page draws figures and no per-day chart, so the unfinished day is a sentence and not a differently drawn bar. The agent figures install check now holds a run and a cost from 400 days ago to the all-time period. On the install: open an agent's Dashboard, choose All time, and read a total larger than the 90 day one if the agent is older than that.",
+    updated: "2026-10-22",
   },
   "M21.4.5": {
     status: "BLOCKED",

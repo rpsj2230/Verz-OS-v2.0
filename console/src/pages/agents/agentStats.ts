@@ -54,7 +54,7 @@ export interface CallerSpend {
 
 /** One agent's figures over one period. A figure is absent when none was sent. */
 export interface AgentPeriod {
-  /** As the API spells it: "7d", "30d", "90d" or "mtd". */
+  /** As the API spells it: "7d", "30d", "90d", "mtd" or "all". */
   readonly range: string;
   readonly runs?: number;
   /** The runs a person started. */
@@ -292,6 +292,9 @@ export function rangeWords(range: string | undefined): string {
   if (range === MONTH_TO_DATE) {
     return "Month to date";
   }
+  if (range === "all") {
+    return "All time";
+  }
   const days = range === undefined ? null : /^(\d+)d$/.exec(range);
   return days?.[1] === undefined ? "recent" : `${days[1]} days`;
 }
@@ -299,8 +302,8 @@ export function rangeWords(range: string | undefined): string {
 /** The month-to-date period's key, as `brain.console.workspace.Range` spells it. */
 export const MONTH_TO_DATE = "mtd";
 
-/** The four periods an agent's page offers, in the route's order (M39.1.3.2). */
-export const AGENT_PERIODS = ["7d", "30d", "90d", MONTH_TO_DATE] as const;
+/** The five periods an agent's page offers, in the route's order, all time last (M39.1.3.2, M21.4.4). */
+export const AGENT_PERIODS = ["7d", "30d", "90d", MONTH_TO_DATE, "all"] as const;
 
 /** Whose figures, in words: the API's two bases. */
 export function basisWords(basis: string | undefined): string | undefined {

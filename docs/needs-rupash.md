@@ -6,6 +6,78 @@ Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
 # Open
 
+## 263. Should the product declare one company-wide ceiling on source calls running at the same time?
+
+**In plain terms:** when one question needs answers from several connected systems, the product asks
+them at the same time. Each system has its own limit on how many questions may be in flight to it
+(`brain.ops.admission`), and a task (M36.2.1.3) asks that the total across all of them is limited too.
+Nobody has set a total. What binds today is the sum of each system's own limit, which grows by itself
+every time a system is connected, so the more you connect the more the product can ask at once, and
+nothing says that is the number you meant.
+
+**Option A: declare a total.** A company-wide limit is added beside the per-system ones, starting at the
+sum of what ships today so nothing changes on the day it arrives, and you change it on the Limits
+screen. Every group of simultaneous calls is held to it as well as to each system's own limit.
+
+**Option B: leave it as the sum.** The per-system limits stay the only limits, the Capacity screen keeps
+saying what the implied total is, and the task is closed as met by them.
+
+**Option C: set a fixed total now.** You name the number. It is declared in the same place as A, but not
+seeded from the sum.
+
+**My recommendation:** A. A total that nobody chose is a limit nobody can reason about, and starting it
+at today's sum means the first time it matters is the first time somebody lowers it on purpose.
+
+**What I need from you:** reply "263: A", "263: B", or "263: C and the number".
+
+## 264. When a person is erased, must the answer cache and the search index be emptied of them, or may they run out by themselves?
+
+**In plain terms:** erasing a person removes their rows from the database. Two places hold copies derived
+from data like theirs: answers the system kept so the same question is not asked twice, and the search
+index. Today neither can be emptied for one person, so every erasure finishes as "incomplete" and no
+deletion certificate (M25.2.4) can be issued, because a certificate is refused while any store was not
+reached. Two facts decide this. A kept answer is never served once it is fifteen minutes old
+(`brain.gate.cache_key.DEFAULT_MAX_AGE`) and the store drops it within the hour
+(`brain.gate.answer_cache.STORE_TTL_SECONDS`). And the search index has no storage of its own: its
+entries are rows in the knowledge tables, which an erasure already removes.
+
+**Option A: state it honestly and let them run out.** The certificate lists the answer cache as running
+out within the hour (the same way it already lists backups as running out within their window),
+and the search index as held in the knowledge rows that were removed. Nothing new is deleted; erasures
+can then finish as complete and certificates can be issued.
+
+**Option B: empty the answer cache on every erasure.** Every kept answer, everybody's, is set aside the
+moment anyone is erased (one switch moves, so every old answer stops being used). It costs a burst of
+questions being answered again. The certificate then says the cache was emptied, not that it runs out.
+
+**My recommendation:** A. A kept answer cannot be served after fifteen minutes and is gone within the hour,
+and emptying everybody's answers for one person's erasure is a cost on every other person for a copy
+nobody can be handed.
+
+**What I need from you:** reply "264: A" or "264: B".
+
+## 265. May a subject access request be answered by the worker, with a table of its own for the request and its answer?
+
+**In plain terms:** a person is entitled to be told what the system holds about them, store by store
+(M25.2.1). Counting that needs to see every row about the person, including rows the web application is
+deliberately not allowed to see, so only the worker, which connects as the database owner, can do it, the
+same way it carries out an erasure. A request therefore has to be filed, picked up by the worker, and its
+answer kept for the person who filed it to read. That is a new table (a migration), the same shape as the
+erasure queue.
+
+**Option A: build it like the erasure queue.** A request is filed on the Retention screen by whoever holds
+the erasure authority, the worker counts every store for that person on its next quarter-hour, and the
+answer (counts per store, and which stores could not be searched, never the data) is shown on the screen.
+New table `ops.subject_access_request`, row-level security on.
+
+**Option B: no table.** The screen counts only what the web application can see. It is cheaper, but it is
+not "everything held about the person", and the document would have to say so on its face.
+
+**My recommendation:** A. A subject access answer that quietly leaves out the rows it cannot see is the
+one document that must not.
+
+**What I need from you:** reply "265: A" or "265: B".
+
 ## 262. After an agent writes on a website, may the system of record be asked about one named record, so the write can be checked?
 
 **In plain terms:** when an agent changes something on a website, the product can check the change by asking
