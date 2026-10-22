@@ -2056,8 +2056,8 @@ const PROGRESS = {
   },
   "M21.1.1": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Ceiling stored and versioned: PUT company budget (company_routes.set_company_budget, ops.budgets.BudgetRow, test_company_routes). Hard stop is ops.budget_stop_store.budget_refusal_for in api_routes, flag budget_enforcement off (needs 169 A). alert_fractions stored, nothing fires them. NEXT: Wire alert_fractions to a notice when spend crosses one (spend.alerts_for exists but is only called by unwired preflight); then write a check naming M21.1.1 that sets a ceiling with alerts and reads the stop record.",
-    updated: "2026-10-13",
+    why: "partly built, not claimed: the company budget now stores warnings at 70 and 90 per cent by default (the owner's wording) and brain.budget_told tells whoever administers a company or department budget once per period about the highest fraction reached, in the chat each last used, behind the switch Tell a budget's administrators when it is nearing its ceiling or has run out (ships off). Left open because what it proves is a message arriving in a real person's chat, which no install check can do, and because the hard stop still waits for the owner to switch budget_enforcement on (needs 169). NEXT: the owner switches the sending on for one test administrator and a budget at 70 per cent, and reads the message; then a person records it.",
+    updated: "2026-10-22",
   },
   "M21.1.2": {
     status: "READY FOR TESTING",
@@ -2101,13 +2101,13 @@ const PROGRESS = {
   },
   "M21.2.5": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Used-up budget stop is wired (budget_stop_store.judged, records BudgetStopRow, refuses with no degradation) but flag budget_enforcement ships off (needs 169 A). Admin warning is recorded (addressed_to) and not delivered: the module says delivery is the next change. NEXT: Deliver the recorded warning through the notice channel to the admin; owner switches the flag after a week of would-have-stopped rows; then check naming M21.2.5.",
-    updated: "2026-10-13",
+    why: "partly built, not claimed: a used-up budget is recorded with who was to be told, and brain.budget_told now delivers that warning (once per stop, saying whether questions are being refused) behind the same switch, which ships off. Left open because the leaf's other half, questions refused until the next period, waits for the owner to switch budget_enforcement on after a week of would-have-stopped rows (needs 169), and delivery to a real chat cannot be proved by an install check. NEXT: owner switches both on for a test department.",
+    updated: "2026-10-22",
   },
   "M21.2.6": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): The refused person gets SPENDING_LIMIT_REACHED (budget_stop_store), which deliberately names no budget and no person who can raise it; console.spend_view.told_about names level and period but has no caller. Leaf wording is narrowed by design with no needs item. NEXT: Raise a needs-rupash question on the narrowing, or call spend_view.told_about from the refusal path for readers entitled to it; then check.",
-    updated: "2026-10-13",
+    why: "partly built, not claimed, and waiting on the owner (needs 224): the sentence a stopped person is told names no budget on purpose. Behind the switch Tell a stopped person which budget, and who can raise it, when they may know (ships off), brain.console.spend_view.told_about names the budget and who raises it to a person whose reach admits that spend, and the plain sentence stays for everybody else. Switching it on is the owner's answer to 224 (B); nothing changes while it is off.",
+    updated: "2026-10-22",
   },
   "M21.3.1": {
     status: "READY FOR TESTING",
