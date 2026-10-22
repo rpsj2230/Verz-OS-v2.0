@@ -308,3 +308,34 @@ def test_a_token_found_in_a_table_a_disconnect_writes_to_fails_the_check(
 
     monkeypatch.setattr(module, "_held_in", finds)
     assert "was found in a table" in _failed(install, DISCONNECT)
+
+
+@pytest.mark.needs_db
+def test_the_search_is_asked_for_every_table_once_and_from_before_the_run_started(
+    install: str, issuer: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The window and the split the check hands the search: the tables with no time column on
+    their own, the others by theirs, together exactly the tables the leaf names, and a start that
+    is earlier than the run and not later. Delete this and the start can move past the run's own
+    rows, or a table can fall out of the split, and the check passes for a search that looks at
+    nothing."""
+    from datetime import timedelta
+
+    from brain.ops import acceptance_checks_member_accounts as module
+
+    asked: list[tuple[tuple[str, ...], datetime]] = []
+    asked_at: list[datetime] = []
+
+    async def records(h: Any, needle: str, *, since: datetime, tables: Any) -> tuple[str, ...]:
+        asked.append((tuple(tables), since))
+        asked_at.append(h.now)
+        return ()
+
+    monkeypatch.setattr(module, "_held_in", records)
+    assert run(install)[DISCONNECT] == (PASSED, "")
+
+    [(settings, early), (written, late)] = asked
+    assert settings == ("ops.setting",)
+    assert sorted((*settings, *written)) == sorted(module.WHERE_A_TOKEN_COULD_BE_LEFT)
+    assert early == late
+    assert asked_at[0] - timedelta(hours=2) < early < asked_at[0]
