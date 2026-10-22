@@ -87,6 +87,7 @@ class NoticeKind(enum.StrEnum):
     APPROVAL_REQUEST = "approval_request"
     DENIAL_PATTERN = "denial_pattern"
     BUDGET_STOPPED = "budget_stopped"
+    BUDGET_NEARING = "budget_nearing"
     ACCESS_REQUEST = "access_request"
     HANDED_TO_A_PERSON = "handed_to_a_person"
     QUESTION_NOT_PICKED_UP = "question_not_picked_up"
@@ -183,8 +184,27 @@ NOTICES: Final[tuple[Notice, ...]] = (
         title="A budget reached its ceiling",
         told="Administrators with authority over the budget, or those above them.",
         about="That work stopped at a budget's ceiling, and which budget.",
-        how="No channel is chosen for it yet, so nothing sends it.",
+        how=(
+            "Told once per stop, in the chat tool each administrator last used, by a loop the "
+            "application runs once the Features page has switched on telling a budget's "
+            "administrators. It says whether questions are being refused for the budget, and "
+            "names no amount."
+        ),
         composed_by="brain.ops.budget_stop:warn",
+        sent_by="brain.budget_told:tell_budget_administrators",
+    ),
+    Notice(
+        kind=NoticeKind.BUDGET_NEARING,
+        title="A budget is nearing its ceiling",
+        told="Administrators with authority over a company or department budget.",
+        about="That a budget has reached a warning fraction of its ceiling, as a share, no amount.",
+        how=(
+            "Told once per period for each fraction reached, at seventy and ninety per cent unless "
+            "the budget sets others, in the chat tool each administrator last used, by the same "
+            "loop and behind the same switch as a budget that has run out."
+        ),
+        composed_by="brain.budget_told:nearing_text",
+        sent_by="brain.budget_told:tell_budget_administrators",
     ),
     Notice(
         kind=NoticeKind.ACCESS_REQUEST,

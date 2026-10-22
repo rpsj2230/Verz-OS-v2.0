@@ -71,6 +71,7 @@ from brain.automation_routes import AutomationWiring
 from brain.browsing.declared import declared_registry
 from brain.browsing.read_tool import ReadSurfaceTool, StoredReadOnlyBrowser
 from brain.browsing.recording_sweep import recordings_under
+from brain.budget_told import keep_telling_budget_administrators
 from brain.cache import (
     AsyncValkeyClient,
     NoEntitlementCache,
@@ -411,6 +412,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     learning: asyncio.Task[None] | None = None
     pausing: asyncio.Task[None] | None = None
     lateness: asyncio.Task[None] | None = None
+    budgets: asyncio.Task[None] | None = None
 
     if settings.run_migrations and not settings.database_url and settings.env != "development":
         # Loud on purpose. Skipping migrations because a variable was unset is exactly
@@ -492,6 +494,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # this process for the same reason, and only while the feature is switched on. See
         # `brain.control_not_run_told`.
         lateness = asyncio.create_task(keep_telling_overdue_controls(app))
+        # The administrators of a budget are told when it nears its ceiling and when it runs out, by
+        # this process for the same reason, and only while the feature is switched on. See
+        # `brain.budget_told`.
+        budgets = asyncio.create_task(keep_telling_budget_administrators(app))
         # An administrator appointed before a capability existed is granted it now, and one whose
         # capability was taken away is not given it back. After the migrations, under the
         # appointment's own lock, and never fatal: a missing capability is a screen that refuses,
@@ -930,6 +936,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             lateness.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await lateness
+        if budgets is not None:
+            budgets.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await budgets
         if trying is not None:
             trying.cancel()
             with contextlib.suppress(asyncio.CancelledError):
