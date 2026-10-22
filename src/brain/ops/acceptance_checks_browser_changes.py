@@ -17,9 +17,10 @@ websites:
   different agent's and a different website's first card says it is the first.
 - **The latest approved run is the one compared with**, not an older one.
 
-Each card is read back from the suspension store at the asker's reach, so what is checked is what a
-person is shown. The approval is by a second reserved person through the approvals route's own
-function (`take_decision`), as `acceptance_checks_browser` does.
+Each card is read back as the approver is shown it (`brain.console.approvals.card`), so what is
+checked is what a person deciding is shown and not the requester's own rendering. The approval is
+by a second reserved person through the approvals route's own function (`take_decision`), as
+`acceptance_checks_browser` does.
 
 The check writes under reserved principals and rolls nothing back by hand: the harness leaves no
 row it did not own, and the test file holds that.
@@ -80,6 +81,7 @@ async def a_card_says_what_changed_since_the_last_approved_run(h: Harness) -> No
     from brain.browsing.planning import Goal, PlanRequest, plan
     from brain.browsing.sessions import ACT_ON_SURFACE_CAPABILITY, BROWSE_SURFACE, TARGET_FIELD
     from brain.browsing.targets import Surface, Target, TargetRegistry, Verb
+    from brain.console.approvals import card as card_for
     from brain.core.scope import Clause, Op, Scope
     from brain.gate.injection import AutonomyTier
     from brain.gate.suspension_store import StoredSuspensions
@@ -135,6 +137,7 @@ async def a_card_says_what_changed_since_the_last_approved_run(h: Harness) -> No
         )
     await h.person(approver, department=A, grants=((ACT_ON_SURFACE_CAPABILITY.value, narrowed),))
     store = StoredSuspensions(h.sessions)
+    approving = await h.reach(approver)
     agent = f"acceptance_{h.run}_agent"
 
     async def card(
@@ -162,10 +165,13 @@ async def a_card_says_what_changed_since_the_last_approved_run(h: Harness) -> No
                 trace_id=h.trace_id,
                 now=h.now,
             )
+        # What the approver is shown, drawn the way every approver surface draws it, and not the
+        # requester's own rendering of the action (`brain.gate.approval_request`).
         suspension = await store.reading_as(asking, h.now).suspension(run_id)
-        if suspension is None:
+        shown = None if suspension is None else card_for(suspension, approving, h.now)
+        if shown is None:
             raise CheckFailedError(THE_FIRST_CARD_WAS_NOT_THE_FIRST)
-        return str(suspension.artefact)
+        return str(shown.request.text)
 
     async def approve(run_number: int) -> None:
         # Each approval a second later than the one before, so "the latest" is not a tie.
