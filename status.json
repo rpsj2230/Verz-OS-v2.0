@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-22T03:56:41.786158+00:00",
-  "commit": "dc92dca6",
-  "commit_subject": "My agents rows open the agent's own page, and a member's own agent within their reach is published at once (#677)",
+  "generated_at": "2026-10-22T04:22:58.751354+00:00",
+  "commit": "e7a54cb3",
+  "commit_subject": "The card for a browser write says what changed since the last run its asker had approved (M19.7.2; M19.9.2 partly built) (#678)",
   "total": 1626,
-  "done": 1225,
-  "percent": 75.3,
-  "built": 1404,
-  "built_percent": 86.3,
+  "done": 1227,
+  "percent": 75.5,
+  "built": 1406,
+  "built_percent": 86.5,
   "built_unproven": 179,
   "built_task_ids": [
     "M1.1.8",
@@ -272,16 +272,16 @@
       "wave": 5,
       "name": "Hands, delivery, go-live",
       "total": 217,
-      "done": 110,
-      "percent": 50.7,
-      "in_progress": 48,
+      "done": 112,
+      "percent": 51.6,
+      "in_progress": 46,
       "ready_for_testing": 29,
       "blocked": 19,
       "open": 11,
       "acts": 42,
       "decided": 18,
-      "built": 139,
-      "built_percent": 64.1
+      "built": 141,
+      "built_percent": 65.0
     },
     {
       "wave": 6,
@@ -495,10 +495,10 @@
       "name": "Browser and computer use",
       "wave": 5,
       "total": 47,
-      "done": 32,
+      "done": 34,
       "acts": 0,
       "decided": 1,
-      "built": 32
+      "built": 34
     },
     {
       "module": "M20",
@@ -1153,9 +1153,11 @@
     "M19.6.6",
     "M19.6.7",
     "M19.7.1",
+    "M19.7.2",
     "M19.7.3",
     "M19.8.1",
     "M19.9.11",
+    "M19.9.2",
     "M19.9.3",
     "M19.9.4",
     "M19.9.6",
@@ -2542,19 +2544,9 @@
       "why": "TRIAGE 2026-10-13 class 2 (partly built): verification.py:read_back and read_back_plan define the out-of-band read through ReadBackPort; test_browsing_verification.py. No ReadBackPort implementation exists and grading.verification_gaps says no target declares a read_back tool. NEXT: Implement a ReadBackPort that reads through the gate (a connector or tool), declare read_back on a registered surface, and call it from verify_run.",
       "updated": "2026-10-13"
     },
-    "M19.7.2": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): sessions.py:ACT_ON_SURFACE is the one write tool; approval.py raises the envelope as a leash suspension, console/approvals.py renders its terms, envelope_store and enforcer.compile_policy bind it by digest; tests in test_browsing_approval.py, _enforcer.py, _sessions.py. No caller raises an approval or runs the write. NEXT: Call approval.raise_approval and approved in the driver start path; add a readable envelope diff to the approval card (none exists).",
-      "updated": "2026-10-13"
-    },
     "M19.9.1": {
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 2 (partly built): enforcer.authorise refuses an out-of-envelope action and the run ends on it (runner.py); approval.py deliberately approves the envelope up front and rejects mid-run cards (A_PERSON_APPROVES_THE_CONTRACT_BEFORE_THE_CONTAINER_STARTS). Suspend and re-approve naming the breach does not exist. NEXT: Either build a breach suspension (a new leash approval naming the refusal) or record the narrowing as a docs/needs-rupash.md question and name it in register row ARC-B-021's decision.",
-      "updated": "2026-10-13"
-    },
-    "M19.9.2": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): Read-only website check exists and is wired (tools/website_check.py, app.py HttpsProber); envelope approval primitives exist (approval.py). No readable diff of an envelope on the card and no in-envelope or out-of-envelope run, so approve-once and ask-again cannot be shown. NEXT: Needs the driver plus an envelope diff in the approval card; then a check that runs a read, an approved write and a breach and records each.",
       "updated": "2026-10-13"
     },
     "M19.9.5": {
@@ -3865,11 +3857,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 6,
+  "closed_today": 8,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "e7a54cb",
+      "at": "2026-10-22T04:13:08+00:00",
+      "subject": "The card for a browser write says what changed since the last run its asker had approved (M19.7.2; M19.9.2 partly built) (#678)",
+      "closed": "M19.7.2,M19.9.2"
+    },
     {
       "sha": "6197ef3",
       "at": "2026-10-22T03:20:03+00:00",
@@ -3983,12 +3981,6 @@
       "at": "2026-10-20T04:24:05+00:00",
       "subject": "2 more tasks are proved on the install by the newest complete acceptance run",
       "closed": "M13.8.11,M39.10.3"
-    },
-    {
-      "sha": "0fadf6e",
-      "at": "2026-10-19T16:27:06+00:00",
-      "subject": "11 more tasks are proved on the install by the newest complete acceptance run",
-      "closed": "M13.7.9,M13.8.7,M13.8.8,M20.5.1,M27.11.12,M27.11.13,M27.11.14,M27.15.32,M27.15.34,M27.15.35,M27.15.75"
     }
   ]
 }
