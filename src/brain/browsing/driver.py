@@ -62,7 +62,7 @@ from typing import TYPE_CHECKING, Final, Protocol
 
 from sqlalchemy import select
 
-from brain.browsing.approval import EnvelopeApproval, raise_approval
+from brain.browsing.approval import EnvelopeApproval, Previous, raise_approval
 from brain.browsing.concurrency import (
     Axis,
     SessionCounts,
@@ -76,7 +76,7 @@ from brain.browsing.concurrency import (
 from brain.browsing.credentials import Bindings, CredentialError, resolve, scrub_history
 from brain.browsing.enforcer import Action, ActionRecord, recheck, stopped_now
 from brain.browsing.envelope import Envelope, compile_envelope
-from brain.browsing.envelope_store import load_envelope, put_envelope
+from brain.browsing.envelope_store import last_approved_parts, load_envelope, put_envelope
 from brain.browsing.grading import Rubric, build_rubric
 from brain.browsing.observation import Snapshot
 from brain.browsing.recording import (
@@ -380,12 +380,24 @@ async def prepare_run(
         exceptions=exceptions,
         now=now if exceptions else None,
     )
-    suspension = (
-        raise_approval(envelope, target, agent_id=agent_id, reach=reach, trace_id=trace_id, now=now)
-        if envelope.awaits_approval()
-        else None
-    )
     await at_reach(session, reach, now)
+    suspension = None
+    if envelope.awaits_approval():
+        # What the card says changed is the asker's own last approved run, by the query.
+        previous = Previous(
+            await last_approved_parts(
+                session, asked_by=reach.principal_id, agent_id=agent_id, target=target.name
+            )
+        )
+        suspension = raise_approval(
+            envelope,
+            target,
+            agent_id=agent_id,
+            reach=reach,
+            trace_id=trace_id,
+            now=now,
+            previous=previous,
+        )
     if suspension is not None:
         await put_suspension(session, suspension)
     await put_envelope(session, envelope, agent_id=agent_id, suspension=suspension)

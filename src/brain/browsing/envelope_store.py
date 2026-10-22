@@ -216,6 +216,37 @@ async def load_envelope(session: AsyncSession, run_id: str) -> StoredEnvelope | 
     return None if row is None else stored_from(dict(row))
 
 
+async def last_approved_parts(
+    session: AsyncSession, *, asked_by: str, agent_id: str, target: str
+) -> dict[str, Any] | None:
+    """The sealed parts of the latest envelope an approver approved that `asked_by` asked for, for
+    this agent on this website.
+
+    **Filtered here, not by the row's policy**, which lets every reader read every envelope
+    (`0041`: `USING (true)`, because an approver has to read what is asked of them). So "the last
+    approved run" is the last one this person asked for, by the query and not by who is reading,
+    and a person who has not asked before reads the first-approval sentence however many others
+    have. The row is checked against its own digest before its parts are used, as every read here
+    is.
+    """
+    result = await session.execute(
+        select(BrowserEnvelopeRow.__table__)
+        .where(
+            BrowserEnvelopeRow.asked_by == asked_by,
+            BrowserEnvelopeRow.agent_id == agent_id,
+            BrowserEnvelopeRow.target == target,
+            BrowserEnvelopeRow.approval_state == ApprovalState.APPROVED.value,
+        )
+        .order_by(BrowserEnvelopeRow.decided_at.desc())
+        .limit(1)
+    )
+    row = result.mappings().one_or_none()
+    if row is None:
+        return None
+    stored_from(dict(row))
+    return dict(row["sealed"])
+
+
 async def record_decision(session: AsyncSession, suspension: SuspendedAction) -> None:
     """Record a decided suspension against its pending envelope. Does not commit.
 
