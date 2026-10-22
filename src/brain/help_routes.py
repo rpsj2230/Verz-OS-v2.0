@@ -159,12 +159,27 @@ class AlertStepsView(BaseModel):
     escalate_after_minutes: int
 
 
+class EscalationRungView(BaseModel):
+    """One rung of the ladder an alert climbs when the rung below cannot fix it (M37.5.2.3)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    who: str
+    can_do: str
+    may_be_told: str
+    #: How this rung is reached, when it is outside the install: the contact the company entered,
+    #: or the sentence saying none has been entered. Empty for a rung inside the install.
+    reached_by: str
+
+
 class AlertRunbookView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     control: str
     guards: str
     steps: list[AlertStepsView]
+    #: The ladder after the on-call rung, in order, ending at the supplier.
+    escalation: list[EscalationRungView]
 
 
 class AlertLink(BaseModel):
@@ -346,6 +361,41 @@ async def alert_index(asked: Asked) -> AlertIndexView:
     )
 
 
+NO_SUPPLIER_CONTACT_ENTERED: Final = (
+    "No way to reach the supplier has been entered, so this step has nobody under it. Enter one on "
+    "Install, Settings, under How to reach the supplier."
+)
+
+
+def escalation_rungs(contact: str | None = None) -> list[EscalationRungView]:
+    """The ladder from the first rung above whoever is on call, with the supplier's contact read
+    from the one place installation values are read, and a sentence saying so when it is unset.
+
+    `contact` is a parameter so a test can ask at more than one setting. The last rung is shown
+    either way: a ladder that hid its top rung because nobody had entered a contact would read as
+    complete, which is the failure `brain.ops.alerting.escalation_gaps` was written about.
+    """
+    from brain.install import value_of
+    from brain.ops.alerting import SUPPLIER_CONTACT_SETTING, Tier, escalation_path, supplier_step
+
+    entered = (value_of(SUPPLIER_CONTACT_SETTING) if contact is None else contact).strip()
+    rungs: list[EscalationRungView] = []
+    for step in escalation_path(from_tier=Tier.INSTALLATION_OWNER):
+        reached = ""
+        if step.reached_by:
+            usable = entered and entered != "unset"
+            reached = supplier_step(entered) if usable else NO_SUPPLIER_CONTACT_ENTERED
+        rungs.append(
+            EscalationRungView(
+                who=step.tier.name.replace("_", " ").lower(),
+                can_do=step.can_do,
+                may_be_told=step.may_be_told,
+                reached_by=reached,
+            )
+        )
+    return rungs
+
+
 @router.get("/help/alerts/{control}", response_model=AlertRunbookView, responses=COMMON_RESPONSES)
 async def alert_runbook(
     control: Annotated[str, RoutePath(pattern=KEY_PATTERN)], asked: Asked
@@ -365,7 +415,9 @@ async def alert_runbook(
                 escalate_after_minutes=int(book.escalate_after.total_seconds() // 60),
             )
         )
-    return AlertRunbookView(control=named.name, guards=named.guards, steps=steps)
+    return AlertRunbookView(
+        control=named.name, guards=named.guards, steps=steps, escalation=escalation_rungs()
+    )
 
 
 @router.get("/help/playbook", response_model=PlaybookView, responses=COMMON_RESPONSES)

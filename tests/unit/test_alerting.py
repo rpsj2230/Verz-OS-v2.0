@@ -361,7 +361,7 @@ def test_the_supplier_contact_is_a_setting_and_this_module_holds_no_address() ->
     theirs. `SUPPLIER_CONTACT_SETTING` is a name; the value arrives as a parameter, so there
     is nowhere in the module for an address to be written down.
     """
-    assert SUPPLIER_CONTACT_SETTING == "support_contact"
+    assert SUPPLIER_CONTACT_SETTING == "INSTALL_SUPPORT_CONTACT"
     line = supplier_step("whatever the installation was told")
     assert "whatever the installation was told" in line
     assert Tier.SUPPLIER.name in line
