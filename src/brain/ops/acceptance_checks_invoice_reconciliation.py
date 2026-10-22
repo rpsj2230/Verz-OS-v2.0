@@ -109,6 +109,7 @@ async def metered_spend_is_held_against_a_providers_invoice(
     from brain.ops.price_store import set_price_statement
     from brain.report_routes import money_and_clock
     from brain.spend_detail_routes import spend_by_provider
+    from brain.tables.audit import attributed_to
     from brain.tables.spend import SpendActualRow
 
     code, _zone = money_and_clock()
@@ -128,7 +129,12 @@ async def metered_spend_is_held_against_a_providers_invoice(
     price = Price(input_minor=Decimal(1), output_minor=Decimal(1), currency="USD")
 
     async def priced(under: str) -> None:
-        await h.execute(*h.attributed(), set_price_statement(under, model, price, by=h.actor))
+        await h.execute(
+            *attributed_to(
+                actor_id=company, ent_hash=(await h.reach(company)).ent_hash(), trace_id=h.trace_id
+            ),
+            set_price_statement(under, model, price, by=company),
+        )
 
     async def recorded(cost: int, at: datetime, trace: str) -> None:
         async with h.sessions() as session:
