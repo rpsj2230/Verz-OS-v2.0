@@ -14,7 +14,7 @@
  */
 
 import { useResource } from "../../api/useResource";
-import { EmptyList, FailureState, SectionCard } from "../../components/kit";
+import { EmptyList, FailureState, LoadingState, SectionCard } from "../../components/kit";
 import { milliseconds, ratePercent } from "../serviceLevelsQuery";
 import { Quiet } from "./reportParts";
 import type { components } from "../../api/schema";
@@ -24,6 +24,7 @@ export type LoadRunsBody = components["schemas"]["LoadRunsView"];
 export const LOAD_RUNS_PATH = "/report/service-levels/load-runs";
 export const LOAD_RUNS_HEADING = "Peak load runs";
 export const LOAD_RUNS_LEDE = "Each run of the peak load test on this install, with each lane's figures beside what it promises.";
+export const LOADING_LOAD_RUNS = "Loading the peak load runs.";
 export const NO_LOAD_RUNS = "No peak run has been kept";
 export const HELD = "Held every objective";
 export const DID_NOT_HOLD = "Did not hold every objective";
@@ -43,7 +44,9 @@ export function LoadRuns() {
     return <FailureState failure={answer.failure} />;
   }
   if (answer.data === null) {
-    return null;
+    // Said while it is asked, so a page is not finished until this card is, and two renders of one
+    // page cannot differ by whether it had arrived when they were read.
+    return <LoadingState label={LOADING_LOAD_RUNS} />;
   }
   return (
     <SectionCard title={LOAD_RUNS_HEADING} lede={LOAD_RUNS_LEDE}>
