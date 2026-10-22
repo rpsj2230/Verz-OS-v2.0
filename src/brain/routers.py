@@ -247,6 +247,11 @@ from brain.data_steward_routes import router as data_steward_router
 # `brain.data_transfer_routes`.
 from brain.data_transfer_routes import router as data_transfer_router
 
+# A department's share of the company's budget, the money moved between departments, a
+# department's per-run ceiling and the allowance of everyone in it, behind `admin:budget` held over
+# everything or over that department. See `brain.department_budget_routes`.
+from brain.department_budget_routes import router as department_budget_router
+
 # A department head's budget against pace and their department's knowledge coverage, for the
 # person who leads it and the one 404 for everybody else. See `brain.department_view_routes`.
 from brain.department_view_routes import router as department_view_router

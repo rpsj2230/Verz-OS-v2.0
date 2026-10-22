@@ -88,7 +88,7 @@ import math
 import sys
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Final
 
@@ -792,10 +792,10 @@ def resolve(
 
 # ------------------------------------------------------------ cost on the front page (M39.1.3)
 class Range(enum.StrEnum):
-    """The four windows the front page offers.
+    """The five windows the front page offers.
 
-    The three fixed lengths and month to date, which is the odd one and the reason this is
-    not a number of days: a month to date window shortens to nothing on the first of the
+    The three fixed lengths, all time, and month to date, which is the odd one and the reason
+    this is not a number of days: a month to date window shortens to nothing on the first of the
     month, and a figure that resets while a budget does not is the figure somebody reads as
     a fall in spend.
     """
@@ -804,9 +804,20 @@ class Range(enum.StrEnum):
     THIRTY_DAYS = "30d"
     NINETY_DAYS = "90d"
     MONTH_TO_DATE = "mtd"
+    #: Everything the ledger holds. Like month to date it has no length, and its start is
+    #: `ALL_TIME_BEGINS`, a date before this product existed (M21.4.4).
+    ALL_TIME = "all"
 
 
-#: How long each fixed range is. Month to date is absent deliberately: it has no length.
+#: Where the all-time range starts: before any run this product could have recorded, so it reads
+#: from the first row without naming one. A fixed instant and not the ledger's oldest row, because
+#: the oldest row moves when retention removes one and a range whose start moves is a figure
+#: that falls for no reason anybody did.
+ALL_TIME_BEGINS: Final = datetime(2000, 1, 1, tzinfo=UTC)
+
+
+#: How long each fixed range is. Month to date and all time are absent deliberately: neither
+#: has a length.
 #:
 #: The middle one is `brain.ops.budgets.DAYS_IN_BUDGET_MONTH` rather than a thirty written
 #: here, and the longest is three of them. A month range that did not agree with the month a
@@ -849,6 +860,8 @@ def window(one: Range, now: datetime) -> tuple[datetime, datetime]:
         raise WorkspaceError(msg)
     if one is Range.MONTH_TO_DATE:
         return _month_start(now), now
+    if one is Range.ALL_TIME:
+        return ALL_TIME_BEGINS, now
     return now - timedelta(days=RANGE_DAYS[one]), now
 
 
@@ -1257,7 +1270,7 @@ def workspace_gaps(
     )
 
     for one_range in ranges:
-        if one_range is not Range.MONTH_TO_DATE and one_range not in RANGE_DAYS:
+        if one_range not in (Range.MONTH_TO_DATE, Range.ALL_TIME) and one_range not in RANGE_DAYS:
             gaps.append(
                 f"{one_range.value} has no length, so selecting it raises at the moment "
                 "somebody asks for a figure rather than when the range was added"
