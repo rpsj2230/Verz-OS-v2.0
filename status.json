@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-22T05:35:54.401425+00:00",
-  "commit": "708c9c62",
-  "commit_subject": "5 more tasks are proved on the install by the newest complete acceptance run",
+  "generated_at": "2026-10-22T05:37:57.701692+00:00",
+  "commit": "5365b9bf",
+  "commit_subject": "The browser read-back gap is on the Needs you page: asking a system of record about one named record (#683)",
   "total": 1626,
   "done": 1233,
   "percent": 75.8,
