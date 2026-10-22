@@ -43,6 +43,17 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         currency: "XXX",
       },
       "/api/v1/report/spend/stops": { stops: [] },
+      // Metered spend per provider for last month, so the invoice card draws its list and form.
+      "/api/v1/report/spend/providers": {
+        since: "2019-02-01",
+        until: "2019-03-01",
+        currency: "XXX",
+        withheld: false,
+        providers: [{ provider: UNBROKEN, requests: 3, metered_minor: 700, reconciliation: null }],
+        not_attributed_minor: 0,
+        not_attributed_requests: 0,
+        told: "A cost row names its model and not its provider.",
+      },
     },
   },
 };

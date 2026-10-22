@@ -2140,9 +2140,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M21.4.1": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No code reconciles spend to a provider invoice. models/pricing.py holds the install's own prices; no invoice figure input, tolerance or difference display found (grep invoice/reconcil in src).",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: GET /report/spend/providers sums what the ledger recorded for a billing period (UTC days) by the provider each model is priced under, and with one provider's invoice typed in holds it against the metered spend in the invoice's own currency (the rate typed, never fetched), shows the difference and whether it is inside the stated two per cent, and a card under the Spend report draws it. What no provider can be given is its own line. Nothing is stored. Install check metered_spend_is_held_against_a_providers_invoice. On the install: open Spend, press nothing, read last month per provider; type a provider's real invoice total for the same month, its currency and, if it is not the install's currency, the rate the invoice states; the card says whether it reconciles and by how much it differs. Needs the install's currency set and a price set for the provider's models.",
+    updated: "2026-10-22",
   },
   "M22.2.2": {
     status: "READY FOR TESTING",

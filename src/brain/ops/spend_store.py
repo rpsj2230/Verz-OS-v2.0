@@ -36,7 +36,7 @@ filter is `may_read_spend`, which a predicate would be a second implementation o
 handed a row: the recorder decides which request a row is and holds it to one. The refresh's
 caller is the worker's schedule, through `brain.ops.schedule_runner`.
 
-Task ids: M36.1.3.1, M36.1.3.2, M21.3.4, M27.12.5
+Task ids: M36.1.3.1, M36.1.3.2, M21.3.4, M27.12.5, M21.4.1
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ import asyncio
 from collections.abc import Callable
 from datetime import datetime
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from brain.console.spend_report_view import SpendDay
@@ -120,6 +120,29 @@ async def recorded_since(session: AsyncSession, since: datetime) -> tuple[Actual
         select(SpendActualRow).where(SpendActualRow.at >= since).order_by(SpendActualRow.at)
     )
     return tuple(actual_from(one) for one in found.scalars().all())
+
+
+async def costs_by_model_between(
+    session: AsyncSession, since: datetime, until: datetime
+) -> tuple[tuple[str, int, int], ...]:
+    """What the ledger recorded in `[since, until)`, as `(model, requests, cost_minor)` by model.
+
+    Summed in the database over a window the caller names, so a billing period is one grouped read
+    and never the ledger brought into memory. Every traffic class is counted, machine traffic
+    included, because a provider's invoice does not leave a nightly sync out. See
+    `brain.ops.reconcile`.
+    """
+    found = await session.execute(
+        select(
+            SpendActualRow.model,
+            func.count(),
+            func.coalesce(func.sum(SpendActualRow.cost_minor), 0),
+        )
+        .where(SpendActualRow.at >= since, SpendActualRow.at < until)
+        .group_by(SpendActualRow.model)
+        .order_by(SpendActualRow.model)
+    )
+    return tuple((str(model), int(requests), int(cost)) for model, requests, cost in found.all())
 
 
 async def question_shape_report(
