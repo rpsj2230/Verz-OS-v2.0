@@ -4321,8 +4321,8 @@ const PROGRESS = {
   },
   "M42.5.14": {
     status: "READY FOR TESTING",
-    why: "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): sign_in_routes.py POST /setup/sign-in (FINISH_PATH) binds the first administrator and signs them in; FirstRun.tsx lands in the console; vault_setup.py and install_settings.py leave nothing to configure; tests test_sign_in_routes.py, test_console_served.py, test_vault_setup.py, first-run.test.tsx. NEXT: Prove on the fresh-install walk; a check can assert that after first run the ask route answers (see M42.6.3).",
-    updated: "2026-10-13",
+    why: "BUILT AND WIRED, AND NOW NAMED BY AN INSTALL CHECK (acceptance_checks_first_run_walk): POST /setup/sign-in verifies a token signed by a realm key the check holds, binds its subject to the person holding the first administrator's grants once the setup code is right, that token then signs the person in, and a wrong code, a non-administrator and an install with a sign-in already bound are refused in the same words. The one stand-in is the count of sign-ins already bound, which a finished install cannot report as none; the closed half is asked of the real store. NOT SHOWN: a sign-in at the real Keycloak, which is the fresh-install walk.",
+    updated: "2026-10-23",
   },
   "M42.5.15": {
     status: "READY FOR TESTING",
@@ -4351,8 +4351,8 @@ const PROGRESS = {
   },
   "M42.5.7": {
     status: "READY FOR TESTING",
-    why: "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): connectors/staff_directories.py and setup_staff_routes.py (registered in routers.py) offer Google Workspace, Microsoft, Lark or a spreadsheet, sign in and pull the list; console StaffListCheck.tsx and setup/staffList.ts; tests test_staff_directories.py, test_setup_staff_routes.py, first-run-staff-list.test.tsx. NEXT: A check can call the staff-source listing for the configured source; the sign-in half belongs to the fresh-install walk.",
-    updated: "2026-10-13",
+    why: "BUILT AND WIRED, AND NOW NAMED BY AN INSTALL CHECK (acceptance_checks_first_run_walk): the staff list screen offers Google Workspace, Microsoft Entra and Lark with the return path, builds the vendor's own sign-in address, reads a list from a spreadsheet and from a directory (answers written in the check) and says who a first run would add, refuses a bad secret in words, and refuses a wrong setup code the way an install with none is refused, before anything is sent. NOT SHOWN BY THE CHECK: signing in at a real vendor with a real application, which is a person-run step on the fresh-install walk (register the application as docs/install/authentication.md says, then use the staff list screen on first run).",
+    updated: "2026-10-23",
   },
   "M42.5.8": {
     status: "READY FOR TESTING",
@@ -4361,8 +4361,8 @@ const PROGRESS = {
   },
   "M42.5.9": {
     status: "READY FOR TESTING",
-    why: "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): wizard connections step (slug list) plus console ConnectSourcesStep.tsx and ConnectSource.tsx connect sources from first run, and the Connectors pages repeat it later (connector_routes.py, ops/connector_store.py); tests console/tests/first-run.test.tsx. NEXT: Check naming M42.5.9 that lists the connector catalogue and one connection on a furnished install via connector_routes.",
-    updated: "2026-10-13",
+    why: "BUILT AND WIRED, AND NOW NAMED BY AN INSTALL CHECK (acceptance_checks_first_run_sources): the connections step keeps the sources a person names and sets no installation value, refuses a name no source could have, the Connectors screen it hands on to lists every source the console connects with its form and steps, and a source connected in the console's own request is then listed as connected. The vault is a stand-in held by the check. NOT SHOWN: the browser drawing of the step (console/tests/first-run.test.tsx holds that) and a real vendor accepting the key.",
+    updated: "2026-10-23",
   },
   "M42.6.2": {
     status: "READY FOR TESTING",
@@ -4381,13 +4381,13 @@ const PROGRESS = {
   },
   "M42.6.5": {
     status: "READY FOR TESTING",
-    why: "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): connector_routes.py, ops/connector_admin.py, connector_store.py, ops/credentials.py and openbao.py hold the credential in the vault, console/connector_trust.py shows what it reads, connectors/SourceFlow.tsx draws it; tests test_connector_routes.py, test_connector_trust.py and others. NEXT: Name M42.6.5 on the connector install checks that connect, vault-hold and show trust (acceptance_checks_connectors*.py), or write one that does all three.",
-    updated: "2026-10-13",
+    why: "BUILT AND WIRED, AND NOW NAMED BY AN INSTALL CHECK (acceptance_checks_first_run_sources): a key typed into the connect request is kept at the vault slot the source's declaration names, is in no response, list, stored setting or ledger entry of the run, the list says a key is held and what the source is trusted to read, and a blank key and an install with no vault each write nothing. The vault is a stand-in the check owns. NOT SHOWN: a real OpenBao accepting the write, which is ops/openbao/REHEARSAL.md on a server.",
+    updated: "2026-10-23",
   },
   "M42.6.6": {
     status: "READY FOR TESTING",
-    why: "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): ops/install/windows/install-from-windows.ps1 and .cmd are generated and held by deployment/windows_helper.py (asks five questions, runs the documented command over ssh.exe); release.yml carries them; test_windows_helper.py. NEXT: Static check that the shipped helper equals windows_helper output; the double-click run is a person-run step on Windows.",
-    updated: "2026-10-13",
+    why: "BUILT AND WIRED, AND NOW HELD BY TWO INSTALL CHECKS (acceptance_checks_windows_helper). The first runs everywhere: the command the helper builds equals the install guide's one command and speaks only flags the installer declares, and the helper's guide names both files and every size. The second reads the shipped script and launcher (five questions in order, the installer's sizes, a launcher that starts only the script, plain ASCII) and is NOT RUN on an image that does not carry ops/install, which a worker's does not; run it from a clone. NOT SHOWN: the double-click run on a Windows computer against a real server, which has never happened and is a person-run step (docs/install/windows.md).",
+    updated: "2026-10-23",
   },
   "M5.7.3": {
     status: "OPEN",
