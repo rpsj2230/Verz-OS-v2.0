@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-23T05:09:51.501005+00:00",
-  "commit": "5f28d951",
-  "commit_subject": "Four install checks make their own state: queue, dead letters, the retention dry run and the control alert (M17.1.2, M17.1.5, M25.4.1, M17.7.2, M37.5.1.3, M37.5.2.1) (#696)",
+  "generated_at": "2026-10-23T06:21:24.055835+00:00",
+  "commit": "01be9917",
+  "commit_subject": "6 more tasks are proved on the install by the newest complete acceptance run",
   "total": 1626,
-  "done": 1247,
-  "percent": 76.7,
+  "done": 1253,
+  "percent": 77.1,
   "built": 1423,
   "built_percent": 87.5,
-  "built_unproven": 176,
+  "built_unproven": 170,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -65,8 +65,6 @@
     "M16.7.1",
     "M16.7.7",
     "M16.7.8",
-    "M17.1.2",
-    "M17.1.5",
     "M17.5.1",
     "M17.5.2",
     "M17.7.2",
@@ -78,7 +76,6 @@
     "M21.2.5",
     "M21.2.6",
     "M24.3.6",
-    "M25.4.1",
     "M26.1.1",
     "M26.1.2",
     "M26.1.3",
@@ -135,8 +132,6 @@
     "M35.3.1.1",
     "M36.1.2.3",
     "M36.2.4.3",
-    "M37.5.1.3",
-    "M37.5.2.1",
     "M38.2.2.3",
     "M38.2.2.4",
     "M38.2.2.5",
@@ -175,7 +170,6 @@
     "M42.5.4",
     "M42.5.7",
     "M42.5.8",
-    "M42.5.9",
     "M42.6.5",
     "M42.6.6",
     "M5.6.5",
@@ -254,10 +248,10 @@
       "wave": 4,
       "name": "Doing, lifecycle, extensions",
       "total": 232,
-      "done": 146,
-      "percent": 62.9,
+      "done": 149,
+      "percent": 64.2,
       "in_progress": 37,
-      "ready_for_testing": 30,
+      "ready_for_testing": 27,
       "blocked": 18,
       "open": 1,
       "acts": 0,
@@ -269,10 +263,10 @@
       "wave": 5,
       "name": "Hands, delivery, go-live",
       "total": 217,
-      "done": 120,
-      "percent": 55.3,
+      "done": 123,
+      "percent": 56.7,
       "in_progress": 37,
-      "ready_for_testing": 29,
+      "ready_for_testing": 26,
       "blocked": 20,
       "open": 11,
       "acts": 42,
@@ -472,7 +466,7 @@
       "name": "Automation and the task lane",
       "wave": 4,
       "total": 41,
-      "done": 24,
+      "done": 26,
       "acts": 0,
       "decided": 0,
       "built": 29
@@ -552,7 +546,7 @@
       "name": "Retention, deletion, export, DSAR",
       "wave": 4,
       "total": 17,
-      "done": 6,
+      "done": 7,
       "acts": 0,
       "decided": 0,
       "built": 7
@@ -672,7 +666,7 @@
       "name": "Migration, launch and handover",
       "wave": 5,
       "total": 45,
-      "done": 32,
+      "done": 34,
       "acts": 41,
       "decided": 4,
       "built": 34
@@ -722,7 +716,7 @@
       "name": "Client deployment template",
       "wave": 5,
       "total": 64,
-      "done": 28,
+      "done": 29,
       "acts": 0,
       "decided": 0,
       "built": 42
@@ -1084,8 +1078,10 @@
     "M16.7.4",
     "M16.7.5",
     "M16.7.6",
+    "M17.1.2",
     "M17.1.3",
     "M17.1.4",
+    "M17.1.5",
     "M17.2.2",
     "M17.2.4",
     "M17.2.5",
@@ -1234,6 +1230,7 @@
     "M25.1.5",
     "M25.2.3",
     "M25.3.1",
+    "M25.4.1",
     "M26.1.4",
     "M26.2.2",
     "M26.2.3",
@@ -1665,7 +1662,9 @@
     "M37.4.3.5",
     "M37.5.1.1",
     "M37.5.1.2",
+    "M37.5.1.3",
     "M37.5.1.4",
+    "M37.5.2.1",
     "M37.5.2.2",
     "M37.5.2.3",
     "M37.6.1.3",
@@ -1890,6 +1889,7 @@
     "M42.5.15",
     "M42.5.2",
     "M42.5.6",
+    "M42.5.9",
     "M42.6.1",
     "M42.6.2",
     "M42.6.3",
@@ -2421,16 +2421,6 @@
       "why": "TRIAGE 2026-10-13 class 2 (partly built): ops/jobs.py has JobState, advance, JobRecord, next_attempt_at, worst_case_runs (test_jobs) but no table of ours: the docstring says nothing persists it. The real job rows are Procrastinate's (ops/queue.py); the Jobs screen (jobs_routes) lists scheduled controls and their runs, not JobState rows. NEXT: map the driver's job rows onto JobState in the Jobs/Live runs read, or decide the driver's own states are the job table and retire the model; then a check reading GET /jobs",
       "updated": "2026-10-13"
     },
-    "M17.1.2": {
-      "status": "READY FOR TESTING",
-      "why": "BUILT and wired: ops/queue.py register_task, enqueue_job, queue_app and the worker's run_shards. Its install check now exists: a_job_put_on_the_install_s_queue_is_fetched_and_run_by_a_worker puts a job of its own on the install's queue (the one traffic class allocated no slots, so no worker of the install drains it), starts a worker of its own with the figures the queue derives for a shard, sees the task run once with the arguments it carried and the queue record it succeeded, and removes every row it made by name. PROOF ON THE INSTALL: 1. Open Install, Acceptance (or press Run now on Scheduled jobs). 2. The check above shows passed on the next run. It shows not run, in words, only where this process names no queue connection, the queue refuses the connection it would open, or the queue's tables are not there yet. Not shown by this check: that the install's own worker is up and draining its queues, which the worker heartbeat and the Scheduled jobs screen say.",
-      "updated": "2026-10-23"
-    },
-    "M17.1.5": {
-      "status": "READY FOR TESTING",
-      "why": "BUILT and wired: GET /jobs/dead lists the jobs the recovery sweep set aside, narrowed per row, with no count. Its install check no longer waits for the install to have a failure: a_job_set_aside_is_listed_to_those_who_may_see_it puts a job of its own on the queue, lets its task raise, sets it aside through the call the recovery sweep makes (DriverQueue.keep_aside), reads the list through the route as a holder of the dead-letter capability and as a person with no grant, and removes the job, its events and its dead-letter row by name. PROOF ON THE INSTALL: 1. Open Install, Acceptance. 2. The check above shows passed on the next run, on an install that has set nothing aside. 3. It shows not run only where the queue is not reachable or not installed (same sentences as the queue check). The run-again control on the same screen is the separate job_redrive switch and is not shown by this check.",
-      "updated": "2026-10-23"
-    },
     "M17.2.1": {
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 2 (partly built): ops/checkpoint_store.py install_checkpointer is called by ops/worker.py at start (schema plus row-level security) and guarded_saver exists with ownership checks (test_checkpoint_store). Nothing compiles a graph, so guarded_saver has no caller and no run saves state. NEXT: wire guarded_saver into the first graph the agent runtime compiles (orchestration/plan or gate/runtime), then a check that a run's state is read back",
@@ -2670,11 +2660,6 @@
       "status": "IN PROGRESS",
       "why": "TRIAGE 2026-10-13 class 3 (built, not wired): ops.export.knowledge_export keeps each item's scope and is tested (test_export) but has no caller; data_transfer catalogue knowledge runs=False (needs 108 decided: build it). NEXT: Wire knowledge_export into a data_transfer route (needs 108) reading know.item through the reader's scope; set runs=True; then check.",
       "updated": "2026-10-13"
-    },
-    "M25.4.1": {
-      "status": "READY FOR TESTING",
-      "why": "BUILT and wired: the retention sweep is report-only until a person releases it, POST /govern/retention/release names the report, and a ledger row records it. Its install check was not run on a real install because it counted the stores as the application's login, which is refused a table (measured: permission denied for obs.trace_step); it now counts as the owner, as the worker does (Settings.owner_database_url), on a read-only connection, so the same report-only sweep runs. PROOF ON THE INSTALL: 1. Open Install, Acceptance. 2. a_dry_run_removes_nothing_until_a_person_releases_the_sweep passes on the next run. It still says not run if the sweep is already released on this install (withdraw the release from the Retention screen first) or if the owner's login cannot be opened from the process running the check.",
-      "updated": "2026-10-23"
     },
     "M25.4.2": {
       "status": "IN PROGRESS",
@@ -3356,16 +3341,6 @@
       "why": "PARTLY BUILT: POST /migration/learning re-derives each conclusion a person drew from an old memory file through the ordinary tier rules and returns the derivations (learning.re_derive). NOT BUILT: filing each derivation into the memory proposal queue, which would put a proposal in front of a reviewer. NEXT: a call from the route into agent_memory_routes' queue behind its own switch.",
       "updated": "2026-10-20"
     },
-    "M37.5.1.3": {
-      "status": "READY FOR TESTING",
-      "why": "BUILT (under M17.7.2) and claimed by its install check: brain.control_not_run_told tells whoever holds the operations alert, once per episode, when a safety mechanism has not run in its window. The check switches the feature on in its own rolled-back transaction, so it passes on an install that has left it off and writes nothing to the install's switch. PROOF ON THE INSTALL: 1. Open Install, Acceptance. 2. a_mechanism_that_has_not_run_is_told_to_whoever_holds_the_alert passes on the next run. 3. To see it live, turn Tell whoever holds the alert when a safety mechanism has not run on under Features (it ships off), then stop the worker for longer than a control's window: the holder is told once in the chat tool they last used.",
-      "updated": "2026-10-23"
-    },
-    "M37.5.2.1": {
-      "status": "READY FOR TESTING",
-      "why": "BUILT (under M17.7.2): the severity of each control's alert decides who is told, through alerting.route_for: everyone holding the operations alert, and the incident capability's holders too for an alert that wakes somebody, each only if they may open Incidents. PROOF ON THE INSTALL: the same check as M37.5.1.3 passes on the next run, with the feature still off on the install; it shows that a holder who cannot open Incidents, and a person who holds nothing, are told nothing.",
-      "updated": "2026-10-23"
-    },
     "M37.5.3.1": {
       "status": "IN PROGRESS",
       "why": "NEEDS THE OWNER (needs-rupash 266): the comparison is built (spend_view.cost_review) but there is no stored projection to compare with and no per-question estimate beside the actual cost. Not built until the owner says where the projection comes from; nothing is claimed.",
@@ -3676,11 +3651,6 @@
       "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): setup_wizard.py model_provider step takes a provider and key (key held in the vault) via _provider_rule; MODEL_PROFILES still lists 'local', but needs-rupash 80 decided hosted providers only (no local-only profile wanted); test_setup_wizard.py. NEXT: Check reads that the install's provider slot is held in the vault; the 'local-only' half is decided out by item 80 (register REQ-42 records it).",
       "updated": "2026-10-13"
     },
-    "M42.5.9": {
-      "status": "READY FOR TESTING",
-      "why": "BUILT AND WIRED, AND NOW NAMED BY AN INSTALL CHECK (acceptance_checks_first_run_sources): the connections step keeps the sources a person names and sets no installation value, refuses a name no source could have, the Connectors screen it hands on to lists every source the console connects with its form and steps, and a source connected in the console's own request is then listed as connected. The vault is a stand-in held by the check. NOT SHOWN: the browser drawing of the step (console/tests/first-run.test.tsx holds that) and a real vendor accepting the key.",
-      "updated": "2026-10-23"
-    },
     "M42.5.10": {
       "status": "READY FOR TESTING",
       "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): setup_wizard.py:review builds a ReviewLine per setting and apply_install writes everything at once through POST /setup/appointment (setup_routes.py); console FirstRun.tsx draws the review screen; tests test_setup_wizard.py, test_setup_routes.py, test_install_settings.py. NEXT: A check cannot run it after first run (the wizard is closed); prove it on the fresh-install walk, or check review() over a sample draft.",
@@ -3774,11 +3744,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 0,
+  "closed_today": 6,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "01be991",
+      "at": "2026-10-23T06:13:30+00:00",
+      "subject": "6 more tasks are proved on the install by the newest complete acceptance run",
+      "closed": "M17.1.2,M17.1.5,M25.4.1,M37.5.1.3,M37.5.2.1,M42.5.9"
+    },
     {
       "sha": "4a8aada",
       "at": "2026-10-22T13:24:44+00:00",
@@ -3892,12 +3868,6 @@
       "at": "2026-10-21T06:48:05+00:00",
       "subject": "A person can ask for their data to be deleted, and the retention owner sees who has asked (M40.4.2.3, switch off, migration 0273) (#661)",
       "closed": "M40.4.2.3"
-    },
-    {
-      "sha": "9d620c2",
-      "at": "2026-10-21T06:30:05+00:00",
-      "subject": "Adoption is wired: a first connector, starter questions from what indexed, and a per-department coverage statement (M34.1.1.1, M34.1.1.2, M34.1.2.1, M34.1.2.2, M34.1.2.3) (#660)",
-      "closed": "M34.1.1.1,M34.1.1.2,M34.1.2.1,M34.1.2.2,M34.1.2.3"
     }
   ]
 }
