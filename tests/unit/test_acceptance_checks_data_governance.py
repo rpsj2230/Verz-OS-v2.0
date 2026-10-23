@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -201,3 +201,107 @@ def test_an_export_handed_over_unrecorded_fails_the_export_check(
     monkeypatch.setattr(StoredExports, "record_report", nothing)
     assert thread_routes is not None
     assert "no record" in _failed(install, EXPORT)
+
+
+def test_the_report_only_run_counts_as_the_owner_on_a_read_only_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**The connection the dry run opens, seen without a database.** An install that names the
+    application's login in `BRAIN_DATABASE_URL` keeps the owner's in `BRAIN_MIGRATION_DATABASE_URL`,
+    and the sweep must be handed the owner's, read-only, or the check says it cannot count. Delete
+    this and the check goes back to the application's login, which an install with a narrow
+    `brain_app` cannot count with, so M25.4.1 is never shown there."""
+    from types import SimpleNamespace
+
+    import psycopg
+
+    from brain.ops import acceptance_checks_data_governance as module
+
+    opened: list[Any] = []
+
+    class Connection:
+        read_only = False
+
+        def __enter__(self) -> Connection:
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            return None
+
+    def connect(conninfo: str, **kwargs: Any) -> Connection:
+        one = Connection()
+        opened.append((conninfo, one))
+        return one
+
+    seen: list[bool] = []
+
+    def executor(conn: Connection, *, holds: Any) -> str:
+        seen.append(conn.read_only)
+        return "executor"
+
+    def sweep(given: Any, *, now: Any, report_only: bool) -> tuple[Any, bool]:
+        return given, report_only
+
+    monkeypatch.setattr(psycopg, "connect", connect)
+    settings = settings_from(
+        {
+            "BRAIN_DATABASE_URL": "postgresql://brain_app:x@db.invalid:5432/brain",
+            "BRAIN_MIGRATION_DATABASE_URL": "postgresql://brain_owner:x@db.invalid:5432/brain",
+        }
+    )
+    got = asyncio.run(
+        module._dry_run(cast(Any, SimpleNamespace(settings=settings)), executor, sweep)
+    )
+    assert got == ("executor", True)
+    [(conninfo, _)] = opened
+    assert "brain_owner" in conninfo and "brain_app" not in conninfo
+    assert seen == [True]
+
+
+def _dry_run_with(url: str, env: dict[str, str]) -> tuple[str, str]:
+    """The dry-run check alone, on the install `url` names, with the process's settings `env`."""
+    from brain.db import normalise_database_url
+
+    settings = settings_from(env)
+    checks = [one for one in registered((MODULE,)) if one.name == DRY_RUN]
+    _, results = asyncio.run(
+        acceptance_run.run_acceptance(
+            normalise_database_url(url),
+            settings=settings,
+            commit="abc1234",
+            checks=checks,
+            force=True,
+        )
+    )
+    [only] = results
+    return only.outcome, only.reason
+
+
+@pytest.mark.needs_db
+def test_on_an_install_naming_the_application_login_the_dry_run_counts_as_the_owner(
+    install: str,
+) -> None:
+    """**The install the check could never be shown on.** The process names a login that holds the
+    application's role in `BRAIN_DATABASE_URL` and the owner's in `BRAIN_MIGRATION_DATABASE_URL`.
+    Counted as the application the sweep is refused a table (measured: permission denied for
+    `obs.trace_step`) and the check is not run; counted as the owner, as the worker counts, it
+    passes. Delete this and a change back to the application's login passes every test here, where
+    the database is a superuser, and M25.4.1 is never shown on a real install."""
+    import os
+    from urllib.parse import urlsplit, urlunsplit
+
+    from tests.fixtures.scratch_postgres import sql
+
+    role = f"acceptance_app_{os.getpid()}"
+    sql(install, f"CREATE ROLE {role} LOGIN IN ROLE brain_app")
+    try:
+        parts = urlsplit(install)
+        app = urlunsplit(parts._replace(netloc=f"{role}@{parts.hostname}:{parts.port}"))
+        counted = _dry_run_with(
+            install, {"BRAIN_DATABASE_URL": app, "BRAIN_MIGRATION_DATABASE_URL": install}
+        )
+        refused = _dry_run_with(install, {"BRAIN_DATABASE_URL": app})
+    finally:
+        sql(install, f"DROP ROLE {role}")
+    assert counted == (PASSED, "")
+    assert refused == (NOT_RUN, THE_SWEEP_CANNOT_COUNT_HERE)

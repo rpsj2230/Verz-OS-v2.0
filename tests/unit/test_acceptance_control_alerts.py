@@ -19,7 +19,7 @@ from typing import Any
 
 import pytest
 
-from brain.ops.acceptance import FAILED, NOT_RUN, PASSED, Check, check_modules, registered
+from brain.ops.acceptance import FAILED, PASSED, Check, check_modules, registered
 from tests.unit.test_acceptance import ROOT, at_head, checks_in, counts
 from tests.unit.test_acceptance_templates import run_checks
 
@@ -48,37 +48,51 @@ def test_the_checks_leaf_is_a_leaf_of_the_work_breakdown() -> None:
     assert set(mine()[ALERT].leaves) <= leaves
 
 
-def switched_on(monkeypatch: pytest.MonkeyPatch) -> None:
-    import brain.control_not_run_told as told
-
-    async def on(_: Any) -> bool:
-        return True
-
-    monkeypatch.setattr(told, "control_alerts_are_on", on)
-
-
 @pytest.mark.needs_db
-def test_while_the_feature_ships_off_the_check_says_it_was_not_run_and_writes_nothing() -> None:
-    """**The state every install is in until somebody switches it on.** The check says in words why
-    it asked nothing, rather than passing. Delete this and a feature nobody switched on reads as a
-    passing check, or fails the install's suite."""
-    import brain.ops.acceptance_checks_control_alerts as module
+def test_while_the_install_ships_the_feature_off_the_check_passes_and_leaves_it_off() -> None:
+    """**The state every install is in until somebody switches it on.** The check switches the
+    feature on in its own transaction, shows the telling, and the install's switch is not written:
+    no settings row for it exists afterwards. Delete this and the check goes back to waiting for an
+    administrator to switch the feature on, so three leaves are never shown on a fresh install, or
+    it leaves the feature on behind it."""
+    from brain.ops.features_declared.control_not_run_alerts import CONTROL_NOT_RUN_ALERTS
+    from tests.fixtures.scratch_postgres import sql
 
     with at_head("brain_acceptance_control_alerts_off") as url:
         before = counts(url)
         outcome = run_checks(url, tuple(mine().values()))
         after = counts(url)
-    assert outcome == {ALERT: (NOT_RUN, module.THE_ALERTS_ARE_SWITCHED_OFF)}
+        left = sql(
+            url, "SELECT count(*) FROM ops.setting WHERE key = %s", CONTROL_NOT_RUN_ALERTS.key
+        )
+    assert outcome == {ALERT: (PASSED, "")}
     assert after == before
+    assert left == [(0,)]
 
 
 @pytest.mark.needs_db
-def test_on_a_real_database_the_control_alert_check_passes_and_nothing_is_left_behind(
+def test_a_switch_that_does_not_turn_the_alert_on_fails_the_check_in_words(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """The switch helper doing nothing, so the function under test still reads the feature as off.
+    Delete this and the check can come back passed, or not run, beside an alert it never asked
+    for."""
+    import brain.ops.acceptance_checks_control_alerts as module
+    import brain.ops.acceptance_switch as switch_module
+
+    async def nothing(*args: Any, **kwargs: Any) -> None:
+        return None
+
+    monkeypatch.setattr(switch_module, "switched", nothing)
+    with at_head("brain_acceptance_control_alerts_stays_off") as url:
+        outcome = run_checks(url, (mine()[ALERT],))
+    assert outcome[ALERT] == (FAILED, module.THE_ALERTS_STAYED_OFF)
+
+
+@pytest.mark.needs_db
+def test_on_a_real_database_the_control_alert_check_passes_and_nothing_is_left_behind() -> None:
     """**The check as the worker runs it, against PostgreSQL at head.** Delete this and the alert
     can stop reaching people with nothing on the owner's install saying so."""
-    switched_on(monkeypatch)
     with at_head("brain_acceptance_control_alerts") as url:
         before = counts(url)
         outcome = run_checks(url, tuple(mine().values()))
@@ -141,7 +155,6 @@ def test_the_control_alert_check_fails_where_the_product_is_broken(
     import brain.ops.acceptance_checks_control_alerts as module
 
     setup, reason = BREAKS[broken]
-    switched_on(monkeypatch)
     setup(monkeypatch)
     with at_head(f"brain_acceptance_control_alerts_{broken}") as url:
         outcome = run_checks(url, (mine()[ALERT],))
