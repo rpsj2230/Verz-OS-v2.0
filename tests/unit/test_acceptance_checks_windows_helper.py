@@ -121,7 +121,7 @@ def test_a_file_the_guide_does_not_name_fails_the_command_check(
     monkeypatch.setattr(
         windows_helper, "HELPER_LAUNCHER_PATH", "ops/install/windows/install-elsewhere.cmd"
     )
-    assert "both files" in _failed(install, COMMAND)
+    assert "launcher" in _failed(install, COMMAND)
 
 
 @pytest.mark.needs_db

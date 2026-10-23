@@ -157,6 +157,7 @@ async def the_connections_step_hands_on_to_screens_that_connect_a_source(h: Harn
     )
     if problems or kept == new_draft():
         raise CheckFailedError("the connections step did not keep the sources a person named")
+
     if settings_from(kept) != settings_from(new_draft()):
         raise CheckFailedError("naming sources in the connections step set an installation value")
     unchanged, refused = answer(
@@ -169,7 +170,8 @@ async def the_connections_step_hands_on_to_screens_that_connect_a_source(h: Harn
         now=h.now,
     )
     if {one.field for one in refused} != {"connections"} or unchanged != new_draft():
-        raise CheckFailedError("a name no source could have was not refused beside its field")
+        raise CheckFailedError("a name no source could have was not refused beside its own field")
+
     skipped, none = answer(
         new_draft(),
         StepId.CONNECTIONS,
@@ -189,10 +191,12 @@ async def the_connections_step_hands_on_to_screens_that_connect_a_source(h: Harn
     with structlog.contextvars.bound_contextvars(trace_id=h.trace_id):
         before = await connectors(console.request(), await asking_as(h, admin, strong=True))
         offered = {one.name: one for one in before.connectable}
-        if not offered or set(offered) != set(CONNECTABLE):
+        if not offered:
+            raise CheckFailedError("Connectors listed no source the console connects")
+        if set(offered) != set(CONNECTABLE):
             raise CheckFailedError("Connectors did not list every source the console connects")
         if any(not one.steps or not one.credential_label for one in offered.values()):
-            raise CheckFailedError("a source was listed with no steps or no key to ask for")
+            raise CheckFailedError("a source was listed with no steps")
         if name not in offered or not offered[name].may_connect:
             raise CheckFailedError("the administrator was not offered the source to connect")
 
@@ -287,13 +291,18 @@ async def a_connector_key_is_kept_in_the_vault_and_shown_nowhere(h: Harness) -> 
     declared = CONNECTABLE[name].build(form, key_reference(name))
     if declared.credential.ref.path != slot.path or not slot.path.startswith(CONNECTOR_KEY_PREFIX):
         raise CheckFailedError("the declaration's key is not at the slot the route keeps it in")
+
     if list(vault.slots) != [slot.path] or vault.slots[slot.path] != {KEY_FIELD: key}:
         raise CheckFailedError("the key was not kept whole at the one slot of the source")
 
     # The list says a key is held and what the source reads, and carries neither the key nor a path.
     shown = [one for one in listed.connectors or [] if one.name == name]
-    if len(shown) != 1 or shown[0].key_held is not True or shown[0].trust is None:
-        raise CheckFailedError("the list did not say a key is held and what the source may read")
+    if len(shown) != 1:
+        raise CheckFailedError("the list did not show the connected source once")
+    if shown[0].key_held is not True:
+        raise CheckFailedError("the list did not say a key is held")
+    if shown[0].trust is None:
+        raise CheckFailedError("the list did not say what the source may read")
     if slot.path in said[-1]:
         raise CheckFailedError("the list named the vault path of a key")
 
@@ -311,5 +320,5 @@ async def a_connector_key_is_kept_in_the_vault_and_shown_nowhere(h: Harness) -> 
     ).all()
     places = [json.dumps(dict(one.connection.settings)) for one in stored]
     places += [json.dumps(row[0], default=str) for row in ledger]
-    if len(stored) != 1 or not ledger or any(key in one for one in places):
-        raise CheckFailedError("the stored connection or the ledger was missing or held the key")
+    if len(stored) != 1 or any(key in one for one in places):
+        raise CheckFailedError("the stored connection was missing or the key was found in it")

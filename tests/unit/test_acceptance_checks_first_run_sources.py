@@ -104,7 +104,7 @@ def test_a_screen_that_lists_no_source_fails_the_step_check(
     step that offers a person nothing to connect."""
 
     monkeypatch.setattr("brain.connector_routes.CONNECTABLE", {})
-    assert "every source" in _failed(install, STEP)
+    assert "no source" in _failed(install, STEP)
 
 
 @pytest.mark.needs_db
@@ -392,3 +392,30 @@ def test_a_blank_key_that_is_accepted_fails_the_key_check(
     monkeypatch.setattr("brain.connector_routes.connection_problems", blank_passes)
     monkeypatch.setattr(connector_routes, "keep_credential", keeping_nothing)
     assert "blank key" in _failed(install, KEY)
+
+
+@pytest.mark.needs_db
+def test_a_list_that_hides_the_connected_source_fails_the_key_check(
+    install: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The list showing nothing after a key was kept. Delete this and M42.6.5 closes on a screen
+    that keeps a key and shows no source for it."""
+    monkeypatch.setattr("brain.connector_routes.admitted_connections", lambda *args: ())
+    assert "once" in _failed(install, KEY)
+
+
+@pytest.mark.needs_db
+def test_a_list_that_says_nothing_of_what_a_source_reads_fails_the_key_check(
+    install: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The trust row dropped from the list. Delete this and M42.6.5 closes on a screen that says a
+    key is held and not what it lets the product read."""
+    from brain import connector_routes
+
+    real = connector_routes.connected_view
+
+    def untrusted(*args: object, **kwargs: object) -> object:
+        return real(*args, **kwargs).model_copy(update={"trust": None})  # type: ignore[arg-type]
+
+    monkeypatch.setattr("brain.connector_routes.connected_view", untrusted)
+    assert "may read" in _failed(install, KEY)

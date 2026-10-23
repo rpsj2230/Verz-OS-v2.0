@@ -109,7 +109,7 @@ def test_a_secret_with_a_space_sent_on_fails_the_staff_check(
     from brain import setup_staff_routes
 
     monkeypatch.setattr(setup_staff_routes, "secret_problem", lambda secret: "")
-    assert "space" in _failed(install, STAFF)
+    assert "still gave a plan" in _failed(install, STAFF)
 
 
 @pytest.mark.needs_db
@@ -225,7 +225,7 @@ def test_a_secret_sent_in_an_address_fails_the_staff_check(
         return await real(leaking, source, **kwargs)  # type: ignore[arg-type]
 
     monkeypatch.setattr("brain.setup_staff_routes.exchange", in_the_address)
-    assert "once" in _failed(install, STAFF)
+    assert "request address" in _failed(install, STAFF)
 
 
 @pytest.mark.needs_db
@@ -313,7 +313,7 @@ def test_a_directory_that_reads_nobody_fails_the_staff_check(
         return MicrosoftEntraSource(pages=[{"value": []}])
 
     monkeypatch.setattr(setup_staff_routes, "pull", empty)
-    assert "two people" in _failed(install, STAFF)
+    assert "not read" in _failed(install, STAFF)
 
 
 @pytest.mark.needs_db
@@ -465,4 +465,120 @@ def test_a_directory_refusal_that_does_not_stop_the_trial_fails_the_staff_check(
         return await real(fetch, source, **kwargs)  # type: ignore[arg-type]
 
     monkeypatch.setattr("brain.setup_staff_routes.exchange", carrying_on)
-    assert "refusal did not stop" in _failed(install, STAFF)
+    assert "still gave a plan" in _failed(install, STAFF)
+
+
+@pytest.mark.needs_db
+def test_an_install_with_a_staff_source_already_saved_passes_the_staff_check_and_keeps_it(
+    install: str,
+) -> None:
+    """**The owner's install, which the scratch database hid.** A finished install has saved a staff
+    source, and installation values put a saved one before the one a trial is handed, so the
+    trial read the owner's source instead of the pasted list. The check sets what is saved aside
+    for its reads and puts it back. Delete this and M42.5.7 fails on every install that has
+    chosen where its staff list lives, which is every install that is finished."""
+    from brain.install import hold_saved, saved_values
+
+    saved = {
+        "INSTALL_STAFF_SOURCE": "lark",
+        "INSTALL_STAFF_SOURCE_LOCATION": "example.invalid",
+    }
+    before = hold_saved(saved)
+    try:
+        assert run_module(install, STAFF)[STAFF] == (PASSED, "")
+        assert dict(saved_values()) == saved
+    finally:
+        hold_saved(before)
+
+
+@pytest.mark.needs_db
+def test_a_trial_that_is_not_safe_to_apply_fails_the_staff_check(
+    install: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A plan carrying a refusal of its own though the trial reported none. Delete this and
+    M42.5.7 closes on a trial a person is told to apply while the plan itself says not to."""
+    import dataclasses
+
+    from brain.console.staff_source_view import rehearse
+
+    def unsafe(*args: object, **kwargs: object) -> object:
+        trial = rehearse(*args, **kwargs)  # type: ignore[arg-type]
+        assert trial.plan is not None
+        return dataclasses.replace(trial, plan=dataclasses.replace(trial.plan, refusals=("x",)))
+
+    monkeypatch.setattr("brain.setup_staff_routes.rehearse", unsafe)
+    assert "safe to apply" in _failed(install, STAFF)
+
+
+@pytest.mark.needs_db
+def test_a_first_run_that_deactivates_somebody_fails_the_staff_check(
+    install: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A first run proposing to deactivate a person on an empty install. Delete this and M42.5.7
+    closes on a trial that frightens a person with a deactivation nobody could make."""
+    import dataclasses
+
+    from brain.console.staff_source_view import rehearse
+
+    def deactivating(*args: object, **kwargs: object) -> object:
+        trial = rehearse(*args, **kwargs)  # type: ignore[arg-type]
+        assert trial.plan is not None
+        plan = dataclasses.replace(trial.plan, would_deactivate=("someone@x.invalid",))
+        return dataclasses.replace(trial, plan=plan)
+
+    monkeypatch.setattr("brain.setup_staff_routes.rehearse", deactivating)
+    assert "deactivating" in _failed(install, STAFF)
+
+
+@pytest.mark.needs_db
+def test_a_directory_that_reads_one_person_fails_the_staff_check(
+    install: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A walk that stopped after the first person. Delete this and M42.5.7 closes on a trial that
+    tells a company its directory holds one person."""
+    from brain.identity.staff_adapters import MicrosoftEntraSource
+    from brain.ops import acceptance_checks_first_run_walk as walk
+
+    async def one_person(*args: object, **kwargs: object) -> MicrosoftEntraSource:
+        return MicrosoftEntraSource(pages=[{"value": [walk._person(1, "Ada One", "ada")]}])
+
+    monkeypatch.setattr("brain.setup_staff_routes.pull", one_person)
+    assert "two people" in _failed(install, STAFF)
+
+
+@pytest.mark.needs_db
+def test_an_exchange_made_twice_fails_the_staff_check(
+    install: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The secret sent to the vendor more than once. Delete this and M42.5.7 closes on a screen
+    that exposes a company's client secret to the vendor twice for one sign-in."""
+    from brain.connectors.staff_directories import exchange
+
+    async def twice(fetch: object, source: str, **kwargs: str) -> str:
+        await exchange(fetch, source, **kwargs)  # type: ignore[arg-type]
+        return await exchange(fetch, source, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr("brain.setup_staff_routes.exchange", twice)
+    assert "exactly once" in _failed(install, STAFF)
+
+
+@pytest.mark.needs_db
+def test_a_spaced_secret_that_reaches_the_directory_fails_the_staff_check(
+    install: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A secret with a space sent on though the directory then refuses it. Delete this and
+    M42.5.7 closes on a screen that sends what was pasted to a vendor and only then judges it."""
+    from brain.ops import acceptance_checks_first_run_walk as walk
+
+    class Refusing(walk._Directory):
+        def __init__(self, secret: str, token: str) -> None:
+            super().__init__("never", token)
+
+    real = walk._Directory
+    monkeypatch.setattr("brain.setup_staff_routes.secret_problem", lambda secret: "")
+
+    def either(secret: str, token: str) -> walk._Directory:
+        return real(secret, token) if "space" not in secret else Refusing(secret, token)
+
+    monkeypatch.setattr(walk, "_Directory", either)
+    assert "sent to the directory" in _failed(install, STAFF)

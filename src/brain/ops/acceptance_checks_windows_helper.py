@@ -134,6 +134,7 @@ async def the_windows_helper_runs_the_documented_command_and_is_guided(
     used = set(re.findall(r"(?<=\s)--[a-z-]+", line))
     if not used <= declared or not {"--release", "--profile", "--console-address"} <= used:
         raise CheckFailedError("the helper's command uses a flag the installer does not declare")
+
     if (
         "sudo " + RELEASE_URL_VARIABLE + "=https://releases.example.invalid/brain.tar.gz"
         not in line
@@ -145,7 +146,8 @@ async def the_windows_helper_runs_the_documented_command_and_is_guided(
     # The page a person reads names what they download and every size they will be asked to pick.
     text = helper_guide.read_text(encoding="utf-8")
     if Path(HELPER_LAUNCHER_PATH).name not in text or Path(HELPER_SCRIPT_PATH).name not in text:
-        raise CheckFailedError("the helper's guide does not name both files a person downloads")
+        raise CheckFailedError("the helper's guide does not name the launcher a person downloads")
+
     if not all(f"`{one}`" in text for one in PROFILES):
         raise CheckFailedError("the helper's guide does not name every size the installer offers")
     if not (included_by(HELPER_SCRIPT_PATH) and included_by(HELPER_LAUNCHER_PATH)):

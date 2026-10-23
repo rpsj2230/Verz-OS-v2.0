@@ -40,7 +40,9 @@ Task ids: M42.5.7, M42.5.14
 
 from __future__ import annotations
 
+import contextlib
 import secrets
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -74,6 +76,15 @@ THE_COUNT_OF_SIGN_INS_IS_THE_ONLY_STAND_IN: Final = (
     "install that is finished has some. The check cannot unbind them inside a transaction it "
     "rolls back, so the writer it hands the route reports none yet and passes every bind to the "
     "install's own store. The closed half is asked of the store itself afterwards."
+)
+
+#: Why the trial reads are made with nothing saved.
+THE_TRIAL_JUDGES_THE_CHOICE_IT_IS_HANDED: Final = (
+    "The staff list trial is handed the source a person is choosing and judges that, but the "
+    "installation values read for the choice put what an install has saved before what is handed "
+    "in. On a fresh install nothing is saved, which is the only install the trial is for; on a "
+    "finished one the saved source outranks the choice, so the check sets what is saved aside "
+    "for the length of its reads and puts it back, and a read of the owner's list is not made."
 )
 
 # ------------------------------------------------------------------------ the figures
@@ -148,6 +159,22 @@ def _told_in_words(why: str) -> bool:
     return len(why.split()) >= 4 and why.rstrip().endswith((".", "?"))
 
 
+@contextlib.contextmanager
+def _saved_values_set_aside() -> Iterator[None]:
+    """This process's saved installation values emptied for a block, and put back after it.
+
+    The reads inside make no network call and wait on nothing, so no other task runs while the
+    values are away. See `THE_TRIAL_JUDGES_THE_CHOICE_IT_IS_HANDED`.
+    """
+    from brain.install import hold_saved
+
+    before = hold_saved({})
+    try:
+        yield
+    finally:
+        hold_saved(before)
+
+
 # ------------------------------------------------ 1. the staff list screen
 @check(
     leaves=("M42.5.7",),
@@ -193,6 +220,7 @@ async def the_staff_list_screen_reads_a_list_and_writes_nothing(
     opening = f"https://login.microsoftonline.com/{TENANT}/oauth2/v2.0/authorize?"
     if not address.startswith(opening) or "code_challenge_method=S256" not in address:
         raise CheckFailedError("the sign-in address was not the vendor's own page with a proof key")
+
     try:
         authorisation_address(
             "microsoft_entra",
@@ -208,17 +236,25 @@ async def the_staff_list_screen_reads_a_list_and_writes_nothing(
         raise CheckFailedError("a return address that did not end in the screen's path was built")
 
     # A spreadsheet is read from the text the person chose and nobody signs in to one.
-    sheet = await trial_for(
-        StaffTrialAsked(setup_code="unused", staff_source="spreadsheet", sheet=SHEET),
-        _nothing_is_called,
-    )
-    if sheet.plan is None or sheet.refusals or not sheet.plan.safe_to_apply:
+    # The trial judges the choice it is handed, so what this install has saved is set aside for
+    # the length of the reads. See `THE_TRIAL_JUDGES_THE_CHOICE_IT_IS_HANDED`.
+    with _saved_values_set_aside():
+        sheet = await trial_for(
+            StaffTrialAsked(setup_code="unused", staff_source="spreadsheet", sheet=SHEET),
+            _nothing_is_called,
+        )
+    if sheet.plan is None or sheet.refusals:
         raise CheckFailedError("a staff list pasted from a spreadsheet was not read")
+
+    if not sheet.plan.safe_to_apply:
+        raise CheckFailedError("a staff list pasted from a spreadsheet was not safe to apply")
     added = {one.work_address for one in sheet.plan.would_add}
     if added != {"ada@acceptance.example.invalid", "grace@acceptance.example.invalid"}:
         raise CheckFailedError("the spreadsheet trial did not name the two people it holds")
-    if sheet.plan.would_remove or sheet.plan.would_deactivate:
+    if sheet.plan.would_remove:
         raise CheckFailedError("a first run was shown removing somebody from an empty install")
+    if sheet.plan.would_deactivate:
+        raise CheckFailedError("a first run was shown deactivating somebody on an empty install")
 
     # A directory is signed in to once with the secret, walked, and the plan is the same shape.
     secret, token = f"acceptance-{secrets.token_hex(12)}", f"token-{secrets.token_hex(12)}"
@@ -233,27 +269,39 @@ async def the_staff_list_screen_reads_a_list_and_writes_nothing(
         verifier=VERIFIER,
         redirect_uri=RETURN_ADDRESS,
     )
-    read = await trial_for(asked, fetch)
-    if read.plan is None or read.refusals or len(read.plan.would_add) != 2:
+    with _saved_values_set_aside():
+        read = await trial_for(asked, fetch)
+    if read.plan is None or read.refusals:
+        raise CheckFailedError("a directory that answered was not read")
+
+    if len(read.plan.would_add) != 2:
         raise CheckFailedError("a directory that answered was not read to the two people it holds")
     exchanges = [one for one in fetch.sent if one.form is not None]
-    if len(exchanges) != 1 or any(secret in str(one.url) for one in fetch.sent):
-        raise CheckFailedError("the client secret was not sent once, in the exchange alone")
+    if len(exchanges) != 1:
+        raise CheckFailedError("the client secret was not sent exactly once")
+    if any(secret in str(one.url) for one in fetch.sent):
+        raise CheckFailedError("the client secret was sent in a request address")
 
     # The refusals are sentences, and the vendor's own words stand for the vendor.
     # A directory that would accept the secret as typed is not reached with one that has a space.
     spaced_secret = f"{secret} with a space"
     open_directory = _Directory(spaced_secret, token)
-    spaced = await trial_for(
-        asked.model_copy(update={"client_secret": spaced_secret}), open_directory
-    )
-    if spaced.plan is not None or not spaced.refusals or open_directory.sent:
-        raise CheckFailedError("a client secret with a space was not refused before it was sent")
+    with _saved_values_set_aside():
+        spaced = await trial_for(
+            asked.model_copy(update={"client_secret": spaced_secret}), open_directory
+        )
+    if spaced.plan is not None or not spaced.refusals:
+        raise CheckFailedError("a client secret with a space still gave a plan")
+
+    if open_directory.sent:
+        raise CheckFailedError("a client secret with a space was sent to the directory")
     if not all(_told_in_words(one) for one in spaced.refusals):
         raise CheckFailedError("a client secret with a space was refused but not in words")
-    wrong = await trial_for(asked.model_copy(update={"code": "ANOTHER-CODE"}), fetch)
+    with _saved_values_set_aside():
+        wrong = await trial_for(asked.model_copy(update={"code": "ANOTHER-CODE"}), fetch)
     if wrong.plan is not None or not wrong.refusals:
-        raise CheckFailedError("a directory's refusal did not stop the trial")
+        raise CheckFailedError("a directory's refusal still gave a plan")
+
     if any(secret in why for why in wrong.refusals):
         raise CheckFailedError("a refusal repeated the client secret it was sent")
 
@@ -373,6 +421,7 @@ async def the_first_administrator_is_bound_and_signed_in_at_the_end(
     done = await finishing(first, code, token)
     if done.principal_id != first or done.outcome is not SignInOutcome.BOUND:
         raise CheckFailedError("the right code and a verified token did not bind the first person")
+
     signed_in = await walk.asked(first, bearer=token)
     if signed_in.caller.principal.id != first:
         raise CheckFailedError("the bound token did not sign in the person it was bound to")
