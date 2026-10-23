@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-23T07:00:15.238780+00:00",
-  "commit": "11091284",
-  "commit_subject": "The staff list check sets saved installation values aside, so it reads the list it is handed on a finished install (#699)",
+  "generated_at": "2026-10-23T07:44:38.963564+00:00",
+  "commit": "75ccb5b0",
+  "commit_subject": "1 more task is proved on the install by the newest complete acceptance run",
   "total": 1626,
-  "done": 1253,
+  "done": 1254,
   "percent": 77.1,
   "built": 1423,
   "built_percent": 87.5,
-  "built_unproven": 170,
+  "built_unproven": 169,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -168,7 +168,6 @@
     "M42.5.14",
     "M42.5.3",
     "M42.5.4",
-    "M42.5.7",
     "M42.5.8",
     "M42.6.5",
     "M42.6.6",
@@ -263,10 +262,10 @@
       "wave": 5,
       "name": "Hands, delivery, go-live",
       "total": 217,
-      "done": 123,
-      "percent": 56.7,
+      "done": 124,
+      "percent": 57.1,
       "in_progress": 37,
-      "ready_for_testing": 26,
+      "ready_for_testing": 25,
       "blocked": 20,
       "open": 11,
       "acts": 42,
@@ -716,7 +715,7 @@
       "name": "Client deployment template",
       "wave": 5,
       "total": 64,
-      "done": 29,
+      "done": 30,
       "acts": 0,
       "decided": 0,
       "built": 42
@@ -1889,6 +1888,7 @@
     "M42.5.15",
     "M42.5.2",
     "M42.5.6",
+    "M42.5.7",
     "M42.5.9",
     "M42.6.1",
     "M42.6.2",
@@ -3641,11 +3641,6 @@
       "why": "TRIAGE 2026-10-13 class 2 (partly built): setup_wizard.py company step collects company_name, product_name, web_address and logo_url (an address, not an upload) into INSTALL_* settings; its docstring says 'M42.5.5 says upload' and substitutes an address. No upload route exists and no needs-rupash question records the narrowing. NEXT: Either build a logo upload (object store plus a served path) or add a docs/needs-rupash.md question and name its number in register row CON-8 or OWN3-1.",
       "updated": "2026-10-13"
     },
-    "M42.5.7": {
-      "status": "READY FOR TESTING",
-      "why": "BUILT AND WIRED, AND NOW NAMED BY AN INSTALL CHECK (acceptance_checks_first_run_walk): the staff list screen offers Google Workspace, Microsoft Entra and Lark with the return path, builds the vendor's own sign-in address, reads a list from a spreadsheet and from a directory (answers written in the check) and says who a first run would add, refuses a bad secret in words, and refuses a wrong setup code the way an install with none is refused, before anything is sent. FIRST RUN ON THE OWNER'S INSTALL FAILED (2026-10-23): installation values put a saved staff source before the one a trial is handed, so a finished install read its own list and not the pasted one; the check now sets saved values aside for its reads and has a test with a saved source. NOT YET SEEN PASSING ON THAT INSTALL, so the leaf is not claimed done. NOT SHOWN BY THE CHECK: signing in at a real vendor with a real application, which is a person-run step on the fresh-install walk (register the application as docs/install/authentication.md says, then use the staff list screen on first run).",
-      "updated": "2026-10-23"
-    },
     "M42.5.8": {
       "status": "READY FOR TESTING",
       "why": "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): setup_wizard.py model_provider step takes a provider and key (key held in the vault) via _provider_rule; MODEL_PROFILES still lists 'local', but needs-rupash 80 decided hosted providers only (no local-only profile wanted); test_setup_wizard.py. NEXT: Check reads that the install's provider slot is held in the vault; the 'local-only' half is decided out by item 80 (register REQ-42 records it).",
@@ -3744,11 +3739,17 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 6,
+  "closed_today": 7,
   "next_up": [
     "M38.5.4"
   ],
   "recent": [
+    {
+      "sha": "75ccb5b",
+      "at": "2026-10-23T07:43:17+00:00",
+      "subject": "1 more task is proved on the install by the newest complete acceptance run",
+      "closed": "M42.5.7"
+    },
     {
       "sha": "01be991",
       "at": "2026-10-23T06:13:30+00:00",
@@ -3862,12 +3863,6 @@
       "at": "2026-10-21T07:50:18+00:00",
       "subject": "A person can keep a personal project of their own threads and files, and each recent conversation says its state (M40.7.7, M40.7.6) (#657)",
       "closed": "M40.7.6,M40.7.7"
-    },
-    {
-      "sha": "58e04c5",
-      "at": "2026-10-21T06:48:05+00:00",
-      "subject": "A person can ask for their data to be deleted, and the retention owner sees who has asked (M40.4.2.3, switch off, migration 0273) (#661)",
-      "closed": "M40.4.2.3"
     }
   ]
 }
