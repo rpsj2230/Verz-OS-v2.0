@@ -1,0 +1,7 @@
+{
+  "held": {
+    "M17.7.2": "the check shows the telling over its own rows, and does not show the scheduler's database lock between application copies, which its progress note names as the part not shown",
+    "M42.6.5": "the check keeps and reads the key through the connector framework's stand-in vault, so a real vault holding the key is not shown; held until the rehearsal on a real OpenBao",
+    "M42.5.14": "the check signs a person in with a token signed by a key the check holds, so the real identity provider is not shown; held until the fresh-install walk"
+  }
+}
