@@ -16,6 +16,8 @@ import pytest
 from brain.ops import acceptance_run
 from brain.ops.acceptance import FAILED, PASSED, registered
 from brain.ops.acceptance_checks_first_run_sources import CHECK_ORDER
+from brain.ops.connectable import CONNECTABLE, given
+from brain.ops.connector_admin import connection_problems
 from brain.settings import settings_from
 from tests.unit.test_acceptance import INSTALL, at_head, checks_in, counts
 
@@ -100,9 +102,8 @@ def test_a_screen_that_lists_no_source_fails_the_step_check(
 ) -> None:
     """The catalogue gone from the Connectors screen. Delete this and M42.5.9 closes on a first-run
     step that offers a person nothing to connect."""
-    from brain import connector_routes
 
-    monkeypatch.setattr(connector_routes, "CONNECTABLE", {})
+    monkeypatch.setattr("brain.connector_routes.CONNECTABLE", {})
     assert "every source" in _failed(install, STEP)
 
 
@@ -128,10 +129,11 @@ def test_a_list_that_cannot_ask_the_vault_fails_the_key_check(
 ) -> None:
     """The list reporting no key held. Delete this and M42.6.5 closes on a screen that tells a
     person to paste a key again that is already safe."""
-    from brain import connector_routes
-    from brain.console.connector_trust import VaultState
+    from brain.ops.credentials import VaultState
 
-    monkeypatch.setattr(connector_routes, "keys_held", lambda store, names: (VaultState.READY, {}))
+    monkeypatch.setattr(
+        "brain.connector_routes.keys_held", lambda store, names: (VaultState.READY, {})
+    )
     assert "held" in _failed(install, KEY)
 
 
@@ -191,11 +193,10 @@ def test_a_screen_missing_one_source_fails_the_step_check(
 ) -> None:
     """One source dropped from the Connectors list. Delete this and M42.5.9 closes on a screen that
     offers some of the sources the console can connect."""
-    from brain import connector_routes
 
-    kept = dict(connector_routes.CONNECTABLE)
+    kept = dict(CONNECTABLE)
     kept.pop(sorted(kept)[-1])
-    monkeypatch.setattr(connector_routes, "CONNECTABLE", kept)
+    monkeypatch.setattr("brain.connector_routes.CONNECTABLE", kept)
     assert "every source" in _failed(install, STEP)
 
 
@@ -207,13 +208,8 @@ def test_a_source_listed_with_no_steps_fails_the_step_check(
     a form with nothing said about where its values come from."""
     import dataclasses
 
-    from brain import connector_routes
-
-    bare = {
-        name: dataclasses.replace(kind, guide=())
-        for name, kind in connector_routes.CONNECTABLE.items()
-    }
-    monkeypatch.setattr(connector_routes, "CONNECTABLE", bare)
+    bare = {name: dataclasses.replace(kind, guide=()) for name, kind in CONNECTABLE.items()}
+    monkeypatch.setattr("brain.connector_routes.CONNECTABLE", bare)
     assert "no steps" in _failed(install, STEP)
 
 
@@ -223,11 +219,10 @@ def test_a_connect_the_route_refuses_fails_the_step_check(
 ) -> None:
     """The form judged wrong though it was filled as the console fills it. Delete this and M42.5.9
     closes on a first-run screen whose connect request is refused."""
-    from brain import connector_routes
-    from brain.ops.connector_admin import SettingProblem
+    from brain.ops.connectable import SettingProblem
 
     refusal = (SettingProblem(field="source", code="x", message="No."),)
-    monkeypatch.setattr(connector_routes, "connection_problems", lambda *args: refusal)
+    monkeypatch.setattr("brain.connector_routes.connection_problems", lambda *args: refusal)
     assert "not accepted" in _failed(install, STEP)
 
 
@@ -298,17 +293,16 @@ def test_a_key_stored_in_the_settings_fails_the_key_check(
 ) -> None:
     """The key copied into the connection's stored settings. Delete this and M42.6.5 closes on a
     key sitting in a table beside its vault copy."""
-    from brain import connector_routes
     from brain.ops import acceptance_checks_connector_framework as framework
 
     key = "k" * 48
-    real = connector_routes.given
+    real = given
     monkeypatch.setattr(framework, "_credential", lambda name: key)
 
     def copying(kind: object, settings: dict[str, str]) -> object:
-        return {**real(kind, settings), "note": key}  # type: ignore[arg-type, dict-item]
+        return {**real(kind, settings), "note": key}  # type: ignore[arg-type]
 
-    monkeypatch.setattr(connector_routes, "given", copying)
+    monkeypatch.setattr("brain.connector_routes.given", copying)
     assert "key" in _failed(install, KEY)
 
 
@@ -361,10 +355,9 @@ def test_a_connect_refused_only_with_a_vault_fails_the_key_check(
 ) -> None:
     """The real connect judged wrong after the two refusals were right. Delete this and M42.6.5
     closes on a key check that never confirms the keyed connect itself worked."""
-    from brain import connector_routes
-    from brain.ops.connector_admin import SettingProblem
+    from brain.ops.connectable import SettingProblem
 
-    real = connector_routes.connection_problems
+    real = connection_problems
     calls: list[int] = []
 
     def third_refused(*args: object) -> object:
@@ -373,7 +366,7 @@ def test_a_connect_refused_only_with_a_vault_fails_the_key_check(
             return (SettingProblem(field="source", code="x", message="No."),)
         return real(*args)  # type: ignore[arg-type]
 
-    monkeypatch.setattr(connector_routes, "connection_problems", third_refused)
+    monkeypatch.setattr("brain.connector_routes.connection_problems", third_refused)
     assert "was not connected" in _failed(install, KEY)
 
 
@@ -386,7 +379,7 @@ def test_a_blank_key_that_is_accepted_fails_the_key_check(
     from brain import connector_routes
     from brain.ops.credentials import Kept
 
-    real = connector_routes.connection_problems
+    real = connection_problems
     calls: list[int] = []
 
     def blank_passes(*args: object) -> object:
@@ -396,6 +389,6 @@ def test_a_blank_key_that_is_accepted_fails_the_key_check(
     async def keeping_nothing(*args: object, **kwargs: object) -> Kept:
         return Kept(slot="nowhere", set_at=None)
 
-    monkeypatch.setattr(connector_routes, "connection_problems", blank_passes)
+    monkeypatch.setattr("brain.connector_routes.connection_problems", blank_passes)
     monkeypatch.setattr(connector_routes, "keep_credential", keeping_nothing)
     assert "blank key" in _failed(install, KEY)

@@ -14,6 +14,8 @@ from datetime import UTC, datetime
 
 import pytest
 
+from brain.connectors.staff_directories import REGISTRATION, exchange
+from brain.console.staff_source_view import rehearse
 from brain.ops import acceptance_run
 from brain.ops.acceptance import FAILED, PASSED, registered
 from brain.ops.acceptance_checks_first_run_walk import CHECK_ORDER
@@ -173,10 +175,9 @@ def test_a_directory_dropped_from_the_screen_fails_the_staff_check(
 ) -> None:
     """Lark no longer offered. Delete this and M42.5.7 closes on a screen that offers two of the
     three directories a company may keep its staff list in."""
-    from brain import setup_staff_routes
 
-    kept = {k: v for k, v in setup_staff_routes.REGISTRATION.items() if k != "lark"}
-    monkeypatch.setattr(setup_staff_routes, "REGISTRATION", kept)
+    kept = {k: v for k, v in REGISTRATION.items() if k != "lark"}
+    monkeypatch.setattr("brain.setup_staff_routes.REGISTRATION", kept)
     assert "three directories" in _failed(install, STAFF)
 
 
@@ -186,17 +187,16 @@ def test_a_trial_that_removes_people_fails_the_staff_check(
 ) -> None:
     """A first run proposing removals from an empty install. Delete this and M42.5.7 closes on a
     trial that frightens a person with removals nobody could make."""
-    from brain import setup_staff_routes
     from brain.identity.staff_source import Roster
 
-    real = setup_staff_routes.rehearse
+    real = rehearse
 
     def removing(*args: object, **kwargs: object) -> object:
         held = {"someone@acceptance.example.invalid": "p1"}
         later = {**kwargs, "known": held, "last_applied": datetime(2019, 1, 1, tzinfo=UTC)}
         return real(*args, **later)  # type: ignore[arg-type]
 
-    monkeypatch.setattr(setup_staff_routes, "rehearse", removing)
+    monkeypatch.setattr("brain.setup_staff_routes.rehearse", removing)
     monkeypatch.setattr(Roster, "may_remove", lambda self: True)
     assert "removing" in _failed(install, STAFF)
 
@@ -207,10 +207,9 @@ def test_a_secret_sent_in_an_address_fails_the_staff_check(
 ) -> None:
     """The client secret carried in a request address. Delete this and M42.5.7 closes on a screen
     that writes a company's secret into every proxy log between here and the vendor."""
-    from brain import setup_staff_routes
     from brain.connectors.staff_directories import Outbound
 
-    real = setup_staff_routes.exchange
+    real = exchange
 
     async def in_the_address(fetch: object, source: str, **kwargs: str) -> str:
         async def leaking(outbound: Outbound) -> object:
@@ -225,7 +224,7 @@ def test_a_secret_sent_in_an_address_fails_the_staff_check(
 
         return await real(leaking, source, **kwargs)  # type: ignore[arg-type]
 
-    monkeypatch.setattr(setup_staff_routes, "exchange", in_the_address)
+    monkeypatch.setattr("brain.setup_staff_routes.exchange", in_the_address)
     assert "once" in _failed(install, STAFF)
 
 
@@ -265,13 +264,8 @@ def test_a_directory_offered_with_nothing_to_register_fails_the_staff_check(
     a screen that offers a sign-in a company cannot set up."""
     import dataclasses
 
-    from brain import setup_staff_routes
-
-    bare = {
-        name: dataclasses.replace(one, where="")
-        for name, one in setup_staff_routes.REGISTRATION.items()
-    }
-    monkeypatch.setattr(setup_staff_routes, "REGISTRATION", bare)
+    bare = {name: dataclasses.replace(one, where="") for name, one in REGISTRATION.items()}
+    monkeypatch.setattr("brain.setup_staff_routes.REGISTRATION", bare)
     assert "registering" in _failed(install, STAFF)
 
 
@@ -454,7 +448,6 @@ def test_a_directory_refusal_that_does_not_stop_the_trial_fails_the_staff_check(
     import secrets
     from types import SimpleNamespace
 
-    from brain import setup_staff_routes
     from brain.ops import acceptance_checks_first_run_walk as walk
 
     fixed = "ab" * 12
@@ -464,12 +457,12 @@ def test_a_directory_refusal_that_does_not_stop_the_trial_fails_the_staff_check(
         SimpleNamespace(token_hex=lambda n: fixed, token_urlsafe=secrets.token_urlsafe),
     )
 
-    real = setup_staff_routes.exchange
+    real = exchange
 
     async def carrying_on(fetch: object, source: str, **kwargs: str) -> str:
         if kwargs["code"] == "ANOTHER-CODE":
             return f"token-{fixed}"
         return await real(fetch, source, **kwargs)  # type: ignore[arg-type]
 
-    monkeypatch.setattr(setup_staff_routes, "exchange", carrying_on)
+    monkeypatch.setattr("brain.setup_staff_routes.exchange", carrying_on)
     assert "refusal did not stop" in _failed(install, STAFF)
