@@ -144,6 +144,12 @@ USES_EXPLAINED: Final[Mapping[tuple[str, str, str], str]] = MappingProxyType(
             "never the application's (A_QUEUE_IS_OPENED_ON_THE_QUEUE_S_URL_AND_NEVER_THE_"
             "APPLICATION_S), so 0228 grants brain_app SELECT alone"
         ),
+        ("brain.ops.queue", "ops.dead_letter", "DELETE"): (
+            "forget_probe_jobs removes the set-aside rows an install check made for its own probe "
+            "task, by the probe's prefix, on the connection the check opens on the queue's own "
+            "URL, the owner's login and never the application's (A_QUEUE_IS_OPENED_ON_THE_QUEUE_S_"
+            "URL_AND_NEVER_THE_APPLICATION_S), so 0228 grants brain_app SELECT alone"
+        ),
         ("brain.ops.erasure_store", "ops.erasure_request", "UPDATE"): (
             "drain_erasure_queue runs on the psycopg connection brain.ops.schedule_runner opens as "
             "the database owner, and refuses a connection row-level security narrows, because a "

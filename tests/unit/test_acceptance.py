@@ -41,6 +41,7 @@ from brain.ops import (
     acceptance_checks_modelserver,
     acceptance_checks_people,
     acceptance_checks_proof_gaps,
+    acceptance_checks_queue,
     acceptance_checks_recovery,
     acceptance_checks_requirement_areas,
     acceptance_checks_role_templates,
@@ -893,14 +894,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         NOT_RUN,
         "this install names no public skill to import, so no import from GitHub was asked",
     )
-    # The alert that a mechanism has not run ships switched off, so the check says in words that it
-    # asked nothing; `tests/unit/test_acceptance_control_alerts.py` switches it on and runs it.
-    alert_outcome, alert_reason = outcomes.pop(
-        "a_mechanism_that_has_not_run_is_told_to_whoever_holds_the_alert"
-    )
-    assert alert_outcome == NOT_RUN
-    assert alert_reason.startswith("the control_not_run_alerts feature")
-    assert "is switched off on this install" in alert_reason
+    # The alert that a mechanism has not run ships switched off, and the check switches it on in
+    # its own transaction, so it is not popped here: it passes with the feature off, which
+    # `tests/unit/test_acceptance_control_alerts.py` shows and the install's switch left unwritten.
     # No key and no hosted profile here, so every check that reaches a model says it was not run;
     # `tests/unit/test_acceptance_models.py` runs them against providers that answer, and
     # `tests/unit/test_acceptance_answers.py` the answer checks against the stand-in.
@@ -1082,9 +1078,18 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
             NOT_RUN,
             acceptance_checks_recovery.NO_SCHEDULED_RUN_YET,
         )
-    # No job has been set aside on a new install, so the dead-letter check says so;
-    # `tests/unit/test_acceptance_checks_dead_letter.py` records one and it passes.
-    assert outcomes.pop("a_job_set_aside_is_listed_to_those_who_may_see_it")[0] == NOT_RUN
+    # The queue's tables are made by the worker when it first starts and no worker has run on this
+    # database, so the two checks that put a job of their own on the queue say so;
+    # `tests/unit/test_acceptance_checks_queue.py` and `test_acceptance_checks_dead_letter.py`
+    # install the queue and each passes.
+    assert outcomes.pop("a_job_put_on_the_install_s_queue_is_fetched_and_run_by_a_worker") == (
+        NOT_RUN,
+        acceptance_checks_queue.NO_QUEUE_IS_INSTALLED_HERE,
+    )
+    assert outcomes.pop("a_job_set_aside_is_listed_to_those_who_may_see_it") == (
+        NOT_RUN,
+        acceptance_checks_queue.NO_QUEUE_IS_INSTALLED_HERE,
+    )
     # A test image may carry no built console, in which case the shell check says so; the install's
     # own image does, and `tests/unit/test_acceptance_checks_localisation.py` serves a bundle.
     assert outcomes.pop("the_console_is_served_as_an_installable_shell")[0] in (PASSED, NOT_RUN)

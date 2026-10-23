@@ -2243,3 +2243,145 @@ SWAP_CANDIDATES: Final[tuple[SwapCandidate, ...]] = (
         ),
     ),
 )
+
+
+# ------------------------------------------------------- a probe job for an install check
+#: Why an install check runs a job through the queue on a queue no worker drains, and cleans up
+#: after it by name.
+A_PROBE_JOB_WAITS_FOR_THE_CHECK_S_OWN_WORKER: Final = (
+    "An install check that wants to see a job enqueued, fetched and run cannot ask the install's "
+    "own worker to do it: the worker is not the check's to start, stop or wait for, and a probe "
+    "left on a queue it drains would be run by a process that has never registered the probe's "
+    "task and recorded as failed. So the probe is enqueued under the one traffic class allocated "
+    "no slots, whose queue nothing drains unless an operator changed the allocation, and the "
+    "check starts a worker of its own, with the figures `driver_options` derives for a shard, "
+    "that stops when that queue is empty. Every probe task carries `PROBE_TASK_PREFIX` and is "
+    "removed by that prefix on that queue, so what the check made is found by what it is called "
+    "and nothing else on the install is touched."
+)
+
+#: The class a probe job is enqueued under: the one `CONCURRENCY` allocates no slots.
+PROBE_TRAFFIC_CLASS: Final = TrafficClass.HUMAN_INTERACTIVE
+
+#: Every probe task's name begins with this, and nothing else of ours may.
+PROBE_TASK_PREFIX: Final = "acceptance.probe."
+
+#: The longest the check's own worker is given to empty the probe queue, and the deadline of the
+#: probe task inside it. Well inside a check's own bound and inside the staleness window.
+PROBE_DRAIN_SECONDS: Final[float] = 30.0
+PROBE_TASK_SECONDS: Final[float] = 20.0
+
+#: The pool the check's own worker holds: one to fetch, one for the job and one spare, as the
+#: queue's own tests size it.
+PROBE_POOL_MAX: Final = 3
+
+#: Whether the driver's tables are there, read from the catalogue and not by querying them.
+PROBE_TABLES_SQL: Final = "SELECT to_regclass('ops.procrastinate_jobs') IS NOT NULL AS there"
+
+#: Removes the probe jobs, by prefix and queue; their events go with them.
+FORGET_PROBE_JOBS_SQL: Final = (
+    "DELETE FROM procrastinate_jobs"
+    " WHERE starts_with(task_name, %(prefix)s) AND queue_name = %(queue)s"
+)
+
+#: Removes the set-aside rows of probe tasks, by prefix. `0228` writes them with the task name of
+#: the driver's row, so the prefix is on the row.
+FORGET_PROBE_LETTERS_SQL: Final = "DELETE FROM ops.dead_letter WHERE starts_with(task, %(prefix)s)"
+
+
+@dataclass(frozen=True)
+class ProbedJob:
+    """What one probe job came to: its id, the queue it was enqueued onto, its state before the
+    check's worker started and after it stopped, and whether it was kept aside afterwards."""
+
+    job_id: int
+    queue: str
+    status_waiting: str
+    status_after: str
+    kept_aside: bool
+
+
+async def probe_tables_are_there(url: str) -> bool:
+    """Whether this install's queue tables exist, asked on the queue's own connection."""
+    app = queue_app(url, pool_max=1)
+    async with app.open_async():
+        rows = await app.connector.execute_query_all_async(PROBE_TABLES_SQL)
+    return bool(rows and rows[0]["there"])
+
+
+async def forget_probe_jobs(url: str) -> None:
+    """Remove every probe job and every set-aside row of one, by name. Idempotent."""
+    app = queue_app(url, pool_max=1)
+    async with app.open_async():
+        await app.connector.execute_query_async(
+            FORGET_PROBE_JOBS_SQL,
+            prefix=PROBE_TASK_PREFIX,
+            queue=queue_name_for(PROBE_TRAFFIC_CLASS),
+        )
+        await app.connector.execute_query_async(FORGET_PROBE_LETTERS_SQL, prefix=PROBE_TASK_PREFIX)
+
+
+async def run_probe_job(
+    url: str,
+    *,
+    task: str,
+    run: Callable[..., Awaitable[object]],
+    args: Mapping[str, str | int],
+    at: datetime,
+    set_aside_reason: str = "",
+) -> ProbedJob:
+    """Enqueue one probe job through `enqueue_job`, drain it with a worker of this call's own and
+    answer with what became of it. See `A_PROBE_JOB_WAITS_FOR_THE_CHECK_S_OWN_WORKER`.
+
+    The task is registered through `register_task` and enqueued through `enqueue_job`, so what
+    is shown is the path every task of ours takes, and the worker is started with
+    `driver_options` for a one-slot shard of the probe queue. `set_aside_reason`, when it is given
+    and the job ended failed, writes the job into `ops.dead_letter` through
+    `DriverQueue.keep_aside`, the call the recovery sweep makes. The caller removes what this
+    made, with `forget_probe_jobs`, whatever happened here.
+    """
+    if not task.startswith(PROBE_TASK_PREFIX):
+        msg = f"a probe task's name begins with {PROBE_TASK_PREFIX!r}, not {task!r}"
+        raise QueueError(msg)
+    app = queue_app(url, pool_max=PROBE_POOL_MAX)
+    register_task(app, task, run, traffic_class=PROBE_TRAFFIC_CLASS, timeout=PROBE_TASK_SECONDS)
+    shard = Shard(
+        queue=queue_name_for(PROBE_TRAFFIC_CLASS), traffic_class=PROBE_TRAFFIC_CLASS, concurrency=1
+    )
+    told = driver_options(shard)
+    async with app.open_async():
+        job_id = await enqueue_job(
+            app, Job(task=task, traffic_class=PROBE_TRAFFIC_CLASS, args=args)
+        )
+        waiting = await _status_of(app, job_id)
+        await asyncio.wait_for(
+            app.run_worker_async(
+                queues=list(told.queues),
+                concurrency=told.concurrency,
+                name=told.name,
+                fetch_job_polling_interval=told.fetch_job_polling_interval,
+                update_heartbeat_interval=told.update_heartbeat_interval,
+                stalled_worker_timeout=told.stalled_worker_timeout,
+                listen_notify=told.listen_notify,
+                wait=False,
+                install_signal_handlers=False,
+            ),
+            timeout=PROBE_DRAIN_SECONDS,
+        )
+        after = await _status_of(app, job_id)
+        kept = bool(set_aside_reason) and after == "failed"
+        if kept:
+            await DriverQueue(app, {}).keep_aside(str(job_id), set_aside_reason, at)
+    return ProbedJob(
+        job_id=job_id,
+        queue=shard.queue,
+        status_waiting=waiting,
+        status_after=after,
+        kept_aside=kept,
+    )
+
+
+async def _status_of(app: App, job_id: int) -> str:
+    """The driver's own state word for one job, or an empty string for a job that is gone."""
+    rows = await app.connector.execute_query_all_async(JOB_STATUS_SQL, id=job_id)
+    return str(rows[0]["status"]) if rows else ""

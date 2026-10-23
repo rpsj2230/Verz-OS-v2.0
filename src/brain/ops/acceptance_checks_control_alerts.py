@@ -21,9 +21,15 @@ through the relay, and a second run sends no second.
 **What it does not prove**, stated: that the loop the application starts runs on the install, which
 is logged on every pass; that Slack and the install's real relay accept the message, which the
 Connect Slack test and the Notifications test message prove; and the seven-day recency, which a
-unit test holds because the check cannot age a binding's last use inside its transaction. Not run
-when an administrator has not switched `control_not_run_alerts` on, which is every install until
-somebody does: the check says so in those words and does not turn it on.
+unit test holds because the check cannot age a binding's last use inside its transaction.
+
+**The feature ships off and the check does not wait for somebody to switch it on.** It switches
+`control_not_run_alerts` on in its own transaction, which is rolled back with the rest, and asks the
+same function with the same switch the web process's loop asks. The install's own switch is never
+written, so an install that has left it off is shown the telling working and is still not telling
+anybody. Until 2026-10-23 the check read the install's switch and said it was not run on every
+install that had not switched the feature on, which is every install that had not yet been asked
+to, so three leaves could never be shown. See `THE_SWITCH_IS_SET_IN_THE_CHECK_S_TRANSACTION_ONLY`.
 
 Task ids: M17.7.2, M37.5.1.3, M37.5.2.1
 """
@@ -54,11 +60,18 @@ THE_ALERT_REACHES_A_CHANNEL_AND_A_RELAY_THE_CHECK_HOLDS: Final = (
 #: The reserved top-level domain, which no mail system delivers to.
 _DOMAIN: Final = "acceptance.invalid"
 
+#: Why the check may switch a feature on and the install is still not changed.
+THE_SWITCH_IS_SET_IN_THE_CHECK_S_TRANSACTION_ONLY: Final = (
+    "The switch is a settings row, the check writes it through the application's own session in "
+    "the transaction every check runs in, and that transaction is always rolled back, so the "
+    "function under test reads the feature as on while the install's own row is never written. "
+    "The notice has no switch of its own, so there is nothing else to set."
+)
+
 # ------------------------------------------------------------------------ the verdicts
-THE_ALERTS_ARE_SWITCHED_OFF: Final = (
-    "the control_not_run_alerts feature, or the notice that a mechanism has not run, is switched "
-    "off on this install, so nobody is told of a mechanism that has not run and that telling was "
-    "not checked"
+THE_ALERTS_STAYED_OFF: Final = (
+    "the alert was still switched off after the check switched the feature on in its own "
+    "transaction, so nobody would be told of a mechanism that has not run"
 )
 NO_CONTROL_TO_ASK_ABOUT: Final = "the registry holds no control a scheduler starts to ask about"
 NOT_SENT_ONCE: Final = (
@@ -103,9 +116,11 @@ async def a_mechanism_that_has_not_run_is_told_to_whoever_holds_the_alert(h: Har
     from brain.ops.acceptance_checks import _HeldLedger, _Secret
     from brain.ops.acceptance_checks_memory import memory_app
     from brain.ops.acceptance_escalation import _Kept
+    from brain.ops.acceptance_switch import switched
     from brain.ops.acceptance_workspace import _everywhere, _planes
     from brain.ops.alerting import OPERATIONS_ALERT
     from brain.ops.controls import Invocation
+    from brain.ops.features_declared.control_not_run_alerts import CONTROL_NOT_RUN_ALERTS
     from brain.ops.idempotency import CallOutcome
     from brain.ops.mail import MailAnswer, MailSettings, Message, Security
     from brain.ops.schedule import schedulable
@@ -116,6 +131,7 @@ async def a_mechanism_that_has_not_run_is_told_to_whoever_holds_the_alert(h: Har
     last_success = {chosen.name: h.now - chosen.alert_after * 3}
 
     await h.found_departments()
+    await switched(h, CONTROL_NOT_RUN_ALERTS, on=True)
     opens = (screen(INCIDENTS_SCREEN).read.requires.value, *_planes())
     holder, blind, nobody = (h.principal(A, one) for one in ("holder", "blind", "nobody"))
     await h.person(holder, department=A, grants=_everywhere(OPERATIONS_ALERT.value, *opens))
@@ -168,7 +184,7 @@ async def a_mechanism_that_has_not_run_is_told_to_whoever_holds_the_alert(h: Har
 
     told = await run(holder, blind, nobody)
     if told.switched_off:
-        raise CheckNotRunError(THE_ALERTS_ARE_SWITCHED_OFF)
+        raise CheckFailedError(THE_ALERTS_STAYED_OFF)
     first = _sent(kept, 0)
     if any(channel in {on[blind], on[nobody]} for channel, _ in first):
         raise CheckFailedError(TOLD_SOMEBODY_WHO_COULD_NOT_ACT)

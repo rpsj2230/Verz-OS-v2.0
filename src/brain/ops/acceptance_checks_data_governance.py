@@ -76,6 +76,15 @@ A_DRY_RUN_IS_MADE_BY_THE_REAL_SWEEP_IN_REPORT_ONLY_MODE: Final = (
     "that is what a worker's first run writes and not after one the check composed."
 )
 
+#: Why the dry run's connection is the owner's and read-only.
+THE_SWEEP_IS_COUNTED_AS_THE_WORKER_COUNTS_IT: Final = (
+    "The worker counts the stores as the database owner (`Settings.owner_database_url`), because "
+    "the application's login is not granted the catalogue and every store, so a check that "
+    "counted as the application could only say it could not count. The check opens the same login "
+    "and sets the session read-only before the sweep is handed it, so a report-only run that "
+    "tried to remove or record anything would be refused by the database rather than trusted."
+)
+
 # ------------------------------------------------------------------------ the figures
 #: What the Retention screen asks of a reader who may release the sweep. Restated rather than
 #: imported, so a change to a route's authority fails its check instead of moving with it.
@@ -310,10 +319,16 @@ async def _dry_run(h: Harness, executor: Any, sweep: Any) -> Any:
 
     from brain.db import libpq_conninfo
 
-    url = h.settings.database_url
+    # The owner's login, as the worker reads it (`Settings.owner_database_url`): counting a store
+    # needs the catalogue and every store's table, which the application's login is not granted
+    # on an install that names it in `database_url`. Held read-only, so a sweep that is asked to
+    # count cannot remove or write whatever it is handed.
+    # See `THE_SWEEP_IS_COUNTED_AS_THE_WORKER_COUNTS_IT`.
+    url = h.settings.owner_database_url()
 
     def run() -> Any:
         with psycopg.connect(libpq_conninfo(url), prepare_threshold=None) as conn:
+            conn.read_only = True
             return sweep(executor(conn, holds=()), now=datetime.now(UTC), report_only=True)
 
     try:
