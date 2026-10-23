@@ -2301,17 +2301,17 @@ class ProbedJob:
     kept_aside: bool
 
 
-async def probe_tables_are_there(url: str) -> bool:
+async def probe_tables_are_there(queue_url: str) -> bool:
     """Whether this install's queue tables exist, asked on the queue's own connection."""
-    app = queue_app(url, pool_max=1)
+    app = queue_app(queue_url, pool_max=1)
     async with app.open_async():
         rows = await app.connector.execute_query_all_async(PROBE_TABLES_SQL)
     return bool(rows and rows[0]["there"])
 
 
-async def forget_probe_jobs(url: str) -> None:
+async def forget_probe_jobs(queue_url: str) -> None:
     """Remove every probe job and every set-aside row of one, by name. Idempotent."""
-    app = queue_app(url, pool_max=1)
+    app = queue_app(queue_url, pool_max=1)
     async with app.open_async():
         await app.connector.execute_query_async(
             FORGET_PROBE_JOBS_SQL,
@@ -2322,7 +2322,7 @@ async def forget_probe_jobs(url: str) -> None:
 
 
 async def run_probe_job(
-    url: str,
+    queue_url: str,
     *,
     task: str,
     run: Callable[..., Awaitable[object]],
@@ -2343,7 +2343,7 @@ async def run_probe_job(
     if not task.startswith(PROBE_TASK_PREFIX):
         msg = f"a probe task's name begins with {PROBE_TASK_PREFIX!r}, not {task!r}"
         raise QueueError(msg)
-    app = queue_app(url, pool_max=PROBE_POOL_MAX)
+    app = queue_app(queue_url, pool_max=PROBE_POOL_MAX)
     register_task(app, task, run, traffic_class=PROBE_TRAFFIC_CLASS, timeout=PROBE_TASK_SECONDS)
     shard = Shard(
         queue=queue_name_for(PROBE_TRAFFIC_CLASS), traffic_class=PROBE_TRAFFIC_CLASS, concurrency=1
