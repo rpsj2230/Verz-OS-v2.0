@@ -86,6 +86,32 @@ actual side by side. They are separate changes, A first.
 
 **What I need from you:** reply "266: A", "266: B" or "266: C", or "266: A and C".
 
+## 269. How should an install recognise another company's value among its own settings and stores?
+
+**In plain terms:** task M42.4.2 asks for an audit of a live install's stores and settings for values that
+belong to another company (the company the product was first run for, or a copy of someone else's
+database). The repository must not contain any company's names, so the audit cannot carry a list of
+the ones to look for. Something has to say what "this install's own" means, and I will not guess,
+because a wrong guess either flags a company's own identity provider as foreign or passes a
+leftover.
+
+**Option A: the install's own declared domains.** The audit takes the web address, the sender address
+and the sign-in issuer the company entered, treats every address in the stores under those domains
+(and the vendors the product names) as its own, and lists the rest for a person to confirm once.
+Nothing company-specific is stored. The first run lists things to confirm.
+
+**Option B: a list shipped hashed.** The release carries salted hashes of the values the first
+deployment used, and the audit hashes each host it finds and compares. It finds exactly the leftovers
+we know of, and nothing new. It is still derived from a company's details, which the independence
+sweep exists to keep out, so I would need your explicit yes.
+
+**Option C: both.** A for anything unknown, B for known leftovers.
+
+**My recommendation:** A. It needs no company's name anywhere and catches a copied database from any
+company, not only the first.
+
+**What I need from you:** reply "269: A", "269: B" or "269: C".
+
 ## 263. Should the product declare one company-wide ceiling on source calls running at the same time?
 
 **In plain terms:** when one question needs answers from several connected systems, the product asks
