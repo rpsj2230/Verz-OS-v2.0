@@ -23,7 +23,7 @@ the driver and never starts anything. This one asks a service that holds the Doc
 a network, a proxy and a runner on the host, briefly, and the owner has not agreed to that until
 `browser_runs` is on.
 
-Task ids: M19.1.1, M19.1.5, M19.1.6, M19.3.5, M19.6.4
+Task ids: M19.1.1, M19.1.5, M19.1.6, M19.3.5, M19.6.4, M42.7.1
 """
 
 from __future__ import annotations
@@ -75,11 +75,12 @@ def _launcher_dial() -> Any:
 
 
 @check(
-    leaves=("M19.1.1", "M19.1.5", "M19.1.6", "M19.3.5", "M19.6.4"),
+    leaves=("M19.1.1", "M19.1.5", "M19.1.6", "M19.3.5", "M19.6.4", "M42.7.1"),
     sentence=(
         "A browser run's sandbox is a gVisor container on a network of its own, with a proxy as "
         "the only member that can reach out, nothing writable but memory and its caps applied, as "
-        "this host's Docker daemon describes it, and none of it is left behind."
+        "this host's Docker daemon describes it, none of it is left behind, and the launcher says "
+        "whether the host offers KVM beside gVisor."
     ),
 )
 async def a_browser_sandbox_is_made_for_one_run_and_removed_with_it(h: Harness) -> None:
@@ -128,6 +129,14 @@ async def a_browser_sandbox_is_made_for_one_run_and_removed_with_it(h: Harness) 
         raise CheckFailedError("the host's daemon did not give the runner the gVisor runtime")
     if answer.fields["left_behind"] != 0:
         raise CheckFailedError("a rehearsal's sandbox was not wholly removed from the host")
+    if answer.fields["virtualisation"] not in (
+        "kvm_in_use",
+        "kvm_available_not_used",
+        "kvm_unavailable",
+    ):
+        raise CheckFailedError(
+            "the launcher did not say whether this host offers KVM beside gVisor"
+        )
 
 
 def _the_product_describes_its_own_sandbox_soundly(run: str) -> None:
