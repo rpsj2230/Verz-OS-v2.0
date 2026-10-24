@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-24T14:13:48.786257+00:00",
-  "commit": "51e2ad48",
-  "commit_subject": "A member sets a review cycle when they add a document, and the check shows they can retire it (#701)",
+  "generated_at": "2026-10-24T14:31:21.247770+00:00",
+  "commit": "e337fa4e",
+  "commit_subject": "A step an unattended run holds for a person has a declared window, goes through the approvals queue, and stops the run when nobody answers (#703)",
   "total": 1626,
   "done": 1254,
   "percent": 77.1,
@@ -2437,8 +2437,8 @@
     },
     "M17.4.5": {
       "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 3 (built, not wired): orchestration/unattended.ApprovalStep, approval_refusals and expire are built (test_orchestration_unattended) with no caller; adoption.py imports only TriggerKind from it. Installed automations have no approval step at all, so there is nothing to time out. NEXT: give automation_run an approval step and call approval_refusals and expire from it; agent approvals already lapse via leash windows",
-      "updated": "2026-10-13"
+      "why": "PARTLY BUILT AND WIRED 2026-10-24; NOT CLAIMED. A task now declares where a person has to say yes and for how long (automation_run.TaskDeclaration.approvals), and the two drafting tasks do (twelve hours). automation_run.approval_gaps holds every declared window to unattended.window_refusals against the cadence of each template that names the task, inside task_gaps, so a window that reaches the next run or outlasts the platform maximum is a red gap test; a drafting template whose task declares none is one too. brain.ops.automation_hold raises a hold through the approvals machinery itself (unattended.approval_refusals, then leash.suspend for the automation's owner, the run's id as the trace) and answers the stop when nobody answered (unattended.expire, none for a hold a person decided). Install check a_step_an_unattended_run_holds_waits_for_a_person_and_expires (acceptance_checks_unattended_approval) shows on an install that the approver of the owner's department is shown the card and another department's is not, that a lapsed hold has no card and cannot be decided, and that it is the stop naming the automation and the step. WHY IT IS NOT CLOSED: no performer raises a hold. Every performer reads, a flow's tool calls go through the gate with no leash, and the tasks that draft are unbuilt, one behind the owner's question about unattended model calls (needs-rupash 210). The leaf's words (a step that needs a person waits for the approval and expires) are shown for the hold the check raises and for nothing a run raises, so it stays IN PROGRESS until a performer calls automation_hold.hold_step and the stop is told to the owner.",
+      "updated": "2026-10-24"
     },
     "M17.4.6": {
       "status": "IN PROGRESS",
