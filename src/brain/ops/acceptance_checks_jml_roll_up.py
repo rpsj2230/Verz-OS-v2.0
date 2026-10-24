@@ -12,15 +12,15 @@ composite that asked the same questions again would be the same check twice in o
 (`brain.ops.acceptance_roll_up` argues it). So these ask nothing of the install: they read what the
 clause checks came to earlier in this run, and sit after every one of them.
 
-**Several clauses have no check yet, and these say so instead of passing on the rest.** A memory of
-the old reach not being replayed (M26.2.5), an external person's end date (M1.8.1), a service key
-stopping with its owner (M1.8.2) and an item a person owns but can no longer reach leaving their
-workspace (named by no leaf) are each a clause that no check names today. (A personal agent
-following its owner, M26.2.2, has one since 2026-10-21.) `clauses_demonstrated` leaves a composite
-whose clause has no check not run and names the clause, so the leaf stays open until every clause
-is shown, and a pass cannot close M26.4.1 on less than its sentence. That is the honest state of
-these two leaves and it is reported as such: they are partly built, and the missing half is named
-here where a reader of the Install page finds it.
+**Two clauses of M26.4.1 have no check yet, and these say so instead of passing on the rest.** A
+service key stopping with its owner (M1.8.2) and an item a person owns but can no longer reach
+leaving their workspace (named by no leaf) are each a clause that no check names today. (A personal
+agent following its owner, M26.2.2, has had one since 2026-10-21; a mover's memories of the old
+reach, M26.2.5, and an external person's end date, M1.8.1, have had one since 2026-10-24, and
+a run stopping on a revoked grant, M13.8.2, one before that.) `clauses_demonstrated` leaves a
+composite whose clause has no check not run and names the clause, so M26.4.1 stays open until every
+clause is shown, and a pass cannot close it on less than its sentence. M26.2.7 asks the six mover
+leaves only, each of which has a check, so it can pass wherever those checks ran and passed.
 
 **Rejected: a roll-up that passes on the clauses that have a check.** It would close both leaves on
 the three or four things that happen to be proved, which is the failure

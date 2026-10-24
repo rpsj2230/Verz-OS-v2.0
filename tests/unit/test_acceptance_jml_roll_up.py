@@ -82,6 +82,28 @@ def test_the_mover_clauses_are_exactly_the_leaves_of_the_mover_group_above_the_t
     ]
 
 
+def test_every_mover_leaf_has_a_check_and_two_clauses_of_the_wider_leaf_have_none() -> None:
+    """The mover roll-up can pass because each of its six leaves is named by a check other than
+    itself; the joiner, mover and leaver roll-up cannot, because the service key (M1.8.2) and the
+    unreachable item have none. Delete this and the docstring of the roll-up and the next person's
+    reading of the Install page say a clause is missing that is not, or the reverse."""
+    from brain.ops import acceptance
+
+    acceptance.check_modules()
+    for clause, named in MOVER_CLAUSES.items():
+        for leaf in named:
+            assert checks_naming(leaf, excluding=MOVER), (clause, leaf)
+    without = [
+        clause
+        for clause, named in CLAUSES.items()
+        if not named or not any(checks_naming(leaf, excluding=JML) for leaf in named)
+    ]
+    assert without == [
+        "a service key stops when its owner lapses",
+        "an item a person can no longer reach leaves their workspace",
+    ]
+
+
 def _run(roll_up: Any, earlier: dict[str, tuple[str, str]]) -> None:
     harness: Any = SimpleNamespace(earlier=earlier)
     asyncio.run(roll_up(harness))
