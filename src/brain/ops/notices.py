@@ -37,7 +37,7 @@ Rejected: a preference per person. `brain.member.connections` models which chann
 each kind on, and nothing sends anything to a person yet for it to apply to. An install-wide
 switch is the one a person can turn today and see change something.
 
-Task ids: M27.8.11, M27.7.12, M8.3.2, M7.7.2
+Task ids: M27.8.11, M27.7.12, M8.3.2, M7.7.2, M17.7.6
 """
 
 from __future__ import annotations
@@ -151,8 +151,12 @@ NOTICES: Final[tuple[Notice, ...]] = (
         title="Evening digest",
         told="One staff room named in configuration, never a person.",
         about="What the day's plan closed, opened and is stuck on.",
-        how="Posted to the room's chat channel once a day. Nothing posts it yet.",
+        how=(
+            "Posted by the worker once a day to the conversation an administrator chose for it, "
+            "and to nobody when none is chosen. Switching it off stops the post."
+        ),
         composed_by="brain.ops.digest_delivery:deliver_digest",
+        sent_by="brain.ops.digest_run:run_digest",
     ),
     Notice(
         kind=NoticeKind.APPROVAL_REQUEST,
@@ -285,6 +289,7 @@ NOTICES: Final[tuple[Notice, ...]] = (
             "conversation is chosen."
         ),
         composed_by="brain.ops.recovery:alerts",
+        sent_by="brain.ops.backup_report_run:run_backup_report",
         fixed_because=A_NOTICE_THAT_EXISTS_TO_CATCH_MISUSE_HAS_NO_SWITCH,
     ),
     Notice(

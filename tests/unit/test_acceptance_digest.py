@@ -92,6 +92,7 @@ def test_on_a_real_database_the_check_passes_and_leaves_nothing_behind() -> None
         ("key", "the chosen conversation was not sent exactly one digest today"),
         ("unset", "a digest nobody pointed anywhere was sent"),
         ("off", "a switched-off channel was sent a digest or not said to be stopped"),
+        ("silenced", "a digest whose notice was switched off was still sent"),
     ],
 )
 def test_the_check_fails_where_the_digest_is_wrong(
@@ -124,6 +125,12 @@ def test_the_check_fails_where_the_digest_is_wrong(
             return Destination(Channel.LARK, "somewhere")
 
         monkeypatch.setattr(digest_run, "destination_of", anywhere)
+    elif broken == "silenced":
+
+        async def always_on(session: Any, kind: Any) -> bool:
+            return True
+
+        monkeypatch.setattr(digest_run, "notice_is_on", always_on)
     else:
         monkeypatch.setattr(digest_run, "connected_problem", lambda *_, **__: "")
     with at_head("brain_acceptance_digest") as url:
