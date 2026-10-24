@@ -65,7 +65,7 @@ is Docker's own script, and Docker's own documentation says not to use it in pro
 routes below are the per-distribution ones from that same documentation, and an unrecognised
 distribution is told exactly what to run instead.
 
-Task ids: M42.5.1, M42.6.2
+Task ids: M42.5.1, M42.6.2, M42.3.4
 """
 
 from __future__ import annotations
@@ -95,6 +95,12 @@ from brain.ops.wiring import PROFILES, assert_known_profile
 #: run, and the copy a person re-runs after an update has to belong to the release on that
 #: server rather than being whichever one is newest.
 SCRIPT_PATH: Final = "ops/install/install.sh"
+
+#: The health script this one runs last, relative to the install directory. Rendered by
+#: `brain.deployment.health`, which owns its argument. It reads and prints and changes nothing, so
+#: a server that is still starting is told so after the install and the install does not fail
+#: for it.
+HEALTH_SCRIPT: Final = "ops/install/health.sh"
 
 #: Why this script is bash and its two siblings are POSIX sh.
 A_MASKED_PIPELINE_REPORTS_A_STEP_THAT_DID_NOTHING: Final = (
@@ -1005,6 +1011,16 @@ def render_install(
             lines.append(f'say "{heading}"')
             lines.extend(step.run.splitlines())
         lines.append("")
+    lines.extend(
+        (
+            f'say "Reading back the state of every service ({HEALTH_SCRIPT})"',
+            f'bash "$BRAIN_HOME/{HEALTH_SCRIPT}" --profile "$BRAIN_PROFILE" \\',
+            '  || say "Something this profile starts is not ready yet. The lines above marked '
+            f"NOT READY say what, and bash $BRAIN_HOME/{HEALTH_SCRIPT} --profile "
+            '$BRAIN_PROFILE reads them again"',
+            "",
+        )
+    )
     lines.append('say "Done. The $BRAIN_PROFILE profile is running from $BRAIN_HOME."')
     return "\n".join(lines) + "\n"
 

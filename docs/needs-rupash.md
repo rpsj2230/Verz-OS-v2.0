@@ -834,6 +834,11 @@ the budget past its limit and may go ahead. The limit still stops the question a
 "would have stopped" figures first; an estimate would refuse questions on a guess, and the overshoot it
 prevents is one question.
 
+**Added 2026-10-24, so you decide with it in front of you:** the same estimator also prices an agent at
+publish, for item 241, so choosing A closes the two question-estimate leaves and leaves that use of it in
+place. Choosing B or C is the only way a live question gets an estimate, and the correction of M21.2.4 (item
+266) needs the estimates B or C would record.
+
 **What I need from you:** reply "226: A", "226: B" or "226: C".
 
 ## 225. Are two scaling leaves closed by what they are for: one pass over the screens, and the ledger's partitioning trigger?
