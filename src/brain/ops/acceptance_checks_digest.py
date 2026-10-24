@@ -145,9 +145,11 @@ class _Records:
 async def the_evening_digest_is_sent_once_a_day_to_the_chosen_conversation(h: Harness) -> None:
     from brain.docs_routes import DOCS
     from brain.locale import time_zone
+    from brain.ops.acceptance_run import SET_UP_REACH
     from brain.ops.digest_run import OFF, SWITCHED_OFF, WBS_FILE, StoredDigestRecords, run_digest
     from brain.ops.notices import notice
     from brain.ops.notices import switch as switch_notice
+    from brain.tables.audit import attributed_to
 
     if not (DOCS / WBS_FILE).exists():
         raise CheckNotRunError(NO_PLAN_IN_THIS_IMAGE)
@@ -200,7 +202,9 @@ async def the_evening_digest_is_sent_once_a_day_to_the_chosen_conversation(h: Ha
     # The notice's own switch, written in this transaction as the Notifications screen writes it,
     # reaches the send: nothing more is posted and the run says why.
     async with h.sessions() as session:
-        for statement in h.attributed():
+        for statement in attributed_to(
+            actor_id=h.actor, ent_hash=SET_UP_REACH, trace_id=h.trace_id
+        ):
             await session.execute(statement)
         await switch_notice(session, notice("evening_digest"), on=False, by=h.actor)
         await session.commit()
