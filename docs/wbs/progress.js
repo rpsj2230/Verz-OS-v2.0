@@ -2085,9 +2085,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M21.2.1": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops.spend.estimate and preflight (lane, tier, tool count, retrieval size) are built and tested; callers are builder.rehearse and orchestration.plan only. budget_stop_store docstring rejects preflight on the request path; no live question is estimated. NEXT: Decide with owner whether to call spend.estimate in api_routes.answered_for before the lane (budget_stop_store.judged is the slot); raise as a needs item since the code deliberately chose stop-on-used-up.",
-    updated: "2026-10-13",
+    status: "BLOCKED",
+    why: "waits on the owner (needs 226, open): whether a live question is estimated before it is answered at all. Option A closes this leaf and M21.2.2 as not wanted, so nothing built on the answer path holds under every option; B refuses on the estimate and C warns, each behind a switch that ships off. What is already wired: the same estimator prices a publish (builder.run_cost, behind publish_cost_hold, item 241) and a rehearsal; the live question is the only caller missing. If 226 is answered B or C the wiring is api_routes.answered_for, after the windows count the request and before the lane, with budget_stop_store.judged as the slot, and the figure shown on the Spend screen. No code changed for this leaf.",
+    updated: "2026-10-24",
   },
   "M21.2.2": {
     status: "IN PROGRESS",
@@ -2100,9 +2100,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M21.2.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops.spend.correct (estimator correction from Observation actuals) is built; only ops.retune.post_launch_correction uses it, called from console.spend_view.cost_review which no route or page calls. No live estimator applies a Correction. NEXT: Run correct() from a worker job over spend_actual versus estimates and persist the Correction; wire it into estimate() on the request path (depends on M21.2.1).",
-    updated: "2026-10-13",
+    status: "BLOCKED",
+    why: "waits on the owner (needs 266, open: where the thirty-day projection comes from) and on data that does not exist under options A or B: ops.spend.correct folds Observation(estimate, actual) pairs, and nothing records an estimate beside what a question cost (the usage rows keep only what was spent; a rehearsal calls no model, so it records no cost either). Only option C of 266 records them, with a new column and a migration. console.spend_view.cost_review also needs a projected_minor that nothing stores, and variance() refuses a projection under one rather than invent one. A route serving it today could only say it has nothing to compare, which the Usage screen's own empty state already says. No code changed for this leaf.",
+    updated: "2026-10-24",
   },
   "M21.2.5": {
     status: "IN PROGRESS",
@@ -4285,9 +4285,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M42.3.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): installer.py:health_report prints per-service healthcheck state and each component's ready_when text; no __main__ or script calls it (only docs name it), and install.sh step 23 polls /health/ready only. NEXT: Add a python -m brain.deployment.installer health command (or ops/install/health.sh) calling health_report and name it in docs/install/operations.md.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT AND WIRED: brain.deployment.health renders ops/install/health.sh, which prints installer.health_report for the profile and then the state of every container now (running and healthy, or a one-shot that exited 0, is ok; anything else is NOT READY with its state), asks the application for readiness, and exits 1 if anything is not ready. install.sh runs it as its last act and the archive carries it with ops/install; docs/install/operations.md says how to run it. Tested against a stand-in for docker. NOT SHOWN: what a real Docker prints for compose ps --format; the first run on a server reads that. TO PROVE: run bash /opt/brain/ops/install/health.sh --profile <profile> on an install and read the output.",
+    updated: "2026-10-24",
   },
   "M42.3.6": {
     status: "READY FOR TESTING",
@@ -5055,9 +5055,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M42.7.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): ops/backup/brain-backup, brain-restore-drill and brain-install-backup (with a systemd timer) exist, but release.INCLUDED has no ops/backup rule (restore-drill.md: the archive does not carry ops/backup) and install.sh has no step that schedules the backup. NEXT: Add an ops/backup rule to release.INCLUDED and an installer PLAN step running brain-install-backup, regenerate install.sh, then check the timer exists on an install.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: the release archive now includes ops/backup (brain-backup, its timer, brain-restore-drill, the drill service and brain-install-backup), so a server installed from it has the restore drill from the release it runs; docs/install/restore-drill.md says where it is (/opt/brain/ops/backup). Tested over the archive file list. NOT BUILT: the installer scheduling the nightly copy; brain-install-backup is still run by a person once, as root, because it needs the bucket and the key that may write it (needs-rupash 5853 describes the step). TO PROVE: extract a published archive and see ops/backup/brain-restore-drill in it.",
+    updated: "2026-10-24",
   },
   "M42.7.5": {
     status: "BLOCKED",

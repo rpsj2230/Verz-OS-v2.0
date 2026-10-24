@@ -473,4 +473,8 @@ say "Sign in there first, then enter the code: it is held in that one browser ta
 say "Until somebody does, this system has no administrator and whoever opens that address first becomes one."
 say "docs/install/install.md, under The setup code, is the rest of it."
 
+say "Reading back the state of every service (ops/install/health.sh)"
+bash "$BRAIN_HOME/ops/install/health.sh" --profile "$BRAIN_PROFILE" \
+  || say "Something this profile starts is not ready yet. The lines above marked NOT READY say what, and bash $BRAIN_HOME/ops/install/health.sh --profile $BRAIN_PROFILE reads them again"
+
 say "Done. The $BRAIN_PROFILE profile is running from $BRAIN_HOME."
