@@ -4285,9 +4285,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M42.3.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): installer.py:health_report prints per-service healthcheck state and each component's ready_when text; no __main__ or script calls it (only docs name it), and install.sh step 23 polls /health/ready only. NEXT: Add a python -m brain.deployment.installer health command (or ops/install/health.sh) calling health_report and name it in docs/install/operations.md.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT AND WIRED: brain.deployment.health renders ops/install/health.sh, which prints installer.health_report for the profile and then the state of every container now (running and healthy, or a one-shot that exited 0, is ok; anything else is NOT READY with its state), asks the application for readiness, and exits 1 if anything is not ready. install.sh runs it as its last act and the archive carries it with ops/install; docs/install/operations.md says how to run it. Tested against a stand-in for docker. NOT SHOWN: what a real Docker prints for compose ps --format; the first run on a server reads that. TO PROVE: run bash /opt/brain/ops/install/health.sh --profile <profile> on an install and read the output.",
+    updated: "2026-10-24",
   },
   "M42.3.6": {
     status: "READY FOR TESTING",
