@@ -58,7 +58,17 @@ what it reads or what it still needs, and a task that cannot run refuses to star
 report nothing, for `brain.ops.schedule_runner.
 A_SCHEDULER_WITH_NOTHING_TO_RUN_IS_HONEST_AND_A_SCHEDULER_THAT_PRETENDS_IS_NOT`'s reason.
 
-Task ids: M39.6.2.1, M39.6.2.3, M38.2.2.5
+**A task that needs a person says where, and for how long.** A drafting task declares its approval
+points on `TaskDeclaration.approvals`, each a step and a window, and `approval_gaps` holds every
+window to `brain.orchestration.unattended.window_refusals` against the cadence of each template that
+names the task: no longer than the platform's maximum and shorter than the gap between two runs, so
+two runs are never waiting on a person at once. A drafting template whose task declares none, and a
+task declaring one that no template drafts for, are gaps. Nothing a run does today raises one:
+`brain.ops.automation_hold` is what raises a hold through the approvals queue and says when nobody
+answered, and it waits for the first performer allowed to draft (needs-rupash 210). See
+`AN_APPROVAL_WINDOW_IS_DECLARED_WITH_THE_TASK_AND_HELD_TO_THE_CADENCE`.
+
+Task ids: M39.6.2.1, M39.6.2.3, M38.2.2.5, M17.4.5
 """
 
 from __future__ import annotations
@@ -81,7 +91,7 @@ from brain.console.agent_automations import (
     automation_reach,
     failure_pause,
 )
-from brain.console.automation_gallery import BUILT_IN, WEEKDAYS, Cadence, Every
+from brain.console.automation_gallery import BUILT_IN, WEEKDAYS, AutomationTemplate, Cadence, Every
 from brain.console.questions_view import QUESTION_AUTHORITY
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.principal import Principal
@@ -89,6 +99,7 @@ from brain.gate.admission import admit
 from brain.ops.automation_owner import AUTOMATION_ASSURANCE, AUTOMATION_CHANNEL
 from brain.ops.jobs import JobState
 from brain.ops.outbox import EventKind, OutboxEvent
+from brain.orchestration.unattended import ApprovalStep, window_refusals
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why nothing about the owner's reach is kept between runs.
@@ -115,6 +126,15 @@ WHAT_A_RUN_SENDS_LEAVES_WITH_THE_RUN_OR_NOT_AT_ALL: Final = (
     "issue_once under the delivery's key. A call through issue_once from inside the run would "
     "commit its ledger record on another connection before the run commits, and a run rolled "
     "back afterwards would have sent something about a run nobody can find."
+)
+
+#: Why a task's approval windows are declared with it and checked before any automation of it runs.
+AN_APPROVAL_WINDOW_IS_DECLARED_WITH_THE_TASK_AND_HELD_TO_THE_CADENCE: Final = (
+    "How long a person has to answer is a property of the task and of how often it runs, and both "
+    "are known before an automation exists. A window found too long when the first hold is raised "
+    "is found at four in the morning with a person's draft already made, so it is found when the "
+    "task is declared instead: the window may not outlast the platform's maximum and may not reach "
+    "the next run, which would put two runs waiting on one person."
 )
 
 #: The actor a run's writes are attributed to. The ledger's identifier grammar, and not a person.
@@ -193,6 +213,26 @@ JOB_STATE_OF: Final = MappingProxyType(
 
 # ------------------------------------------------------------------ the tasks
 @dataclass(frozen=True)
+class ApprovalPoint:
+    """A point in a task's run where a person has to say yes, and how long they have (M17.4.5).
+
+    The same two facts as `brain.orchestration.unattended.ApprovalStep` less the automation, which a
+    task does not have until somebody installs it. `step` builds the step for one automation, and
+    in doing so is refused by the step's own constructor for an empty id or a window of nothing.
+    """
+
+    step_id: str
+    window: timedelta
+
+    def __post_init__(self) -> None:
+        self.step("declaration")
+
+    def step(self, automation_id: str) -> ApprovalStep:
+        """This point as the step of one automation."""
+        return ApprovalStep(step_id=self.step_id, automation_id=automation_id, window=self.window)
+
+
+@dataclass(frozen=True)
 class TaskDeclaration:
     """One automation task: what its run reads, or what it still needs before it can run.
 
@@ -205,6 +245,9 @@ class TaskDeclaration:
     reads: Capability | None = None
     #: What still has to exist before it can run, empty when it can.
     needs: str = ""
+    #: Where a person has to say yes before the run goes on. Empty for a task that only reads and
+    #: tells; required for one a template says drafts. See `approval_gaps`.
+    approvals: tuple[ApprovalPoint, ...] = ()
 
     def __post_init__(self) -> None:
         if (self.reads is None) == (not self.needs.strip()):
@@ -218,6 +261,11 @@ class TaskDeclaration:
     def runnable(self) -> bool:
         return self.reads is not None
 
+
+#: How long a person has to answer a draft: half a day, so a draft made at the end of one day is
+#: answered or gone before the next run, and inside both the platform's maximum and the shortest
+#: gap between two runs of any template that drafts.
+DRAFT_APPROVAL_WINDOW: Final = timedelta(hours=12)
 
 #: The task an automation a person wrote in words runs. Not a template's, so `task_gaps` does not
 #: ask a template to name it, and `brain.console.automation_authoring.AUTHORED_TASK` is this.
@@ -259,6 +307,7 @@ TASKS: Final[tuple[TaskDeclaration, ...]] = (
     ),
     TaskDeclaration(
         task="automation.deal_capture",
+        approvals=(ApprovalPoint(step_id="approve_the_draft", window=DRAFT_APPROVAL_WINDOW),),
         needs=(
             "a group chat to read, a customer-record source to draft against, and a place a "
             "person approves a draft. Nothing drafts a record from a chat, and a draft held for "
@@ -267,6 +316,7 @@ TASKS: Final[tuple[TaskDeclaration, ...]] = (
     ),
     TaskDeclaration(
         task="automation.email_replies",
+        approvals=(ApprovalPoint(step_id="approve_the_reply", window=DRAFT_APPROVAL_WINDOW),),
         needs=(
             "a mailbox to read as the person it runs as and a place a drafted reply waits for "
             "them. Nothing drafts a reply, and an unattended run may not call a model until the "
@@ -294,6 +344,47 @@ def task_declaration(
     return None
 
 
+def shortest_gap(cadence: Cadence) -> timedelta:
+    """The least time between two runs of this cadence: a day for a daily or weekday one, a week
+    for a weekly one. Weekday runs are a day apart Monday to Friday and three days over the
+    weekend, and the least is the one an approval window must fit inside."""
+    return timedelta(days=7) if cadence.every is Every.WEEK else timedelta(days=1)
+
+
+def approval_gaps(
+    declarations: Sequence[TaskDeclaration] = TASKS,
+    catalogue: Sequence[AutomationTemplate] = BUILT_IN,
+) -> tuple[str, ...]:
+    """Every way a task's approval points disagree with the templates that run it (M17.4.5).
+
+    A template that drafts must have a task that declares an approval point, and a task that
+    declares one must be a task some template drafts for. Each declared window is held to
+    `window_refusals` against the shortest gap of every template naming the task, which is the
+    rule a run raising the hold is held to. See
+    `AN_APPROVAL_WINDOW_IS_DECLARED_WITH_THE_TASK_AND_HELD_TO_THE_CADENCE`.
+    """
+    gaps: list[str] = []
+    drafting = {one.task for one in catalogue if one.drafts}
+    for declaration in declarations:
+        if declaration.task in drafting and not declaration.approvals:
+            gaps.append(
+                f"{declaration.task!r} drafts and declares no point where a person approves"
+            )
+        if declaration.approvals and declaration.task not in drafting:
+            gaps.append(f"{declaration.task!r} declares an approval and no template drafts for it")
+        for template in catalogue:
+            if template.task != declaration.task:
+                continue
+            steps = tuple(one.step(template.template_id) for one in declaration.approvals)
+            gaps.extend(
+                f"{declaration.task!r} on {template.template_id!r}: {reason}"
+                for reason in window_refusals(
+                    template.template_id, shortest_gap(template.cadence), steps
+                )
+            )
+    return tuple(gaps)
+
+
 def task_gaps(declarations: Sequence[TaskDeclaration] = TASKS) -> tuple[str, ...]:
     """Every template task with no declaration, and every declaration no template names."""
     named = {one.task for one in BUILT_IN} | {INSTRUCTION_TASK}
@@ -309,6 +400,7 @@ def task_gaps(declarations: Sequence[TaskDeclaration] = TASKS) -> tuple[str, ...
     gaps.extend(
         f"{task!r} is declared and no template names it" for task in sorted(set(declared) - named)
     )
+    gaps.extend(approval_gaps(declarations))
     return tuple(gaps)
 
 
