@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-24T13:43:06.674722+00:00",
-  "commit": "38389be5",
-  "commit_subject": "An administrator can see stored workflows and coordinated runs, give an agent a workflow or a specialist, and run them from the console (#702)",
+  "generated_at": "2026-10-24T14:13:48.786257+00:00",
+  "commit": "51e2ad48",
+  "commit_subject": "A member sets a review cycle when they add a document, and the check shows they can retire it (#701)",
   "total": 1626,
   "done": 1254,
   "percent": 77.1,
-  "built": 1426,
-  "built_percent": 87.7,
-  "built_unproven": 172,
+  "built": 1427,
+  "built_percent": 87.8,
+  "built_unproven": 173,
   "built_task_ids": [
     "M1.1.8",
     "M1.8.8",
@@ -159,6 +159,7 @@
     "M39.9.1.5",
     "M40.1.1.4",
     "M40.1.2.3",
+    "M40.3.1.2",
     "M40.4.1.1",
     "M40.7.1",
     "M40.7.3",
@@ -252,14 +253,14 @@
       "total": 232,
       "done": 149,
       "percent": 64.2,
-      "in_progress": 34,
-      "ready_for_testing": 30,
+      "in_progress": 33,
+      "ready_for_testing": 31,
       "blocked": 18,
       "open": 1,
       "acts": 0,
       "decided": 23,
-      "built": 181,
-      "built_percent": 78.0
+      "built": 182,
+      "built_percent": 78.4
     },
     {
       "wave": 5,
@@ -701,7 +702,7 @@
       "done": 44,
       "acts": 0,
       "decided": 6,
-      "built": 49
+      "built": 50
     },
     {
       "module": "M41",
@@ -3525,9 +3526,9 @@
       "updated": "2026-10-13"
     },
     "M40.3.1.2": {
-      "status": "IN PROGRESS",
-      "why": "TRIAGE 2026-10-13 class 2 (partly built): Upload (queue_upload, add_link), replace (POST .../versions) and verify-with-next-review exist. Missing: retire (archive not built, needs a migration per knowledge_lifecycle_routes) and a review cycle at upload time (upload takes no review date). member_library.upload/replace/retire have no caller. NEXT: add a review_by field to the upload request, and a retire route over a know.supersede-style function with its migration",
-      "updated": "2026-10-13"
+      "status": "READY FOR TESTING",
+      "why": "built: POST /knowledge/uploads takes review_in_days (1 to 730, refused outside it before the file is read) and stores the item due that many days ahead (member_library.review_date_for, uploads.with_review_by), the answer carries review_by, and a document sent without one is outside the sweep as before. Retire needed no new stored thing: the archive route (POST /knowledge/items/{id}/archive, know.archive_item from migration 0216) already lets the person who added a document withdraw it and refuses a colleague who only reads it in the one 404 sentence; the earlier note that retire needed a migration was stale. Install check: a_member_adds_a_document_with_a_review_cycle_and_retires_it (ops/acceptance_checks_member_library.py), not yet run on the install. No console control sets the cycle at upload yet (the Add a document form sends none); member_library.upload, replace and retire are still not the live path and are left unwired.",
+      "updated": "2026-10-24"
     },
     "M40.3.1.3": {
       "status": "IN PROGRESS",
