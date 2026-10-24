@@ -18,14 +18,15 @@ is the reading `report_is_due` refuses to give for an unmeasured report. See
 `brain.ops.scaling.TRIGGERS`; the ledger line's window is the retention policy's own; the host
 line's count is `budget_breaches` for this install's profile, asked again here.
 
-Task ids: M36.1.1.4, M36.1.4.3
+Task ids: M36.1.1.4, M36.1.4.3, M36.1.2.4, M36.1.3.3
 """
 
 from __future__ import annotations
 
-from typing import Final
+from typing import Any, Final
 
-from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, check
+from brain.ops import read_load
+from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, CheckNotRunError, check
 from brain.ops.acceptance_operations_console import asking_as, console_for, refused, screen_grants
 from brain.ops.acceptance_run import Harness
 
@@ -69,7 +70,10 @@ async def each_scaling_move_says_when_it_is_due_and_what_it_cannot_say(
     if not await refused(capacity(console.request(), await asking_as(h, nobody))):
         raise CheckFailedError("a person without the Capacity screen was shown the scaling moves")
 
-    served = await capacity(console.request(), await asking_as(h, reader))
+    # A counter of its own, empty, so the lines nothing measures are the check's whatever this
+    # process has been asked since it started.
+    with read_load.observing(read_load.ReadLoad()):
+        served = await capacity(console.request(), await asking_as(h, reader))
     lines = {(one.move, one.observable): one for one in served.moves}
     wanted = {(one.move.value, one.observable.value) for one in TRIGGERS}
     if set(lines) != wanted or len(served.moves) != len(wanted):
@@ -104,3 +108,96 @@ async def each_scaling_move_says_when_it_is_due_and_what_it_cannot_say(
     ):
         if lines[key].due is not None:
             raise CheckFailedError("a move nothing measures was served with a due flag")
+
+
+#: Said where the answer path already takes the interactive pool, so no read could be "inside" it.
+NO_HEADROOM_TO_EXCEED: Final = (
+    "this install's profile leaves the console no headroom in the interactive pool, so a count of "
+    "reads cannot be shown inside it"
+)
+
+
+#: Said where this install's profile has no capacity sizing, so the answer path's peak occupancy
+#: and the headroom it leaves the console are not worked out.
+NO_SIZING_FOR_THIS_PROFILE: Final = (
+    "this install's profile has no capacity sizing, so the headroom the answer path leaves the "
+    "console is not worked out and reads in flight cannot be held against it"
+)
+
+
+class _Seconds:
+    """A clock the check moves by hand, so a report takes exactly as long as the check says."""
+
+    def __init__(self) -> None:
+        self.now = 1_000_000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def _load_with(reads_together: int, reports: int, report_seconds: float) -> read_load.ReadLoad:
+    """A counter that saw this many reads in flight together and this many reports this slow."""
+    clock = _Seconds()
+    load = read_load.ReadLoad(clock)
+    started = [load.begin("GET", "/api/v1/agents") for _ in range(reads_together)]
+    for one in started:
+        load.finish(one)
+    for _ in range(reports):
+        begun = load.begin("GET", "/api/v1/report/spend")
+        clock.now += report_seconds
+        load.finish(begun)
+    return load
+
+
+@check(
+    leaves=("M36.1.2.4", "M36.1.3.3"),
+    sentence=(
+        "Console reads and report screens this process has counted reach the Capacity screen: "
+        "reads in flight beyond the headroom the answer path leaves make the replica move due and "
+        "inside it do not, report screens slower than the threshold make materialised reports "
+        "due and faster do not, and a process that has counted too few says it has not measured."
+    ),
+)
+async def counted_reads_and_reports_make_their_scaling_moves_due_or_not(h: Harness) -> None:
+    from brain.install_routes import capacity
+
+    await h.found_departments()
+    reader = h.principal(A, "load")
+    await h.person(reader, department=A, grants=screen_grants("connections"))
+    console = console_for(h)
+
+    async def moves(load: read_load.ReadLoad) -> dict[str, Any]:
+        with read_load.observing(load):
+            served = await capacity(console.request(), await asking_as(h, reader))
+        return {one.observable: one for one in served.moves}
+
+    quiet = await moves(read_load.ReadLoad())
+    if quiet["console_reads_in_flight"].due is not None or quiet["report_p95_ms"].due is not None:
+        raise CheckFailedError("a process that counted nothing was served a due flag for a load")
+    headroom = quiet["console_reads_in_flight"].threshold
+    threshold = quiet["report_p95_ms"].threshold
+    if headroom is None:
+        raise CheckNotRunError(NO_SIZING_FOR_THIS_PROFILE)
+    if threshold is None:
+        raise CheckFailedError("the report move was served with no threshold to be held against")
+
+    if headroom < 1:
+        raise CheckNotRunError(NO_HEADROOM_TO_EXCEED)
+    over = int(headroom) + 1
+    busy = await moves(_load_with(over, 25, threshold / 1000.0 + 1.0))
+    if busy["console_reads_in_flight"].due is not True or busy[
+        "console_reads_in_flight"
+    ].measured != float(over):
+        raise CheckFailedError("reads in flight beyond the headroom did not make the replica due")
+    if busy["report_p95_ms"].due is not True:
+        raise CheckFailedError("report screens slower than the threshold did not make views due")
+
+    calm = await moves(_load_with(int(headroom), 25, threshold / 1000.0 / 2.0))
+    if calm["console_reads_in_flight"].due is not False:
+        raise CheckFailedError("reads in flight inside the headroom made the replica due")
+    if calm["report_p95_ms"].due is not False:
+        raise CheckFailedError("report screens inside the threshold made views due")
+
+    thin = await moves(_load_with(0, 5, threshold / 1000.0 + 1.0))
+    if thin["report_p95_ms"].due is not None or thin["report_p95_ms"].measured is not None:
+        raise CheckFailedError("a handful of reports was read as a 95th percentile")
