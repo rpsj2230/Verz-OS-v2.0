@@ -511,11 +511,49 @@ copy, beside `DEFAULT_POOL_SIZE`, with the same number:
 Then redeploy the application in Coolify once. Nothing else changes: requests queue at the pooler
 for a moment under load, which is what the pool was always meant to do.
 
+## Rehearsing failures on a throwaway install
+
+**Nobody has run this on a server.** `ops/chaos/chaos.sh` stops one component of a running install
+at a time, reads what the application does while it is down, starts the component again and reads
+whether the application recovers. Everything about how it reasons is tested against a stand-in for
+Docker (`test_deployment_chaos.py`); a real container stopping and the product coming back is shown
+by the first run on a server, and that run is yours.
+
+Run it only on an install that may be broken on purpose, and say so:
+
+```
+bash /opt/brain/ops/chaos/chaos.sh --profile standard --this-install-is-disposable
+```
+
+It does nothing without that flag, refuses to start if the application is not live and ready to
+begin with, finds containers inside the install's own compose project (so another project's
+`db` on the same host is never touched), and starts again whatever it stopped if you interrupt it.
+`--fault db` (or `worker`, `provider`, `connector`, `browser`) runs one; `--recover-within SECONDS`
+changes the wait for readiness after the start (180 by default, a starting position).
+
+For each fault it prints what the failure-mode matrix says the outage looks like, then what it saw:
+liveness and readiness while the component was down, and how long readiness took to return. Two
+things fail a fault: the application stopped answering liveness while the component was down, and
+it was not ready again within the wait. For the database alone, readiness that stays ready with the
+database stopped also fails, because that is the application answering from whatever it can still
+reach. For every other component readiness is recorded and not judged, because the matrix says
+several of them present as nothing from outside.
+
+A fault whose target is not running is **skipped and counted**: the model server runs from its own
+compose file, the egress proxy only in the full profile, and the browser only while a browsing run
+is in flight (start one, then run `--fault browser`). A run in which nothing could be made exits 3.
+
+The script cannot check what a person has to: that a worker stopped mid-task puts its job back only
+when the task is declared safe, that a connector call interrupted by the proxy failing is read back
+and not repeated, that a question asked while the model server is down falls to the next step. Each
+fault ends with the check to make by hand.
+
 ## What is checked and what is not
 
 | Claim | Held by |
 | --- | --- |
 | Which database a console page is read from, and when it carries a staleness banner | `test_read_replica.py` and `test_replica_store.py`; the lag query itself against a real server that is a primary, never against a real replica |
+| That the failure rehearsal's table of faults covers the five named, matches the matrix, and names tests that exist; that its script refuses without the disposable flag, finds containers in the install's own project, judges liveness and recovery and starts what it stopped again | `test_deployment_chaos.py`, the script run against a stand-in for Docker; **a real stop and recovery on a server: nobody yet** |
 | The backup schedule and its intervals | `test_recovery.py`, against the schedule |
 | The recovery figures per profile | `test_reliability.py` |
 | That a service level statement is refused when the arithmetic does not support it | `test_launch.py` |
@@ -536,3 +574,9 @@ trace ledger is real in every profile. The other two are not configuration at al
 backup schedule is a set of constants that nothing runs, no drill has ever verified a restore,
 and almost every mechanism in the table above is the monitoring. A client following this page
 ends with health checks and no backups.
+
+M30.4.3 is not claimed. The rehearsal script and its table are built and tested against a stand-in
+for Docker, and the in-process halves it names (the database's readiness, a provider that fails, a
+connector that is down, a worker's orphaned job, the browser's leftovers) are held by tests that
+exist. No component has been stopped on a real install by it, and the worker-mid-task and
+connector-mid-call cases are checks a person makes by hand after the script has run.

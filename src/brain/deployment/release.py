@@ -439,6 +439,13 @@ INCLUDED: Final[tuple[Rule, ...]] = (
         "drill run with a script from another release proves a different system",
     ),
     Rule(
+        "ops/chaos",
+        "the failure rehearsal, which stops one component of a throwaway install at a time and "
+        "reads whether the application recovers. A server installed from this archive that is "
+        "asked to rehearse its failures has to have the script from the release it runs, because "
+        "a rehearsal run with a script from another release proves a different system",
+    ),
+    Rule(
         "ops/update",
         "the update and rollback scripts, which are the only two things on a client's server "
         "that write the image variable, so an install that does not carry them is one whose "
