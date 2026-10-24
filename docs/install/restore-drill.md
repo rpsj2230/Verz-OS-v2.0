@@ -39,9 +39,9 @@ and still have lost a policy.
 - Work on the server where `ops/backup/brain-install-backup` was run, as root. It wrote
   `/etc/brain-backup.env`, which holds the database container, the database name and user, the
   bucket, the object store's address, and the key that may read the bucket.
-- Have `brain-restore-drill` on that server. The release archive does not carry `ops/backup`, so
-  copy `ops/backup/brain-restore-drill` from the repository at the release tag the install runs,
-  the same way `brain-backup` reached `/usr/local/bin`.
+- Have `brain-restore-drill` on that server. The release archive carries `ops/backup`, so it is at
+  `/opt/brain/ops/backup/brain-restore-drill`, from the same release the install runs, which is
+  what makes the rehearsal a rehearsal of that release.
 - Pick a copy younger than the window copies are kept for (the figures table below). An older
   one has already been expired by the bucket's own rule.
 - Pick a copy whose manifest carries `migration_head` and `row_counts`. Copies taken by a
