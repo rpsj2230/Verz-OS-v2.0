@@ -3,7 +3,7 @@
 - **Screens:** `/agents/:agentId/:tab`, `/automations`, `/automations/:automationId`, `/automations/:automationId/:view`
 - **Tables:** `ops.workflow_version`, `agent.workflow_assignment`, `ops.workflow_run`, `ops.workflow_step_run`, `agent.automation`, `agent.automation_run`, `agent.automation_schedule`, `agent.automation_change`, `gate.automation_owner`
 - **Installation values:** none
-- **Measured here:** 25 routes, 8 called by no screen; 10 write routes, 10 with all three proofs; 4 gaps.
+- **Measured here:** 25 routes, 1 called by no screen; 14 write routes, 10 with all three proofs; 3 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -11,29 +11,28 @@
 | `GET /api/v1/agents/{agent_id}/automation-templates` | `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/automation-templates/{template_id}/preview` | `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/automations` | `/agents/:agentId` |
-| `GET /api/v1/agents/{agent_id}/workflows` | **no screen** |
+| `GET /api/v1/agents/{agent_id}/workflows` | `/agents/:agentId/:tab` |
 | `GET /api/v1/console/automations` | `/automations`, `/people/:personId` |
 | `GET /api/v1/console/automations/{automation_id}` | `/automations/:automationId`, `/automations/:automationId/:view` |
 | `GET /api/v1/console/automations/{automation_id}/stats` | `/automations/:automationId` |
-| `GET /api/v1/workflow-runs` | **no screen** |
-| `GET /api/v1/workflows` | **no screen** |
+| `GET /api/v1/workflow-runs` | `/features` |
+| `GET /api/v1/workflows` | `/agents/:agentId/:tab`, `/features` |
 | `GET /api/v1/workflows/{workflow_id}` | **no screen** |
 | `POST /api/v1/agents/{agent_id}/automation-authoring/preview` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/automations` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/automations/authored` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/automations/{automation_id}/start` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/automations/{automation_id}/stop` | `/agents/:agentId`, `/agents/:agentId/:tab` |
-| `POST /api/v1/agents/{agent_id}/workflow-runs` | **no screen** |
-| `POST /api/v1/agents/{agent_id}/workflows` | **no screen** |
-| `POST /api/v1/agents/{agent_id}/workflows/removals` | **no screen** |
+| `POST /api/v1/agents/{agent_id}/workflow-runs` | `/agents/:agentId`, `/agents/:agentId/:tab` |
+| `POST /api/v1/agents/{agent_id}/workflows` | `/agents/:agentId`, `/agents/:agentId/:tab` |
+| `POST /api/v1/agents/{agent_id}/workflows/removals` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/automations/{automation_id}/adopt` | `/automations/:automationId`, `/automations/:automationId/:view` |
 | `POST /api/v1/automations/{automation_id}/pause` | `/automations/:automationId`, `/automations/:automationId/:view` |
 | `POST /api/v1/automations/{automation_id}/remove` | `/automations/:automationId`, `/automations/:automationId/:view` |
 | `POST /api/v1/automations/{automation_id}/reschedule` | `/automations/:automationId`, `/automations/:automationId/:view` |
 | `POST /api/v1/automations/{automation_id}/resume` | `/automations/:automationId`, `/automations/:automationId/:view` |
-| `POST /api/v1/workflows` | **no screen** |
+| `POST /api/v1/workflows` | `/features` |
 
-- **Gap.** A stored workflow cannot be written, assigned to an agent or run, and its runs cannot be read, from the console. Open leaf `M17.6.1`.
 - **Gap.** A removed automation cannot be brought back, and installing the same outcome again for the same agent and person is refused. Recorded: A removal is a final row in agent.automation_change (brain.console.automations.A_REMOVAL_IS_FINAL_AND_KEEPS_ITS_HISTORY) and 0055's one-install-per-agent-template-and-person constraint still reads the removed install; the page draws Bring back as not available yet.
 - **Gap.** An automation registered to call the tool route with its own credential (gate.automation_owner) is not listed or adoptable on a screen. Recorded: Nothing on an install writes that registration yet: brain.ops.automation_owner_store.StoredAutomations.put has no caller, so there is no row to list; its adopt is kept for when one exists.
 - **Gap.** Three of the four automation templates cannot be started on any install. Recorded: brain.ops.automation_run.TASKS says what work_summary, source_freshness and approvals_waiting each still need, and the Automations tab shows that sentence instead of a Start control.
@@ -47,8 +46,12 @@
 | `POST /api/v1/agents/{agent_id}/automations/authored` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_one_confirmed_request_writes_one_paused_automation_as_the_caller` in `tests/unit/test_automation_authoring_routes.py` | `test_a_written_automation_reads_back_arrives_in_the_ledger_and_install_is_still_once` in `tests/unit/test_automation_authoring_store.py` (database, in CI) | `test_a_confirmation_for_other_words_is_refused_and_writes_nothing` in `tests/unit/test_automation_authoring_routes.py` |
 | `POST /api/v1/agents/{agent_id}/automations/{automation_id}/start` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who` in `tests/unit/test_automation_run_store.py` (database, in CI) | `test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who` in `tests/unit/test_automation_run_store.py` (database, in CI) | `test_a_confirmed_start_is_written_as_the_approver_and_a_stale_one_writes_nothing` in `tests/unit/test_automation_schedule_routes.py` |
 | `POST /api/v1/agents/{agent_id}/automations/{automation_id}/stop` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who` in `tests/unit/test_automation_run_store.py` (database, in CI) | `test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who` in `tests/unit/test_automation_run_store.py` (database, in CI) | `test_the_owner_stops_their_own_without_approval_and_a_bystander_cannot` in `tests/unit/test_automation_schedule_routes.py` |
+| `POST /api/v1/agents/{agent_id}/workflow-runs` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_every_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_workflow.py` (database, in CI) | **None.** A run is kept in ops.workflow_run and ops.workflow_step_run as statuses and closed-vocabulary causes, insert-only and naming who ran it; each step also leaves the trace of any call through the gate, and no ledger entry is appended for the run itself. | `test_a_run_goes_through_the_door_as_the_asker_and_is_kept_with_one_trace` in `tests/unit/test_workflow_routes.py` |
+| `POST /api/v1/agents/{agent_id}/workflows` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_every_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_workflow.py` (database, in CI) | **None.** A workflow version and an assignment are rows in ops.workflow_version and agent.workflow_assignment that name who wrote them and when and are never edited (a withdrawal is a row that ends one), so the row is the dated record and no ledger entry is appended (migration 0273). | `test_the_authority_over_an_agent_assigns_and_withdraws_a_workflow` in `tests/unit/test_workflow_routes.py` |
+| `POST /api/v1/agents/{agent_id}/workflows/removals` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_every_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_workflow.py` (database, in CI) | **None.** A workflow version and an assignment are rows in ops.workflow_version and agent.workflow_assignment that name who wrote them and when and are never edited (a withdrawal is a row that ends one), so the row is the dated record and no ledger entry is appended (migration 0273). | `test_the_authority_over_an_agent_assigns_and_withdraws_a_workflow` in `tests/unit/test_workflow_routes.py` |
 | `POST /api/v1/automations/{automation_id}/adopt` | `/automations/:automationId`, `/automations/:automationId/:view` | `test_an_ownerless_automation_stops_and_waits_and_once_adopted_runs_as_the_adopter` in `tests/unit/test_automation_change_store.py` (database, in CI) | `test_an_ownerless_automation_stops_and_waits_and_once_adopted_runs_as_the_adopter` in `tests/unit/test_automation_change_store.py` (database, in CI) | `test_an_ownerless_automation_is_adopted_in_the_adopters_name_and_stays_paused` in `tests/unit/test_automations_routes.py` |
 | `POST /api/v1/automations/{automation_id}/pause` | `/automations/:automationId`, `/automations/:automationId/:view` | `test_a_paused_automation_does_not_run_on_the_next_tick_and_the_ledger_says_who` in `tests/unit/test_automation_change_store.py` (database, in CI) | `test_a_paused_automation_does_not_run_on_the_next_tick_and_the_ledger_says_who` in `tests/unit/test_automation_change_store.py` (database, in CI) | `test_a_paused_automation_does_not_run_on_the_next_tick_and_the_ledger_says_who` in `tests/unit/test_automation_change_store.py` (database, in CI) |
 | `POST /api/v1/automations/{automation_id}/remove` | `/automations/:automationId`, `/automations/:automationId/:view` | `test_a_removed_automation_never_runs_again_and_cannot_be_started_from_its_agent` in `tests/unit/test_automation_change_store.py` (database, in CI) | `test_a_removed_automation_never_runs_again_and_cannot_be_started_from_its_agent` in `tests/unit/test_automation_change_store.py` (database, in CI) | `test_a_removed_automation_never_runs_again_and_cannot_be_started_from_its_agent` in `tests/unit/test_automation_change_store.py` (database, in CI) |
 | `POST /api/v1/automations/{automation_id}/reschedule` | `/automations/:automationId`, `/automations/:automationId/:view` | `test_a_schedule_change_moves_the_next_run_and_the_runner_keeps_to_the_new_cadence` in `tests/unit/test_automation_change_store.py` (database, in CI) | `test_a_schedule_change_moves_the_next_run_and_the_runner_keeps_to_the_new_cadence` in `tests/unit/test_automation_change_store.py` (database, in CI) | `test_a_schedule_change_moves_the_next_run_and_the_runner_keeps_to_the_new_cadence` in `tests/unit/test_automation_change_store.py` (database, in CI) |
 | `POST /api/v1/automations/{automation_id}/resume` | `/automations/:automationId`, `/automations/:automationId/:view` | `test_an_ownerless_automation_stops_and_waits_and_once_adopted_runs_as_the_adopter` in `tests/unit/test_automation_change_store.py` (database, in CI) | `test_an_ownerless_automation_stops_and_waits_and_once_adopted_runs_as_the_adopter` in `tests/unit/test_automation_change_store.py` (database, in CI) | `test_an_ownerless_automation_stops_and_waits_and_once_adopted_runs_as_the_adopter` in `tests/unit/test_automation_change_store.py` (database, in CI) |
+| `POST /api/v1/workflows` | `/features` | `test_every_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_workflow.py` (database, in CI) | **None.** A version is a row in ops.workflow_version that names who saved it and when and is never edited, so the row is the dated record and no ledger entry is appended (migration 0273); saving changes nobody's access. | `test_the_authority_saves_a_workflow_as_the_next_version_and_reads_it_back` in `tests/unit/test_workflow_routes.py` |

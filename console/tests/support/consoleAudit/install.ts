@@ -16,6 +16,7 @@ import {
 } from "../../../src/pages/browserQuery";
 import { switchPath } from "../../../src/pages/featuresQuery";
 import { COMPLETE_PATH, MIGRATION_API_PATH } from "../../../src/pages/migrationQuery";
+import { WORKFLOWS_API_PATH } from "../../../src/pages/agents/agentWorkflowsQuery";
 import { REHEARSALS_API_PATH } from "../../../src/pages/orchestrationQuery";
 import { PLUGINS_API_PATH, verbPath } from "../../../src/pages/pluginsQuery";
 import { at, type Proof, type Proofs, SETTINGS_PRESSED, t, type WriteRoute } from "../auditClaims";
@@ -28,6 +29,7 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("PUT /api/v1/migration/cutover", "document.path", `${MIGRATION_API_PATH}/cutover`),
   ],
   "src/pages/install/MigrationPanel.tsx COMPLETE_PATH": [at("POST /api/v1/migration/cutover/complete", "COMPLETE_PATH", COMPLETE_PATH)],
+  "src/pages/install/WorkflowsPanel.tsx WORKFLOWS_API_PATH": [at("POST /api/v1/workflows", "WORKFLOWS_API_PATH", WORKFLOWS_API_PATH)],
   "src/pages/install/OrchestrationPanel.tsx REHEARSALS_API_PATH": [at("POST /api/v1/orchestration/weighed-plans", "REHEARSALS_API_PATH", REHEARSALS_API_PATH)],
   "src/pages/install/BrowserPanel.tsx TARGETS_API_PATH": [at("POST /api/v1/install/browser/targets", "TARGETS_API_PATH", TARGETS_API_PATH)],
   "src/pages/install/BrowserPanel.tsx retirePath(row.name)": [
@@ -55,6 +57,16 @@ const A_PLUGIN_ROW_IS_FOLLOWED_BY_THE_INSTALL_CHECK = t(
   "test_every_check_passes_on_an_install_and_leaves_nothing",
   true,
 );
+
+const A_WORKFLOW_VERSION_IS_FOLLOWED_BY_THE_INSTALL_CHECK = t(
+  "test_acceptance_checks_workflow",
+  "test_every_check_passes_on_an_install_and_leaves_nothing",
+  true,
+);
+
+const NO_LEDGER_ENTRY_FOR_A_WORKFLOW_VERSION: Proof = {
+  none: "A version is a row in ops.workflow_version that names who saved it and when and is never edited, so the row is the dated record and no ledger entry is appended (migration 0273); saving changes nobody's access.",
+};
 
 const A_WEIGHED_PLAN_IS_FOLLOWED_BY_THE_INSTALL_CHECK = t(
   "test_acceptance_checks_orchestration_rehearsal",
@@ -146,6 +158,11 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: A_PLUGIN_ROW_IS_FOLLOWED_BY_THE_INSTALL_CHECK,
     audit: NO_PLUGIN_LEDGER_ENTRY,
     behaviour: A_PLUGIN_ROW_IS_FOLLOWED_BY_THE_INSTALL_CHECK,
+  },
+  "POST /api/v1/workflows": {
+    row: A_WORKFLOW_VERSION_IS_FOLLOWED_BY_THE_INSTALL_CHECK,
+    audit: NO_LEDGER_ENTRY_FOR_A_WORKFLOW_VERSION,
+    behaviour: t("test_workflow_routes", "test_the_authority_saves_a_workflow_as_the_next_version_and_reads_it_back"),
   },
   "POST /api/v1/orchestration/weighed-plans": {
     row: A_WEIGHED_PLAN_IS_FOLLOWED_BY_THE_INSTALL_CHECK,

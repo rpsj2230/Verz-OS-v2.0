@@ -29,9 +29,50 @@ import { agentMemoryKindsApiPath } from "../../../src/pages/agents/AgentMemoryKi
 import { agentOwnWorkspaceApiPath } from "../../../src/pages/agents/AgentOwnWorkspace";
 import { agentUpgradeAcceptApiPath, agentUpgradeDeclineApiPath } from "../../../src/pages/agents/agentUpgradeQuery";
 import { agentGroupRemovalApiPath, agentGroupsApiPath } from "../../../src/pages/agents/agentGroupsQuery";
+import {
+  agentCalleeRemovalsApiPath,
+  agentCalleesApiPath,
+  agentFanOutApiPath,
+  COORDINATED_RUNS_API_PATH,
+} from "../../../src/pages/agents/agentSpecialistsQuery";
+import {
+  agentWorkflowRemovalApiPath,
+  agentWorkflowRunApiPath,
+  agentWorkflowsApiPath,
+} from "../../../src/pages/agents/agentWorkflowsQuery";
 import { DESCRIBE_API_PATH, suggestApiPath, takeApiPath } from "../../../src/pages/agents/agentCoauthorQuery";
 import { DRAFTS_API_PATH, draftActApiPath, editAsDraftApiPath } from "../../../src/pages/agents/agentDraftsQuery";
-import { at, type Proofs, type ReadAfterAnAction, t, type WriteRoute } from "../auditClaims";
+import { at, type Proof, type Proofs, type ReadAfterAnAction, t, type WriteRoute } from "../auditClaims";
+
+/** The install checks that follow a link, a fan-out switch and a coordinated run to the rows they write. */
+const A_COORDINATION_ROW_IS_FOLLOWED_BY_THE_INSTALL_CHECK = t(
+  "test_acceptance_checks_coordination",
+  "test_every_check_passes_on_an_install_and_leaves_nothing",
+  true,
+);
+
+/** The install checks that follow an assignment and a run to the rows they write. */
+const A_WORKFLOW_ROW_IS_FOLLOWED_BY_THE_INSTALL_CHECK = t(
+  "test_acceptance_checks_workflow",
+  "test_every_check_passes_on_an_install_and_leaves_nothing",
+  true,
+);
+
+const A_COORDINATION_ROW_IS_ITS_OWN_RECORD: Proof = {
+  none: "A link and a fan-out grant are rows in agent.agent_callee and agent.agent_fanout that name who wrote them and when and are never edited, so the row is the dated record and no ledger entry is appended (migration 0272 says why a ledger action kind was not added).",
+};
+
+const A_COORDINATED_RUN_IS_ITS_OWN_RECORD: Proof = {
+  none: "A run is kept in ops.coordinated_run, children included, as how it went, never what it was about, insert-only and naming who asked; it changes nobody's access and no configuration, so no ledger entry is appended.",
+};
+
+const A_WORKFLOW_ROW_IS_ITS_OWN_RECORD: Proof = {
+  none: "A workflow version and an assignment are rows in ops.workflow_version and agent.workflow_assignment that name who wrote them and when and are never edited (a withdrawal is a row that ends one), so the row is the dated record and no ledger entry is appended (migration 0273).",
+};
+
+const A_WORKFLOW_RUN_IS_ITS_OWN_RECORD: Proof = {
+  none: "A run is kept in ops.workflow_run and ops.workflow_step_run as statuses and closed-vocabulary causes, insert-only and naming who ran it; each step also leaves the trace of any call through the gate, and no ledger entry is appended for the run itself.",
+};
 
 /** A channel switch pressed over HTTP against PostgreSQL: the row, and one ledger entry naming who. */
 /** An agent installed into a group chat and taken out, over HTTP against PostgreSQL, each on the ledger. */
@@ -262,6 +303,31 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/agents/{agent_id}/publish", "agentMoveApiPath", agentMoveApiPath("quote-helper", "publish")),
     at("POST /api/v1/agents/{agent_id}/transfer", "agentMoveApiPath", agentMoveApiPath("quote-helper", "transfer")),
     at("POST /api/v1/agents/{agent_id}/duplicate", "agentMoveApiPath", agentMoveApiPath("quote-helper", "duplicate")),
+  ],
+  "src/pages/agents/AgentSpecialists.tsx agentCalleesApiPath(agentId)": [
+    at("POST /api/v1/agents/{agent_id}/coordination/callees", "agentCalleesApiPath", agentCalleesApiPath("quote-helper")),
+  ],
+  "src/pages/agents/AgentSpecialists.tsx agentCalleeRemovalsApiPath(agentId)": [
+    at(
+      "POST /api/v1/agents/{agent_id}/coordination/callees/removals",
+      "agentCalleeRemovalsApiPath",
+      agentCalleeRemovalsApiPath("quote-helper"),
+    ),
+  ],
+  "src/pages/agents/AgentSpecialists.tsx agentFanOutApiPath(agentId)": [
+    at("POST /api/v1/agents/{agent_id}/coordination/fan-out", "agentFanOutApiPath", agentFanOutApiPath("quote-helper")),
+  ],
+  "src/pages/agents/AgentSpecialists.tsx COORDINATED_RUNS_API_PATH": [
+    at("POST /api/v1/orchestration/coordinated-runs", "COORDINATED_RUNS_API_PATH", COORDINATED_RUNS_API_PATH),
+  ],
+  "src/pages/agents/AgentWorkflows.tsx agentWorkflowsApiPath(agentId)": [
+    at("POST /api/v1/agents/{agent_id}/workflows", "agentWorkflowsApiPath", agentWorkflowsApiPath("quote-helper")),
+  ],
+  "src/pages/agents/AgentWorkflows.tsx agentWorkflowRemovalApiPath(agentId)": [
+    at("POST /api/v1/agents/{agent_id}/workflows/removals", "agentWorkflowRemovalApiPath", agentWorkflowRemovalApiPath("quote-helper")),
+  ],
+  "src/pages/agents/AgentWorkflows.tsx agentWorkflowRunApiPath(agentId)": [
+    at("POST /api/v1/agents/{agent_id}/workflow-runs", "agentWorkflowRunApiPath", agentWorkflowRunApiPath("quote-helper")),
   ],
   "src/pages/agents/AgentGroups.tsx agentGroupsApiPath(agentId)": [
     at("POST /api/v1/agents/{agent_id}/groups", "agentGroupsApiPath", agentGroupsApiPath("quote-helper")),
@@ -495,6 +561,41 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: LIFECYCLE_PRESSED,
     audit: LIFECYCLE_PRESSED,
     behaviour: t("test_agent_lifecycle_routes", "test_a_transfer_hands_the_agent_to_somebody_here_and_names_who_handed_it"),
+  },
+  "POST /api/v1/agents/{agent_id}/coordination/callees": {
+    row: A_COORDINATION_ROW_IS_FOLLOWED_BY_THE_INSTALL_CHECK,
+    audit: A_COORDINATION_ROW_IS_ITS_OWN_RECORD,
+    behaviour: t("test_coordination_routes", "test_an_administrator_allows_a_callee_and_the_write_is_in_their_name"),
+  },
+  "POST /api/v1/agents/{agent_id}/coordination/callees/removals": {
+    row: A_COORDINATION_ROW_IS_FOLLOWED_BY_THE_INSTALL_CHECK,
+    audit: A_COORDINATION_ROW_IS_ITS_OWN_RECORD,
+    behaviour: t("test_coordination_routes", "test_a_link_is_withdrawn_in_the_callers_name_and_withdrawing_nothing_is_said"),
+  },
+  "POST /api/v1/agents/{agent_id}/coordination/fan-out": {
+    row: A_COORDINATION_ROW_IS_FOLLOWED_BY_THE_INSTALL_CHECK,
+    audit: A_COORDINATION_ROW_IS_ITS_OWN_RECORD,
+    behaviour: t("test_coordination_routes", "test_fan_out_is_granted_and_taken_back_by_the_authority_only"),
+  },
+  "POST /api/v1/orchestration/coordinated-runs": {
+    row: A_COORDINATION_ROW_IS_FOLLOWED_BY_THE_INSTALL_CHECK,
+    audit: A_COORDINATED_RUN_IS_ITS_OWN_RECORD,
+    behaviour: t("test_coordination_routes", "test_a_plan_is_run_in_turn_when_fan_out_was_never_enabled_and_the_reason_is_kept"),
+  },
+  "POST /api/v1/agents/{agent_id}/workflows": {
+    row: A_WORKFLOW_ROW_IS_FOLLOWED_BY_THE_INSTALL_CHECK,
+    audit: A_WORKFLOW_ROW_IS_ITS_OWN_RECORD,
+    behaviour: t("test_workflow_routes", "test_the_authority_over_an_agent_assigns_and_withdraws_a_workflow"),
+  },
+  "POST /api/v1/agents/{agent_id}/workflows/removals": {
+    row: A_WORKFLOW_ROW_IS_FOLLOWED_BY_THE_INSTALL_CHECK,
+    audit: A_WORKFLOW_ROW_IS_ITS_OWN_RECORD,
+    behaviour: t("test_workflow_routes", "test_the_authority_over_an_agent_assigns_and_withdraws_a_workflow"),
+  },
+  "POST /api/v1/agents/{agent_id}/workflow-runs": {
+    row: A_WORKFLOW_ROW_IS_FOLLOWED_BY_THE_INSTALL_CHECK,
+    audit: A_WORKFLOW_RUN_IS_ITS_OWN_RECORD,
+    behaviour: t("test_workflow_routes", "test_a_run_goes_through_the_door_as_the_asker_and_is_kept_with_one_trace"),
   },
   "POST /api/v1/agents/{agent_id}/groups": {
     row: GROUP_INSTALLED,

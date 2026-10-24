@@ -4575,9 +4575,9 @@ const PROGRESS = {
     updated: "2026-10-20",
   },
   "M17.6.5": {
-    status: "IN PROGRESS",
-    why: "BUILT 2026-10-21, not yet proved on an install and no page draws it. brain.orchestration.workflow reads a stored, versioned definition (steps: tool, connector read, skill; named typed outputs; reads only earlier declared outputs; a condition over an output; parallel flag; retry and back-off; failure path stop, continue or handler). brain.orchestration.workflow_run runs it through a door, keeps statuses and words and no value, and says repeated failure; brain.workflow_routes writes, assigns and runs it (migration 0273, switch stored_workflows ships off) through call_piece at the asker's reach narrowed by the agent; install check acceptance_checks_workflow. Not built: a console page, a skill step's offered skills bound to the run, writes (the leash is empty so a step that changes something is stated as not offered), and the two-connector two-skill run of M17.6.8.",
-    updated: "2026-10-20",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-21 and drawn 2026-10-24. brain.orchestration.workflow reads a stored, versioned definition (steps: tool, connector read, skill; named typed outputs; reads only earlier declared outputs; a condition over an output; parallel flag; retry and back-off; failure path stop, continue or handler). brain.orchestration.workflow_run runs it through a door, keeps statuses and words and no value; brain.workflow_routes writes, assigns and runs it (migration 0273, switch stored_workflows ships off) at the asker's reach narrowed by the agent. NOW DRAWN: Install, Features has Stored workflows (the ones written with their newest version, a form to write the next version from a JSON definition, and the runs kept step by step), and the agent's Profile has a Workflows card (give the agent one, run it, withdraw it after a confirmation). PROOF ON THE INSTALL: 1. Switch on Run stored workflows under Install, Features. 2. Write a one-step workflow under Stored workflows and save it; its version appears. 3. Open an agent's Profile, choose the workflow under Workflows and press Give it to this agent. 4. Press Run: the steps are drawn with a status each, and the run appears under Runs kept on Features. Not built: a skill step's offered skills bound to the run, writes (the leash is empty so a step that changes something is stated as not offered), a visual editor for a definition, and the two-connector two-skill run of M17.6.8.",
+    updated: "2026-10-24",
   },
   "M17.6.6": {
     status: "IN PROGRESS",
@@ -4675,9 +4675,9 @@ const PROGRESS = {
     updated: "2026-10-21",
   },
   "M18.5.1": {
-    status: "IN PROGRESS",
-    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
-    updated: "2026-10-20",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-20 and drawn 2026-10-24. brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask and again at every tool call, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines, results checked against their contract, merged with a stated gap); routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off). NOW DRAWN: the agent's Profile has a Specialists card (allow another agent, withdraw one after a confirmation, the run-together switch after a confirmation, and a request box that splits a request and draws the mode, why not together, each specialist's status and the merged result with a stated gap and an estimated cost), and Install, Features has Requests split between agents (the runs kept). PROOF ON THE INSTALL: 1. Switch on Hand requests between agents under Install, Features. 2. On a coordinating agent's Profile choose another agent under Specialists and press Allow it. 3. Type a request and press Split and run: the plan, the specialists and the result are drawn, with the reason they ran one after another. 4. The run appears under Requests split between agents on Features. Still to see: a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-24",
   },
   "M18.5.2": {
     status: "IN PROGRESS",
@@ -4695,9 +4695,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M18.6.2": {
-    status: "IN PROGRESS",
-    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
-    updated: "2026-10-20",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-20 and drawn 2026-10-24: whether a coordinating agent may run its specialists at the same time is a grant an administrator gives and takes back (brain.coordination_routes, migration 0272), and a run records why its specialists ran one after another. NOW DRAWN: the Specialists card on the agent's Profile has the run-together switch (both directions confirmed, the confirmation saying it costs more for the same request), and each run kept says why it was not run together. PROOF ON THE INSTALL: 1. On a coordinating agent's Profile under Specialists switch Let this agent run its specialists at the same time on and confirm. 2. Ask it a request that splits: the run says Run together when the gate agrees and there is room, and says why when it ran one after another. Costs are estimates until a run is joined to recorded spend, and the page says so beside every figure.",
+    updated: "2026-10-24",
   },
   "M18.7.1": {
     status: "IN PROGRESS",
