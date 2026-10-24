@@ -75,6 +75,8 @@ FILTERS: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
             "Dockerfile",
             "src/brain/ops/dependency_policy.py",
             "src/brain/ops/sweeps.py",
+            "src/brain/ops/third_party_notices.py",
+            "NOTICES.md",
         ),
         # Trivy over every lock in the tree and over the image the Dockerfile builds, judged by
         # `brain.ops.vulnerabilities` against its recorded exceptions.

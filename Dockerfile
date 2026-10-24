@@ -104,6 +104,9 @@ COPY --chown=brain:brain migrations /app/migrations
 # The tracker, architecture and the status computed from git at build time. Baking the
 # status in means the page can never disagree with the binary serving it.
 COPY --chown=brain:brain docs /app/docs
+# The notices of the third-party software this image bundles, generated from the lockfiles by
+# `brain.ops.third_party_notices` and held current by a check that fails the build's tests.
+COPY --chown=brain:brain NOTICES.md /app/NOTICES.md
 # The realm, because the identity stack has to be deployable without a checkout.
 #
 # `docker-compose.keycloak.yml` used to bind-mount this from `./ops/keycloak/`, which works

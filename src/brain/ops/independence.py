@@ -314,6 +314,10 @@ ALLOWED_HOSTS: Final[frozenset[str]] = frozenset(
         # can become a client's host.
         "pypi.org",
         "registry.npmjs.org",
+        # The same registry's public page for a package, which `brain.ops.third_party_notices`
+        # prints beside each console package in the notices file so a reader can open its own
+        # licence. A link in generated text, never fetched, and the same for every install.
+        "www.npmjs.com",
         # Trivy's signed apt repository, from which CI's vulnerability job installs the scanner.
         # A tool's package source, like the two above; never a client's.
         "aquasecurity.github.io",

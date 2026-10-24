@@ -5050,9 +5050,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M42.7.3": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No notice bundling found: ops/dependency_policy.py checks licences of locked packages in CI but nothing generates a notices file from the lockfiles, puts one in the image or archive, or fails a release without one; release.INCLUDED has no notice rule.",
-    updated: "2026-10-13",
+    status: "IN PROGRESS",
+    why: "BUILT, NOT CLAIMED (needs-rupash 268): brain.ops.third_party_notices generates NOTICES.md from the uv locks (the closure a no-dev install reaches), the console lock (fonts included, build-time packages not) and every image's declared terms; the Dockerfile copies it into the image, the archive includes it, and a check run by the unit suite and the dependency job fails when a lock or a compose file moved and the file did not, or a shipped component has no licence recorded. NOT BUILT: each project's licence text and copyright line, which a lockfile does not hold and which some of the licences ask to travel with the software. Whether a list of names, versions and licences is enough is a legal question and is item 268.",
+    updated: "2026-10-24",
   },
   "M42.7.4": {
     status: "READY FOR TESTING",

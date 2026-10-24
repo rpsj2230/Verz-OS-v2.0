@@ -50,3 +50,4 @@ ops
 docs/wbs
 *.md
 !README.md
+!NOTICES.md

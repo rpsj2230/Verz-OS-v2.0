@@ -393,6 +393,13 @@ INCLUDED: Final[tuple[Rule, ...]] = (
         "is the one file the whole of brain.install exists to keep neutral",
     ),
     Rule(
+        "NOTICES.md",
+        "the notices of the third-party software this release bundles, generated from the "
+        "lockfiles. A licence that asks to be acknowledged is acknowledged where the client "
+        "holds the release, and a release archive without it carries the software and not the "
+        "acknowledgement",
+    ),
+    Rule(
         "ops/automation",
         "the automation profile bind-mounts the egress allowlist from here, and a container "
         "that comes up without it is one whose outbound traffic nothing restricts",

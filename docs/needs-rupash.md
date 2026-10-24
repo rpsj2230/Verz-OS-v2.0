@@ -6,6 +6,59 @@ Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
 # Open
 
+## 268. Is a list of the third-party software, with versions and licences, enough of a notice, or must the release carry each licence text and copyright line?
+
+**In plain terms:** the release now carries `NOTICES.md` in the image and the archive. It names every
+Python package, console package and font, and every container image, each with its version and
+licence, generated from the lockfiles, and the build's tests fail when a lock moves and the file does
+not. What a lockfile cannot give is each project's licence text and copyright line, and some of the
+licences in use (MIT, BSD, Apache) ask that the text and the copyright line travel with the software.
+Whether a list satisfies that obligation for a product you hand to clients is a legal question, not a
+technical one, so I have not decided it. Until you answer, M42.7.3 is not claimed.
+
+**Option A: the list is enough.** The file stays as it is. It costs nothing more and it is what most
+products ship. Risk: a licence that insists on its text being reproduced is not honoured to the letter.
+
+**Option B: carry the texts.** The image build collects each installed package's own licence files
+(Python's `dist-info`, npm's licence files from the console build) into the notices file or a
+folder beside it. It is exact, larger (about the size of a book), and the build gets one more step.
+
+**Option C: ask your lawyer first, then A or B.** I recommend this only if a client contract promises
+compliance with a named standard.
+
+**My recommendation:** B. It is the safe reading of the licences already on the allowlist, and the
+cost is a build step, not a product change.
+
+**What I need from you:** reply "268: A", "268: B" or "268: C".
+
+## 267. Should the four notices nobody pushes today be pushed: an approval waiting, a request for access, emergency access taken, an administrator granting themselves something?
+
+**In plain terms:** the Notifications screen lists fifteen kinds of notice. Eleven are sent by something that
+runs. Four are only written down where a person who opens the right screen will read them: an approval
+waiting for you (the Approvals screen, or you write approve to the Brain in Lark), a person asking for a
+field (the owner's Access requests screen), somebody taking emergency access (each other super
+administrator's Elevation screen), and an administrator granting themselves something (the Access requests
+page of each steward it reaches, for ninety days). Nothing tells the person in the chat tool they actually
+read, so an approval can wait until it lapses and emergency access can be taken without anyone looking.
+Pushing them means putting a sentence about a person and an action into a chat message, and choosing for
+each who hears it, so it is yours to decide.
+
+**Option A: all four, each to the person it concerns in the chat tool they last used.** Told once, naming
+the kind of thing and who asked, never the value or the field's contents, as you decided for a mechanism that
+has not run (221). Switchable on the Features page and shipped off, like that one.
+
+**Option B: only the two that report misuse.** Emergency access and an administrator granting themselves
+something, to the people they name, and the email address set during setup as the fallback. An approval
+and a request for access stay on their screens.
+
+**Option C: none.** They stay on their screens, and the Notifications screen says they are read there.
+
+**My recommendation:** B now. Those two are the ones where silence is the failure, and they reach a handful of
+people. An approval is only worth pushing once the measured wait (222) shows people are slow to find them, and
+a request for access names a person and a field, which is more than I would put in a chat message unasked.
+
+**What I need from you:** reply "267: A", "267: B" or "267: C". (Task M17.7.6.)
+
 ## 266. What is the thirty-day cost review compared with: a figure you type at go-live, the department budgets added up, or the estimator's own forecast?
 
 **In plain terms:** tasks M37.5.3.1 and M37.5.3.3 ask for the first thirty days of real spend to be set
