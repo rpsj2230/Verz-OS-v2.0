@@ -123,7 +123,7 @@ FIELDS: Final[Mapping[Kind, frozenset[str]]] = {
     Kind.RECORD: frozenset({"index", "surface", "verb", "origin", "ref", "sequence", "refusal"}),
     Kind.ENDED: frozenset({"reason"}),
     Kind.REHEARSE: frozenset({"run_id", "origins"}),
-    Kind.REHEARSED: frozenset({"run_id", "runtime", "gaps", "left_behind"}),
+    Kind.REHEARSED: frozenset({"run_id", "runtime", "gaps", "left_behind", "virtualisation"}),
 }
 
 

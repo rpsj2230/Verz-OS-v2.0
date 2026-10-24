@@ -3515,9 +3515,9 @@ const PROGRESS = {
     updated: "2026-10-22",
   },
   "M36.1.2.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops/scaling.py trigger predicates are tested (test_scaling.py) but nothing imports brain.ops.scaling; controls.NOT_A_SCHEDULE says each is a decision for a person asked when someone looks. GET /install/capacity (install_routes.py) does not evaluate them. NEXT: wire replica_is_due with measured console read load against answer headroom into GET /install/capacity so a person sees when a replica is warranted",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: every console read (a GET under /api/v1) is counted in flight by the web process and the busiest minute of the last hour is kept (brain.ops.read_load); the Capacity screen holds it against the headroom the answer path leaves the interactive pool and says Due now or Not due, or Not measured where this process has counted nothing. A reading is one web process's own, and says so. Nothing scales anything: it is a reading for a person. Install check counted_reads_and_reports_make_their_scaling_moves_due_or_not. On the install: open the console for a while, then Limits, budgets and capacity; the read replica line shows the most reads in flight together and whether that is beyond the headroom.",
+    updated: "2026-10-24",
   },
   "M36.1.3.1": {
     status: "IN PROGRESS",
@@ -3530,9 +3530,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M36.1.3.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops/scaling.py trigger predicates are tested (test_scaling.py) but nothing imports brain.ops.scaling; controls.NOT_A_SCHEDULE says each is a decision for a person asked when someone looks. GET /install/capacity (install_routes.py) does not evaluate them. NEXT: wire report_is_due(observed_p95_ms) into the report routes' timing and into GET /install/capacity; needs a per-report latency measurement",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: the time every answered report screen takes (a GET under /api/v1/report/) is kept, the last 500 per web process, and with at least twenty the 95th percentile is held against the threshold on the Capacity screen: Due now, Not due, or Not measured. A refused report is not a duration. Nothing builds a view: it is a reading for a person to weigh. Install check counted_reads_and_reports_make_their_scaling_moves_due_or_not. On the install: open Reports, Spend a few times, then Limits, budgets and capacity; the materialised reports line shows the p95 and whether it is beyond the threshold.",
+    updated: "2026-10-24",
   },
   "M36.1.4.1": {
     status: "BLOCKED",
@@ -5040,9 +5040,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M42.7.1": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No install health check reports kernel virtualisation: grep for kvm and virtualisation finds only a sentence in browsing/sandbox.py; launcher.py --check reports gVisor (runsc) only, and no administrator-facing text states browser isolation.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: launcher --check now prints what the host offers beside gVisor (brain.browsing.virtualisation: gVisor set to KVM and /dev/kvm usable, usable and unused, unusable, set to KVM but unusable which fails the check, or no gVisor), and fails only for the one state in which every run would fail to start. The launcher's rehearsal answer carries the same state, and the browser sandbox install check requires it, so the Install page's check for the sandbox names KVM beside gVisor. NOT SHOWN: a real host. The sandbox check is NOT RUN on an install with browser runs off or no launcher. TO PROVE: run python -m brain.browsing.launcher --app-image <image> --check on the Docker host and read the kernel virtualisation line; with browser runs on, the Install page's browser sandbox check passes only when the launcher names a state.",
+    updated: "2026-10-24",
   },
   "M42.7.2": {
     status: "BLOCKED",
@@ -5055,9 +5055,9 @@ const PROGRESS = {
     updated: "2026-10-24",
   },
   "M42.7.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): ops/backup/brain-backup, brain-restore-drill and brain-install-backup (with a systemd timer) exist, but release.INCLUDED has no ops/backup rule (restore-drill.md: the archive does not carry ops/backup) and install.sh has no step that schedules the backup. NEXT: Add an ops/backup rule to release.INCLUDED and an installer PLAN step running brain-install-backup, regenerate install.sh, then check the timer exists on an install.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: the release archive now includes ops/backup (brain-backup, its timer, brain-restore-drill, the drill service and brain-install-backup), so a server installed from it has the restore drill from the release it runs; docs/install/restore-drill.md says where it is (/opt/brain/ops/backup). Tested over the archive file list. NOT BUILT: the installer scheduling the nightly copy; brain-install-backup is still run by a person once, as root, because it needs the bucket and the key that may write it (needs-rupash 5853 describes the step). TO PROVE: extract a published archive and see ops/backup/brain-restore-drill in it.",
+    updated: "2026-10-24",
   },
   "M42.7.5": {
     status: "BLOCKED",

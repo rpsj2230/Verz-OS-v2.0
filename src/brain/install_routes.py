@@ -142,7 +142,7 @@ Scope: five read-only routes. Nothing here writes, and the only session anything
 is the one it deliberately does not open.
 
 Task ids: M27.7.25, M27.7.27, M42.3.9, M38.1.3.5, M23.1.1, M23.2.1, M27.15.51
-Task ids: M22.3.1, M22.3.2, M22.3.4
+Task ids: M22.3.1, M22.3.2, M22.3.4, M36.1.2.4, M36.1.3.3
 Task ids: M22.1.5
 """
 
@@ -189,6 +189,7 @@ from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.deployment.release_feed import ReleaseWatch, feed_address
 from brain.deployment.update_mode import follows_every_release
+from brain.ops import read_load
 from brain.ops.admission import (
     FIRST_BOTTLENECK_AT_SCALE,
     Budget,
@@ -207,6 +208,7 @@ from brain.ops.features_declared.backup_drill_requests import BACKUP_DRILL_REQUE
 from brain.ops.install_from_empty import read_plan
 from brain.ops.limit_store import UNREACHABLE_POLICY, Availability, WindowsUnreadableError
 from brain.ops.limits import DeclaredWindow, Limit, LimiterState, ceilings, declared_windows
+from brain.ops.read_load import Reading
 from brain.ops.recovery import DRILL_INTERVAL_DAYS, placement_findings
 from brain.ops.rehearsal_request import Pending, pending_in
 from brain.ops.release_manifest import read_manifest
@@ -1117,12 +1119,30 @@ class MoveView(BaseModel):
 #: What a move says when what it waits on is not measured on this install. Literal sentences,
 #: so none is built from a value and each can be held by a test.
 NOT_MEASURED_READS_IN_FLIGHT: Final = (
-    "Nothing on this install counts console reads in flight, so whether they exceed this "
-    "headroom is not measured here."
+    "This web process has not yet counted a console read, so whether they exceed this headroom is "
+    "not measured here."
 )
 NOT_MEASURED_REPORT_LATENCY: Final = (
-    "Nothing on this install times a report screen, so whether one is slower than this is not "
-    "measured here."
+    "This web process has not yet timed enough report screens to read a 95th percentile, so "
+    "whether one is slower than this is not measured here."
+)
+#: What a measured move says. Each names the process whose window it is, because an install runs
+#: several and each counts its own (`brain.ops.read_load`), and each is a reading for a person to
+#: weigh and not an instruction: nothing here moves a replica or builds a view.
+READS_ARE_OVER_THE_HEADROOM: Final = (
+    "Due now: at its busiest minute of the last hour this web process had more console reads in "
+    "flight together than the answer path leaves room for. Other web processes count their own."
+)
+READS_ARE_INSIDE_THE_HEADROOM: Final = (
+    "Not due: this web process's busiest minute of the last hour stayed inside the headroom the "
+    "answer path leaves. Other web processes count their own."
+)
+REPORTS_ARE_OVER_THE_THRESHOLD: Final = (
+    "Due now: this web process's report screens ran slower than the threshold at the 95th "
+    "percentile. Whether to materialise one is for a person to decide."
+)
+REPORTS_ARE_INSIDE_THE_THRESHOLD: Final = (
+    "Not due: this web process's 95th percentile for report screens is inside the threshold."
 )
 A_DECISION_NOT_A_MEASUREMENT: Final = (
     "Whether one machine failing may take the whole system with it is a decision for the "
@@ -1132,12 +1152,14 @@ DUE_NOW: Final = "Due now."
 NOT_DUE: Final = "Not due."
 
 
-def scaling_moves(profile: str) -> list[MoveView]:
+def scaling_moves(profile: str, load: Reading | None = None) -> list[MoveView]:
     """Every scaling trigger asked of this install, as `brain.ops.scaling` decides it.
 
-    The decisions are `partitioning_is_due`, `replica_headroom` and `host_split_is_due`, called
-    here rather than restated, so the screen cannot say a move is due on a figure the trigger
-    table does not use. A trigger whose input nothing measures is served as not measured.
+    The decisions are `partitioning_is_due`, `replica_is_due`, `report_is_due` and
+    `host_split_is_due`, called here rather than restated, so the screen cannot say a move is due
+    on a figure the trigger table does not use. A trigger whose input nothing measures yet is served
+    as not measured. `load` is what this process's console reads and reports have come to
+    (`brain.ops.read_load`); the process's own when not given.
     """
     from brain.ops.class_pools import POOLS
     from brain.ops.retention import METADATA_LEDGER_RETENTION_DAYS
@@ -1148,8 +1170,11 @@ def scaling_moves(profile: str) -> list[MoveView]:
         host_split_is_due,
         partitioning_is_due,
         replica_headroom,
+        replica_is_due,
+        report_is_due,
     )
 
+    seen = read_load.current().reading() if load is None else load
     breaches = len(budget_breaches(profile))
     sized = next((one for one in seed_profiles() if one.name == profile), None)
     moves: list[MoveView] = []
@@ -1169,8 +1194,20 @@ def scaling_moves(profile: str) -> list[MoveView]:
             case ScalingObservable.CONSOLE_READS_IN_FLIGHT:
                 threshold = None if sized is None else float(replica_headroom(sized, POOLS))
                 said = NOT_MEASURED_READS_IN_FLIGHT
+                if sized is not None and seen.peak_reads_in_flight is not None:
+                    measured = float(seen.peak_reads_in_flight)
+                    due = replica_is_due(
+                        sized, POOLS, console_reads_in_flight=seen.peak_reads_in_flight
+                    )
+                    said = READS_ARE_OVER_THE_HEADROOM if due else READS_ARE_INSIDE_THE_HEADROOM
             case ScalingObservable.REPORT_P95_MS:
                 said = NOT_MEASURED_REPORT_LATENCY
+                if seen.report_p95_ms is not None:
+                    measured = seen.report_p95_ms
+                    due = report_is_due(observed_p95_ms=seen.report_p95_ms)
+                    said = (
+                        REPORTS_ARE_OVER_THE_THRESHOLD if due else REPORTS_ARE_INSIDE_THE_THRESHOLD
+                    )
             case ScalingObservable.PROFILE_DOES_NOT_FIT:
                 measured = float(breaches)
                 due = host_split_is_due(profile)
