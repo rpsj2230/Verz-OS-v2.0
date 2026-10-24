@@ -227,6 +227,8 @@ def test_the_screen_lists_every_notice_on_and_an_unconfigured_relay_with_no_pass
     sent = {one["kind"] for one in body["notices"] if one["sent"]}
     assert sent == {
         NoticeKind.REVERIFICATION_REQUEST.value,
+        NoticeKind.EVENING_DIGEST.value,
+        NoticeKind.BACKUP_EXPOSURE.value,
         NoticeKind.DENIAL_PATTERN.value,
         NoticeKind.BUDGET_STOPPED.value,
         NoticeKind.BUDGET_NEARING.value,
