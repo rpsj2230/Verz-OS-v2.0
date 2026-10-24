@@ -191,7 +191,7 @@ lockfiles and the images this release names: do not edit it, regenerate it.
 - anyio 4.15.0: MIT (https://pypi.org/project/anyio/4.15.0/)
 - asgiref 3.12.1: BSD-3-Clause (https://pypi.org/project/asgiref/3.12.1/)
 - attrs 26.1.0: MIT (https://pypi.org/project/attrs/26.1.0/)
-- certifi 2026.7.22: MPL-2.0 (https://pypi.org/project/certifi/2026.7.22/)
+- certifi 2026.10.23: MPL-2.0 (https://pypi.org/project/certifi/2026.10.23/)
 - cffi 2.1.1: MIT-0 (https://pypi.org/project/cffi/2.1.1/)
 - charset-normalizer 3.5.1: MIT (https://pypi.org/project/charset-normalizer/3.5.1/)
 - click 8.5.0: BSD-3-Clause (https://pypi.org/project/click/8.5.0/)

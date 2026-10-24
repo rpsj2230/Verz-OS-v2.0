@@ -15,6 +15,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
 from brain.deployment.release import REPO, included_by
@@ -23,9 +24,11 @@ from brain.ops.third_party_notices import (
     NO_LICENCE,
     NOTICES_PATH,
     READ_FROM_THE_PROJECT,
+    REGENERATE_WITH,
     check,
     entries_for,
     licences_for,
+    main,
     parse,
     python_shipped,
     render,
@@ -272,3 +275,29 @@ def test_a_dependency_cycle_in_a_lock_does_not_loop_and_a_shared_dependency_is_n
     names = [one.name for one in python_shipped(lock, "uv.lock")]
 
     assert names == ["a", "b", "shared"]
+
+
+def test_a_stale_file_ends_the_failure_with_the_one_command_that_regenerates_it(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Any lock change makes the check fail, for someone who did not write it. Delete this and the
+    failure lists what is stale and says nothing of how to put it right."""
+    monkeypatch.setattr("brain.ops.third_party_notices.check", lambda: ("pypi:x 1 ships",))
+
+    assert main(["check"]) == 1
+    printed = capsys.readouterr().out
+
+    assert "pypi:x 1 ships" in printed
+    assert REGENERATE_WITH in printed
+    assert "third_party_notices write > NOTICES.md" in REGENERATE_WITH
+
+
+def test_a_current_file_passes_without_the_regeneration_advice(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The sibling: advice printed on success is noise a person learns to ignore. Delete this and
+    the sentence can be printed on every run."""
+    monkeypatch.setattr("brain.ops.third_party_notices.check", lambda: ())
+
+    assert main(["check"]) == 0
+    assert capsys.readouterr().out == ""

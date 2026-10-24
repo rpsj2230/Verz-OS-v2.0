@@ -297,6 +297,14 @@ def entries_for(
     )
 
 
+#: The sentence the check ends with when it fails, because any change to a lock file makes it fail
+#: and the person who hits it is rarely the one who wrote it.
+REGENERATE_WITH: Final = (
+    "Regenerate the file with: uv run python -m brain.ops.third_party_notices write > NOTICES.md "
+    "(it asks the package index for each licence), then commit it."
+)
+
+
 def write(repo: Path = REPO, fetch: Callable[[str], Any] = fetch_json) -> str:
     """The file's text for this tree, asking the package index for each Python licence."""
     components = shipped(repo)
@@ -314,6 +322,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     gaps = check()
     for gap in gaps:
         print(gap)
+    if gaps:
+        print(REGENERATE_WITH)
     return 1 if gaps else 0
 
 
