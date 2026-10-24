@@ -75,7 +75,11 @@
  * which reads the chosen list once and holds what it needs in its own state, so nothing it asks
  * for is an answer, in the review or in the appointment.
  *
- * Task ids: M42.5.14, M27.8.7, M42.5.7, M42.5.9, M27.9.9
+ * **The company screen carries a logo upload under its questions**, drawn by
+ * `components/LogoUpload.tsx`, which sends the file at the choosing and holds nothing the
+ * appointment carries. See `brain.branding`.
+ *
+ * Task ids: M42.5.14, M27.8.7, M42.5.7, M42.5.9, M27.9.9, M42.5.5
  */
 
 import { useState, useSyncExternalStore } from "react";
@@ -116,6 +120,7 @@ import {
 } from "../setup/wizard";
 import { FailureNotice } from "../ui/FailureNotice";
 import { Notice } from "../ui/Notice";
+import { LogoUpload } from "../components/LogoUpload";
 import { StaffListCheck } from "../components/StaffListCheck";
 
 /** Why this page signs in before it asks for anything. */
@@ -623,6 +628,7 @@ function Wizard() {
           </button>
         </div>
       </form>
+      {screen.key === "company" ? <LogoUpload setupCode={code} /> : null}
       {screen.key === "staff_source" ? (
         <StaffListCheck
           setupCode={code}

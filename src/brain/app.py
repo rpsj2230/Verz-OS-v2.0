@@ -126,7 +126,6 @@ from brain.learning_told import keep_sending_learning_digests
 from brain.mailbox_read import keep_reading_the_mailbox
 from brain.migrate import run_migrations
 from brain.models.default_ladder import reconcile as reconcile_default_ladder
-from brain.ops import read_load
 from brain.ops.admission import WorkloadClass
 from brain.ops.artifact_store import artifacts_for
 from brain.ops.automation_owner_store import StoredAutomations
@@ -1297,14 +1296,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             trace_id=trace_id, path=request.url.path, trace_id_supplied=supplied
         )
         started = time.perf_counter()
-        # Counted if it is a console read, so the Capacity screen can say what this process has seen
-        # of the load a read replica or a materialised report waits on (`brain.ops.read_load`).
-        load = read_load.current()
-        counted = load.begin(request.method, request.url.path)
-        answered = False
         try:
             response = await call_next(request)
-            answered = response.status_code < 400
         except Exception:
             # Caught here, inside the binding, rather than by an `Exception` handler: Starlette
             # runs that handler outermost, after this `finally` has cleared the trace id, and it
@@ -1315,7 +1308,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             response = unexpected_failure(trace_id)
         finally:
             structlog.contextvars.clear_contextvars()
-            load.finish(counted, answered=answered)
         response.headers["x-trace-id"] = trace_id
         response.headers["server-timing"] = f"app;dur={(time.perf_counter() - started) * 1000:.1f}"
         return response

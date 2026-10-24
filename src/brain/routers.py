@@ -381,6 +381,10 @@ from brain.load_run_routes import router as load_run_router
 # paged, behind `admin:application_log` over everything. See `brain.log_routes`.
 from brain.log_routes import router as log_router
 
+# The wizard's logo upload and the image the console draws from it, M42.5.5. See
+# `brain.logo_routes`.
+from brain.logo_routes import router as logo_router
+
 # A member disconnecting their own account at a vendor, the vendor told first. Asked of the person
 # themselves. See `brain.member_accounts_routes`.
 from brain.member_accounts_routes import router as member_accounts_router

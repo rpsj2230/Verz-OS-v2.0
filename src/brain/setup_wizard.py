@@ -69,11 +69,15 @@ own signatures to prove there is no parameter anywhere that could say otherwise.
 would leave an unauthenticated route to the widest role in the system behind a value somebody
 printed once and probably still has. See `A_CLOSED_WIZARD_IS_UNREACHABLE_AND_NEVER_HIDDEN`.
 
-**The logo is an address and not an upload, and M42.5.5 says upload.** The setting it feeds is
-`INSTALL_LOGO_URL`, whose declared meaning is a URL served from somewhere the client controls,
-and an upload would need the object store, an HTTP body and a write this module has no client
-for. Collecting an address into a setting that is an address is the version that works; the
-substitution is written here rather than left for somebody to discover from the screen.
+**The logo is an address or an upload (M42.5.5).** The question here is the address, the setting
+it feeds is `INSTALL_LOGO_URL`, and the upload is not an answer: `brain.logo_routes` takes the file
+behind the setup code the moment it is chosen and `brain.setup_routes.appoint_first_administrator`
+points `INSTALL_LOGO_URL` at it when no address was given. It is not an answer for the reason the
+staff list's trial is not: the wizard's answers are small text kept in a draft and reviewed, and an
+image is neither. `brain.branding` argues where the file lives and why an SVG is refused. Until
+2026-10-24 this paragraph said the opposite, that an upload needed the object store and a client
+this module has no use for, and substituted an address in a docstring; the file beside the draft
+needs neither.
 
 Rejected: minting the setup code here. A function that produces a secret needs a test, and a
 test that exercises it either contains a value or asserts nothing. That is

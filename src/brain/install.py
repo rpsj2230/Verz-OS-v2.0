@@ -192,8 +192,10 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         belongs=Belongs.BRANDING,
         meaning=(
             "An absolute https URL to the client's logo, served from somewhere they control, or "
-            "a path on this install. The default is the product's own icon, which the console "
-            "bundle serves, so an install that sets nothing draws a mark and not a broken image."
+            "a path on this install; a logo uploaded in the setup wizard is kept on this install "
+            "and this is set to its path. The default is the product's own icon, which the "
+            "console bundle serves, so an install that sets nothing draws a mark and not a "
+            "broken image."
         ),
         default="/icon.svg",
     ),

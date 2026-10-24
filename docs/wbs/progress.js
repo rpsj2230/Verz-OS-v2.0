@@ -3515,9 +3515,9 @@ const PROGRESS = {
     updated: "2026-10-22",
   },
   "M36.1.2.4": {
-    status: "READY FOR TESTING",
-    why: "built: every console read (a GET under /api/v1) is counted in flight by the web process and the busiest minute of the last hour is kept (brain.ops.read_load); the Capacity screen holds it against the headroom the answer path leaves the interactive pool and says Due now or Not due, or Not measured where this process has counted nothing. A reading is one web process's own, and says so. Nothing scales anything: it is a reading for a person. Install check counted_reads_and_reports_make_their_scaling_moves_due_or_not. On the install: open the console for a while, then Limits, budgets and capacity; the read replica line shows the most reads in flight together and whether that is beyond the headroom.",
-    updated: "2026-10-24",
+    status: "IN PROGRESS",
+    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops/scaling.py trigger predicates are tested (test_scaling.py) but nothing imports brain.ops.scaling; controls.NOT_A_SCHEDULE says each is a decision for a person asked when someone looks. GET /install/capacity (install_routes.py) does not evaluate them. NEXT: wire replica_is_due with measured console read load against answer headroom into GET /install/capacity so a person sees when a replica is warranted",
+    updated: "2026-10-13",
   },
   "M36.1.3.1": {
     status: "IN PROGRESS",
@@ -3530,9 +3530,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M36.1.3.3": {
-    status: "READY FOR TESTING",
-    why: "built: the time every answered report screen takes (a GET under /api/v1/report/) is kept, the last 500 per web process, and with at least twenty the 95th percentile is held against the threshold on the Capacity screen: Due now, Not due, or Not measured. A refused report is not a duration. Nothing builds a view: it is a reading for a person to weigh. Install check counted_reads_and_reports_make_their_scaling_moves_due_or_not. On the install: open Reports, Spend a few times, then Limits, budgets and capacity; the materialised reports line shows the p95 and whether it is beyond the threshold.",
-    updated: "2026-10-24",
+    status: "IN PROGRESS",
+    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops/scaling.py trigger predicates are tested (test_scaling.py) but nothing imports brain.ops.scaling; controls.NOT_A_SCHEDULE says each is a decision for a person asked when someone looks. GET /install/capacity (install_routes.py) does not evaluate them. NEXT: wire report_is_due(observed_p95_ms) into the report routes' timing and into GET /install/capacity; needs a per-report latency measurement",
+    updated: "2026-10-13",
   },
   "M36.1.4.1": {
     status: "BLOCKED",
@@ -4355,9 +4355,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M42.5.5": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): setup_wizard.py company step collects company_name, product_name, web_address and logo_url (an address, not an upload) into INSTALL_* settings; its docstring says 'M42.5.5 says upload' and substitutes an address. No upload route exists and no needs-rupash question records the narrowing. NEXT: Either build a logo upload (object store plus a served path) or add a docs/needs-rupash.md question and name its number in register row CON-8 or OWN3-1.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: the company step takes a logo as an upload. POST /setup/logo (behind the setup code, one refusal for a wrong code or a finished install) keeps a PNG, JPEG, GIF or WebP of up to 256 KiB, identified by its bytes, beside the wizard's draft; an SVG is refused because it can carry script. The appointment points INSTALL_LOGO_URL at /brand/logo in its own transaction unless a web address was given, which wins, and GET /brand/logo serves it with nosniff and an empty content policy. The console's company screen has the file chooser. Tested over the routes, the appointment and the screen. NOT BUILT: replacing the upload after setup other than by giving a web address on Settings. TO PROVE: run first run on an install, choose a PNG on the company screen, finish, and see it in the console's header.",
+    updated: "2026-10-24",
   },
   "M42.5.7": {
     status: "READY FOR TESTING",
