@@ -36,6 +36,14 @@ none because a one-shot is ready when it has exited. `brain.deployment.installer
 prints, per profile, which services have one and what "ready" means for each component that
 does not.
 
+**To read it on your server, run `bash /opt/brain/ops/install/health.sh --profile <lite|standard|full>`.**
+The install script runs it as its last act, so you have already seen it once. It prints that
+report, then the state of every container now: a container is ok when it is running and its own
+healthcheck says healthy, or when it is a one-shot that exited 0, and anything else, including
+`running` with `starting` or `unhealthy`, is printed as NOT READY with the state it is in. It
+then asks the application the same readiness question the install did. It changes nothing, so run
+it as often as you like; it exits 1 if anything is not ready and 2 if Docker could not be asked.
+
 ## What "ready" means, per component
 
 Every component in this system is required to carry a sentence saying what ready means for it,
