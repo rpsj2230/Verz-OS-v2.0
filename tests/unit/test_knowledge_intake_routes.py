@@ -190,7 +190,9 @@ def test_an_administrator_adds_a_page_by_its_link_for_one_department(served: Ser
         "department": "web",
         "passages": len(read.blocks),
         "found_by": FOUND_BY_TEXT,
+        "review_by": None,
     }
+    assert read.item.review_by is None
     assert served.site.asked == [PRICING_URL]
     assert read.item.content.startswith(f"Taken from {SITE}/services/pricing on ")
     assert PRICING_WORD in read.item.content

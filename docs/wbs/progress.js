@@ -4085,9 +4085,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.3.1.2": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Upload (queue_upload, add_link), replace (POST .../versions) and verify-with-next-review exist. Missing: retire (archive not built, needs a migration per knowledge_lifecycle_routes) and a review cycle at upload time (upload takes no review date). member_library.upload/replace/retire have no caller. NEXT: add a review_by field to the upload request, and a retire route over a know.supersede-style function with its migration",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: POST /knowledge/uploads takes review_in_days (1 to 730, refused outside it before the file is read) and stores the item due that many days ahead (member_library.review_date_for, uploads.with_review_by), the answer carries review_by, and a document sent without one is outside the sweep as before. Retire needed no new stored thing: the archive route (POST /knowledge/items/{id}/archive, know.archive_item from migration 0216) already lets the person who added a document withdraw it and refuses a colleague who only reads it in the one 404 sentence; the earlier note that retire needed a migration was stale. Install check: a_member_adds_a_document_with_a_review_cycle_and_retires_it (ops/acceptance_checks_member_library.py), not yet run on the install. No console control sets the cycle at upload yet (the Add a document form sends none); member_library.upload, replace and retire are still not the live path and are left unwired.",
+    updated: "2026-10-24",
   },
   "M40.3.1.3": {
     status: "IN PROGRESS",
