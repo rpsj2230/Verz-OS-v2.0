@@ -6,34 +6,6 @@ Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
 # Open
 
-## 267. Should the four notices nobody pushes today be pushed: an approval waiting, a request for access, emergency access taken, an administrator granting themselves something?
-
-**In plain terms:** the Notifications screen lists fifteen kinds of notice. Eleven are sent by something that
-runs. Four are only written down where a person who opens the right screen will read them: an approval
-waiting for you (the Approvals screen, or you write approve to the Brain in Lark), a person asking for a
-field (the owner's Access requests screen), somebody taking emergency access (each other super
-administrator's Elevation screen), and an administrator granting themselves something (the Access requests
-page of each steward it reaches, for ninety days). Nothing tells the person in the chat tool they actually
-read, so an approval can wait until it lapses and emergency access can be taken without anyone looking.
-Pushing them means putting a sentence about a person and an action into a chat message, and choosing for
-each who hears it, so it is yours to decide.
-
-**Option A: all four, each to the person it concerns in the chat tool they last used.** Told once, naming
-the kind of thing and who asked, never the value or the field's contents, as you decided for a mechanism that
-has not run (221). Switchable on the Features page and shipped off, like that one.
-
-**Option B: only the two that report misuse.** Emergency access and an administrator granting themselves
-something, to the people they name, and the email address set during setup as the fallback. An approval
-and a request for access stay on their screens.
-
-**Option C: none.** They stay on their screens, and the Notifications screen says they are read there.
-
-**My recommendation:** B now. Those two are the ones where silence is the failure, and they reach a handful of
-people. An approval is only worth pushing once the measured wait (222) shows people are slow to find them, and
-a request for access names a person and a field, which is more than I would put in a chat message unasked.
-
-**What I need from you:** reply "267: A", "267: B" or "267: C". (Task M17.7.6.)
-
 ## 266. What is the thirty-day cost review compared with: a figure you type at go-live, the department budgets added up, or the estimator's own forecast?
 
 **In plain terms:** tasks M37.5.3.1 and M37.5.3.3 ask for the first thirty days of real spend to be set
@@ -60,6 +32,32 @@ re-tuning task needs anyway, but it only has data from the day it ships.
 actual side by side. They are separate changes, A first.
 
 **What I need from you:** reply "266: A", "266: B" or "266: C", or "266: A and C".
+
+## 269. How should an install recognise another company's value among its own settings and stores?
+
+**In plain terms:** task M42.4.2 asks for an audit of a live install's stores and settings for values that
+belong to another company (the company the product was first run for, or a copy of someone else's
+database). The repository must not contain any company's names, so the audit cannot carry a list of
+the ones to look for. Something has to say what "this install's own" means, and I will not guess,
+because a wrong guess either flags a company's own identity provider as foreign or passes a
+leftover.
+
+**Option A: the install's own declared domains.** The audit takes the web address, the sender address
+and the sign-in issuer the company entered, treats every address in the stores under those domains
+(and the vendors the product names) as its own, and lists the rest for a person to confirm once.
+Nothing company-specific is stored. The first run lists things to confirm.
+
+**Option B: a list shipped hashed.** The release carries salted hashes of the values the first
+deployment used, and the audit hashes each host it finds and compares. It finds exactly the leftovers
+we know of, and nothing new. It is still derived from a company's details, which the independence
+sweep exists to keep out, so I would need your explicit yes.
+
+**Option C: both.** A for anything unknown, B for known leftovers.
+
+**My recommendation:** A. It needs no company's name anywhere and catches a copied database from any
+company, not only the first.
+
+**What I need from you:** reply "269: A", "269: B" or "269: C".
 
 ## 263. Should the product declare one company-wide ceiling on source calls running at the same time?
 
@@ -808,6 +806,11 @@ the budget past its limit and may go ahead. The limit still stops the question a
 **My recommendation:** A. You have already chosen to stop when a limit is used up and to watch a week of
 "would have stopped" figures first; an estimate would refuse questions on a guess, and the overshoot it
 prevents is one question.
+
+**Added 2026-10-24, so you decide with it in front of you:** the same estimator also prices an agent at
+publish, for item 241, so choosing A closes the two question-estimate leaves and leaves that use of it in
+place. Choosing B or C is the only way a live question gets an estimate, and the correction of M21.2.4 (item
+266) needs the estimates B or C would record.
 
 **What I need from you:** reply "226: A", "226: B" or "226: C".
 
