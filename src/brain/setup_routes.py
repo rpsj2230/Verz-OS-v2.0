@@ -138,6 +138,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from brain.api import COMMON_RESPONSES, NoEchoRoute
+from brain.branding import LOGO_PATH
+from brain.branding import read as read_logo
 from brain.core.errors import Absent, BrainError, Failed
 from brain.firstrun import GRANTED_BY, Enrolment
 from brain.identity.data_steward import NamedSteward, StewardRefusedError
@@ -181,6 +183,9 @@ from brain.setup_wizard import (
     write_draft,
 )
 from brain.sign_in_routes import FINISH_PATH, enrolment_of
+
+#: The installation value the uploaded logo is pointed at.
+LOGO_SETTING: Final = "INSTALL_LOGO_URL"
 
 log = structlog.get_logger()
 
@@ -684,6 +689,7 @@ async def appoint_first_administrator(
     ladder: LadderWriter | None = None,
     alone: bool = True,
     steward_id: str | None = None,
+    logo_uploaded: bool = False,
 ) -> Appointment:
     """Run the appointment in its order, or refuse before the answers in one way.
 
@@ -694,7 +700,9 @@ async def appoint_first_administrator(
     database, which writes no routing ladder. `alone` is whether this process serves the
     console by itself; see `A_RESTART_IS_ASKED_FOR_ONLY_WHERE_ANOTHER_PROCESS_SERVES`.
     `steward_id` is the id a steward named as another person is written under, minted here when
-    None; see `THE_SERVER_CHOOSES_WHO_IS_APPOINTED`.
+    None; see `THE_SERVER_CHOOSES_WHO_IS_APPOINTED`. `logo_uploaded` is whether the wizard's logo
+    upload put a file down: when it did and no logo address was given, the appointment points
+    `INSTALL_LOGO_URL` at it, in the same transaction as every other value. See `brain.branding`.
     """
     store = credentials if credentials is not None else Credentials(None)
     if enrolment is None:
@@ -724,12 +732,15 @@ async def appoint_first_administrator(
         if why is not None:
             log.info("appointment refused", reason="not_kept", names=[slot.path], why=why)
             return Appointment(unkept=(slot.path,), variables=(slot.provider.env_var,), reason=why)
+    settings = dict(applied.settings)
+    if logo_uploaded and not settings.get(LOGO_SETTING):
+        settings[LOGO_SETTING] = LOGO_PATH
     try:
         await appointer.appoint(
             applied.grant,
             display_name=draft.values_for(StepId.ADMINISTRATOR)["full_name"],
             trace_id=trace_id,
-            settings=applied.settings,
+            settings=settings,
             steward=steward_of(
                 applied,
                 principal_id=principal_id,
@@ -741,7 +752,7 @@ async def appoint_first_administrator(
         raise _nothing_to_appoint() from refused
     # Held from what was written rather than read back, so this process answers with the
     # install's own values on the very next request. See the module note.
-    hold_saved({**saved_values(), **applied.settings})
+    hold_saved({**saved_values(), **settings})
     await write_ladder_after_appointment(ladder, applied, trace_id=trace_id)
     return Appointment(
         principal_id=principal_id,
@@ -803,6 +814,7 @@ async def appoint_from_setup(request: Request, body: AppointmentAsked) -> JSONRe
             credentials=credentials_of(request),
             ladder=ladder_of(request),
             alone=serves_alone(),
+            logo_uploaded=read_logo(draft_file_of(request).parent) is not None,
         )
     except BrainError:
         raise
