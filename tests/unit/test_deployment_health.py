@@ -12,7 +12,6 @@ Task ids: M42.3.4
 
 from __future__ import annotations
 
-import os
 import shutil
 import stat
 import subprocess
@@ -88,14 +87,18 @@ def test_the_committed_script_is_what_the_renderer_prints() -> None:
 
 
 @needs_bash
-def test_the_script_is_valid_bash_and_executable() -> None:
-    """The file is syntax-checked and carries the executable bit. Delete this and a stray quote
-    in an embedded report ships a script that fails on the one server it was written for."""
+def test_the_script_is_valid_bash_with_a_shebang_and_is_run_through_bash() -> None:
+    """The file is syntax-checked, starts with a shebang, and is invoked as `bash <path>` by the
+    install script and the guide, exactly as install.sh is, so no executable bit is needed or
+    promised. Delete this and a stray quote in an embedded report ships a script that fails on
+    the one server it was written for, or the invocation drifts to one that needs a mode."""
     assert BASH is not None
     done = subprocess.run([BASH, "-n", str(SCRIPT)], capture_output=True, text=True, check=False)
 
     assert done.returncode == 0, done.stderr
-    assert os.access(SCRIPT, os.X_OK)
+    assert SCRIPT.read_text(encoding="utf-8").startswith("#!/bin/bash\n")
+    install = (REPO / INSTALL_PATH).read_text(encoding="utf-8")
+    assert f'bash "$BRAIN_HOME/{HEALTH_SCRIPT}"' in install
 
 
 @needs_bash
