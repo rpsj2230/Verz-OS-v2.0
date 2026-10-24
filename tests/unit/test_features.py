@@ -153,6 +153,7 @@ def test_every_declared_reader_asks_about_its_feature_and_nothing_else_asks() ->
         "brain.welcome_routes",
         "brain.coordination_routes",
         "brain.workflow_routes",
+        "brain.ops.shared_answers",
     }
 
 
@@ -315,6 +316,7 @@ def test_switching_a_feature_on_writes_its_row_and_the_next_read_sees_it(
         "multi_agent_coordination": False,
         "stored_workflows": False,
         "browser_declarations": False,
+        "shared_answer_runs": False,
     }
 
 
