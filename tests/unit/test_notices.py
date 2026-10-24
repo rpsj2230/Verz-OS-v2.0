@@ -53,8 +53,7 @@ def test_every_kind_has_exactly_one_notice_and_every_composer_exists() -> None:
 
 def test_a_notice_said_to_be_sent_names_a_sender_that_asks_the_switch_about_it() -> None:
     """**What makes "sent" and the switch true.** The sender is read for a call to `notice_is_on`
-    naming this notice's kind. Four are started by the worker's schedule (the build's evening digest
-    and the daily backup report among them, which asked nothing before 2026-10-24), the handoff of a
+    naming this notice's kind. Two are started by the worker's schedule, the handoff of a
     question to a person is sent by the answer path itself as the question is handed on (M8.3.2),
     its asker is told it expired by a loop the application starts (M8.3.4), each person's week
     of learning is told by another (M16.5.1), and an automation's steward is told that it was
@@ -71,7 +70,6 @@ def test_a_notice_said_to_be_sent_names_a_sender_that_asks_the_switch_about_it()
     sent = [one for one in NOTICES if one.sent_by]
     assert [one.kind for one in sent] == [
         NoticeKind.REVERIFICATION_REQUEST,
-        NoticeKind.EVENING_DIGEST,
         NoticeKind.DENIAL_PATTERN,
         NoticeKind.BUDGET_STOPPED,
         NoticeKind.BUDGET_NEARING,
@@ -79,7 +77,6 @@ def test_a_notice_said_to_be_sent_names_a_sender_that_asks_the_switch_about_it()
         NoticeKind.QUESTION_NOT_PICKED_UP,
         NoticeKind.LEARNING_DIGEST,
         NoticeKind.CONTROL_NOT_RUN,
-        NoticeKind.BACKUP_EXPOSURE,
         NoticeKind.AUTOMATION_PAUSED,
     ]
     for one in sent:

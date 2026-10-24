@@ -42,7 +42,7 @@ person, and a chat binding keeps no address to send to (`brain.ops.notices`, app
 Rejected: raising the report as a ledger entry. It is a reading of a bucket, not an act by a
 person, and the ledger records acts.
 
-Task ids: M30.3.10, M30.6.10, M17.7.6
+Task ids: M30.3.10, M30.6.10
 """
 
 from __future__ import annotations
@@ -74,7 +74,6 @@ from brain.ops.idempotency import (
     issue_once,
     operation_for,
 )
-from brain.ops.notices import NoticeKind, notice_is_on
 from brain.ops.recovery import Alert, alerts
 from brain.ops.setting_store import put, read_namespace
 from brain.tables.audit import attributed_to
@@ -114,10 +113,6 @@ ALERT_TOOL: Final = "backup.alert"
 
 #: What a run says when nobody has chosen where alerts go.
 NOBODY_TOLD: Final = "recorded, and nobody was told: no conversation has been chosen for alerts"
-
-#: What a report says when its notice is switched off. The notice has no switch today, so this is
-#: the sentence for the day it gains one, and the sender asks so that day needs no change here.
-SWITCHED_OFF: Final = "the backup notice is switched off"
 
 T = TypeVar("T")
 
@@ -357,10 +352,6 @@ async def run_backup_report(
     summary = f"{report.answer}; {len(report.alerts)} alert(s)"
     if not report.alerts:
         return f"recorded: {summary}"
-    async with sessions() as session:
-        told = await notice_is_on(session, NoticeKind.BACKUP_EXPOSURE)
-    if not told:
-        return f"recorded, and not sent: {SWITCHED_OFF}: {summary}"
     chosen = destination_of(saved)
     if chosen is None:
         return f"{NOBODY_TOLD}: {summary}"
