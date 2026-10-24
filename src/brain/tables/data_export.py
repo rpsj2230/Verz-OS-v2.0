@@ -109,6 +109,10 @@ class ExportDataSet(enum.StrEnum):
     #: A person's own conversation as they were shown it, taken from the thread itself
     #: (`brain.thread_routes`, `0207`) as a subject access request in their own name.
     CONVERSATION = "conversation_history"
+    #: The inventory of the documents one reader may see, with who may read each one, taken from
+    #: the Knowledge screen (`brain.knowledge_export_routes`, `0276`). Always readable, and never
+    #: the documents' text.
+    KNOWLEDGE = "knowledge"
 
 
 class ExportForm(enum.StrEnum):

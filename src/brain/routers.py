@@ -349,6 +349,11 @@ from brain.install_routes import router as install_router
 # `admin:schedule` over everything and the `schedule_control` feature. See `brain.jobs_routes`.
 from brain.jobs_routes import router as jobs_router
 
+# The inventory of the documents a reader may see, with who may read each one, taken from the
+# Knowledge screen and recorded on the Exports log before it is handed over. See
+# `brain.knowledge_export_routes`.
+from brain.knowledge_export_routes import router as knowledge_export_router
+
 # Adding a web page by its link, and a bulk upload queued for the worker to read (M7.1.2,
 # M7.1.5). See `brain.knowledge_intake_routes`.
 from brain.knowledge_intake_routes import router as knowledge_intake_router

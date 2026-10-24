@@ -44,7 +44,9 @@ import {
   readDocRow,
   verifiedWords,
 } from "../src/pages/knowledge/knowledgeDocuments";
+import { EXPORT_LABEL, KNOWLEDGE_EXPORT_API_PATH } from "../src/pages/knowledge/KnowledgeExport";
 import { ADD_LABEL, KNOWLEDGE_HEADING, NO_DOCUMENTS } from "../src/pages/knowledge/KnowledgePage";
+import { REASON_BLANK, REFERENCE_BLANK } from "../src/pages/exports/ReportExport";
 import { CAPTURE, CAPTURE_PROBLEMS } from "../src/pages/knowledge/SolutionsPage";
 import { APPROVE, CONFIRM_CONSEQUENCE, OPEN, REASON_MISSING, REJECT } from "../src/pages/knowledge/CorrectionsPage";
 import { QUEUED_FIELDS, QUEUED_STATES, queuedPath, readQueued } from "../src/pages/knowledgeIntakeQuery";
@@ -75,11 +77,12 @@ import {
   uploadPath,
 } from "../src/pages/knowledgeQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
-import { apiDocument } from "./support/openapi";
+import { apiDocument, declaredRequestBodySchema } from "./support/openapi";
 import { backendEnumMembers, backendModelFields } from "./support/python";
 import { installRadixStubs } from "./support/radix";
 import { readRepoFile } from "./support/repo";
-import { noRouteRetires, retiringPattern, sentenceFor } from "./support/explanations";
+import { registered } from "./support/explanations";
+import { confirmWith } from "./support/rowMenu";
 
 const API = "/api/v1";
 const ORIGIN = "https://console.test";
@@ -262,18 +265,60 @@ describe("the Knowledge list", () => {
     expect(container.textContent).not.toContain(ITEM);
   });
 
-  test("Export inventory is drawn inert with its reason, and Add is offered to somebody the API lets add", async () => {
-    // What breaks if this is deleted: an unrecorded export of titles, or the upload control vanishing
-    // for the people who may add documents.
+  test("Export inventory is a live control, and Add is offered to somebody the API lets add", async () => {
+    // What breaks if this is deleted: the export going back to a sentence saying it is coming, or
+    // the upload control vanishing for the people who may add documents.
     const idp = api({ ...LIST, [UPLOAD_OPTIONS_API_PATH]: OPTIONS, [TASKS_API_PATH]: { items: [] } });
     const container = await page("/library", idp);
     const inert = [...container.querySelectorAll(`[${UNAVAILABLE_MARK}]`)].map((one) => one.textContent ?? "");
 
-    expect(inert).toContain("Export inventory");
-    await waitFor(() => {
-      expect(container.textContent).toContain(sentenceFor("knowledge.export_inventory"));
-    });
+    expect(inert).not.toContain("Export inventory");
+    expect([...container.querySelectorAll("button")].some((one) => (one.textContent ?? "").includes(EXPORT_LABEL))).toBe(true);
     expect([...container.querySelectorAll("button")].some((one) => (one.textContent ?? "").includes(ADD_LABEL))).toBe(true);
+  });
+
+  test("the inventory export says what each field takes, refuses a blank form, and is sent from its confirmation", async () => {
+    // What breaks if this is deleted: M25.3.3's inventory goes without a reason or a reference, or is
+    // sent before anybody agreed to it, or asks the route for a key it does not declare.
+    const idp = api(
+      { ...LIST, [UPLOAD_OPTIONS_API_PATH]: OPTIONS, [TASKS_API_PATH]: { items: [] } },
+      {
+        export: { export_id: "e-1", data_set: "knowledge", reason: "regulatory_request", reason_reference: "AUDIT-1", produced_at: "2019-05-01T10:00:00Z", form: "readable", first_seq: null, last_seq: null, entries: 1, verified: null, document_digest: "a".repeat(64) },
+        filename: "knowledge-e-1.csv",
+        document: "Document\r\nSite handover\r\n",
+        told: "TOLD-SENTENCE",
+      },
+    );
+    const container = await page("/library", idp);
+    fireEvent.click([...container.querySelectorAll("button")].find((one) => (one.textContent ?? "").includes(EXPORT_LABEL)) as HTMLElement);
+    const form = (await screen.findByRole("form", { name: EXPORT_LABEL })) as HTMLFormElement;
+    expect(form.textContent).toContain("for example AUDIT-2026-Q3");
+    fireEvent.submit(form);
+    await waitFor(() => {
+      expect(form.textContent).toContain(REASON_BLANK);
+    });
+    expect(form.textContent).toContain(REFERENCE_BLANK);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+
+    fireEvent.change(form.querySelector("select") as HTMLSelectElement, { target: { value: "regulatory_request" } });
+    fireEvent.change(form.querySelector('input[name="reason_reference"]') as HTMLInputElement, { target: { value: " AUDIT-1 " } });
+    fireEvent.submit(form);
+    expect(writes(idp)).toEqual([]);
+    await confirmWith(EXPORT_LABEL);
+
+    await waitFor(() => {
+      expect(writes(idp)).toHaveLength(1);
+    });
+    expect(writes(idp)[0]?.url.pathname).toBe(`${API}${KNOWLEDGE_EXPORT_API_PATH}`);
+    expect(bodyOf(writes(idp)[0]?.init as RequestInit)).toEqual({ reason: "regulatory_request", reason_reference: "AUDIT-1" });
+    expect(Object.keys(bodyOf(writes(idp)[0]?.init as RequestInit) as object).sort()).toEqual(
+      Object.keys(declaredRequestBodySchema(`${API}${KNOWLEDGE_EXPORT_API_PATH}`, "post")["properties"] as object).sort(),
+    );
+    // The file is handed over after the record, and what is said of it is said before this ends, so
+    // the next test does not start with this one's save still running.
+    await waitFor(() => {
+      expect(container.textContent).toMatch(/TOLD-SENTENCE|could not save the document/);
+    });
   });
 
   test("somebody the API lets add nothing sees no Add, and an empty list says what would fill it", async () => {
@@ -779,9 +824,9 @@ describe("what the module reads and says", () => {
     // What breaks if this is deleted: "coming soon" said about Archive or Export after its route has
     // landed. The positive sibling holds that each pattern matches the path it is written for.
     const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
-    noRouteRetires(["knowledge.export_inventory"]);
     expect(paths).toContain(`${API}/knowledge/items/{item_id}/archive`);
-    expect(retiringPattern("knowledge.export_inventory").test("/api/v1/knowledge/inventory")).toBe(true);
+    expect(paths).toContain(`${API}${KNOWLEDGE_EXPORT_API_PATH}`);
+    expect(registered().map((one) => one.act)).not.toContain("knowledge.export_inventory");
     expect(paths).toContain(`${API}${DOCUMENTS_API_PATH}`);
     expect(paths).toContain(`${API}${VERIFICATIONS_API_PATH}`);
   });

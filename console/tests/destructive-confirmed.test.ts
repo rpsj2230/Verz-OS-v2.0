@@ -39,6 +39,16 @@ import { CONTROL_DIRECTORIES, everyConfirmation, everyWrite } from "./support/wr
  * why each one is not destructive.
  */
 const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
+  "src/pages/review/CertificationExport.tsx CERTIFICATION_EXPORT_API_PATH":
+    "Taking the report copies rows the reader may already see and removes nothing, and the call is made by the " +
+    "shared report form (src/pages/exports/ReportExport.tsx) only from its confirmation, which names what leaves, so " +
+    "nothing is sent before it: tests/review-pages.test.tsx submits the form complete and holds that no write " +
+    "is sent until the confirmation is pressed.",
+  "src/pages/knowledge/KnowledgeExport.tsx KNOWLEDGE_EXPORT_API_PATH":
+    "Taking the inventory copies the rows of the Knowledge list the reader may already see, with none of the " +
+    "text, and removes nothing, and the call is made by the shared report form (src/pages/exports/ReportExport.tsx) only " +
+    "from its confirmation, which names what leaves, so nothing is sent before it: tests/knowledge-page.test.tsx " +
+    "submits the form complete and holds that no write is sent until the confirmation is pressed.",
   "src/pages/agent-templates/TemplateTransfer.tsx IMPORT_API_PATH":
     "Reading a template document writes nothing: brain.template_withdrawal_routes.import_template, asked " +
     "without a digest, parses the document and names what it holds and keeps no row, which " +

@@ -55,7 +55,7 @@ window and whether the chain verified when it is a chain, and the sha256 of the 
 is what lets a copy turning up later be matched to the person who took it. Keeping the document too
 would be a second copy of the ledger with none of its protections.
 
-Task ids: M27.8.16, M27.9.4
+Task ids: M27.8.16, M27.9.4, M25.3.3
 """
 
 from __future__ import annotations
@@ -201,9 +201,20 @@ A_CONVERSATION_IS_EXPORTED_BY_THE_PERSON_WHO_HAD_IT: Final = (
     "name of the person who took it."
 )
 
+#: Where the knowledge inventory is taken, and what it is not.
+AN_INVENTORY_IS_TAKEN_FROM_THE_KNOWLEDGE_SCREEN: Final = (
+    "Taken from the Knowledge screen, whose rows it holds: every document you may see, with who "
+    "may read it, its steward and its review. It carries no document's text. It is recorded here "
+    "with the other exports."
+)
+
 #: Data sets that run, and are taken from their own screen rather than this screen's form.
 TAKEN_ELSEWHERE: Final = frozenset(
-    {ExportDataSet.ACCESS_CERTIFICATION.value, ExportDataSet.CONVERSATION.value}
+    {
+        ExportDataSet.ACCESS_CERTIFICATION.value,
+        ExportDataSet.CONVERSATION.value,
+        ExportDataSet.KNOWLEDGE.value,
+    }
 )
 
 #: Everything the code knows how to bring in or take out, in the order the screen lists them.
@@ -231,16 +242,15 @@ CATALOGUE: Final[tuple[DataSet, ...]] = (
         told=A_CERTIFICATION_REPORT_IS_TAKEN_FROM_THE_REVIEW,
     ),
     DataSet(
-        key="knowledge",
+        key=ExportDataSet.KNOWLEDGE.value,
         label="Knowledge",
         direction=Direction.EXPORT,
-        carries="Knowledge items with the scope that says who may read each one.",
-        runs=False,
-        told=(
-            "Not available yet. The export is written and keeps each item's scope with it, and "
-            "nothing on this install stores a knowledge item for it to read, because documents "
-            "cannot be brought in yet either."
+        carries=(
+            "The documents you may see, each with the scope that says who may read it. Never a "
+            "document's text."
         ),
+        runs=True,
+        told=AN_INVENTORY_IS_TAKEN_FROM_THE_KNOWLEDGE_SCREEN,
     ),
     DataSet(
         key="subject_access",
