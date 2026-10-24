@@ -5040,9 +5040,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M42.7.1": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No install health check reports kernel virtualisation: grep for kvm and virtualisation finds only a sentence in browsing/sandbox.py; launcher.py --check reports gVisor (runsc) only, and no administrator-facing text states browser isolation.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: launcher --check now prints what the host offers beside gVisor (brain.browsing.virtualisation: gVisor set to KVM and /dev/kvm usable, usable and unused, unusable, set to KVM but unusable which fails the check, or no gVisor), and fails only for the one state in which every run would fail to start. The launcher's rehearsal answer carries the same state, and the browser sandbox install check requires it, so the Install page's check for the sandbox names KVM beside gVisor. NOT SHOWN: a real host. The sandbox check is NOT RUN on an install with browser runs off or no launcher. TO PROVE: run python -m brain.browsing.launcher --app-image <image> --check on the Docker host and read the kernel virtualisation line; with browser runs on, the Install page's browser sandbox check passes only when the launcher names a state.",
+    updated: "2026-10-24",
   },
   "M42.7.2": {
     status: "BLOCKED",

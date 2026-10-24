@@ -47,6 +47,7 @@ class Launcher:
     gaps: tuple[str, ...] = ()
     runtime: str = "runsc"
     left_behind: int = 0
+    virtualisation: str = "kvm_unavailable"
     silent: bool = False
     wrong_run: bool = False
     sent: bytes = b""
@@ -64,6 +65,7 @@ class Launcher:
             runtime=self.runtime,
             gaps=list(self.gaps),
             left_behind=self.left_behind,
+            virtualisation=self.virtualisation,
         )
 
     async def hang_up(self) -> None:
@@ -102,11 +104,11 @@ async def run_it() -> None:
 
 
 # ------------------------------------------------------------------ what it names
-def test_the_check_names_the_five_sandbox_leaves_and_sits_in_this_packages_range() -> None:
+def test_the_check_names_the_sandbox_leaves_and_sits_in_this_packages_range() -> None:
     """Delete this and the check can lose a leaf with the page showing the same row, or sit outside
     the keys this package was given, where it would collide with another package's."""
     assert [(one.name, one.leaves) for one in registered((MODULE,))] == [
-        (NAME, ("M19.1.1", "M19.1.5", "M19.1.6", "M19.3.5", "M19.6.4"))
+        (NAME, ("M19.1.1", "M19.1.5", "M19.1.6", "M19.3.5", "M19.6.4", "M42.7.1"))
     ]
     assert checks_in(MODULE) == [NAME]
     assert 2300 <= module.CHECK_ORDER <= 2399
@@ -187,6 +189,8 @@ def test_a_host_whose_daemon_describes_the_sandbox_as_asked_passes_the_check(
         (Launcher(runtime="runc"), "gVisor runtime"),
         (Launcher(runtime=""), "gVisor runtime"),
         (Launcher(left_behind=1), "wholly removed"),
+        (Launcher(virtualisation="no_gvisor"), "offers KVM"),
+        (Launcher(virtualisation=""), "offers KVM"),
         (Launcher(wrong_run=True), "something else"),
     ],
 )
