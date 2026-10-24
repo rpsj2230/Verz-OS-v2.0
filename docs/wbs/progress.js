@@ -499,6 +499,11 @@ const PROGRESS = {
     why: "moved to Wave 4 (needs-rupash 112): closes when every permissions requirement row has its proof on the install. PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (requirement_check_routes, tables.requirement_check, pages/RequirementChecks.tsx +4 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-w1-8",
     updated: "2026-09-29",
   },
+  "M1.8.1": {
+    status: "READY FOR TESTING",
+    why: "built: a contractor or partner cannot be saved without an end date (Principal validator, the add-person form's body, and a check constraint on auth.principal), the reach is read at an instant and holds nothing from the end date (EntitlementSet.not_after), and a session opens only until it (identity.sessions.open_session). Install check: an_external_person_stops_on_their_end_date (ops/acceptance_checks_external_end.py), which reads the reach and opens sessions at the second before and after the date rather than waiting for it. Proved as far as the principal a chat binding resolves to is no longer active; the chat route's own refusal of an inactive person (chat_answer) is not driven by it. Not yet run on the install.",
+    updated: "2026-10-24",
+  },
   "M10.1.1": {
     status: "READY FOR TESTING",
     why: "channel pipeline (PR #105, merged, migration 0114): proved on the install with the signed webhook channel, set up, refused, delivered once and switched off",
@@ -2253,6 +2258,11 @@ const PROGRESS = {
     status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): Answer cache key includes the entitlement hash (gate.answer_cache, cache_key); check M6.5.2 shows a person who moved department was refused the cached answer (acceptance_checks_cache.py:196). Test test_answer_cache. NEXT: Add M26.2.4 to that check's leaves=(...).",
     updated: "2026-10-13",
+  },
+  "M26.2.5": {
+    status: "READY FOR TESTING",
+    why: "built: a memory is recalled at the reach it was formed at (brain.memory.formation.may_recall), so a mover's memory of the reach they left stops being shown and nothing is rewritten (identity.lifecycle.replayable_after is the pure model). Install check: a_mover_is_not_told_the_memories_of_the_reach_they_left (ops/acceptance_checks_mover_memory.py): a memory formed on Ask in one department is shown, is not shown to the person or to a model once the grants over that department are withdrawn and the same grants over another are given, is still on file with its row unchanged, and is shown again when the move is undone. The move is a grant change and not the staff sync (that step is M26.2.1's check), so the check runs on every install. Not yet run on the install.",
+    updated: "2026-10-24",
   },
   "M26.2.6": {
     status: "READY FOR TESTING",
@@ -4811,13 +4821,13 @@ const PROGRESS = {
   },
   "M26.2.7": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Roll-up test leaf: tests/unit/test_lifecycle.py covers the pure module, but several clauses it covers (provision, delegations, welcome) are not wired, so a test of every item above has nothing end to end to run. 2026-10-20 ROLL-UP BUILT, NOT YET ABLE TO PASS: acceptance_checks_jml_roll_up.every_mover_leaf_is_shown_clause_by_clause_in_this_run reads the checks for M26.2.1 to M26.2.6 and is not run while any has none (M26.2.5 has no install check). tests/unit/test_mover_end_to_end.py drives the staff run and asks the reach, cache key, memory, automation and knowledge rules of one mover on the state it leaves. A person runs the install checks; this closes when every clause check passes in one run.",
-    updated: "2026-10-20",
+    why: "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Roll-up test leaf. 2026-10-24 ALL SIX CLAUSES NOW HAVE A CHECK: M26.2.5 (a_mover_is_not_told_the_memories_of_the_reach_they_left) was the last without one. acceptance_checks_jml_roll_up.every_mover_leaf_is_shown_clause_by_clause_in_this_run reads the checks for M26.2.1 to M26.2.6, so it passes in a run in which each of them passed. Run on a scratch database at head with the Starter pack furnished, every clause check passed and this roll-up passed; on one with no Starter pack the pack check (M26.2.1, M26.2.4, M26.2.6) is not run and so is this. It has not yet been seen passing on the owner's install. tests/unit/test_mover_end_to_end.py drives the staff run and asks the same rules of one mover. A person runs the install checks; this closes when every clause check passes in one run.",
+    updated: "2026-10-24",
   },
   "M26.4.1": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Roll-up proof (a check can be written once clauses exist) across joiner, mover and leaver; clauses depend on unwired parts (delegations M26.2.3, personal knowledge disposition M26.3.4, ended grant mid-run, external person end date). NEXT: Waits on M26.2.3 and M26.3.4, then a person runs it and the checks are recorded. 2026-10-20 ROLL-UP BUILT, NOT YET ABLE TO PASS: acceptance_checks_jml_roll_up.joiner_mover_leaver_is_shown_clause_by_clause_in_this_run reads the clause checks and names any clause with none: a personal agent following its owner (M26.2.2, now checked), memories of the old reach (M26.2.5), a run stopping on a revoked grant (M13.8.2, has a check), an external person's end date (M1.8.1) and a service key stopping with its owner (M1.8.2), neither of which has a check, and an owned item a person can no longer reach leaving their workspace, which no leaf names. It stays not run, never passed, until each is shown.",
-    updated: "2026-10-20",
+    why: "TRIAGE 2026-10-13 class 2 (partly built): Roll-up proof across joiner, mover and leaver. 2026-10-24: a mover's memories of the old reach (M26.2.5) and an external person's end date (M1.8.1) now have checks, as a personal agent following its owner (M26.2.2) and a run stopping on a revoked grant (M13.8.2) did. acceptance_checks_jml_roll_up.joiner_mover_leaver_is_shown_clause_by_clause_in_this_run still names two clauses with no check: a service key stopping when its owner lapses (M1.8.2) and an item a person owns but can no longer reach leaving their workspace (named by no leaf), so it is not run and this leaf stays open. NEXT: a check for the service key against the service account store (identity.service_account_store, channels.api_keys), and a decision whether the unreachable-item clause is a leaf of its own.",
+    updated: "2026-10-24",
   },
   "M29.3.1": {
     status: "READY FOR TESTING",
