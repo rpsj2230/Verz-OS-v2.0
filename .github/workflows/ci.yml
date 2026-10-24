@@ -1248,6 +1248,11 @@ jobs:
         run: uv run python -m brain.ops.sweeps dependencies
       - name: Every image's terms and the licences the npm locks record
         run: uv run python -m brain.ops.dependency_policy offline
+      - name: The notices file names everything the release ships
+        # M42.7.3. NOTICES.md is what the image and the archive carry; this fails when a lock or a
+        # compose file moved and the file did not. Offline: the licences were read when it was
+        # written (`python -m brain.ops.third_party_notices write > NOTICES.md`).
+        run: uv run python -m brain.ops.third_party_notices check
       - name: The policy refuses a copyleft addition and an archived one, and passes the tree
         # M0.5.7 and M0.7.1. The release age, the archived check and each locked package's
         # licence as the index gives it are asked here and nowhere else, over both uv locks,
