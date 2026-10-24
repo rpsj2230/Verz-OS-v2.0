@@ -27,13 +27,15 @@
  * words, and `kit/parts.tsx`' `Advanced` holds the rest for a support request.
  *
  * **Tools and workflows are parts of an agent in their own right** (needs-rupash 180, option B). The
- * tools an agent carries are the block under its reach, and a Workflows card says what a workflow is
- * and that none is stored yet, rather than leaving the part off the page until one is.
+ * tools an agent carries are the block under its reach, the Workflows card (`AgentWorkflows.tsx`) is the
+ * stored procedures it may run, which a steward gives it and anyone who may start it can run, and the
+ * Specialists card (`AgentSpecialists.tsx`) is the agents it may hand a subtask to. Both are drawn only
+ * to a reader the API tells their names to, and both explain a switch that is off in the server's words.
  *
  * **A personal agent's owner also sees their own Google account** (`AgentOwnWorkspace.tsx`, M39.10.4), to
  * attach or take off with a confirmation; the card is absent for everybody else and for a team agent.
  *
- * Task ids: M27.10.2, M5.7.3, M27.11.6, M13.7.4, M39.1.1.1, M27.11.12, M27.11.13, M27.11.14, M27.15.32, M39.10.4
+ * Task ids: M27.10.2, M5.7.3, M27.11.6, M13.7.4, M39.1.1.1, M27.11.12, M27.11.13, M27.11.14, M27.15.32, M39.10.4, M17.6.5, M18.5.1, M18.6.2
  */
 
 import { Brain, Globe, MonitorX, Plug, Radio, ShieldCheck, Sparkles } from "lucide-react";
@@ -65,6 +67,8 @@ import { AgentLeash } from "./AgentLeash";
 import { AgentTools } from "./AgentTools";
 import { AgentChannels } from "./AgentChannels";
 import { AgentGroups } from "./AgentGroups";
+import { AgentSpecialists } from "./AgentSpecialists";
+import { AgentWorkflows } from "./AgentWorkflows";
 import { AgentOwnWorkspace } from "./AgentOwnWorkspace";
 import { WHERE_IT_ANSWERS } from "./ChannelChoices";
 import { LeashPill } from "./pills";
@@ -319,19 +323,6 @@ function Permissions({
   );
 }
 
-export const WORKFLOWS_HEADING = "Workflows";
-export const WORKFLOWS_LEDE = "Stored, versioned procedures this agent follows, referred to and never copied in.";
-export const NO_WORKFLOWS = "No workflows are stored on this install yet. When one is, it is attached here, by name and version, and the agent follows exactly that version.";
-
-/** The agent's workflows: a part of its own, and honestly empty until a workflow can be stored. */
-export function WorkflowsCard() {
-  return (
-    <SectionCard title={WORKFLOWS_HEADING} lede={WORKFLOWS_LEDE}>
-      <Note>{NO_WORKFLOWS}</Note>
-    </SectionCard>
-  );
-}
-
 function Availability({
   agentId,
   facts,
@@ -578,7 +569,8 @@ export function AgentProfile({
             onDetailsChanged={onDetailsChanged}
             onEditDraft={onEditDraft}
           />
-          <WorkflowsCard />
+          <AgentWorkflows agentId={agent.agentId} />
+          <AgentSpecialists agentId={agent.agentId} name={agent.displayName} />
           <AgentChannels agentId={agent.agentId} />
           <AgentGroups agentId={agent.agentId} />
           <AgentOwnWorkspace agentId={agent.agentId} name={agent.displayName} />

@@ -315,6 +315,20 @@ EXPLANATIONS: Final[tuple[Explanation, ...]] = (
         Lead.NOT_YET,
     ),
     Explanation(
+        "workflow.run_switched_off",
+        Form.NOTE,
+        "running a stored workflow is switched off on this install; it is switched on under "
+        "Features. Workflows can still be written and given to an agent.",
+        Lead.NOT_YET,
+    ),
+    Explanation(
+        "coordination.run_switched_off",
+        Form.NOTE,
+        "handing a request between agents is switched off on this install; it is switched on "
+        "under Features. Specialists can still be allowed or taken off a coordinating agent.",
+        Lead.NOT_YET,
+    ),
+    Explanation(
         "log.export_cut_off",
         Form.NOTE,
         "The period held more rows than one export carries; choose a shorter period for the rest.",

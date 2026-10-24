@@ -332,6 +332,29 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         installs: [{ id: "g-1", channel: "lark", room_ref: UNBROKEN, name: UNBROKEN, present: false, answering: false, installed_at: "2019-03-04T09:00:00Z" }],
         rooms: [{ channel: "lark", room_ref: UNBROKEN, name: UNBROKEN }],
       },
+      // The stored workflows it may run, and the ones a steward could give it: each name a token.
+      "/api/v1/agents/quote-helper/workflows": {
+        agent_id: "quote-helper",
+        names_shown: true,
+        workflows: [UNBROKEN],
+        may_change: true,
+        switched_on: true,
+      },
+      "/api/v1/workflows": {
+        workflows: [{ workflow_id: UNBROKEN, version: 1, name: UNBROKEN }],
+        switched_on: true,
+      },
+      // The specialists it may hand a subtask to, for its steward, and the agents to choose from.
+      "/api/v1/agents/quote-helper/coordination": {
+        agent_id: "quote-helper",
+        names_shown: true,
+        callees: [{ agent_id: UNBROKEN, display_name: UNBROKEN }],
+        fan_out_enabled: false,
+        may_change: true,
+        switched_on: true,
+        words: UNBROKEN,
+      },
+      "/api/v1/agents": { items: [{ agent_id: "other-helper", display_name: UNBROKEN }], truncated: false },
       // Who else can find it, for its steward: the departments and people beside the level, each a
       // token with nowhere to break, and the controls that change them.
       "/api/v1/agents/quote-helper/audience": {
