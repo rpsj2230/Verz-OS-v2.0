@@ -3570,14 +3570,14 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M36.2.3.1": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops/scaling.py share_role, may_share, share_refusals decide whether an in-flight answer may be shared (tested); the answer path has no in-flight sharing (gate cache has none). Only connector fetches share, via federation.SingleFlight in live_read. NEXT: call scaling.share_role from the answer lane's cache lookup in gate (cache_key) so a second identical question waits for the first",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: brain.ops.shared_answers (a per-process registry of answer runs in flight keyed by the answer cache's own key, decided by scaling.share_role) called from brain.api_routes.sharing_a_run after the windows have counted the request, behind the new shared_answer_runs switch which ships off; the answer path now waits for a run already in flight at the same cache key. A follower is never handed the leader's text: it waits, bounded at forty-five seconds, then reads the answer cache under its own key, so a refused, failed or abstained leader leaves it to answer for itself. A volatile question is neither registered nor waited for. Two web processes do not share a run (said on the module; a reading from the Capacity screen is what would justify a shared table). Install check equal_reach_waits_for_a_run_in_flight_other_reach_does_not. On the install: switch on Answer a question once when people with the same reach ask it at the same time on the Features page; sign in as two colleagues whose access is identical and ask the same question, which is not about the present moment, within a few seconds of each other; the second is told the answer with an 'answered ... ago' note; then ask it as a colleague with different access during the same few seconds and see they are answered at their own reach.",
+    updated: "2026-10-24",
   },
   "M36.2.3.2": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): scaling.may_share compares gate.cache_key parts and requires equal entitlement hash, never similarity (tested). The answer cache key itself already carries ent_hash, but nothing calls may_share, so no sharing happens. federation.flight_key omits reach on purpose. NEXT: wire may_share with M36.2.3.1; an existing cache check (ARC-A-051) already proves the key carries the hash",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: brain.ops.shared_answers (a per-process registry of answer runs in flight keyed by the answer cache's own key, decided by scaling.share_role) called from brain.api_routes.sharing_a_run after the windows have counted the request, behind the new shared_answer_runs switch which ships off; the rule is the answer cache's key, so an equal entitlement hash and never a similar one. A follower is never handed the leader's text: it waits, bounded at forty-five seconds, then reads the answer cache under its own key, so a refused, failed or abstained leader leaves it to answer for itself. A volatile question is neither registered nor waited for. Two web processes do not share a run (said on the module; a reading from the Capacity screen is what would justify a shared table). Install check equal_reach_waits_for_a_run_in_flight_other_reach_does_not. On the install: switch on Answer a question once when people with the same reach ask it at the same time on the Features page; sign in as two colleagues whose access is identical and ask the same question, which is not about the present moment, within a few seconds of each other; the second is told the answer with an 'answered ... ago' note; then ask it as a colleague with different access during the same few seconds and see they are answered at their own reach.",
+    updated: "2026-10-24",
   },
   "M36.2.4.1": {
     status: "READY FOR TESTING",

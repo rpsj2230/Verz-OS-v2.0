@@ -144,6 +144,7 @@ import secrets
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
+from functools import partial
 from typing import Annotated, Any, Final, cast
 
 import structlog
@@ -178,14 +179,23 @@ from brain.core.scope import Clause, Op, Scope
 from brain.gate.addressing import from_web
 from brain.gate.admission import Assurance, admit, second_factor_gives_back, verbs_withheld
 from brain.gate.answer import Answered, answer_lane, frames_of
-from brain.gate.answer_cache import AnswerStore
+from brain.gate.answer_cache import AnswerStore, lookup
 from brain.gate.badge_store import item_lookup_of
+from brain.gate.cache_key import cache_key
 from brain.gate.caches import MAX_QUESTION_CHARS
 from brain.gate.catalogue import AgentCeiling
 from brain.gate.context import Channel, GateStep, Recorder, open_trace
 from brain.gate.fast_lane import AmbiguityReader, FastPathRule, RowReader
 from brain.gate.finish import Origin, RequestRecorder
-from brain.gate.front import AgentSetup, Caching, Choosing, remember, run_front_half
+from brain.gate.front import (
+    AgentSetup,
+    Caching,
+    Choosing,
+    FrontHalf,
+    flight_parts,
+    remember,
+    run_front_half,
+)
 from brain.gate.injection import RiskAssessment
 from brain.gate.invoke import InvocationRefusedError, invoke
 from brain.gate.leash import Leash
@@ -267,6 +277,7 @@ from brain.ops.model_service import ModelService
 from brain.ops.retrieval_store import StoredRetrievals
 from brain.ops.sensitive_referral_store import SensitiveReferrals, StoredSensitiveReferrals
 from brain.ops.session_memory_store import SessionRecollection, StoredSessions
+from brain.ops.shared_answers import Flight, answers_are_shared, flights_of
 from brain.ops.shared_start import universal_when_on
 from brain.ops.signal_store import StoredSignals
 from brain.ops.slack_messages_live import Alongside
@@ -1257,6 +1268,39 @@ async def trying_a_skill_is_on(state: Any) -> bool:
         return False
     async with sessions() as session:
         return await is_on(session, TRY_A_SKILL)
+
+
+async def sharing_a_run(
+    state: Any,
+    front: FrontHalf,
+    *,
+    question: str,
+    reach: EntitlementSet,
+    caching: Caching | None,
+    now: datetime,
+) -> tuple[FrontHalf, Flight | None]:
+    """The front half, served from a run in flight at exactly this reach, if any (M36.2.3).
+
+    Only a miss on a process that keeps answers and has `shared_answer_runs` on is in question.
+    The request either leads, and is handed the registration to release when it has finished, or
+    waited for the run in flight and found what that run stored under this request's own key, in
+    which case it is answered as a cache hit is. Every other outcome is the request answering for
+    itself, which is what it did before this existed. See `brain.ops.shared_answers`.
+    """
+    parts = flight_parts(question, front=front, reach=reach, caching=caching)
+    if (
+        front.cached is not None
+        or parts is None
+        or caching is None
+        or not await answers_are_shared(getattr(state, "db_sessions", None))
+    ):
+        return front, None
+    arrival = await flights_of(state).arrive(
+        parts, look=partial(lookup, cache_key(parts), caching.store, now)
+    )
+    if arrival.found is None:
+        return front, arrival.flight
+    return replace(front, cached=arrival.found), None
 
 
 def answer_is_not_cacheable(
@@ -2454,6 +2498,7 @@ async def answered_for(
         )
     )
 
+    flight: Flight | None = None
     try:
         roster = await roster_of(request.app.state, asking, registry)
         front = run_front_half(
@@ -2494,6 +2539,17 @@ async def answered_for(
         )
         if counted is not None and not counted.allowed:
             return counted
+        # Counted, so a request that waits below is a request like any other for the windows. A
+        # question already being answered at exactly this reach is waited for, not asked again
+        # (M36.2.3); released in the `finally` below, whatever the run came to.
+        front, flight = await sharing_a_run(
+            request.app.state,
+            front,
+            question=address.question,
+            reach=asking.reach,
+            caching=caching,
+            now=asking.now,
+        )
         # A stored agent answers at the caller's reach narrowed by its ceiling, and the default
         # at the caller's own. Everything read below is read at that reach and no other.
         agent = roster.records.get(front.selection.agent_id)
@@ -2640,6 +2696,9 @@ async def answered_for(
         if failed is not None and referral is None:
             await failed()
         raise Failed(f"answering: {type(exc).__name__}") from exc
+    finally:
+        if flight is not None:
+            flight.release()
 
     # The reason, never the question and never the answer. An abstention reason is the audit
     # half of the outcome and a log is an audit surface; the question is the caller's and the
