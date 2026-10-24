@@ -7,18 +7,16 @@ the install check (`acceptance_checks_backup`) is where that half runs.
 
 The clock is 2999, for the reason CLAUDE.md records about fixtures that go off.
 
-Task ids: M30.3.10, M30.6.10, M17.7.6
+Task ids: M30.3.10, M30.6.10
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator, Callable, Mapping
-from contextlib import asynccontextmanager
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from unittest import mock
 
 import pytest
 
@@ -29,7 +27,6 @@ from brain.ops import backup_report_run as module
 from brain.ops.backup_manifest import MANIFEST_SUFFIX
 from brain.ops.backup_report_run import (
     NOBODY_TOLD,
-    SWITCHED_OFF,
     BackupReport,
     alerts_text,
     deliver_alerts,
@@ -40,7 +37,6 @@ from brain.ops.channel_store import ChannelRecord
 from brain.ops.digest_delivery import DigestChannel
 from brain.ops.idempotency import OperationLedger
 from brain.ops.leases import SealedSecret
-from brain.ops.notices import NoticeKind
 from brain.ops.recovery import Severity
 from brain.ops.secrets import SecretRef, VaultRole
 from tests.fixtures.operation_ledger import MemoryLedger
@@ -141,19 +137,9 @@ def recorded(monkeypatch: pytest.MonkeyPatch) -> list[BackupReport]:
     return kept
 
 
-class Sessions:
-    """What the runner opens to ask a notice's switch: a session with nothing behind it, since the
-    switch itself is stood in for below."""
-
-    @asynccontextmanager
-    async def __call__(self) -> AsyncIterator[None]:
-        yield None
-
-
 def run(
     listing: Callable[[], list[tuple[str, str]]] | None,
     *,
-    notice_on: bool = True,
     unread: str = "",
     saved: str = "lark:oc_room",
     ledger: MemoryLedger | None = None,
@@ -167,26 +153,21 @@ def run(
     def through(work: Callable[[OperationLedger], tuple[int, int]]) -> tuple[int, int]:
         return work(held)
 
-    async def switch(session: object, kind: NoticeKind) -> bool:
-        assert kind is NoticeKind.BACKUP_EXPOSURE
-        return notice_on
-
-    with mock.patch.object(module, "notice_is_on", switch):
-        return asyncio.run(
-            module.run_backup_report(
-                sessions=Sessions(),  # type: ignore[arg-type]
-                listing=listing,
-                unread=unread,
-                profile=profile,
-                now=now,
-                saved=saved,
-                records=Records(enabled),
-                secrets=Lender(),
-                transport=transport if transport is not None else Transport(),
-                ledger=through,
-                wires=lambda: {Channel.LARK: Wire()},
-            )
+    return asyncio.run(
+        module.run_backup_report(
+            sessions=None,  # type: ignore[arg-type]
+            listing=listing,
+            unread=unread,
+            profile=profile,
+            now=now,
+            saved=saved,
+            records=Records(enabled),
+            secrets=Lender(),
+            transport=transport if transport is not None else Transport(),
+            ledger=through,
+            wires=lambda: {Channel.LARK: Wire()},
         )
+    )
 
 
 # ------------------------------------------------------------------------ the report
@@ -405,19 +386,3 @@ def test_an_alert_that_arrives_later_the_same_day_is_still_said(
     )
 
     assert len(transport.sent) == 2 and "1 message sent" in changed
-
-
-def test_a_report_whose_notice_is_switched_off_is_recorded_and_not_said(
-    recorded: list[BackupReport],
-) -> None:
-    """**The sender asks its notice's switch**, so the day the notice gains one it reaches the post.
-    The report is still recorded, because the record is what separates a check that ran from one
-    that never did. Delete this and the report is posted whatever the switch says, or goes
-    unrecorded with it."""
-    transport = Transport()
-
-    said = run(lambda: [], notice_on=False, transport=transport)
-
-    assert SWITCHED_OFF in said and "not sent" in said
-    assert transport.sent == []
-    assert len(recorded) == 1

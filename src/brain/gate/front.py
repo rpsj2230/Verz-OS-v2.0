@@ -50,7 +50,13 @@ from brain.core.entitlement import EntitlementSet
 from brain.core.envelope import ToolDefinition
 from brain.core.lane import Lane
 from brain.gate.answer_cache import AnswerStore, lookup, store_answer
-from brain.gate.cache_key import CachedAnswer, NotCacheableError, key_for
+from brain.gate.cache_key import (
+    CachedAnswer,
+    CacheKeyParts,
+    NotCacheableError,
+    is_volatile,
+    key_for,
+)
 from brain.gate.catalogue import AgentCeiling, ProjectedCatalogue, project
 from brain.gate.classify import LaneDecision, classify_lane
 from brain.gate.context import Channel, GateStep, Recorder, StepOutOfOrderError
@@ -232,6 +238,27 @@ def _cached(
     except NotCacheableError:
         return None
     return lookup(key, caching.store, now)
+
+
+def flight_parts(
+    question: str, *, front: FrontHalf, reach: EntitlementSet, caching: Caching | None
+) -> CacheKeyParts | None:
+    """The parts an answer being computed now would be stored under, or None when it is not kept.
+
+    Built from the same four values `_cached` looked up with and `remember` will store with, so
+    a request that waits for another waits for exactly the entry its own lookup will then find
+    (`AN_ANSWER_IS_STORED_UNDER_THE_KEY_ITS_OWN_LOOKUP_USED`). None for a process with no answer
+    store and for a volatile question, which the cache refuses and sharing therefore does too.
+    """
+    if caching is None or is_volatile(question, caching.sources):
+        return None
+    return CacheKeyParts(
+        question=question,
+        ent_hash=reach.ent_hash(),
+        agent_config_hash=front.setup.config_hash,
+        policy_epoch=caching.policy_epoch,
+        source_epochs=caching.source_epochs,
+    )
 
 
 def remember(

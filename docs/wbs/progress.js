@@ -1740,9 +1740,9 @@ const PROGRESS = {
     updated: "2026-10-24",
   },
   "M17.4.6": {
-    status: "BLOCKED",
-    why: "NOT BUILT, 2026-10-24, and why. Run history exists (console/agent_automations AutomationRun, automations_routes detail and stats, tables/automation_run) and says each run's outcome. A run's cost cannot be recorded because no run spends: the one performer this install has reads a table and calls no model, a flow's tool calls go through the gate with no model, and the tasks that would ask one are unbuilt behind needs-rupash 210 (may an automation call a model with nobody present). Recording nought for every run would be the thing automations_routes.RUN_COST_IS_NOT_RECORDED declines to do: a figure that reads as a measurement and is not one. The sentence is true today and the stats route keeps saying it. WHAT BUILDS IT, once 210 is answered: the performer that calls a model hands the run's id as the request's trace id, the spend ledger already records what each request cost, and unattended.CostedRun/history joins the two by that id; the stats route then sums it per period and the unrecorded entry goes. unattended.CostedRun is unwired until then.",
-    updated: "2026-10-24",
+    status: "IN PROGRESS",
+    why: "TRIAGE 2026-10-13 class 2 (partly built): Run history exists: console/agent_automations AutomationRun, automations_routes detail and stats, tables/automation_run. Cost per run is not recorded: RUN_COST_IS_NOT_RECORDED in automations_routes says so. unattended.CostedRun/history is unwired. NEXT: record cost per run (spend actuals joined by run id) and surface it in AutomationRun and the stats route",
+    updated: "2026-10-13",
   },
   "M17.5.1": {
     status: "READY FOR TESTING",
@@ -3570,14 +3570,14 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M36.2.3.1": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops/scaling.py share_role, may_share, share_refusals decide whether an in-flight answer may be shared (tested); the answer path has no in-flight sharing (gate cache has none). Only connector fetches share, via federation.SingleFlight in live_read. NEXT: call scaling.share_role from the answer lane's cache lookup in gate (cache_key) so a second identical question waits for the first",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: brain.ops.shared_answers (a per-process registry of answer runs in flight keyed by the answer cache's own key, decided by scaling.share_role) called from brain.api_routes.sharing_a_run after the windows have counted the request, behind the new shared_answer_runs switch which ships off; the answer path now waits for a run already in flight at the same cache key. A follower is never handed the leader's text: it waits, bounded at forty-five seconds, then reads the answer cache under its own key, so a refused, failed or abstained leader leaves it to answer for itself. A volatile question is neither registered nor waited for. Two web processes do not share a run (said on the module; a reading from the Capacity screen is what would justify a shared table). Install check equal_reach_waits_for_a_run_in_flight_other_reach_does_not. On the install: switch on Answer a question once when people with the same reach ask it at the same time on the Features page; sign in as two colleagues whose access is identical and ask the same question, which is not about the present moment, within a few seconds of each other; the second is told the answer with an 'answered ... ago' note; then ask it as a colleague with different access during the same few seconds and see they are answered at their own reach.",
+    updated: "2026-10-24",
   },
   "M36.2.3.2": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): scaling.may_share compares gate.cache_key parts and requires equal entitlement hash, never similarity (tested). The answer cache key itself already carries ent_hash, but nothing calls may_share, so no sharing happens. federation.flight_key omits reach on purpose. NEXT: wire may_share with M36.2.3.1; an existing cache check (ARC-A-051) already proves the key carries the hash",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: brain.ops.shared_answers (a per-process registry of answer runs in flight keyed by the answer cache's own key, decided by scaling.share_role) called from brain.api_routes.sharing_a_run after the windows have counted the request, behind the new shared_answer_runs switch which ships off; the rule is the answer cache's key, so an equal entitlement hash and never a similar one. A follower is never handed the leader's text: it waits, bounded at forty-five seconds, then reads the answer cache under its own key, so a refused, failed or abstained leader leaves it to answer for itself. A volatile question is neither registered nor waited for. Two web processes do not share a run (said on the module; a reading from the Capacity screen is what would justify a shared table). Install check equal_reach_waits_for_a_run_in_flight_other_reach_does_not. On the install: switch on Answer a question once when people with the same reach ask it at the same time on the Features page; sign in as two colleagues whose access is identical and ask the same question, which is not about the present moment, within a few seconds of each other; the second is told the answer with an 'answered ... ago' note; then ask it as a colleague with different access during the same few seconds and see they are answered at their own reach.",
+    updated: "2026-10-24",
   },
   "M36.2.4.1": {
     status: "READY FOR TESTING",
@@ -4285,9 +4285,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M42.3.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): installer.py:health_report prints per-service healthcheck state and each component's ready_when text; no __main__ or script calls it (only docs name it), and install.sh step 23 polls /health/ready only. NEXT: Add a python -m brain.deployment.installer health command (or ops/install/health.sh) calling health_report and name it in docs/install/operations.md.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT AND WIRED: brain.deployment.health renders ops/install/health.sh, which prints installer.health_report for the profile and then the state of every container now (running and healthy, or a one-shot that exited 0, is ok; anything else is NOT READY with its state), asks the application for readiness, and exits 1 if anything is not ready. install.sh runs it as its last act and the archive carries it with ops/install; docs/install/operations.md says how to run it. Tested against a stand-in for docker. NOT SHOWN: what a real Docker prints for compose ps --format; the first run on a server reads that. TO PROVE: run bash /opt/brain/ops/install/health.sh --profile <profile> on an install and read the output.",
+    updated: "2026-10-24",
   },
   "M42.3.6": {
     status: "READY FOR TESTING",
@@ -4631,8 +4631,8 @@ const PROGRESS = {
   },
   "M17.7.6": {
     status: "IN PROGRESS",
-    why: "PARTLY BUILT, 2026-10-24 count: eleven of the fifteen notice kinds are sent by something that runs. Wired this week: the evening digest now asks its switch (digest_run.run_digest asks notice_is_on; until now the Notifications screen offered a switch nothing consulted, and its row said nothing posts it) and the daily backup report is registered as the sender of the backup-exposure notice (backup_report_run.run_backup_report, which already posted each alert once a day to the digest's conversation and now asks the notice's switch, which that notice does not have). Still unsent, and each needs your decision on who hears it and in which chat tool: approval_request, access_request, emergency_access and self_grant. They are needs-rupash 267, with a recommendation (B: the two that report misuse, to the people they name, in chat with the email fallback; leave an approval on its screen until the measured wait of 222 says people are slow to find them). Not built: an undelivered state per notice on the Notifications screen. Delivery outcomes are already kept in ops.channel_delivery (refused and unknown included) but carry no notice kind, so showing them per notice needs the kind or the intent prefix recorded beside the outcome. NOT CLAIMED: the leaf stays open until 267 is answered and the four are built to it.",
-    updated: "2026-10-24",
+    why: "PARTLY BUILT 2026-10-14: control_not_run now has a sender through tell_later and the mail relay (brain.control_not_run_told), so seven of the fourteen notice kinds are sent. Still unsent: evening_digest (sent by the digest destination, not through tell_later), approval_request, budget_stopped, access_request, backup_exposure, emergency_access and self_grant. Not built: an undelivered state per notice on the Notifications screen. Delivery outcomes are already kept in ops.channel_delivery (refused and unknown included) but carry no notice kind, so showing them per notice needs the kind or the intent prefix recorded beside the outcome",
+    updated: "2026-10-14",
   },
   "M17.7.7": {
     status: "IN PROGRESS",
@@ -4991,13 +4991,13 @@ const PROGRESS = {
   },
   "M42.4.2": {
     status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): Nothing audits stores for another company's values: deployment/audit.py covers configuration, build inputs and git history only; ops/independence.py covers source and docs. No search over database rows, logs, uploads, object store, vector store, embeddings or caches.",
-    updated: "2026-10-13",
+    why: "NEEDS THE OWNER (needs-rupash 269): what counts as another company's value in the stores of a live install. The repository may not hold any company's names, so the audit cannot carry a list of them; the options are the install's own declared domains, a list shipped hashed, or a person confirming each foreign host once. Nothing is built until it is answered.",
+    updated: "2026-10-24",
   },
   "M42.4.3": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No credential, token, webhook, integration or default-administrator audit found: deployment.audit does not read live settings, and variables.unminted_secrets is an unwired helper for secrets only.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: two install checks (acceptance_checks_install_audit) read at most 2000 rows of each thing and never a table as text: every person holding the administrator's authority over the whole company can sign in as themselves (a console sign-in is bound) and is not called by a default account's name, no session is allowed to last more than a month, no saved installation value is shaped like a key a provider gives, every active webhook goes to https with its signing secret at a signing path, and every connected source that takes a key has a credential write on record. They pass over installs holding people, sessions, webhooks, sources and saved values, and fail for each thing they look for. NOT READ: the vault itself (the ledger of credential writes is read, never a secret), and the identity provider's own tokens. TO PROVE: the Install page shows both checks passing.",
+    updated: "2026-10-24",
   },
   "M42.4.4": {
     status: "BLOCKED",
