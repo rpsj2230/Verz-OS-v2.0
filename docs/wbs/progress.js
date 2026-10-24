@@ -4840,9 +4840,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M30.4.3": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No chaos suite exists: nothing in src, tests, ops or CI matches chaos, and no script kills Postgres, provider, connector, browser or worker. Related: ops/crash.py durable_machines, ops/recovery_run.py, ops.reliability.MATRIX.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-25, not run on an install: brain.deployment.chaos holds the five faults (database, provider, connector, browser, worker) against the failure-mode matrix and renders ops/chaos/chaos.sh, which stops one component of a throwaway install at a time, judges that the application stays live and is ready again within a wait, and starts the component again on any exit; the release archive carries it and docs/install/operations.md explains it. tests/unit/test_deployment_chaos.py runs the committed script against a stand-in for Docker, and each fault names the in-process tests that prove the product's side (all checked to exist). NEXT, a person's step: run bash ops/chaos/chaos.sh --profile <profile> --this-install-is-disposable on a throwaway install and read the output; the worker-mid-task and connector-mid-call cases are checks made by hand afterwards. Not shown: a real container stopping and the product coming back.",
+    updated: "2026-10-25",
   },
   "M30.4.6": {
     status: "READY FOR TESTING",
