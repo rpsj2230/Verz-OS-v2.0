@@ -96,7 +96,7 @@ import enum
 import inspect
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Final, Protocol
 
@@ -321,6 +321,29 @@ def my_library(
 
 
 # ----------------------------------------- upload, replace and retire (M40.3.1.2)
+#: The longest review cycle an upload may set, in days: two years. A cycle longer than that is a
+#: document nobody is asked about, which is the case the cycle exists to prevent.
+MAX_REVIEW_CYCLE_DAYS: Final = 730
+
+
+def review_date_for(days: int, *, now: datetime) -> datetime:
+    """The review date an upload sets, from a number of days ahead of `now` (M40.3.1.2).
+
+    **A number of days and not a date**, because the person means "ask me again in ninety days" and
+    a date typed into a form is a time zone, a past date and a typo away from a document that is due
+    the day it is added. The same rule as `upload`: the cycle is ahead of the moment it is set,
+    and no cycle at all is a different choice, made by sending none. Refused outside one to
+    `MAX_REVIEW_CYCLE_DAYS`, in the words the door shows.
+    """
+    if not 1 <= days <= MAX_REVIEW_CYCLE_DAYS:
+        msg = (
+            f"a review cycle is between one day and {MAX_REVIEW_CYCLE_DAYS} days, and {days} is "
+            f"not. {A_REPLACEMENT_WITH_NO_REVIEW_DATE_LEAVES_THE_SWEEP_WITHOUT_ANNOUNCING_IT}"
+        )
+        raise LibraryError(msg)
+    return now + timedelta(days=days)
+
+
 def upload(
     *,
     item_id: str,

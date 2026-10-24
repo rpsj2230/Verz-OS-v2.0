@@ -408,10 +408,6 @@ export const AREAS: Readonly<Record<string, Area>> = {
         because: "brain.builder.agent_drafts.A_RUNG_IS_RAISED_WITH_EVIDENCE_AND_NEVER_BY_A_DRAFT, and no model answers for an agent yet (brain.agent_builder_routes.A_REHEARSAL_RUNS_NO_MODEL_YET).",
       },
       {
-        what: "Which agents an agent may hand a subtask to, and whether it may run them at the same time, cannot be set from the console.",
-        leaf: "M18.5.1",
-      },
-      {
         what: "A published template version cannot be installed from the console.",
         because: "brain.agent_lifecycle_routes serves the version and its install, and the Agent templates page has no button that presses it yet; switching on and off, archiving, duplicating and handing on are pressed from the Agents pages.",
       },
@@ -493,10 +489,6 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
     installation: [],
     gaps: [
-      {
-        what: "A stored workflow cannot be written, assigned to an agent or run, and its runs cannot be read, from the console.",
-        leaf: "M17.6.1",
-      },
       {
         what: "A removed automation cannot be brought back, and installing the same outcome again for the same agent and person is refused.",
         because:
@@ -781,9 +773,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
           "The points that take code run it in a sidecar or a sandbox and neither runner exists, so the panel says no_plugin_is_loaded; M29.2.4 (a drain on upgrade) and M29.2.5 (an isolation tier enforced by a host) wait on one.",
       },
       {
-        what: "A weighed plan starts nothing, and a request split between a coordinating agent's specialists has no page.",
+        what: "A weighed plan starts nothing.",
         because:
-          "The panel says nothing_is_started because weighing is a rehearsal; splitting a request, running the specialists and listing the runs kept are POST and GET /orchestration/coordinated-runs (brain.coordination_routes), behind the multi_agent_coordination switch, and no page draws them yet (M18.5.3).",
+          "The panel says nothing_is_started because weighing is a rehearsal. Splitting a request between a coordinating agent's specialists is a separate act, pressed from the agent's Profile, and its runs are listed on this page.",
       },
       {
         what: "Nothing in a migration reaches the old system: a revocation, a job stopped and an act done are recorded as a person says they are.",

@@ -499,6 +499,11 @@ const PROGRESS = {
     why: "moved to Wave 4 (needs-rupash 112): closes when every permissions requirement row has its proof on the install. PRIOR WORK (checked 2026-10-07, branches of the last 8 weeks): BUILT AND WIRED on main (requirement_check_routes, tables.requirement_check, pages/RequirementChecks.tsx +4 more); open for proof on the install or a decision, not for code. MORE ELSEWHERE, read before building: old backup branch recovery/from-windows-20260928-wt-w1-8",
     updated: "2026-09-29",
   },
+  "M1.8.1": {
+    status: "READY FOR TESTING",
+    why: "built: a contractor or partner cannot be saved without an end date (Principal validator, the add-person form's body, and a check constraint on auth.principal), the reach is read at an instant and holds nothing from the end date (EntitlementSet.not_after), and a session opens only until it (identity.sessions.open_session). Install check: an_external_person_stops_on_their_end_date (ops/acceptance_checks_external_end.py), which reads the reach and opens sessions at the second before and after the date rather than waiting for it. Proved as far as the principal a chat binding resolves to is no longer active; the chat route's own refusal of an inactive person (chat_answer) is not driven by it. Not yet run on the install.",
+    updated: "2026-10-24",
+  },
   "M10.1.1": {
     status: "READY FOR TESTING",
     why: "channel pipeline (PR #105, merged, migration 0114): proved on the install with the signed webhook channel, set up, refused, delivered once and switched off",
@@ -1731,13 +1736,13 @@ const PROGRESS = {
   },
   "M17.4.5": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): orchestration/unattended.ApprovalStep, approval_refusals and expire are built (test_orchestration_unattended) with no caller; adoption.py imports only TriggerKind from it. Installed automations have no approval step at all, so there is nothing to time out. NEXT: give automation_run an approval step and call approval_refusals and expire from it; agent approvals already lapse via leash windows",
-    updated: "2026-10-13",
+    why: "PARTLY BUILT AND WIRED 2026-10-24; NOT CLAIMED. A task now declares where a person has to say yes and for how long (automation_run.TaskDeclaration.approvals), and the two drafting tasks do (twelve hours). automation_run.approval_gaps holds every declared window to unattended.window_refusals against the cadence of each template that names the task, inside task_gaps, so a window that reaches the next run or outlasts the platform maximum is a red gap test; a drafting template whose task declares none is one too. brain.ops.automation_hold raises a hold through the approvals machinery itself (unattended.approval_refusals, then leash.suspend for the automation's owner, the run's id as the trace) and answers the stop when nobody answered (unattended.expire, none for a hold a person decided). Install check a_step_an_unattended_run_holds_waits_for_a_person_and_expires (acceptance_checks_unattended_approval) shows on an install that the approver of the owner's department is shown the card and another department's is not, that a lapsed hold has no card and cannot be decided, and that it is the stop naming the automation and the step. WHY IT IS NOT CLOSED: no performer raises a hold. Every performer reads, a flow's tool calls go through the gate with no leash, and the tasks that draft are unbuilt, one behind the owner's question about unattended model calls (needs-rupash 210). The leaf's words (a step that needs a person waits for the approval and expires) are shown for the hold the check raises and for nothing a run raises, so it stays IN PROGRESS until a performer calls automation_hold.hold_step and the stop is told to the owner.",
+    updated: "2026-10-24",
   },
   "M17.4.6": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Run history exists: console/agent_automations AutomationRun, automations_routes detail and stats, tables/automation_run. Cost per run is not recorded: RUN_COST_IS_NOT_RECORDED in automations_routes says so. unattended.CostedRun/history is unwired. NEXT: record cost per run (spend actuals joined by run id) and surface it in AutomationRun and the stats route",
-    updated: "2026-10-13",
+    status: "BLOCKED",
+    why: "NOT BUILT, 2026-10-24, and why. Run history exists (console/agent_automations AutomationRun, automations_routes detail and stats, tables/automation_run) and says each run's outcome. A run's cost cannot be recorded because no run spends: the one performer this install has reads a table and calls no model, a flow's tool calls go through the gate with no model, and the tasks that would ask one are unbuilt behind needs-rupash 210 (may an automation call a model with nobody present). Recording nought for every run would be the thing automations_routes.RUN_COST_IS_NOT_RECORDED declines to do: a figure that reads as a measurement and is not one. The sentence is true today and the stats route keeps saying it. WHAT BUILDS IT, once 210 is answered: the performer that calls a model hands the run's id as the request's trace id, the spend ledger already records what each request cost, and unattended.CostedRun/history joins the two by that id; the stats route then sums it per period and the unrecorded entry goes. unattended.CostedRun is unwired until then.",
+    updated: "2026-10-24",
   },
   "M17.5.1": {
     status: "READY FOR TESTING",
@@ -2253,6 +2258,11 @@ const PROGRESS = {
     status: "READY FOR TESTING",
     why: "TRIAGE 2026-10-13 class 1 (built and wired, install check missing): Answer cache key includes the entitlement hash (gate.answer_cache, cache_key); check M6.5.2 shows a person who moved department was refused the cached answer (acceptance_checks_cache.py:196). Test test_answer_cache. NEXT: Add M26.2.4 to that check's leaves=(...).",
     updated: "2026-10-13",
+  },
+  "M26.2.5": {
+    status: "READY FOR TESTING",
+    why: "built: a memory is recalled at the reach it was formed at (brain.memory.formation.may_recall), so a mover's memory of the reach they left stops being shown and nothing is rewritten (identity.lifecycle.replayable_after is the pure model). Install check: a_mover_is_not_told_the_memories_of_the_reach_they_left (ops/acceptance_checks_mover_memory.py): a memory formed on Ask in one department is shown, is not shown to the person or to a model once the grants over that department are withdrawn and the same grants over another are given, is still on file with its row unchanged, and is shown again when the move is undone. The move is a grant change and not the staff sync (that step is M26.2.1's check), so the check runs on every install. Not yet run on the install.",
+    updated: "2026-10-24",
   },
   "M26.2.6": {
     status: "READY FOR TESTING",
@@ -3505,9 +3515,9 @@ const PROGRESS = {
     updated: "2026-10-22",
   },
   "M36.1.2.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops/scaling.py trigger predicates are tested (test_scaling.py) but nothing imports brain.ops.scaling; controls.NOT_A_SCHEDULE says each is a decision for a person asked when someone looks. GET /install/capacity (install_routes.py) does not evaluate them. NEXT: wire replica_is_due with measured console read load against answer headroom into GET /install/capacity so a person sees when a replica is warranted",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: every console read (a GET under /api/v1) is counted in flight by the web process and the busiest minute of the last hour is kept (brain.ops.read_load); the Capacity screen holds it against the headroom the answer path leaves the interactive pool and says Due now or Not due, or Not measured where this process has counted nothing. A reading is one web process's own, and says so. Nothing scales anything: it is a reading for a person. Install check counted_reads_and_reports_make_their_scaling_moves_due_or_not. On the install: open the console for a while, then Limits, budgets and capacity; the read replica line shows the most reads in flight together and whether that is beyond the headroom.",
+    updated: "2026-10-24",
   },
   "M36.1.3.1": {
     status: "IN PROGRESS",
@@ -3520,9 +3530,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M36.1.3.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops/scaling.py trigger predicates are tested (test_scaling.py) but nothing imports brain.ops.scaling; controls.NOT_A_SCHEDULE says each is a decision for a person asked when someone looks. GET /install/capacity (install_routes.py) does not evaluate them. NEXT: wire report_is_due(observed_p95_ms) into the report routes' timing and into GET /install/capacity; needs a per-report latency measurement",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: the time every answered report screen takes (a GET under /api/v1/report/) is kept, the last 500 per web process, and with at least twenty the 95th percentile is held against the threshold on the Capacity screen: Due now, Not due, or Not measured. A refused report is not a duration. Nothing builds a view: it is a reading for a person to weigh. Install check counted_reads_and_reports_make_their_scaling_moves_due_or_not. On the install: open Reports, Spend a few times, then Limits, budgets and capacity; the materialised reports line shows the p95 and whether it is beyond the threshold.",
+    updated: "2026-10-24",
   },
   "M36.1.4.1": {
     status: "BLOCKED",
@@ -4085,9 +4095,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M40.3.1.2": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Upload (queue_upload, add_link), replace (POST .../versions) and verify-with-next-review exist. Missing: retire (archive not built, needs a migration per knowledge_lifecycle_routes) and a review cycle at upload time (upload takes no review date). member_library.upload/replace/retire have no caller. NEXT: add a review_by field to the upload request, and a retire route over a know.supersede-style function with its migration",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: POST /knowledge/uploads takes review_in_days (1 to 730, refused outside it before the file is read) and stores the item due that many days ahead (member_library.review_date_for, uploads.with_review_by), the answer carries review_by, and a document sent without one is outside the sweep as before. Retire needed no new stored thing: the archive route (POST /knowledge/items/{id}/archive, know.archive_item from migration 0216) already lets the person who added a document withdraw it and refuses a colleague who only reads it in the one 404 sentence; the earlier note that retire needed a migration was stale. Install check: a_member_adds_a_document_with_a_review_cycle_and_retires_it (ops/acceptance_checks_member_library.py), not yet run on the install. No console control sets the cycle at upload yet (the Add a document form sends none); member_library.upload, replace and retire are still not the live path and are left unwired.",
+    updated: "2026-10-24",
   },
   "M40.3.1.3": {
     status: "IN PROGRESS",
@@ -4575,9 +4585,9 @@ const PROGRESS = {
     updated: "2026-10-20",
   },
   "M17.6.5": {
-    status: "IN PROGRESS",
-    why: "BUILT 2026-10-21, not yet proved on an install and no page draws it. brain.orchestration.workflow reads a stored, versioned definition (steps: tool, connector read, skill; named typed outputs; reads only earlier declared outputs; a condition over an output; parallel flag; retry and back-off; failure path stop, continue or handler). brain.orchestration.workflow_run runs it through a door, keeps statuses and words and no value, and says repeated failure; brain.workflow_routes writes, assigns and runs it (migration 0273, switch stored_workflows ships off) through call_piece at the asker's reach narrowed by the agent; install check acceptance_checks_workflow. Not built: a console page, a skill step's offered skills bound to the run, writes (the leash is empty so a step that changes something is stated as not offered), and the two-connector two-skill run of M17.6.8.",
-    updated: "2026-10-20",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-21 and drawn 2026-10-24. brain.orchestration.workflow reads a stored, versioned definition (steps: tool, connector read, skill; named typed outputs; reads only earlier declared outputs; a condition over an output; parallel flag; retry and back-off; failure path stop, continue or handler). brain.orchestration.workflow_run runs it through a door, keeps statuses and words and no value; brain.workflow_routes writes, assigns and runs it (migration 0273, switch stored_workflows ships off) at the asker's reach narrowed by the agent. NOW DRAWN: Install, Features has Stored workflows (the ones written with their newest version, a form to write the next version from a JSON definition, and the runs kept step by step), and the agent's Profile has a Workflows card (give the agent one, run it, withdraw it after a confirmation). PROOF ON THE INSTALL: 1. Switch on Run stored workflows under Install, Features. 2. Write a one-step workflow under Stored workflows and save it; its version appears. 3. Open an agent's Profile, choose the workflow under Workflows and press Give it to this agent. 4. Press Run: the steps are drawn with a status each, and the run appears under Runs kept on Features. Not built: a skill step's offered skills bound to the run, writes (the leash is empty so a step that changes something is stated as not offered), a visual editor for a definition, and the two-connector two-skill run of M17.6.8.",
+    updated: "2026-10-24",
   },
   "M17.6.6": {
     status: "IN PROGRESS",
@@ -4621,8 +4631,8 @@ const PROGRESS = {
   },
   "M17.7.6": {
     status: "IN PROGRESS",
-    why: "PARTLY BUILT 2026-10-14: control_not_run now has a sender through tell_later and the mail relay (brain.control_not_run_told), so seven of the fourteen notice kinds are sent. Still unsent: evening_digest (sent by the digest destination, not through tell_later), approval_request, budget_stopped, access_request, backup_exposure, emergency_access and self_grant. Not built: an undelivered state per notice on the Notifications screen. Delivery outcomes are already kept in ops.channel_delivery (refused and unknown included) but carry no notice kind, so showing them per notice needs the kind or the intent prefix recorded beside the outcome",
-    updated: "2026-10-14",
+    why: "PARTLY BUILT, 2026-10-24 count: eleven of the fifteen notice kinds are sent by something that runs. Wired this week: the evening digest now asks its switch (digest_run.run_digest asks notice_is_on; until now the Notifications screen offered a switch nothing consulted, and its row said nothing posts it) and the daily backup report is registered as the sender of the backup-exposure notice (backup_report_run.run_backup_report, which already posted each alert once a day to the digest's conversation and now asks the notice's switch, which that notice does not have). Still unsent, and each needs your decision on who hears it and in which chat tool: approval_request, access_request, emergency_access and self_grant. They are needs-rupash 267, with a recommendation (B: the two that report misuse, to the people they name, in chat with the email fallback; leave an approval on its screen until the measured wait of 222 says people are slow to find them). Not built: an undelivered state per notice on the Notifications screen. Delivery outcomes are already kept in ops.channel_delivery (refused and unknown included) but carry no notice kind, so showing them per notice needs the kind or the intent prefix recorded beside the outcome. NOT CLAIMED: the leaf stays open until 267 is answered and the four are built to it.",
+    updated: "2026-10-24",
   },
   "M17.7.7": {
     status: "IN PROGRESS",
@@ -4675,9 +4685,9 @@ const PROGRESS = {
     updated: "2026-10-21",
   },
   "M18.5.1": {
-    status: "IN PROGRESS",
-    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
-    updated: "2026-10-20",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-20 and drawn 2026-10-24. brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask and again at every tool call, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines, results checked against their contract, merged with a stated gap); routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off). NOW DRAWN: the agent's Profile has a Specialists card (allow another agent, withdraw one after a confirmation, the run-together switch after a confirmation, and a request box that splits a request and draws the mode, why not together, each specialist's status and the merged result with a stated gap and an estimated cost), and Install, Features has Requests split between agents (the runs kept). PROOF ON THE INSTALL: 1. Switch on Hand requests between agents under Install, Features. 2. On a coordinating agent's Profile choose another agent under Specialists and press Allow it. 3. Type a request and press Split and run: the plan, the specialists and the result are drawn, with the reason they ran one after another. 4. The run appears under Requests split between agents on Features. Still to see: a person watching a real request split on the install (M18.6.1).",
+    updated: "2026-10-24",
   },
   "M18.5.2": {
     status: "IN PROGRESS",
@@ -4695,9 +4705,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M18.6.2": {
-    status: "IN PROGRESS",
-    why: "BUILT 2026-10-20, not yet proved on an install and no page draws it. Wired: brain.orchestration.coordinator runs a plan (callee allow-list refused before a child starts, each child at the asker's reach folded through the coordinator, the specialist and the subtask by chain_reach and again at every tool call by Answering.lenses, depth and per-run caps at dispatch, the global parallelism budget asked once for the widest wave, specialists in turn when fan-out is not enabled or the gate declines and never replaced by the coordinator, results checked against their contract, merged with a stated gap); brain.orchestration.planner reads a model's reply through read_proposal and FieldKind; routes in brain.coordination_routes (migration 0272, switch multi_agent_coordination ships off); install check acceptance_checks_coordination. NEXT: a console card on the agent Profile for the links, the fan-out switch and asking a coordinator, then a person watching a real request split on the install (M18.6.1).",
-    updated: "2026-10-20",
+    status: "READY FOR TESTING",
+    why: "BUILT 2026-10-20 and drawn 2026-10-24: whether a coordinating agent may run its specialists at the same time is a grant an administrator gives and takes back (brain.coordination_routes, migration 0272), and a run records why its specialists ran one after another. NOW DRAWN: the Specialists card on the agent's Profile has the run-together switch (both directions confirmed, the confirmation saying it costs more for the same request), and each run kept says why it was not run together. PROOF ON THE INSTALL: 1. On a coordinating agent's Profile under Specialists switch Let this agent run its specialists at the same time on and confirm. 2. Ask it a request that splits: the run says Run together when the gate agrees and there is room, and says why when it ran one after another. Costs are estimates until a run is joined to recorded spend, and the page says so beside every figure.",
+    updated: "2026-10-24",
   },
   "M18.7.1": {
     status: "IN PROGRESS",
@@ -4811,13 +4821,13 @@ const PROGRESS = {
   },
   "M26.2.7": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Roll-up test leaf: tests/unit/test_lifecycle.py covers the pure module, but several clauses it covers (provision, delegations, welcome) are not wired, so a test of every item above has nothing end to end to run. 2026-10-20 ROLL-UP BUILT, NOT YET ABLE TO PASS: acceptance_checks_jml_roll_up.every_mover_leaf_is_shown_clause_by_clause_in_this_run reads the checks for M26.2.1 to M26.2.6 and is not run while any has none (M26.2.5 has no install check). tests/unit/test_mover_end_to_end.py drives the staff run and asks the reach, cache key, memory, automation and knowledge rules of one mover on the state it leaves. A person runs the install checks; this closes when every clause check passes in one run.",
-    updated: "2026-10-20",
+    why: "TRIAGE 2026-10-13 class 5 (not code, owner or blocked): Roll-up test leaf. 2026-10-24 ALL SIX CLAUSES NOW HAVE A CHECK: M26.2.5 (a_mover_is_not_told_the_memories_of_the_reach_they_left) was the last without one. acceptance_checks_jml_roll_up.every_mover_leaf_is_shown_clause_by_clause_in_this_run reads the checks for M26.2.1 to M26.2.6, so it passes in a run in which each of them passed. Run on a scratch database at head with the Starter pack furnished, every clause check passed and this roll-up passed; on one with no Starter pack the pack check (M26.2.1, M26.2.4, M26.2.6) is not run and so is this. It has not yet been seen passing on the owner's install. tests/unit/test_mover_end_to_end.py drives the staff run and asks the same rules of one mover. A person runs the install checks; this closes when every clause check passes in one run.",
+    updated: "2026-10-24",
   },
   "M26.4.1": {
     status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Roll-up proof (a check can be written once clauses exist) across joiner, mover and leaver; clauses depend on unwired parts (delegations M26.2.3, personal knowledge disposition M26.3.4, ended grant mid-run, external person end date). NEXT: Waits on M26.2.3 and M26.3.4, then a person runs it and the checks are recorded. 2026-10-20 ROLL-UP BUILT, NOT YET ABLE TO PASS: acceptance_checks_jml_roll_up.joiner_mover_leaver_is_shown_clause_by_clause_in_this_run reads the clause checks and names any clause with none: a personal agent following its owner (M26.2.2, now checked), memories of the old reach (M26.2.5), a run stopping on a revoked grant (M13.8.2, has a check), an external person's end date (M1.8.1) and a service key stopping with its owner (M1.8.2), neither of which has a check, and an owned item a person can no longer reach leaving their workspace, which no leaf names. It stays not run, never passed, until each is shown.",
-    updated: "2026-10-20",
+    why: "TRIAGE 2026-10-13 class 2 (partly built): Roll-up proof across joiner, mover and leaver. 2026-10-24: a mover's memories of the old reach (M26.2.5) and an external person's end date (M1.8.1) now have checks, as a personal agent following its owner (M26.2.2) and a run stopping on a revoked grant (M13.8.2) did. acceptance_checks_jml_roll_up.joiner_mover_leaver_is_shown_clause_by_clause_in_this_run still names two clauses with no check: a service key stopping when its owner lapses (M1.8.2) and an item a person owns but can no longer reach leaving their workspace (named by no leaf), so it is not run and this leaf stays open. NEXT: a check for the service key against the service account store (identity.service_account_store, channels.api_keys), and a decision whether the unreachable-item clause is a leaf of its own.",
+    updated: "2026-10-24",
   },
   "M29.3.1": {
     status: "READY FOR TESTING",
@@ -5030,9 +5040,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M42.7.1": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No install health check reports kernel virtualisation: grep for kvm and virtualisation finds only a sentence in browsing/sandbox.py; launcher.py --check reports gVisor (runsc) only, and no administrator-facing text states browser isolation.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: launcher --check now prints what the host offers beside gVisor (brain.browsing.virtualisation: gVisor set to KVM and /dev/kvm usable, usable and unused, unusable, set to KVM but unusable which fails the check, or no gVisor), and fails only for the one state in which every run would fail to start. The launcher's rehearsal answer carries the same state, and the browser sandbox install check requires it, so the Install page's check for the sandbox names KVM beside gVisor. NOT SHOWN: a real host. The sandbox check is NOT RUN on an install with browser runs off or no launcher. TO PROVE: run python -m brain.browsing.launcher --app-image <image> --check on the Docker host and read the kernel virtualisation line; with browser runs on, the Install page's browser sandbox check passes only when the launcher names a state.",
+    updated: "2026-10-24",
   },
   "M42.7.2": {
     status: "BLOCKED",
@@ -5045,9 +5055,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M42.7.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): ops/backup/brain-backup, brain-restore-drill and brain-install-backup (with a systemd timer) exist, but release.INCLUDED has no ops/backup rule (restore-drill.md: the archive does not carry ops/backup) and install.sh has no step that schedules the backup. NEXT: Add an ops/backup rule to release.INCLUDED and an installer PLAN step running brain-install-backup, regenerate install.sh, then check the timer exists on an install.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: the release archive now includes ops/backup (brain-backup, its timer, brain-restore-drill, the drill service and brain-install-backup), so a server installed from it has the restore drill from the release it runs; docs/install/restore-drill.md says where it is (/opt/brain/ops/backup). Tested over the archive file list. NOT BUILT: the installer scheduling the nightly copy; brain-install-backup is still run by a person once, as root, because it needs the bucket and the key that may write it (needs-rupash 5853 describes the step). TO PROVE: extract a published archive and see ops/backup/brain-restore-drill in it.",
+    updated: "2026-10-24",
   },
   "M42.7.5": {
     status: "BLOCKED",

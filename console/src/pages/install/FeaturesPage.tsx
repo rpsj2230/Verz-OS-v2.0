@@ -61,9 +61,11 @@ import {
 } from "../featuresQuery";
 import { when } from "../sessionsQuery";
 import { MigrationPanel } from "./MigrationPanel";
+import { CoordinatedRunsPanel } from "./CoordinatedRunsPanel";
 import { OrchestrationPanel } from "./OrchestrationPanel";
 import { BrowserPanel } from "./BrowserPanel";
 import { PluginsPanel } from "./PluginsPanel";
+import { WorkflowsPanel } from "./WorkflowsPanel";
 
 export const NOT_SWITCHED = "The feature was not switched";
 
@@ -145,6 +147,8 @@ function FeatureList({ body, onSwitched }: { readonly body: FeaturesBody; readon
       <PluginsPanel />
       <BrowserPanel />
       <OrchestrationPanel />
+      <CoordinatedRunsPanel />
+      <WorkflowsPanel />
       <MigrationPanel />
       {body.features.length === 0 ? null : (
         <Advanced>

@@ -86,6 +86,28 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "brain.orchestration_routes.rehearse keeps the numbers and the verdict in ops.fanout_gate, which is insert-only " +
     "(no UPDATE or DELETE is granted), and starts no agent because none exists to dispatch, which " +
     "tests/unit/test_orchestration_routes.py and tests/unit/test_acceptance_checks_orchestration_rehearsal.py hold.",
+  "src/pages/agents/AgentSpecialists.tsx agentCalleesApiPath(agentId)":
+    "Allowing a specialist adds a link and ends nothing: brain.coordination_routes.allow_callee writes a row that " +
+    "names who allowed it and when, a link confers no reach (every specialist still runs at the asker's own reach " +
+    "narrowed by both agents), and taking it off is the confirmed act, which tests/unit/test_coordination_routes.py holds.",
+  "src/pages/agents/AgentSpecialists.tsx COORDINATED_RUNS_API_PATH":
+    "Splitting a request keeps one record of the run and ends and replaces nothing: brain.coordination_routes." +
+    "coordinate_request asks each specialist as the asker would be answered by it directly, at a reach narrowed by " +
+    "the coordinating agent, the specialist and the subtask, and keeps the run in ops.coordinated_run, which is " +
+    "insert-only, as how it went and never what it was about. tests/unit/test_coordination_routes.py holds it.",
+  "src/pages/agents/AgentWorkflows.tsx agentWorkflowsApiPath(agentId)":
+    "Giving an agent a workflow adds an assignment and ends nothing: brain.workflow_routes.assign_workflow writes a " +
+    "row naming who assigned it and when, the workflow must exist, and taking it off is the confirmed act, which " +
+    "tests/unit/test_workflow_routes.py holds.",
+  "src/pages/agents/AgentWorkflows.tsx agentWorkflowRunApiPath(agentId)":
+    "Running a workflow changes nothing it reads: brain.workflow_routes.run_assigned_workflow sends each step through " +
+    "the gate as the agent's own call at the asker's reach narrowed by the agent, offers no write (a step that would " +
+    "change something is recorded as not offered), and keeps the run as statuses and causes in ops.workflow_run, " +
+    "which is insert-only. tests/unit/test_workflow_routes.py holds it, including the door offering no writes.",
+  "src/pages/install/WorkflowsPanel.tsx WORKFLOWS_API_PATH":
+    "Saving a workflow writes the next version and replaces nothing: brain.workflow_routes.save_workflow inserts a " +
+    "row in ops.workflow_version, which is insert-only, so every earlier version is kept and a run records which " +
+    "version it ran, which tests/unit/test_workflow_routes.py holds.",
   "src/pages/agents/AutomationAuthoring.tsx authoringPreviewApiPath(agentId)":
     "Reviewing a new automation writes nothing: brain.automation_authoring_routes.authoring_preview " +
     "returns what saving would store and what it would have done, keeps no row, and the save is a " +

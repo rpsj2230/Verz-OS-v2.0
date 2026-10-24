@@ -51,7 +51,7 @@ nothing left behind. It exists so an install can prove its isolation to the work
 reach the daemon, without any page being opened. See
 `A_REHEARSAL_REPORTS_THE_DAEMON_AND_NOT_THE_REQUEST`.
 
-Task ids: M19.1.1, M19.1.5, M19.1.6, M19.3.5, M19.6.4
+Task ids: M19.1.1, M19.1.5, M19.1.6, M19.3.5, M19.6.4, M42.7.1
 """
 
 from __future__ import annotations
@@ -81,6 +81,7 @@ from brain.browsing.sandbox import (
     sandbox_for,
     sandbox_gaps,
 )
+from brain.browsing.virtualisation import State, arguments_of, kvm_usable, report_for
 from brain.browsing.wire import MAX_LINE_BYTES, Kind, WireError, decode, encode
 
 #: Why a rehearsal reports what the daemon says and not what was sent.
@@ -209,6 +210,8 @@ class Rehearsal:
     runtime: str
     gaps: tuple[str, ...]
     left_behind: int
+    #: `brain.browsing.virtualisation.State`'s value for the host, as the launcher read it.
+    virtualisation: str = "no_gvisor"
 
 
 @dataclass
@@ -218,6 +221,8 @@ class Launcher:
     engine: Engine
     app_image: str
     spent: set[str] = field(default_factory=set)
+    #: What the host offers, read once at start; see `brain.browsing.virtualisation`.
+    virtualisation: str = "no_gvisor"
 
     def launch(self, run_id: str, origins: frozenset[str]) -> Launched:
         """Create the network and proxy, start the proxy, and create the runner unstarted.
@@ -270,7 +275,13 @@ class Launcher:
                 gaps.append("what the rehearsal created was not wholly removed")
         containers, networks = self.engine.labelled(run_id)
         left = len(containers) + len([one for one in networks if one != EGRESS_NETWORK])
-        return Rehearsal(run_id=run_id, runtime=runtime, gaps=tuple(gaps), left_behind=left)
+        return Rehearsal(
+            run_id=run_id,
+            runtime=runtime,
+            gaps=tuple(gaps),
+            left_behind=left,
+            virtualisation=self.virtualisation,
+        )
 
     def tear_down(self, launched: Launched) -> None:
         """Remove the runner, the proxy and the network, attempting each whatever came before."""
@@ -492,6 +503,11 @@ class DockerEngine:
         info = self._request("GET", "/info").json()
         return tuple(sorted(info.get("Runtimes", {})))
 
+    def info(self) -> Mapping[str, Any]:
+        """The daemon's own description of itself, as it answered."""
+        found: Mapping[str, Any] = self._request("GET", "/info").json()
+        return found
+
     def ensure_egress_network(self) -> None:
         """Create the shared egress network if this daemon does not have it yet."""
         found = self._request("GET", f"/networks/{EGRESS_NETWORK}")
@@ -581,6 +597,7 @@ async def _rehearsed(
         gaps, runtime, left = (str(exc),), "", 0
     except EngineError:
         gaps, runtime, left = ("the daemon refused or could not be reached",), "", 0
+    virtualisation = launcher.virtualisation
     writer.write(
         encode(
             Kind.REHEARSED,
@@ -588,6 +605,7 @@ async def _rehearsed(
             runtime=runtime,
             gaps=list(gaps),
             left_behind=left,
+            virtualisation=virtualisation,
         )
     )
     await writer.drain()
@@ -640,11 +658,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     arguments = parser.parse_args(argv)
     engine = DockerEngine.over()
     gaps = runtime_gaps(engine.runtimes())
+    host = report_for(arguments_of(engine.info()), usable=kvm_usable())
     if arguments.check or gaps:
         for gap in gaps:
             print(gap)
-        return 1 if gaps else 0
-    launcher = Launcher(engine=engine, app_image=arguments.app_image)
+        # Said beside the runtime and never a reason to fail: see `brain.browsing.virtualisation`.
+        print(host.sentence)
+        return 1 if gaps or host.state is State.KVM_REQUIRED_BUT_UNAVAILABLE else 0
+    launcher = Launcher(
+        engine=engine, app_image=arguments.app_image, virtualisation=host.state.value
+    )
     engine.ensure_egress_network()
     launcher.sweep()
     serve(launcher, socket=DOCKER_SOCKET, engine=engine)

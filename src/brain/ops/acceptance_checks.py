@@ -389,11 +389,13 @@ async def _upload(
     department: str = A,
     level: Any = None,
     kind: Any = None,
+    review_by: Any = None,
 ) -> Any:
     """The upload route's own sequence, as `uploader`: placed in `department`, admitted, read,
     then stored. `level` is the `Visibility` the upload asks for, the department's unless
     said, and a personal upload is placed at the uploader's own level as the route places it.
-    `kind` is the `KnowledgeKind` it is added as, an SOP unless said."""
+    `kind` is the `KnowledgeKind` it is added as, an SOP unless said, and `review_by` the review
+    date the upload asks for, set as the route sets it by `with_review_by`."""
     from brain.knowledge.chunk_store import ingest_document
     from brain.knowledge.embed_policy import REVISION_SETTING, REVISION_UNSET
     from brain.knowledge.ingest import ParseFailure, admit_upload, ceiling_for
@@ -404,6 +406,7 @@ async def _upload(
         assert_safe_filename,
         placement_for_upload,
         text_path_type,
+        with_review_by,
     )
     from brain.knowledge.visibility import Visibility
     from brain.knowledge_routes import (
@@ -440,6 +443,7 @@ async def _upload(
     )
     if isinstance(read, ParseFailure):
         return read
+    read = with_review_by(read, review_by)
 
     async def no_queue(job: object) -> object:
         raise CheckFailedError("an upload on the text path queued work for a worker")

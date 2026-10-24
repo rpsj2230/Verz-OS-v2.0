@@ -12,7 +12,9 @@ nor changed, and the key the worker would borrow is not borrowed.
 **What the check proves.** That the deployed image's digest is off until chosen and sends nothing
 then; that a chosen conversation is sent exactly one digest for today, rendered from this image's
 plan, and a second run the same day sends nothing; that the record it keeps names today and the
-tasks closed now; and that a chosen channel which has been switched off stops with the reason.
+tasks closed now; that a chosen channel which has been switched off stops with the reason; and that
+the evening digest's own switch on the Notifications screen, written in the check's transaction as
+the screen writes it, stops the post.
 
 **What only a real Lark group proves**, stated rather than implied: that Lark accepts the post
 with the install's app, that the bot is still a member of the group chosen, and that the app holds
@@ -143,7 +145,11 @@ class _Records:
 async def the_evening_digest_is_sent_once_a_day_to_the_chosen_conversation(h: Harness) -> None:
     from brain.docs_routes import DOCS
     from brain.locale import time_zone
-    from brain.ops.digest_run import OFF, WBS_FILE, StoredDigestRecords, run_digest
+    from brain.ops.acceptance_run import SET_UP_REACH
+    from brain.ops.digest_run import OFF, SWITCHED_OFF, WBS_FILE, StoredDigestRecords, run_digest
+    from brain.ops.notices import notice
+    from brain.ops.notices import switch as switch_notice
+    from brain.tables.audit import attributed_to
 
     if not (DOCS / WBS_FILE).exists():
         raise CheckNotRunError(NO_PLAN_IN_THIS_IMAGE)
@@ -165,6 +171,7 @@ async def the_evening_digest_is_sent_once_a_day_to_the_chosen_conversation(h: Ha
     async def once(saved: str, record: ChannelRecord) -> str:
         return await run_digest(
             kept,
+            sessions=h.sessions,
             now=h.now,
             saved=saved,
             zone=time_zone(),
@@ -192,3 +199,15 @@ async def the_evening_digest_is_sent_once_a_day_to_the_chosen_conversation(h: Ha
     stopped = await once(f"lark:{conversation}-off", off)
     if "stopped" not in stopped or len(transport.sent) != 1:
         raise CheckFailedError("a switched-off channel was sent a digest or not said to be stopped")
+    # The notice's own switch, written in this transaction as the Notifications screen writes it,
+    # reaches the send: nothing more is posted and the run says why.
+    async with h.sessions() as session:
+        for statement in attributed_to(
+            actor_id=h.actor, ent_hash=SET_UP_REACH, trace_id=h.trace_id
+        ):
+            await session.execute(statement)
+        await switch_notice(session, notice("evening_digest"), on=False, by=h.actor)
+        await session.commit()
+    silenced = await once(f"lark:{conversation}-silenced", on)
+    if silenced != SWITCHED_OFF or len(transport.sent) != 1:
+        raise CheckFailedError("a digest whose notice was switched off was still sent")

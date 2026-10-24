@@ -557,13 +557,25 @@ def approval_refusals(run: UnattendedRun, steps: Sequence[ApprovalStep]) -> tupl
     outlive, and treating a missing interval as an infinite one would refuse every approval
     on every webhook automation.
     """
+    return window_refusals(run.automation_id, run.trigger.cadence, steps)
+
+
+def window_refusals(
+    automation_id: str, cadence: timedelta | None, steps: Sequence[ApprovalStep]
+) -> tuple[str, ...]:
+    """`approval_refusals` for an automation known only by its id and the gap between its runs.
+
+    Split out so a task's declared approval points can be checked against a template's cadence
+    before any automation of it exists (`brain.ops.automation_run.approval_gaps`), by the same
+    three checks a run is held to. `approval_refusals` is this over a run's own trigger, so there
+    is one rule and two doors.
+    """
     findings: list[str] = []
-    cadence = run.trigger.cadence
     for step in steps:
-        if step.automation_id != run.automation_id:
+        if step.automation_id != automation_id:
             findings.append(
                 f"step {step.step_id!r} belongs to {step.automation_id!r} and is being "
-                f"checked against {run.automation_id!r}, so its window is measured against "
+                f"checked against {automation_id!r}, so its window is measured against "
                 "another automation's cadence"
             )
             continue

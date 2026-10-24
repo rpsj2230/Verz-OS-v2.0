@@ -439,7 +439,13 @@ def test_the_answer_to_a_rehearsal_is_one_rehearsed_line_naming_the_run() -> Non
     as one with gaps."""
     answer = _answer(Daemon())
 
-    assert answer == {"run_id": "rehearsal-1", "runtime": "runsc", "gaps": [], "left_behind": 0}
+    assert answer == {
+        "run_id": "rehearsal-1",
+        "runtime": "runsc",
+        "gaps": [],
+        "left_behind": 0,
+        "virtualisation": "no_gvisor",
+    }
 
 
 def test_a_request_the_sandbox_refuses_is_answered_with_its_sentence_and_not_with_silence() -> None:
@@ -475,3 +481,20 @@ def test_a_string_is_not_a_flag_in_a_daemons_answer() -> None:
 
     assert facts.read_only is None and facts.privileged is None
     assert network_facts({"Internal": "true"}).internal is None
+
+
+def test_the_answer_names_what_the_launcher_read_of_the_host() -> None:
+    """The state the launcher was started with is the one it answers, for a refusal as well as a
+    clean rehearsal. Delete this and the install check reads a state the launcher never read."""
+    writer = _Writer()
+    asyncio.run(
+        launcher_module._rehearsed(
+            Launcher(engine=Daemon(), app_image=APP_IMAGE, virtualisation="kvm_in_use"),
+            writer,  # type: ignore[arg-type]
+            "rehearsal-1",
+            frozenset({ORIGIN}),
+        )
+    )
+    (line,) = writer.lines
+
+    assert decode(line).fields["virtualisation"] == "kvm_in_use"

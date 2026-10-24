@@ -53,6 +53,7 @@ from brain.knowledge.visibility import (
     VisibilityError,
 )
 from brain.member_library import (
+    MAX_REVIEW_CYCLE_DAYS,
     ORIGIN_SOURCE,
     AuthoredUse,
     AuthorUsage,
@@ -81,6 +82,7 @@ from brain.member_library import (
     replace,
     request_promotion,
     retire,
+    review_date_for,
     share,
     submit_for_review,
     upload,
@@ -291,6 +293,22 @@ def test_a_library_row_says_what_the_badge_says_about_the_same_item() -> None:
 
 
 # --- upload, replace, retire (M40.3.1.2) -----------------------------------------------
+
+
+def test_a_review_cycle_is_a_number_of_days_between_one_and_two_years_ahead_of_now() -> None:
+    """**M40.3.1.2.** Ninety days is ninety days ahead, the bounds are in and one beyond each is
+    out, and the refusal repeats why the cycle cannot be dropped.
+
+    Delete this and a cycle of nought days (due today) or of fifty years (due never) is accepted,
+    and the upload sets a date the sweep either nags at once or never reaches."""
+    assert review_date_for(90, now=NOW) == NOW + timedelta(days=90)
+    assert review_date_for(1, now=NOW) == NOW + timedelta(days=1)
+    assert review_date_for(MAX_REVIEW_CYCLE_DAYS, now=NOW) == NOW + timedelta(
+        days=MAX_REVIEW_CYCLE_DAYS
+    )
+    for days in (0, -1, MAX_REVIEW_CYCLE_DAYS + 1):
+        with pytest.raises(LibraryError, match="between one day and 730 days"):
+            review_date_for(days, now=NOW)
 
 
 def test_an_upload_carries_a_review_cycle_and_cannot_be_given_one_already_behind_us() -> None:

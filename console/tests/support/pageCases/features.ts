@@ -88,6 +88,47 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         rehearsal_is_on: true,
         weights_note: UNBROKEN,
       },
+      // The requests split between agents, and the stored workflows and the runs kept: every value a
+      // token with nowhere to break.
+      "/api/v1/orchestration/coordinated-runs": {
+        runs: [
+          {
+            run_id: UNBROKEN,
+            coordinator_id: UNBROKEN,
+            started_at: "2019-03-04T09:00:00Z",
+            asked_by: UNBROKEN,
+            mode: "sequential",
+            why: ["gate_declined"],
+            children: [
+              { subtask_id: UNBROKEN, callee_id: UNBROKEN, depth: 1, reach_hash: "a".repeat(32), status: "delivered", cost_minor: 100, seconds: 1.5 },
+            ],
+            complete: true,
+            total_minor: 100,
+            currency: "XXX",
+          },
+        ],
+        switched_on: true,
+      },
+      "/api/v1/workflows": {
+        workflows: [{ workflow_id: UNBROKEN, version: 1, name: UNBROKEN }],
+        switched_on: true,
+      },
+      "/api/v1/workflow-runs": {
+        runs: [
+          {
+            run_id: UNBROKEN,
+            workflow_id: UNBROKEN,
+            version: 1,
+            agent_id: UNBROKEN,
+            outcome: "failure",
+            failed_step: UNBROKEN,
+            steps: [{ step_id: UNBROKEN, status: "failed", cause: "refused", detail: UNBROKEN, attempts: 1, seconds: 0.5 }],
+            candidates_opened: [],
+            run_by: UNBROKEN,
+            started_at: "2019-03-04T09:00:00Z",
+          },
+        ],
+      },
       "/api/v1/install/plugins": {
         points: [
           {

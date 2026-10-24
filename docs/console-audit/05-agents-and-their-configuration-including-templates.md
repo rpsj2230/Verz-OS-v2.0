@@ -3,7 +3,7 @@
 - **Screens:** `/agents`, `/agents/:agentId`, `/agents/:agentId/:tab`, `/agent-templates`, `/agent-templates/:templateId`, `/approvals`, `/approvals/:suspensionId`, `/agents/new`, `/agents/drafts`, `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step`
 - **Tables:** `agent.agent`, `agent.template_instance`, `agent.template_version`, `agent.template_withdrawal`, `agent.template_draft`, `agent.audience_extra`, `agent.agent_callee`, `agent.agent_fanout`, `agent.upgrade_decline`, `agent.leash_change`, `agent.supervised_action`, `agent.action_verdict`, `agent.supervision_pin`, `agent.tool_attachment`, `ops.agent_item_use`, `agent.group_install`, `ops.channel_room`, `agent.browser_envelope`, `gate.suspension`, `agent.manifest_draft`, `agent.manifest_revision`, `agent.manifest_act`, `agent.learning_pause`, `ops.agent_run`
 - **Installation values:** none
-- **Measured here:** 90 routes, 18 called by no screen; 49 write routes, 43 with all three proofs; 5 gaps.
+- **Measured here:** 90 routes, 14 called by no screen; 52 write routes, 43 with all three proofs; 4 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -17,7 +17,7 @@
 | `GET /api/v1/agent-templates/{template_id}/versions/{version}` | `/agent-templates/:templateId` |
 | `GET /api/v1/agent-templates/{template_id}/versions/{version}/export` | **no screen** |
 | `GET /api/v1/agent-templates/{template_id}/versions/{version}/withdrawal` | `/agent-templates/:templateId` |
-| `GET /api/v1/agents` | `/`, `/agents`, `/department`, `/people/:personId`, `/people/:personId/:view` |
+| `GET /api/v1/agents` | `/`, `/agents`, `/agents/:agentId/:tab`, `/department`, `/people/:personId`, `/people/:personId/:view` |
 | `GET /api/v1/agents/{agent_id}/about` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/artifacts` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/artifacts/latest` | **no screen** |
@@ -26,7 +26,7 @@
 | `GET /api/v1/agents/{agent_id}/audience` | `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/capabilities` | `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/conversations` | `/agents/:agentId/:tab` |
-| `GET /api/v1/agents/{agent_id}/coordination` | **no screen** |
+| `GET /api/v1/agents/{agent_id}/coordination` | `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/groups` | `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/knowledge` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/learning` | `/agents/:agentId/:tab` |
@@ -66,9 +66,9 @@
 | `POST /api/v1/agents/{agent_id}/audience/additions` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/audience/removals` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/channels` | `/agents/:agentId`, `/agents/:agentId/:tab` |
-| `POST /api/v1/agents/{agent_id}/coordination/callees` | **no screen** |
-| `POST /api/v1/agents/{agent_id}/coordination/callees/removals` | **no screen** |
-| `POST /api/v1/agents/{agent_id}/coordination/fan-out` | **no screen** |
+| `POST /api/v1/agents/{agent_id}/coordination/callees` | `/agents/:agentId`, `/agents/:agentId/:tab` |
+| `POST /api/v1/agents/{agent_id}/coordination/callees/removals` | `/agents/:agentId`, `/agents/:agentId/:tab` |
+| `POST /api/v1/agents/{agent_id}/coordination/fan-out` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/disable` | `/agent-templates/:templateId`, `/agents`, `/agents/:agentId`, `/agents/:agentId/:tab`, `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step`, `/department`, `/department/:view`, `/people`, `/people/:personId`, `/people/:personId/:view` |
 | `POST /api/v1/agents/{agent_id}/drafts` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/duplicate` | `/agent-templates/:templateId`, `/agents`, `/agents/:agentId`, `/agents/:agentId/:tab`, `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step`, `/department`, `/department/:view`, `/people`, `/people/:personId`, `/people/:personId/:view` |
@@ -101,7 +101,6 @@
 - **Gap.** An agent's finished runs are recorded, how each ended and what it spent, and no screen lists them. Recorded: ops.agent_run is written by brain.gate.runtime for operating the runtime and is not the record of what an agent did (brain.ops.agent_run_store.AN_AGENT_RUN_ROW_IS_A_COUNT_AND_NOT_AN_AUDIT_RECORD); the agent's Dashboard draws spend from the usage routes, and a list of runs is a screen nobody has drawn yet.
 - **Gap.** A draft is written, checked and rehearsed on every install, and published only where the install holds a template signing key. Recorded: brain.agent_builder_routes signs a published draft with the key brain.agent_lifecycle_routes installs with, and no setting holds one yet (brain.ops.starter_store.NO_TEMPLATE_IS_SIGNED_BEFORE_THE_INSTALL_HOLDS_A_KEY_OF_ITS_OWN); publishing says so rather than signing with a weaker key.
 - **Gap.** A rung above Shadow cannot be published from a draft, and a rehearsal does not ask its test questions. Recorded: brain.builder.agent_drafts.A_RUNG_IS_RAISED_WITH_EVIDENCE_AND_NEVER_BY_A_DRAFT, and no model answers for an agent yet (brain.agent_builder_routes.A_REHEARSAL_RUNS_NO_MODEL_YET).
-- **Gap.** Which agents an agent may hand a subtask to, and whether it may run them at the same time, cannot be set from the console. Open leaf `M18.5.1`.
 - **Gap.** A published template version cannot be installed from the console. Recorded: brain.agent_lifecycle_routes serves the version and its install, and the Agent templates page has no button that presses it yet; switching on and off, archiving, duplicating and handing on are pressed from the Agents pages.
 
 **Every write to this area, followed to the system.**
@@ -130,6 +129,9 @@
 | `POST /api/v1/agents/{agent_id}/audience/additions` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_the_checks_pass_on_an_install_and_leave_nothing` in `tests/unit/test_acceptance_checks_agent_profile.py` (database, in CI) | **None.** An offer is the agent.audience_extra row: it names who offered, when, and who withdrew it and when, under row level policies that refuse a row in another person's name, and the table has no ledger trigger, so no ledger entry follows the write and no test could assert one. | `test_an_offer_is_added_and_withdrawn_in_the_callers_name_when_the_switch_is_on` in `tests/unit/test_agent_audience_routes.py` |
 | `POST /api/v1/agents/{agent_id}/audience/removals` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_the_checks_pass_on_an_install_and_leave_nothing` in `tests/unit/test_acceptance_checks_agent_profile.py` (database, in CI) | **None.** An offer is the agent.audience_extra row: it names who offered, when, and who withdrew it and when, under row level policies that refuse a row in another person's name, and the table has no ledger trigger, so no ledger entry follows the write and no test could assert one. | `test_withdrawing_what_was_never_offered_says_so_and_writes_nothing` in `tests/unit/test_agent_audience_routes.py` |
 | `POST /api/v1/agents/{agent_id}/channels` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_a_channel_switch_pressed_reaches_its_row_and_one_ledger_entry_naming_the_person` in `tests/unit/test_agent_lifecycle_store.py` (database, in CI) | `test_a_channel_switch_pressed_reaches_its_row_and_one_ledger_entry_naming_the_person` in `tests/unit/test_agent_lifecycle_store.py` (database, in CI) | `test_an_administrator_over_the_row_switches_an_agent_s_channels` in `tests/unit/test_agent_lifecycle_routes.py` |
+| `POST /api/v1/agents/{agent_id}/coordination/callees` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_every_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_coordination.py` (database, in CI) | **None.** A link and a fan-out grant are rows in agent.agent_callee and agent.agent_fanout that name who wrote them and when and are never edited, so the row is the dated record and no ledger entry is appended (migration 0272 says why a ledger action kind was not added). | `test_an_administrator_allows_a_callee_and_the_write_is_in_their_name` in `tests/unit/test_coordination_routes.py` |
+| `POST /api/v1/agents/{agent_id}/coordination/callees/removals` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_every_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_coordination.py` (database, in CI) | **None.** A link and a fan-out grant are rows in agent.agent_callee and agent.agent_fanout that name who wrote them and when and are never edited, so the row is the dated record and no ledger entry is appended (migration 0272 says why a ledger action kind was not added). | `test_a_link_is_withdrawn_in_the_callers_name_and_withdrawing_nothing_is_said` in `tests/unit/test_coordination_routes.py` |
+| `POST /api/v1/agents/{agent_id}/coordination/fan-out` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_every_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_checks_coordination.py` (database, in CI) | **None.** A link and a fan-out grant are rows in agent.agent_callee and agent.agent_fanout that name who wrote them and when and are never edited, so the row is the dated record and no ledger entry is appended (migration 0272 says why a ledger action kind was not added). | `test_fan_out_is_granted_and_taken_back_by_the_authority_only` in `tests/unit/test_coordination_routes.py` |
 | `POST /api/v1/agents/{agent_id}/disable` | `/agent-templates/:templateId`, `/agents`, `/agents/:agentId`, `/agents/:agentId/:tab`, `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step`, `/department`, `/department/:view`, `/people`, `/people/:personId`, `/people/:personId/:view` | `test_each_move_pressed_reaches_its_row_and_one_ledger_entry_naming_the_person` in `tests/unit/test_agent_lifecycle_store.py` (database, in CI) | `test_each_move_pressed_reaches_its_row_and_one_ledger_entry_naming_the_person` in `tests/unit/test_agent_lifecycle_store.py` (database, in CI) | `test_disable_then_archive_each_move_the_agent_once_and_name_the_person` in `tests/unit/test_agent_lifecycle_routes.py` |
 | `POST /api/v1/agents/{agent_id}/drafts` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_an_edit_published_is_the_next_version_of_the_agents_own_template` in `tests/unit/test_agent_draft_store.py` (database, in CI) | `test_an_edit_published_is_the_next_version_of_the_agents_own_template` in `tests/unit/test_agent_draft_store.py` (database, in CI) | `test_an_edit_starts_from_the_agent_as_it_is_and_an_instruction_change_publishes_at_once` in `tests/unit/test_agent_builder_routes.py` |
 | `POST /api/v1/agents/{agent_id}/duplicate` | `/agent-templates/:templateId`, `/agents`, `/agents/:agentId`, `/agents/:agentId/:tab`, `/agents/drafts/:draftId`, `/agents/drafts/:draftId/:step`, `/department`, `/department/:view`, `/people`, `/people/:personId`, `/people/:personId/:view` | `test_each_move_pressed_reaches_its_row_and_one_ledger_entry_naming_the_person` in `tests/unit/test_agent_lifecycle_store.py` (database, in CI) | `test_each_move_pressed_reaches_its_row_and_one_ledger_entry_naming_the_person` in `tests/unit/test_agent_lifecycle_store.py` (database, in CI) | `test_a_duplicate_is_a_new_disabled_agent_from_the_same_version_with_the_same_ceiling` in `tests/unit/test_agent_lifecycle_routes.py` |
