@@ -2085,9 +2085,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M21.2.1": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops.spend.estimate and preflight (lane, tier, tool count, retrieval size) are built and tested; callers are builder.rehearse and orchestration.plan only. budget_stop_store docstring rejects preflight on the request path; no live question is estimated. NEXT: Decide with owner whether to call spend.estimate in api_routes.answered_for before the lane (budget_stop_store.judged is the slot); raise as a needs item since the code deliberately chose stop-on-used-up.",
-    updated: "2026-10-13",
+    status: "BLOCKED",
+    why: "waits on the owner (needs 226, open): whether a live question is estimated before it is answered at all. Option A closes this leaf and M21.2.2 as not wanted, so nothing built on the answer path holds under every option; B refuses on the estimate and C warns, each behind a switch that ships off. What is already wired: the same estimator prices a publish (builder.run_cost, behind publish_cost_hold, item 241) and a rehearsal; the live question is the only caller missing. If 226 is answered B or C the wiring is api_routes.answered_for, after the windows count the request and before the lane, with budget_stop_store.judged as the slot, and the figure shown on the Spend screen. No code changed for this leaf.",
+    updated: "2026-10-24",
   },
   "M21.2.2": {
     status: "IN PROGRESS",
@@ -2100,9 +2100,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M21.2.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops.spend.correct (estimator correction from Observation actuals) is built; only ops.retune.post_launch_correction uses it, called from console.spend_view.cost_review which no route or page calls. No live estimator applies a Correction. NEXT: Run correct() from a worker job over spend_actual versus estimates and persist the Correction; wire it into estimate() on the request path (depends on M21.2.1).",
-    updated: "2026-10-13",
+    status: "BLOCKED",
+    why: "waits on the owner (needs 266, open: where the thirty-day projection comes from) and on data that does not exist under options A or B: ops.spend.correct folds Observation(estimate, actual) pairs, and nothing records an estimate beside what a question cost (the usage rows keep only what was spent; a rehearsal calls no model, so it records no cost either). Only option C of 266 records them, with a new column and a migration. console.spend_view.cost_review also needs a projected_minor that nothing stores, and variance() refuses a projection under one rather than invent one. A route serving it today could only say it has nothing to compare, which the Usage screen's own empty state already says. No code changed for this leaf.",
+    updated: "2026-10-24",
   },
   "M21.2.5": {
     status: "IN PROGRESS",
