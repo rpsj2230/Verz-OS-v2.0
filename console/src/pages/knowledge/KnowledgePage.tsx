@@ -14,9 +14,9 @@
  * reader somewhere to add; to anybody else there is nothing to press and nothing is said.
  *
  * **The bulk act is Verify, and it is several single verifications.** The route verifies each row
- * the reader ticked as its own act and reports each outcome, which is said under the list. Export
- * and Archive are drawn and inert with their reasons (`knowledgeActions.ts`): neither has a route,
- * and an unrecorded export of titles is the channel the Exports screen watches.
+ * the reader ticked as its own act and reports each outcome, which is said under the list. The
+ * inventory is exported from the header (`KnowledgeExport.tsx`): the route records it on the Exports
+ * log before the file is handed over, and the file holds the rows listed here and no text.
  *
  * **What was removed from the old page, and why.** The long lede about bounded knowledge; the "At a
  * glance" figures, two of which were "Not measured on this install" paragraphs; the coverage card and
@@ -25,10 +25,10 @@
  * controls; and the lifecycle, intake and solutions cards stacked above the list, which are now a
  * document's own page, the Add menu, and the Solutions and Corrections tabs.
  *
- * Task ids: M27.15.40, M27.16.1, M7.6.3, M7.1.2, M7.1.5, M27.16.3
+ * Task ids: M27.15.40, M27.16.1, M7.6.3, M7.1.2, M7.1.5, M27.16.3, M25.3.3
  */
 
-import { BookOpen, ChevronDown, Download, MoreHorizontal, Plus } from "lucide-react";
+import { BookOpen, ChevronDown, MoreHorizontal, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { request } from "../../api/client";
@@ -38,7 +38,6 @@ import {
   ConfirmDialog,
   Drawer,
   type EntityColumn,
-  Explanation,
   ListPage,
   Note,
   SectionCard,
@@ -56,6 +55,7 @@ import { FailureNotice } from "../../ui/FailureNotice";
 import { defaultReviewDay, instantOf, TASKS_API_PATH } from "../knowledgeLifecycleQuery";
 import { readUploadOptions, UPLOAD_OPTIONS_API_PATH, type UploadOptions } from "../knowledgeQuery";
 import { AddFileForm, AddLinkForm, AddManyForm, levelsOf } from "./addForms";
+import { KnowledgeExport } from "./KnowledgeExport";
 import { REVIEW_HINT, REVIEW_LABEL, reviewProblem } from "./formParts";
 import {
   dayWords,
@@ -89,7 +89,6 @@ export const SEARCH_HINT = "Search titles and stewards";
 export const ADD_LABEL = "Add documents";
 export const SOLUTIONS_LINK = "Solutions";
 export const CORRECTIONS_LINK = "Corrections";
-export const EXPORT_LABEL = "Export inventory";
 export const TASKS_HEADING = "Your tasks";
 export const MORE_DOCUMENTS = "More documents are on file than one reading covers; search or filter to reach the rest.";
 
@@ -387,7 +386,7 @@ export function KnowledgePage() {
             <Button asChild variant="outline" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
               <Link to={CORRECTIONS_ADDRESS}>{CORRECTIONS_LINK}</Link>
             </Button>
-            <Explanation form="action" act="knowledge.export_inventory" label={EXPORT_LABEL} text={EXPORT_LABEL} icon={<Download aria-hidden />} />
+            <KnowledgeExport />
           </>
         }
         notice={notice}

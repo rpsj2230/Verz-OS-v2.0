@@ -56,7 +56,6 @@ A_ROUTE_THAT_WOULD_RETIRE_IT: dict[str, str] = {
     "automation.reinstate": f"{API_PREFIX}/automations/{{automation_id}}/reinstate",
     "channel.verify": f"{API_PREFIX}/channels/{{name}}/verify",
     "credential.check_source": f"{API_PREFIX}/connectors/{{connector}}/test",
-    "knowledge.export_inventory": f"{API_PREFIX}/knowledge/inventory",
     "service_account.change_end": f"{API_PREFIX}/govern/service-accounts/{{client_id}}/end",
 }
 

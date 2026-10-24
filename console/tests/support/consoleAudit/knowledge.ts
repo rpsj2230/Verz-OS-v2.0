@@ -14,6 +14,7 @@ import {
   agentKnowledgeRetireApiPath,
   agentKnowledgeUploadApiPath,
 } from "../../../src/pages/agents/agentKnowledgeQuery";
+import { KNOWLEDGE_EXPORT_API_PATH } from "../../../src/pages/knowledge/KnowledgeExport";
 import { uploadPath } from "../../../src/pages/knowledgeQuery";
 import {
   archivePath,
@@ -103,6 +104,9 @@ export const READ_AFTER_AN_ACTION: Readonly<Record<string, ReadAfterAnAction>> =
 };
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
+  "src/pages/knowledge/KnowledgeExport.tsx KNOWLEDGE_EXPORT_API_PATH": [
+    at("POST /api/v1/knowledge/inventory", "KNOWLEDGE_EXPORT_API_PATH", KNOWLEDGE_EXPORT_API_PATH),
+  ],
   // The form is drawn on the Knowledge page and, with the agent's addresses, on an agent's Knowledge
   // section (`brain.agent_knowledge_routes`), which calls the same door.
   "src/pages/knowledge/addForms.tsx (door?.upload ?? uploadPath)(place.kind, place.level, place.department)": [
@@ -199,7 +203,23 @@ const FETCHED_AGAIN = finishing(
   "test_a_link_is_fetched_again_only_when_a_person_asks_and_the_newer_page_replaces_the_old",
 );
 
+/** `tests/unit/test_knowledge_export_routes.py`, which presses the inventory export against PostgreSQL. */
+const INVENTORY_RECORDED = t(
+  "test_knowledge_export_routes",
+  "test_the_inventory_is_recorded_with_its_ledger_entry_and_matches_the_file_handed_over",
+  true,
+);
+
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/knowledge/inventory": {
+    row: INVENTORY_RECORDED,
+    audit: INVENTORY_RECORDED,
+    behaviour: t(
+      "test_knowledge_export_routes",
+      "test_the_inventory_holds_the_documents_the_list_shows_that_reader_and_states_their_scope",
+      true,
+    ),
+  },
   "POST /api/v1/agents/{agent_id}/knowledge/{item_id}/retire": { row: RETIRED, audit: RETIRED, behaviour: RETIRED },
   "POST /api/v1/agents/{agent_id}/knowledge/{item_id}/refetch": {
     row: FETCHED_AGAIN,

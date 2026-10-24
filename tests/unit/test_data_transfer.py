@@ -340,6 +340,23 @@ def test_the_certification_report_is_not_taken_through_the_audit_trails_form() -
     assert ExportDataSet.ACCESS_CERTIFICATION.value in {one.key for one in CATALOGUE if one.runs}
 
 
+def test_the_knowledge_inventory_is_not_taken_through_the_audit_trails_form() -> None:
+    """The inventory runs, and is taken from Knowledge with the rows it holds (M25.3.3). Delete
+    this and a request naming it here is accepted and answered with an audit trail export filed as
+    the knowledge inventory, a ledger window on the Exports log under a document's name."""
+    found = request_problems(
+        data_set=ExportDataSet.KNOWLEDGE.value,
+        reason=ExportReason.REGULATORY_REQUEST.value,
+        reason_reference="MATTER-2019/004",
+        since=LONG_AGO,
+        until=LONG_AGO + timedelta(days=1),
+    )
+    assert [(one.field.value, one.code) for one in found] == [("data_set", "not_available")]
+    assert ExportDataSet.KNOWLEDGE.value in {one.key for one in CATALOGUE if one.runs}
+    inventory = next(one for one in CATALOGUE if one.key == ExportDataSet.KNOWLEDGE.value)
+    assert "Never a document's text" in inventory.carries
+
+
 def test_a_persons_conversation_is_not_taken_through_an_administrators_form() -> None:
     """A conversation runs, and is taken by the person who had it, on Ask (M33.3.1.3). Delete this
     and an administrator naming it on the export form is answered with an audit trail export

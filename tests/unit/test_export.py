@@ -40,6 +40,7 @@ from brain.ops.export import (
     conversation_export,
     export_gaps,
     knowledge_export,
+    knowledge_inventory,
     withheld_names_on,
 )
 from brain.ops.retention import Store
@@ -491,6 +492,42 @@ def test_a_knowledge_export_carries_the_same_scope_predicate_the_item_had() -> N
         assert out.scope == source.scope
         assert out.item_id == source.item_id
         assert out.content == source.content
+
+
+def test_a_knowledge_inventory_carries_every_scope_and_none_of_the_text() -> None:
+    """The inventory is `knowledge_export` without the words, and the scope check is the same one.
+
+    Delete this and the inventory can carry a document's text out of the system, past the passage
+    policy and the sensitive-read record, or drop a level on the way out."""
+    items = [
+        _item(Visibility.PERSONAL, item_id="k_1"),
+        _item(Visibility.DEPARTMENT, item_id="k_2"),
+        _item(Visibility.COMPANY, item_id="k_3"),
+    ]
+
+    exported = knowledge_inventory(items)
+
+    assert [one.item_id for one in exported] == ["k_1", "k_2", "k_3"]
+    assert [one.scope for one in exported] == [one.scope for one in items]
+    assert [one.visibility for one in exported] == [one.visibility for one in items]
+    assert {one.content for one in exported} == {""}
+    assert knowledge_inventory([]) == ()
+
+
+def test_a_knowledge_inventory_that_would_flatten_a_scope_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The comparison runs on the inventory too. Delete this and the inventory can be the one export
+    path that skips the check, because it is the one with no text to catch the eye."""
+    from brain.core.scope import Scope
+    from brain.ops.export import ExportedKnowledge
+
+    monkeypatch.setattr(ExportedKnowledge, "scope", property(lambda self: Scope.unrestricted()))
+
+    with pytest.raises(ExportError, match="different scope"):
+        knowledge_inventory([_item(Visibility.DEPARTMENT, item_id="k_2")])
+    with pytest.raises(ExportError, match="different scope"):
+        knowledge_export([_item(Visibility.DEPARTMENT, item_id="k_2")])
 
 
 def test_an_exported_knowledge_item_cannot_be_built_without_a_visibility() -> None:

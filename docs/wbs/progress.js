@@ -2215,9 +2215,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M25.3.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 3 (built, not wired): ops.export.knowledge_export keeps each item's scope and is tested (test_export) but has no caller; data_transfer catalogue knowledge runs=False (needs 108 decided: build it). NEXT: Wire knowledge_export into a data_transfer route (needs 108) reading know.item through the reader's scope; set runs=True; then check.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built to needs-rupash 108 (decided 2026-09-29: the knowledge inventory, not the text): brain.knowledge_export_routes (POST /knowledge/inventory) takes the Knowledge list's own rows through Authority.may_see, checks each document's scope with ops.export.knowledge_inventory (the same comparison as knowledge_export, which still has no caller and is the path a text export would take, not built because a document's text is read through the passage policy and the sensitive-read record that a file cannot carry), records ops.data_export under the exporter (0276 widens the data set list) and hands the CSV over once, from an Export inventory button on the Knowledge page. Install check the_inventory_holds_what_the_reader_may_see_and_no_text. On the install: open Knowledge, press Export inventory, choose a reason and give a ticket number, confirm, and open the saved file: it lists the documents on that page with the level, department and who may read each one, and no text; then open the Exports log under Import and export and see the export recorded under your name, and as a member of another department take the same export and see their file lists their own documents only.",
+    updated: "2026-10-24",
   },
   "M26.1.1": {
     status: "READY FOR TESTING",

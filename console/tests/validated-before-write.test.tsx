@@ -180,10 +180,6 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "landmark these cases read. It says what each field takes before anything is sent, and " +
     "tests/review-pages.test.tsx submits it blank and holds that no confirmation opens, nothing is sent " +
     "and each blank field is named beside it.",
-  "src/pages/review/CertificationExport.tsx":
-    "The export form is inside the drawer opened from the Access review header, outside the main " +
-    "landmark these cases read. tests/review-pages.test.tsx submits it blank and holds that no " +
-    "confirmation opens, nothing is sent and the reason and the reference are each said to be needed.",
   "src/pages/people/WorkEmail.tsx":
     "The work email form is inside the Add work email drawer opened from a person's Overview, outside " +
     "the main landmark these cases read. tests/people-access-pages.test.tsx submits it blank and holds " +

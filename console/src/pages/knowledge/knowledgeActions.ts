@@ -1,27 +1,22 @@
 /**
- * What can be done to knowledge from its pages that has no route yet, and the one sentence saying
- * why each cannot be pressed, with where the acts that do work are done.
+ * What can be done to knowledge from its pages, and where the acts that happen elsewhere are done.
  *
- * **Measured against the routes on this branch, not against the design.** On 2026-10-12 the API
+ * **Measured against the routes on this branch, not against the design.** On 2026-10-24 the API
  * served upload, add by link, the bulk queue, verify (one or several), a newer version, asking for
- * the whole company, hand-over, archive, the tasks and captured solutions. It served no route that
- * exports the inventory and records the export on the Exports screen.
+ * the whole company, hand-over, archive, the tasks, captured solutions and the inventory export.
+ * Nothing on a Knowledge page is waiting on a route, so no sentence about one is kept here.
  *
  * - **Archive** arrived with `0220`'s `know.archive_item`: a write past `know.item`'s policy, which
- *   admits only live rows, made by a function that repeats the reach the session was told. Its
- *   sentence went, and a live control took its place, in the same commit.
- * - **Export inventory** is recorded in `ops.data_export`, whose data sets are a closed list checked
- *   by the table (`brain.tables.data_export.ExportDataSet`, audit trail only), so a knowledge
- *   inventory is a new member and a migration widening the check. No export is offered meanwhile,
- *   not even of the rows shown: a list of titles leaving the building unrecorded is the channel the
- *   Exports screen exists to watch.
+ *   admits only live rows, made by a function that repeats the reach the session was told.
+ * - **Export inventory** arrived with `0276` (M25.3.3): `knowledge` joined the closed list of data
+ *   sets `ops.data_export` checks (`brain.tables.data_export.ExportDataSet`), and the route records
+ *   the export before it hands the file over. Its "coming soon" sentence went in the same commit.
  *
  * **When a route lands, its sentence goes and a live control takes its place, in the same commit.**
  * `tests/unit/test_console_explanations.py` reads every expiry against the routes the application
- * mounts (`knowledge.export_inventory`), so nothing can go on saying "coming soon" about
- * something that has arrived.
+ * mounts, so nothing can go on saying "coming soon" about something that has arrived.
  *
- * Task ids: M27.15.40, M27.16.1
+ * Task ids: M27.15.40, M27.16.1, M25.3.3
  */
 
 /** Where the acts that happen elsewhere are done, as console addresses. */

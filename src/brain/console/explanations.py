@@ -161,12 +161,6 @@ EXPLANATIONS: Final[tuple[Explanation, ...]] = (
         retired_by=rf"^{API_PREFIX}/connectors/\{{[^}}]+\}}/(test|check)$",
     ),
     Explanation(
-        "knowledge.export_inventory",
-        Form.ACTION,
-        f"{SOON}exporting the inventory, recorded on the Exports screen with who took it and why.",
-        retired_by=rf"^{API_PREFIX}/knowledge/(inventory|documents/exports?)\b",
-    ),
-    Explanation(
         "service_account.change_end",
         Form.ACTION,
         f"{SOON}changing when an account stops working. Register a new account to extend one "

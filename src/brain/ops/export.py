@@ -56,6 +56,7 @@ import inspect
 from collections.abc import Mapping, Sequence
 from dataclasses import MISSING, dataclass, fields
 from datetime import datetime
+from typing import Protocol
 
 from brain.chat.turns import Turn, TurnKind
 from brain.core.scope import Scope
@@ -443,24 +444,67 @@ def knowledge_export(items: Sequence[KnowledgeItem]) -> tuple[ExportedKnowledge,
     `brain.ops.canaries.compare_askers` makes: the property being asserted is about what came
     out, so it has to be read off what came out.
     """
-    exported: list[ExportedKnowledge] = []
-    for item in items:
-        candidate = ExportedKnowledge(
-            item_id=item.item_id,
-            title=item.title,
-            content=item.content,
-            visibility=item.visibility,
-            owner_id=item.owner_id,
-            state=item.state,
+    return tuple(_carried(item, item.content) for item in items)
+
+
+def _carried(item: Inventoried, content: str) -> ExportedKnowledge:
+    """One item as it leaves, or a refusal when its scope would not leave with it.
+
+    The one place the comparison is made, so the export with text and the inventory without it
+    cannot differ in what they refuse.
+    """
+    candidate = ExportedKnowledge(
+        item_id=item.item_id,
+        title=item.title,
+        content=content,
+        visibility=item.visibility,
+        owner_id=item.owner_id,
+        state=item.state,
+    )
+    if candidate.scope != item.visibility.scope():
+        msg = (
+            f"{item.item_id!r} would leave with a different scope from the one it has; "
+            "see AN_EXPORT_THAT_FLATTENS_SCOPE_LAUNDERS_PERMISSION"
         )
-        if candidate.scope != item.scope:
-            msg = (
-                f"{item.item_id!r} would leave with a different scope from the one it has; "
-                "see AN_EXPORT_THAT_FLATTENS_SCOPE_LAUNDERS_PERMISSION"
-            )
-            raise ExportError(msg)
-        exported.append(candidate)
-    return tuple(exported)
+        raise ExportError(msg)
+    return candidate
+
+
+class Inventoried(Protocol):
+    """What the inventory of a document needs, which is everything about it except what it says.
+
+    `brain.knowledge.lifecycle.StoredItem` satisfies it, because the stored row in `know.item`
+    carries no text, and `KnowledgeItem` satisfies it too. The scope is not a field of this
+    protocol: it is derived from `visibility`, the way both of them derive it.
+    """
+
+    @property
+    def item_id(self) -> str: ...
+    @property
+    def title(self) -> str: ...
+    @property
+    def visibility(self) -> KnowledgeVisibility: ...
+    @property
+    def owner_id(self) -> str: ...
+    @property
+    def state(self) -> KnowledgeState: ...
+
+
+def knowledge_inventory(items: Sequence[Inventoried]) -> tuple[ExportedKnowledge, ...]:
+    """The inventory of these documents, each with the scope it has, or refuse (M25.3.3).
+
+    **An inventory is `knowledge_export` without the text.** Needs-rupash 108 decided that the
+    data set on the Exports log is the knowledge inventory, and a document's text is read through
+    the passage policy and the sensitive-read record (`brain.knowledge_lifecycle_routes.
+    version_text`), neither of which a copy in a file can carry. So the exported item carries no
+    content, and the same check as `knowledge_export` runs over each one: the scope derived from
+    the exported visibility is compared with the one the source derives, and an export that
+    flattened it is refused before anything is returned.
+
+    The comparison is against the source's own visibility, not a stored predicate, because a
+    stored row has none; `KnowledgeVisibility.scope` is the one place a predicate is made.
+    """
+    return tuple(_carried(item, "") for item in items)
 
 
 # ------------------------------------------------------------------ the structural checks
