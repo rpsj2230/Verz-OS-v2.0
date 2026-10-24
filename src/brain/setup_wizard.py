@@ -245,6 +245,17 @@ A_CLOSED_WIZARD_IS_UNREACHABLE_AND_NEVER_HIDDEN: Final = (
     "prove nothing takes a parameter that could reopen it."
 )
 
+#: Why a channel skipped now is not a channel refused. The same argument as the data sources', and
+#: the channels step is the second screen of it (M42.5.16).
+A_CHANNEL_SKIPPED_NOW_IS_NOT_A_CHANNEL_REFUSED: Final = (
+    "Connecting a chat or email channel needs the vendor's own identifiers and a secret, and on "
+    "install day the person holding them is usually not in the room. Connecting needs an "
+    "administrator too, so it happens after the sign-in, through the Channels screen's own form, "
+    "with a test message sent before the person leaves. Skipping records that it was skipped and "
+    "nothing else, and answering it commits nothing either: this screen sets no installation "
+    "value, so a skipped install and an answered one are the same install."
+)
+
 #: Why a step skipped now is not a decision the client is stuck with.
 A_CONNECTION_SKIPPED_NOW_IS_NOT_A_CONNECTION_REFUSED: Final = (
     "Connecting a data source needs somebody who can authorise it in that source, and on "
@@ -315,6 +326,7 @@ class StepId(enum.StrEnum):
     STAFF_SOURCE = "staff_source"
     MODEL_PROVIDER = "model_provider"
     CONNECTIONS = "connections"
+    CHANNELS = "channels"
     REVIEW = "review"
     FINISH = "finish"
 
@@ -418,6 +430,22 @@ def _slug_list(value: str) -> str:
         name = one.strip()
         if name and not SLUG.match(name):
             return "not_a_source_name"
+    return ""
+
+
+def _channel_list(value: str) -> str:
+    """A comma-separated list of channel names, each shaped like one.
+
+    Shape only, for `_slug_list`'s reason: a name typed here commits nothing, and is connected
+    after the sign-in by first run's channels step (`console/src/setup/ConnectChannelsStep.tsx`),
+    which says for each name whether this release has a channel by that name. Its own error code,
+    because the sentence for a source name tells a person to look for a short name of a data
+    source, which a channel is not.
+    """
+    for one in value.split(","):
+        name = one.strip()
+        if name and not SLUG.match(name):
+            return "not_a_channel_name"
     return ""
 
 
@@ -710,7 +738,7 @@ def _q(
     )
 
 
-#: The wizard. Eight screens, and the count is arithmetic rather than a number somebody typed:
+#: The wizard. Ten screens, and the count is arithmetic rather than a number somebody typed:
 #: `brain.deployment.installer.PLAN` carries a comment saying it has ten steps and has had
 #: twelve since somebody appended two, which is the failure `progress_for` avoids by reading
 #: `len` and never a constant.
@@ -869,6 +897,19 @@ WIZARD: Final[tuple[Step, ...]] = (
                 "connections",
                 errors=_errors(TOO_LONG, {"not_a_source_name": "setup.error.not_a_source_name"}),
                 check=_slug_list,
+                required=False,
+            ),
+        ),
+        skippable=True,
+    ),
+    Step(
+        key=StepId.CHANNELS,
+        title_key="setup.step.channels.title",
+        questions=(
+            _q(
+                "channels",
+                errors=_errors(TOO_LONG, {"not_a_channel_name": "setup.error.not_a_channel_name"}),
+                check=_channel_list,
                 required=False,
             ),
         ),

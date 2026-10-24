@@ -153,18 +153,21 @@ def answered(*, hosted: bool = False, skip_connections: bool = True) -> Draft:
         )
         assert problems == (), (key, problems)
     if skip_connections:
-        return skip(draft, StepId.CONNECTIONS, an_enrolment(), SECRET, administrators=0, now=INSIDE)
-    draft, problems = answer(
-        draft,
-        StepId.CONNECTIONS,
-        {"connections": "xero, hubspot"},
-        an_enrolment(),
-        SECRET,
-        administrators=0,
-        now=INSIDE,
-    )
-    assert problems == ()
-    return draft
+        draft = skip(
+            draft, StepId.CONNECTIONS, an_enrolment(), SECRET, administrators=0, now=INSIDE
+        )
+    else:
+        draft, problems = answer(
+            draft,
+            StepId.CONNECTIONS,
+            {"connections": "xero, hubspot"},
+            an_enrolment(),
+            SECRET,
+            administrators=0,
+            now=INSIDE,
+        )
+        assert problems == ()
+    return skip(draft, StepId.CHANNELS, an_enrolment(), SECRET, administrators=0, now=INSIDE)
 
 
 def a_field(name: str, *, errors: dict[str, str] | None = None) -> FormField:
@@ -456,7 +459,7 @@ def test_only_the_first_and_the_last_screen_have_nothing_behind_them() -> None:
     assert progress_for(WIZARD[-1].key).back is None
     middles = [one.key for one in WIZARD[1:-1]]
     assert all(progress_for(key).back is not None for key in middles)
-    assert progress_for(StepId.REVIEW).back is StepId.CONNECTIONS
+    assert progress_for(StepId.REVIEW).back is StepId.CHANNELS
 
 
 def test_a_position_outside_the_wizard_is_refused_rather_than_rendered() -> None:
@@ -1578,6 +1581,7 @@ def test_the_screens_that_store_nothing_are_the_ones_a_resume_cannot_land_on() -
         StepId.STAFF_SOURCE,
         StepId.MODEL_PROVIDER,
         StepId.CONNECTIONS,
+        StepId.CHANNELS,
     }
     assert next_step(new_draft()) is StepId.COMPANY
 
@@ -1766,3 +1770,46 @@ def test_the_administrator_s_address_as_another_person_is_the_one_problem_across
     assert applied.steward == steward_answer(chosen)
     assert applied.steward is not None
     assert applied.steward.same_as_administrator is True
+
+
+def test_the_channels_screen_follows_the_data_sources_is_skippable_and_sets_nothing() -> None:
+    """M42.5.16. A screen after the data sources, optional, that commits no installation value, so
+    a skipped install and an answered one are the same install. Delete this and the screen moves,
+    becomes required (and so blocks an install day when the vendor's identifiers are not to hand),
+    or starts writing a value the person never reviewed."""
+    keys = [one.key for one in WIZARD]
+
+    assert keys.index(StepId.CHANNELS) == keys.index(StepId.CONNECTIONS) + 1
+    assert keys.index(StepId.CHANNELS) + 1 == keys.index(StepId.REVIEW)
+    step = step_for(StepId.CHANNELS)
+    assert step.skippable is True
+    assert [one.required for one in step.questions] == [False]
+    assert all(one.setting == "" for one in step.questions)
+    named, problems = answer(
+        new_draft(),
+        StepId.CHANNELS,
+        {"channels": "lark, email"},
+        an_enrolment(),
+        SECRET,
+        administrators=0,
+        now=INSIDE,
+    )
+    assert problems == ()
+    assert settings_from(named) == settings_from(new_draft())
+
+
+def test_a_channel_name_is_a_short_lower_case_name_and_the_refusal_is_its_own_sentence() -> None:
+    """The names are shaped like names, and the sentence is not the data sources'. Delete this and
+    a name with a capital or a space is kept and handed to the channels screen as is, or a person
+    told to use a source's short name is looking for a data source on a channels screen."""
+    step = step_for(StepId.CHANNELS)
+
+    assert problems_with(step, {"channels": "Lark, e mail"}) == (
+        FieldError(field="channels", key="setup.error.not_a_channel_name"),
+    )
+    assert problems_with(step, {"channels": "lark, email"}) == ()
+    assert problems_with(step, {}) == ()
+    assert (
+        MESSAGES["setup.error.not_a_channel_name"]["en"]
+        != MESSAGES["setup.error.not_a_source_name"]["en"]
+    )

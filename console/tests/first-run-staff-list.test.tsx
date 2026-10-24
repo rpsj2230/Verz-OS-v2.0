@@ -190,6 +190,8 @@ async function sendTheReview(container: HTMLElement): Promise<void> {
   press(container, "Continue");
   await arriveAt(container, "Data sources");
   press(container, "Skip this screen");
+  await arriveAt(container, "Chat and email channels");
+  press(container, "Skip this screen");
   await arriveAt(container, REVIEW_TITLE);
   press(container, "Set up this system");
 }

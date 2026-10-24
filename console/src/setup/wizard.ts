@@ -187,6 +187,12 @@ export const SCREENS: readonly Screen[] = Object.freeze([
     questions: [question("connections", "Data sources to connect later", { required: false })],
     skippable: true,
   },
+  {
+    key: "channels",
+    title: "Chat and email channels",
+    questions: [question("channels", "Chat and email channels to connect now", { required: false })],
+    skippable: true,
+  },
 ] satisfies Screen[]);
 
 /**
@@ -220,6 +226,8 @@ export const MESSAGES: Readonly<Record<string, string>> = Object.freeze({
   "setup.error.not_an_address": "Enter the work email address this person signs in with",
   "setup.error.not_a_source_name":
     "Use each source's short name, in lower case, separated by commas",
+  "setup.error.not_a_channel_name":
+    "Use each channel's short name, in lower case, separated by commas",
   "setup.error.provider_needed":
     "Choose which provider answers questions, or keep them on your own hardware",
   "setup.error.key_needed": "This provider needs a key from your own account with them",

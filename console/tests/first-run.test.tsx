@@ -58,6 +58,11 @@ import {
   ON_TO_THE_CONSOLE,
   SKIP_CONNECTING,
 } from "../src/setup/ConnectSourcesStep";
+import {
+  CONNECT_CHANNELS_TITLE,
+  NO_SUCH_CHANNEL,
+  SKIP_CHANNELS,
+} from "../src/setup/ConnectChannelsStep";
 import { THE_BRAIN_COULD_NOT_BE_REACHED } from "../src/ui/FailureNotice";
 import { CONSOLE_ORIGIN, everythingInStorage, fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
 import {
@@ -104,6 +109,8 @@ interface Stand {
   readonly signIn?: () => Response;
   /** Answers the Connectors routes, which first run's data sources step calls after the sign-in. */
   readonly connectors?: (path: string, init: RequestInit | undefined) => Response;
+  /** Answers the channel routes, which first run's channels step calls after the sign-in. */
+  readonly channels?: (path: string, init: RequestInit | undefined) => Response;
 }
 
 /** A stand-in API answering the two setup routes and `/me`, recording what reached it. */
@@ -130,6 +137,14 @@ function standIn(answers: Stand) {
       if (path === "/api/v1/me") {
         record();
         return json(A_CALLER);
+      }
+      if (path.startsWith("/api/v1/console/channels") && answers.channels) {
+        record();
+        return answers.channels(path, init);
+      }
+      if (path.startsWith("/api/v1/channels") && answers.channels) {
+        record();
+        return answers.channels(path, init);
       }
       if (path.startsWith("/api/v1/connectors") && answers.connectors) {
         record();
@@ -193,6 +208,7 @@ async function answerEverything(
   hosted = false,
   sources = "",
   administratorIsSteward = false,
+  channels = "",
 ): Promise<void> {
   give(container, "setup_code", "setup_code", CODE);
   press(container, "Continue");
@@ -230,6 +246,13 @@ async function answerEverything(
     press(container, "Skip this screen");
   } else {
     give(container, "connections", "connections", sources);
+    press(container, "Continue");
+  }
+  await arriveAt(container, "Chat and email channels");
+  if (channels === "") {
+    press(container, "Skip this screen");
+  } else {
+    give(container, "channels", "channels", channels);
     press(container, "Continue");
   }
   await arriveAt(container, REVIEW_TITLE);
@@ -399,7 +422,7 @@ describe("the whole of first run", () => {
         staff_source: { staff_source: "spreadsheet", staff_source_location: "" },
         model_provider: { model_profile: "local", model_provider: "", provider_key: "" },
       },
-      skipped: ["connections"],
+      skipped: ["connections", "channels"],
     });
     const finishing = callsTo(seen, FINISH_PATH)[0];
     expect(finishing?.body).toEqual({ setup_code: CODE, principal_id: PRINCIPAL });
@@ -846,5 +869,85 @@ describe("connecting the sources named during setup", () => {
     await arriveAt(container, "Overview");
     expect(router.state.location.pathname).toBe("/");
     expect(seen.filter((one) => one.path === "/api/v1/connectors" && one.body !== null)).toEqual([]);
+  });
+
+  const CHANNEL_ROW = {
+    channel: "lark",
+    label: "Lark",
+    receives: true,
+    status: "not_set_up",
+    secret: "none",
+    health: "unknown",
+    last_delivered_at: null,
+    events_path: "/api/v1/channels/lark/events",
+    events_address: "",
+    steps: [],
+    tenant_fields: ["app_id"],
+    secret_parts: [],
+    tenant: {},
+    changed_at: null,
+    changed_by: null,
+    changed_by_name: null,
+  };
+
+  function channelsAnswer(path: string, init: RequestInit | undefined): Response {
+    if (path === "/api/v1/console/channels/lark") {
+      return json(CHANNEL_ROW);
+    }
+    if (path === "/api/v1/console/channels/nonesuch") {
+      return json({ message: "no", problems: [] }, 404);
+    }
+    if (path === "/api/v1/channels/lark" && init?.method === "PUT") {
+      return json({ ...CHANNEL_ROW, status: "on" });
+    }
+    return json({ message: "unexpected" }, 500);
+  }
+
+  test("the channels named are offered after the sign-in, each by its own row, and a name with no channel says so", async () => {
+    // What breaks if this is deleted: M42.5.16. The step can run before the appointment, where
+    // nobody holds the channel grant; it can show a form for a channel the API does not have;
+    // or it can drop a name this release has no channel for without a sentence.
+    const { idp, seen } = standIn({
+      appointment: () => json({ principal_id: PRINCIPAL, finish_path: FINISH_PATH, provider_key: "not_asked" }),
+      channels: channelsAnswer,
+    });
+    const { container, router } = await openFirstRun(idp);
+    await answerEverything(container, false, "", false, "lark, nonesuch");
+    press(container, "Set up this system");
+
+    await arriveAt(container, CONNECT_CHANNELS_TITLE);
+    await waitFor(() => expect(container.querySelector("[data-slot='channel-profile']")).not.toBeNull());
+    expect(container.textContent).toContain(NO_SUCH_CHANNEL);
+    expect(router.state.location.pathname).toBe(FIRST_RUN_PATH);
+    const appointed = callsTo(seen, APPOINTMENT_PATH)[0];
+    expect(appointed?.body).toMatchObject({ answers: { channels: { channels: "lark, nonesuch" } } });
+    const reads = seen.filter((one) => one.path.startsWith("/api/v1/console/channels"));
+    expect(reads.map((one) => one.path).sort()).toEqual([
+      "/api/v1/console/channels/lark",
+      "/api/v1/console/channels/nonesuch",
+    ]);
+    expect(reads.every((one) => one.authorization === "Bearer ACCESS-TOKEN-1")).toBe(true);
+    expect(seen.findIndex((one) => one.path === FINISH_PATH)).toBeLessThan(
+      seen.findIndex((one) => one.path.startsWith("/api/v1/console/channels")),
+    );
+
+    press(container, SKIP_CHANNELS);
+    await arriveAt(container, "Overview");
+  });
+
+  test("skipping the channels screen asks the channel routes nothing and lands on the console", async () => {
+    // What breaks if this is deleted: a step that cannot be left, or one that reads channels for
+    // an install that named none, which is a request to a route its administrator may not hold.
+    const { idp, seen } = standIn({
+      appointment: () => json({ principal_id: PRINCIPAL, finish_path: FINISH_PATH, provider_key: "not_asked" }),
+      channels: channelsAnswer,
+    });
+    const { container, router } = await openFirstRun(idp);
+    await answerEverything(container);
+    press(container, "Set up this system");
+
+    await arriveAt(container, "Overview");
+    expect(router.state.location.pathname).toBe("/");
+    expect(seen.filter((one) => one.path.includes("channels"))).toEqual([]);
   });
 });

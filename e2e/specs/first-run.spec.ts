@@ -43,6 +43,11 @@ test("the first administrator sets the install up in the browser with a second f
   await next();
   await page.locator(field("model_provider", "model_profile")).selectOption("local");
   await next();
+  // Two optional screens, skipped one after the other: the data sources, then the chat and email
+  // channels. Naming a channel here would only record the wish; setting it up needs a real vendor
+  // after the sign-in, which the harness does not have.
+  await page.getByRole("button", { name: "Skip this screen" }).click();
+  await expect(page.getByText("Chat and email channels").first(), "the channels screen follows").toBeVisible();
   await page.getByRole("button", { name: "Skip this screen" }).click();
   await page.getByRole("button", { name: "Set up this system" }).click();
 

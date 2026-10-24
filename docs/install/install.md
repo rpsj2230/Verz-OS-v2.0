@@ -244,8 +244,13 @@ First run is these screens, in this order.
    steward](authentication.md#your-first-administrator-and-your-second).
 6. **Your staff list.**
 7. **How questions are answered.**
-8. **Data sources.** The only screen you may skip.
-9. **Check this before anything is written.** The review. Sending it appoints you as the first
+8. **Data sources.** Skippable.
+9. **Chat and email channels.** Skippable. Name the channels you want connected now. Setting one
+   up needs the vendor's identifiers and a secret, and it needs an administrator, so it happens
+   after the review is sent and you are signed in: each channel you named is set up on the
+   same form the Channels screen has, followed by a test message, and you can leave at any
+   point and finish from Channels in the console.
+10. **Check this before anything is written.** The review. Sending it appoints you as the first
    administrator and the data steward you named, signs that sign-in in, and lands you on the
    console's overview.
 
@@ -271,7 +276,7 @@ the installer already has a shell on the server and could read the file directly
 
 ## After the wizard
 
-The wizard is nine screens with a back button on every one, and **nothing is written until you
+The wizard is ten screens with a back button on every one, and **nothing is written until you
 approve the review screen**. A wizard that committed each screen as it went could not be
 corrected, and the company name mistyped on screen two would be discovered on screen seven, by
 which time it is in the branding, in the realm and in the first notification you send.

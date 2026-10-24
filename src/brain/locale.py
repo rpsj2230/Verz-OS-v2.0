@@ -571,6 +571,7 @@ MESSAGES: Final[Mapping[str, Mapping[str, str]]] = {
         "zh-Hans": "如何解答提问",
     },
     "setup.step.connections.title": {"en": "Data sources", "zh-Hans": "数据源"},
+    "setup.step.channels.title": {"en": "Chat and email channels", "zh-Hans": "聊天与邮件渠道"},
     "setup.step.review.title": {
         "en": "Check this before anything is written",
         "zh-Hans": "写入之前请先核对",
@@ -619,6 +620,10 @@ MESSAGES: Final[Mapping[str, Mapping[str, str]]] = {
         "en": "Data sources to connect later",
         "zh-Hans": "稍后要连接的数据源",
     },
+    "field.channels.label": {
+        "en": "Chat and email channels to connect now",
+        "zh-Hans": "现在要连接的聊天与邮件渠道",
+    },
     "setup.error.blank": {
         "en": "This is needed before setup can continue",
         "zh-Hans": "继续安装之前需要填写此项",
@@ -638,6 +643,10 @@ MESSAGES: Final[Mapping[str, Mapping[str, str]]] = {
     "setup.error.not_an_address": {
         "en": "Enter the work email address this person signs in with",
         "zh-Hans": "请输入此人用于登录的工作邮箱地址",
+    },
+    "setup.error.not_a_channel_name": {
+        "en": "Use each channel's short name, in lower case, separated by commas",
+        "zh-Hans": "请使用各渠道的简称 全部小写 以逗号分隔",
     },
     "setup.error.not_a_source_name": {
         "en": "Use each source's short name, in lower case, separated by commas",
