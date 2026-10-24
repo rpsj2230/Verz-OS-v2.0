@@ -1,0 +1,1993 @@
+{
+ "cases": [
+  {
+   "expected": "2026-09-08",
+   "input": {
+    "day": 8,
+    "month": 9,
+    "year": 2026
+   },
+   "kind": "date",
+   "rules": {
+    "dateMarks": [
+     "-",
+     "-",
+     ""
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "English",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "en"
+   }
+  },
+  {
+   "expected": "2019-01-02",
+   "input": {
+    "day": 2,
+    "month": 1,
+    "year": 2019
+   },
+   "kind": "date",
+   "rules": {
+    "dateMarks": [
+     "-",
+     "-",
+     ""
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "English",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "en"
+   }
+  },
+  {
+   "expected": "0999-12-31",
+   "input": {
+    "day": 31,
+    "month": 12,
+    "year": 999
+   },
+   "kind": "date",
+   "rules": {
+    "dateMarks": [
+     "-",
+     "-",
+     ""
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "English",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "en"
+   }
+  },
+  {
+   "expected": "2026-09-08 06:30",
+   "input": {
+    "iso": "2026-09-08T06:30:00Z",
+    "zone": "UTC"
+   },
+   "kind": "timestamp",
+   "rules": {
+    "dateMarks": [
+     "-",
+     "-",
+     ""
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "English",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "en"
+   }
+  },
+  {
+   "expected": "2026-09-09 07:59",
+   "input": {
+    "iso": "2026-09-08T23:59:00Z",
+    "zone": "Asia/Singapore"
+   },
+   "kind": "timestamp",
+   "rules": {
+    "dateMarks": [
+     "-",
+     "-",
+     ""
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "English",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "en"
+   }
+  },
+  {
+   "expected": "2026-01-14 22:05",
+   "input": {
+    "iso": "2026-01-15T03:05:00Z",
+    "zone": "America/New_York"
+   },
+   "kind": "timestamp",
+   "rules": {
+    "dateMarks": [
+     "-",
+     "-",
+     ""
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "English",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "en"
+   }
+  },
+  {
+   "expected": "2026-07-14 23:05",
+   "input": {
+    "iso": "2026-07-15T03:05:00Z",
+    "zone": "America/New_York"
+   },
+   "kind": "timestamp",
+   "rules": {
+    "dateMarks": [
+     "-",
+     "-",
+     ""
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "English",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "en"
+   }
+  },
+  {
+   "expected": "2026-03-29 00:30",
+   "input": {
+    "iso": "2026-03-29T00:30:00Z",
+    "zone": "Europe/London"
+   },
+   "kind": "timestamp",
+   "rules": {
+    "dateMarks": [
+     "-",
+     "-",
+     ""
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "English",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "en"
+   }
+  },
+  {
+   "expected": "0",
+   "input": {
+    "value": "0"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "-",
+     "-",
+     ""
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "English",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "en"
+   }
+  },
+  {
+   "expected": "12",
+   "input": {
+    "value": "12"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "-",
+     "-",
+     ""
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "English",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "en"
+   }
+  },
+  {
+   "expected": "999",
+   "input": {
+    "value": "999"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "-",
+     "-",
+     ""
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "English",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "en"
+   }
+  },
+  {
+   "expected": "1,000",
+   "input": {
+    "value": "1000"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "-",
+     "-",
+     ""
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "English",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "en"
+   }
+  },
+  {
+   "expected": "1,234",
+   "input": {
+    "value": "1234"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "-",
+     "-",
+     ""
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "English",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "en"
+   }
+  },
+  {
+   "expected": "1,234,567.89",
+   "input": {
+    "value": "1234567.89"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "-",
+     "-",
+     ""
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "English",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "en"
+   }
+  },
+  {
+   "expected": "-1,234.5",
+   "input": {
+    "value": "-1234.5"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "-",
+     "-",
+     ""
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "English",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "en"
+   }
+  },
+  {
+   "expected": "1,234,567.890",
+   "input": {
+    "value": "1234567.890"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "-",
+     "-",
+     ""
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "English",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "en"
+   }
+  },
+  {
+   "expected": "0.5",
+   "input": {
+    "value": "0.5"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "-",
+     "-",
+     ""
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "English",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "en"
+   }
+  },
+  {
+   "expected": "1,234,567.89 USD",
+   "input": {
+    "code": "USD",
+    "value": "1234567.89"
+   },
+   "kind": "money",
+   "rules": {
+    "dateMarks": [
+     "-",
+     "-",
+     ""
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "English",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "en"
+   }
+  },
+  {
+   "expected": "1,234,567.89 SGD",
+   "input": {
+    "code": "SGD",
+    "value": "1234567.89"
+   },
+   "kind": "money",
+   "rules": {
+    "dateMarks": [
+     "-",
+     "-",
+     ""
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "English",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "en"
+   }
+  },
+  {
+   "expected": "1,234,567.89 XXX",
+   "input": {
+    "code": "XXX",
+    "value": "1234567.89"
+   },
+   "kind": "money",
+   "rules": {
+    "dateMarks": [
+     "-",
+     "-",
+     ""
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "English",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "en"
+   }
+  },
+  {
+   "expected": "2026年09月08日",
+   "input": {
+    "day": 8,
+    "month": 9,
+    "year": 2026
+   },
+   "kind": "date",
+   "rules": {
+    "dateMarks": [
+     "年",
+     "月",
+     "日"
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "简体中文",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "zh-Hans"
+   }
+  },
+  {
+   "expected": "2019年01月02日",
+   "input": {
+    "day": 2,
+    "month": 1,
+    "year": 2019
+   },
+   "kind": "date",
+   "rules": {
+    "dateMarks": [
+     "年",
+     "月",
+     "日"
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "简体中文",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "zh-Hans"
+   }
+  },
+  {
+   "expected": "0999年12月31日",
+   "input": {
+    "day": 31,
+    "month": 12,
+    "year": 999
+   },
+   "kind": "date",
+   "rules": {
+    "dateMarks": [
+     "年",
+     "月",
+     "日"
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "简体中文",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "zh-Hans"
+   }
+  },
+  {
+   "expected": "2026年09月08日 06:30",
+   "input": {
+    "iso": "2026-09-08T06:30:00Z",
+    "zone": "UTC"
+   },
+   "kind": "timestamp",
+   "rules": {
+    "dateMarks": [
+     "年",
+     "月",
+     "日"
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "简体中文",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "zh-Hans"
+   }
+  },
+  {
+   "expected": "2026年09月09日 07:59",
+   "input": {
+    "iso": "2026-09-08T23:59:00Z",
+    "zone": "Asia/Singapore"
+   },
+   "kind": "timestamp",
+   "rules": {
+    "dateMarks": [
+     "年",
+     "月",
+     "日"
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "简体中文",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "zh-Hans"
+   }
+  },
+  {
+   "expected": "2026年01月14日 22:05",
+   "input": {
+    "iso": "2026-01-15T03:05:00Z",
+    "zone": "America/New_York"
+   },
+   "kind": "timestamp",
+   "rules": {
+    "dateMarks": [
+     "年",
+     "月",
+     "日"
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "简体中文",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "zh-Hans"
+   }
+  },
+  {
+   "expected": "2026年07月14日 23:05",
+   "input": {
+    "iso": "2026-07-15T03:05:00Z",
+    "zone": "America/New_York"
+   },
+   "kind": "timestamp",
+   "rules": {
+    "dateMarks": [
+     "年",
+     "月",
+     "日"
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "简体中文",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "zh-Hans"
+   }
+  },
+  {
+   "expected": "2026年03月29日 00:30",
+   "input": {
+    "iso": "2026-03-29T00:30:00Z",
+    "zone": "Europe/London"
+   },
+   "kind": "timestamp",
+   "rules": {
+    "dateMarks": [
+     "年",
+     "月",
+     "日"
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "简体中文",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "zh-Hans"
+   }
+  },
+  {
+   "expected": "0",
+   "input": {
+    "value": "0"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "年",
+     "月",
+     "日"
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "简体中文",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "zh-Hans"
+   }
+  },
+  {
+   "expected": "12",
+   "input": {
+    "value": "12"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "年",
+     "月",
+     "日"
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "简体中文",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "zh-Hans"
+   }
+  },
+  {
+   "expected": "999",
+   "input": {
+    "value": "999"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "年",
+     "月",
+     "日"
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "简体中文",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "zh-Hans"
+   }
+  },
+  {
+   "expected": "1,000",
+   "input": {
+    "value": "1000"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "年",
+     "月",
+     "日"
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "简体中文",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "zh-Hans"
+   }
+  },
+  {
+   "expected": "1,234",
+   "input": {
+    "value": "1234"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "年",
+     "月",
+     "日"
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "简体中文",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "zh-Hans"
+   }
+  },
+  {
+   "expected": "1,234,567.89",
+   "input": {
+    "value": "1234567.89"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "年",
+     "月",
+     "日"
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "简体中文",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "zh-Hans"
+   }
+  },
+  {
+   "expected": "-1,234.5",
+   "input": {
+    "value": "-1234.5"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "年",
+     "月",
+     "日"
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "简体中文",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "zh-Hans"
+   }
+  },
+  {
+   "expected": "1,234,567.890",
+   "input": {
+    "value": "1234567.890"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "年",
+     "月",
+     "日"
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "简体中文",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "zh-Hans"
+   }
+  },
+  {
+   "expected": "0.5",
+   "input": {
+    "value": "0.5"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "年",
+     "月",
+     "日"
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "简体中文",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "zh-Hans"
+   }
+  },
+  {
+   "expected": "1,234,567.89 USD",
+   "input": {
+    "code": "USD",
+    "value": "1234567.89"
+   },
+   "kind": "money",
+   "rules": {
+    "dateMarks": [
+     "年",
+     "月",
+     "日"
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "简体中文",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "zh-Hans"
+   }
+  },
+  {
+   "expected": "1,234,567.89 SGD",
+   "input": {
+    "code": "SGD",
+    "value": "1234567.89"
+   },
+   "kind": "money",
+   "rules": {
+    "dateMarks": [
+     "年",
+     "月",
+     "日"
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "简体中文",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "zh-Hans"
+   }
+  },
+  {
+   "expected": "1,234,567.89 XXX",
+   "input": {
+    "code": "XXX",
+    "value": "1234567.89"
+   },
+   "kind": "money",
+   "rules": {
+    "dateMarks": [
+     "年",
+     "月",
+     "日"
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "简体中文",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "tag": "zh-Hans"
+   }
+  },
+  {
+   "expected": "08.09.2026",
+   "input": {
+    "day": 8,
+    "month": 9,
+    "year": 2026
+   },
+   "kind": "date",
+   "rules": {
+    "dateMarks": [
+     ".",
+     ".",
+     ""
+    ],
+    "dateOrder": "dmy",
+    "decimalPoint": ",",
+    "direction": "ltr",
+    "endonym": "Testish",
+    "groupSeparator": " ",
+    "groupSize": 3,
+    "tag": "xx"
+   }
+  },
+  {
+   "expected": "02.01.2019",
+   "input": {
+    "day": 2,
+    "month": 1,
+    "year": 2019
+   },
+   "kind": "date",
+   "rules": {
+    "dateMarks": [
+     ".",
+     ".",
+     ""
+    ],
+    "dateOrder": "dmy",
+    "decimalPoint": ",",
+    "direction": "ltr",
+    "endonym": "Testish",
+    "groupSeparator": " ",
+    "groupSize": 3,
+    "tag": "xx"
+   }
+  },
+  {
+   "expected": "31.12.0999",
+   "input": {
+    "day": 31,
+    "month": 12,
+    "year": 999
+   },
+   "kind": "date",
+   "rules": {
+    "dateMarks": [
+     ".",
+     ".",
+     ""
+    ],
+    "dateOrder": "dmy",
+    "decimalPoint": ",",
+    "direction": "ltr",
+    "endonym": "Testish",
+    "groupSeparator": " ",
+    "groupSize": 3,
+    "tag": "xx"
+   }
+  },
+  {
+   "expected": "08.09.2026 06:30",
+   "input": {
+    "iso": "2026-09-08T06:30:00Z",
+    "zone": "UTC"
+   },
+   "kind": "timestamp",
+   "rules": {
+    "dateMarks": [
+     ".",
+     ".",
+     ""
+    ],
+    "dateOrder": "dmy",
+    "decimalPoint": ",",
+    "direction": "ltr",
+    "endonym": "Testish",
+    "groupSeparator": " ",
+    "groupSize": 3,
+    "tag": "xx"
+   }
+  },
+  {
+   "expected": "09.09.2026 07:59",
+   "input": {
+    "iso": "2026-09-08T23:59:00Z",
+    "zone": "Asia/Singapore"
+   },
+   "kind": "timestamp",
+   "rules": {
+    "dateMarks": [
+     ".",
+     ".",
+     ""
+    ],
+    "dateOrder": "dmy",
+    "decimalPoint": ",",
+    "direction": "ltr",
+    "endonym": "Testish",
+    "groupSeparator": " ",
+    "groupSize": 3,
+    "tag": "xx"
+   }
+  },
+  {
+   "expected": "14.01.2026 22:05",
+   "input": {
+    "iso": "2026-01-15T03:05:00Z",
+    "zone": "America/New_York"
+   },
+   "kind": "timestamp",
+   "rules": {
+    "dateMarks": [
+     ".",
+     ".",
+     ""
+    ],
+    "dateOrder": "dmy",
+    "decimalPoint": ",",
+    "direction": "ltr",
+    "endonym": "Testish",
+    "groupSeparator": " ",
+    "groupSize": 3,
+    "tag": "xx"
+   }
+  },
+  {
+   "expected": "14.07.2026 23:05",
+   "input": {
+    "iso": "2026-07-15T03:05:00Z",
+    "zone": "America/New_York"
+   },
+   "kind": "timestamp",
+   "rules": {
+    "dateMarks": [
+     ".",
+     ".",
+     ""
+    ],
+    "dateOrder": "dmy",
+    "decimalPoint": ",",
+    "direction": "ltr",
+    "endonym": "Testish",
+    "groupSeparator": " ",
+    "groupSize": 3,
+    "tag": "xx"
+   }
+  },
+  {
+   "expected": "29.03.2026 00:30",
+   "input": {
+    "iso": "2026-03-29T00:30:00Z",
+    "zone": "Europe/London"
+   },
+   "kind": "timestamp",
+   "rules": {
+    "dateMarks": [
+     ".",
+     ".",
+     ""
+    ],
+    "dateOrder": "dmy",
+    "decimalPoint": ",",
+    "direction": "ltr",
+    "endonym": "Testish",
+    "groupSeparator": " ",
+    "groupSize": 3,
+    "tag": "xx"
+   }
+  },
+  {
+   "expected": "0",
+   "input": {
+    "value": "0"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     ".",
+     ".",
+     ""
+    ],
+    "dateOrder": "dmy",
+    "decimalPoint": ",",
+    "direction": "ltr",
+    "endonym": "Testish",
+    "groupSeparator": " ",
+    "groupSize": 3,
+    "tag": "xx"
+   }
+  },
+  {
+   "expected": "12",
+   "input": {
+    "value": "12"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     ".",
+     ".",
+     ""
+    ],
+    "dateOrder": "dmy",
+    "decimalPoint": ",",
+    "direction": "ltr",
+    "endonym": "Testish",
+    "groupSeparator": " ",
+    "groupSize": 3,
+    "tag": "xx"
+   }
+  },
+  {
+   "expected": "999",
+   "input": {
+    "value": "999"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     ".",
+     ".",
+     ""
+    ],
+    "dateOrder": "dmy",
+    "decimalPoint": ",",
+    "direction": "ltr",
+    "endonym": "Testish",
+    "groupSeparator": " ",
+    "groupSize": 3,
+    "tag": "xx"
+   }
+  },
+  {
+   "expected": "1 000",
+   "input": {
+    "value": "1000"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     ".",
+     ".",
+     ""
+    ],
+    "dateOrder": "dmy",
+    "decimalPoint": ",",
+    "direction": "ltr",
+    "endonym": "Testish",
+    "groupSeparator": " ",
+    "groupSize": 3,
+    "tag": "xx"
+   }
+  },
+  {
+   "expected": "1 234",
+   "input": {
+    "value": "1234"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     ".",
+     ".",
+     ""
+    ],
+    "dateOrder": "dmy",
+    "decimalPoint": ",",
+    "direction": "ltr",
+    "endonym": "Testish",
+    "groupSeparator": " ",
+    "groupSize": 3,
+    "tag": "xx"
+   }
+  },
+  {
+   "expected": "1 234 567,89",
+   "input": {
+    "value": "1234567.89"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     ".",
+     ".",
+     ""
+    ],
+    "dateOrder": "dmy",
+    "decimalPoint": ",",
+    "direction": "ltr",
+    "endonym": "Testish",
+    "groupSeparator": " ",
+    "groupSize": 3,
+    "tag": "xx"
+   }
+  },
+  {
+   "expected": "-1 234,5",
+   "input": {
+    "value": "-1234.5"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     ".",
+     ".",
+     ""
+    ],
+    "dateOrder": "dmy",
+    "decimalPoint": ",",
+    "direction": "ltr",
+    "endonym": "Testish",
+    "groupSeparator": " ",
+    "groupSize": 3,
+    "tag": "xx"
+   }
+  },
+  {
+   "expected": "1 234 567,890",
+   "input": {
+    "value": "1234567.890"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     ".",
+     ".",
+     ""
+    ],
+    "dateOrder": "dmy",
+    "decimalPoint": ",",
+    "direction": "ltr",
+    "endonym": "Testish",
+    "groupSeparator": " ",
+    "groupSize": 3,
+    "tag": "xx"
+   }
+  },
+  {
+   "expected": "0,5",
+   "input": {
+    "value": "0.5"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     ".",
+     ".",
+     ""
+    ],
+    "dateOrder": "dmy",
+    "decimalPoint": ",",
+    "direction": "ltr",
+    "endonym": "Testish",
+    "groupSeparator": " ",
+    "groupSize": 3,
+    "tag": "xx"
+   }
+  },
+  {
+   "expected": "1 234 567,89 USD",
+   "input": {
+    "code": "USD",
+    "value": "1234567.89"
+   },
+   "kind": "money",
+   "rules": {
+    "dateMarks": [
+     ".",
+     ".",
+     ""
+    ],
+    "dateOrder": "dmy",
+    "decimalPoint": ",",
+    "direction": "ltr",
+    "endonym": "Testish",
+    "groupSeparator": " ",
+    "groupSize": 3,
+    "tag": "xx"
+   }
+  },
+  {
+   "expected": "1 234 567,89 SGD",
+   "input": {
+    "code": "SGD",
+    "value": "1234567.89"
+   },
+   "kind": "money",
+   "rules": {
+    "dateMarks": [
+     ".",
+     ".",
+     ""
+    ],
+    "dateOrder": "dmy",
+    "decimalPoint": ",",
+    "direction": "ltr",
+    "endonym": "Testish",
+    "groupSeparator": " ",
+    "groupSize": 3,
+    "tag": "xx"
+   }
+  },
+  {
+   "expected": "1 234 567,89 XXX",
+   "input": {
+    "code": "XXX",
+    "value": "1234567.89"
+   },
+   "kind": "money",
+   "rules": {
+    "dateMarks": [
+     ".",
+     ".",
+     ""
+    ],
+    "dateOrder": "dmy",
+    "decimalPoint": ",",
+    "direction": "ltr",
+    "endonym": "Testish",
+    "groupSeparator": " ",
+    "groupSize": 3,
+    "tag": "xx"
+   }
+  },
+  {
+   "expected": "09/08/2026",
+   "input": {
+    "day": 8,
+    "month": 9,
+    "year": 2026
+   },
+   "kind": "date",
+   "rules": {
+    "dateMarks": [
+     "/",
+     "/",
+     ""
+    ],
+    "dateOrder": "mdy",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "Testish too",
+    "groupSeparator": ",",
+    "groupSize": 2,
+    "tag": "yy"
+   }
+  },
+  {
+   "expected": "01/02/2019",
+   "input": {
+    "day": 2,
+    "month": 1,
+    "year": 2019
+   },
+   "kind": "date",
+   "rules": {
+    "dateMarks": [
+     "/",
+     "/",
+     ""
+    ],
+    "dateOrder": "mdy",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "Testish too",
+    "groupSeparator": ",",
+    "groupSize": 2,
+    "tag": "yy"
+   }
+  },
+  {
+   "expected": "12/31/0999",
+   "input": {
+    "day": 31,
+    "month": 12,
+    "year": 999
+   },
+   "kind": "date",
+   "rules": {
+    "dateMarks": [
+     "/",
+     "/",
+     ""
+    ],
+    "dateOrder": "mdy",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "Testish too",
+    "groupSeparator": ",",
+    "groupSize": 2,
+    "tag": "yy"
+   }
+  },
+  {
+   "expected": "09/08/2026 06:30",
+   "input": {
+    "iso": "2026-09-08T06:30:00Z",
+    "zone": "UTC"
+   },
+   "kind": "timestamp",
+   "rules": {
+    "dateMarks": [
+     "/",
+     "/",
+     ""
+    ],
+    "dateOrder": "mdy",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "Testish too",
+    "groupSeparator": ",",
+    "groupSize": 2,
+    "tag": "yy"
+   }
+  },
+  {
+   "expected": "09/09/2026 07:59",
+   "input": {
+    "iso": "2026-09-08T23:59:00Z",
+    "zone": "Asia/Singapore"
+   },
+   "kind": "timestamp",
+   "rules": {
+    "dateMarks": [
+     "/",
+     "/",
+     ""
+    ],
+    "dateOrder": "mdy",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "Testish too",
+    "groupSeparator": ",",
+    "groupSize": 2,
+    "tag": "yy"
+   }
+  },
+  {
+   "expected": "01/14/2026 22:05",
+   "input": {
+    "iso": "2026-01-15T03:05:00Z",
+    "zone": "America/New_York"
+   },
+   "kind": "timestamp",
+   "rules": {
+    "dateMarks": [
+     "/",
+     "/",
+     ""
+    ],
+    "dateOrder": "mdy",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "Testish too",
+    "groupSeparator": ",",
+    "groupSize": 2,
+    "tag": "yy"
+   }
+  },
+  {
+   "expected": "07/14/2026 23:05",
+   "input": {
+    "iso": "2026-07-15T03:05:00Z",
+    "zone": "America/New_York"
+   },
+   "kind": "timestamp",
+   "rules": {
+    "dateMarks": [
+     "/",
+     "/",
+     ""
+    ],
+    "dateOrder": "mdy",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "Testish too",
+    "groupSeparator": ",",
+    "groupSize": 2,
+    "tag": "yy"
+   }
+  },
+  {
+   "expected": "03/29/2026 00:30",
+   "input": {
+    "iso": "2026-03-29T00:30:00Z",
+    "zone": "Europe/London"
+   },
+   "kind": "timestamp",
+   "rules": {
+    "dateMarks": [
+     "/",
+     "/",
+     ""
+    ],
+    "dateOrder": "mdy",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "Testish too",
+    "groupSeparator": ",",
+    "groupSize": 2,
+    "tag": "yy"
+   }
+  },
+  {
+   "expected": "0",
+   "input": {
+    "value": "0"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "/",
+     "/",
+     ""
+    ],
+    "dateOrder": "mdy",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "Testish too",
+    "groupSeparator": ",",
+    "groupSize": 2,
+    "tag": "yy"
+   }
+  },
+  {
+   "expected": "12",
+   "input": {
+    "value": "12"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "/",
+     "/",
+     ""
+    ],
+    "dateOrder": "mdy",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "Testish too",
+    "groupSeparator": ",",
+    "groupSize": 2,
+    "tag": "yy"
+   }
+  },
+  {
+   "expected": "9,99",
+   "input": {
+    "value": "999"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "/",
+     "/",
+     ""
+    ],
+    "dateOrder": "mdy",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "Testish too",
+    "groupSeparator": ",",
+    "groupSize": 2,
+    "tag": "yy"
+   }
+  },
+  {
+   "expected": "10,00",
+   "input": {
+    "value": "1000"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "/",
+     "/",
+     ""
+    ],
+    "dateOrder": "mdy",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "Testish too",
+    "groupSeparator": ",",
+    "groupSize": 2,
+    "tag": "yy"
+   }
+  },
+  {
+   "expected": "12,34",
+   "input": {
+    "value": "1234"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "/",
+     "/",
+     ""
+    ],
+    "dateOrder": "mdy",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "Testish too",
+    "groupSeparator": ",",
+    "groupSize": 2,
+    "tag": "yy"
+   }
+  },
+  {
+   "expected": "1,23,45,67.89",
+   "input": {
+    "value": "1234567.89"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "/",
+     "/",
+     ""
+    ],
+    "dateOrder": "mdy",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "Testish too",
+    "groupSeparator": ",",
+    "groupSize": 2,
+    "tag": "yy"
+   }
+  },
+  {
+   "expected": "-12,34.5",
+   "input": {
+    "value": "-1234.5"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "/",
+     "/",
+     ""
+    ],
+    "dateOrder": "mdy",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "Testish too",
+    "groupSeparator": ",",
+    "groupSize": 2,
+    "tag": "yy"
+   }
+  },
+  {
+   "expected": "1,23,45,67.890",
+   "input": {
+    "value": "1234567.890"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "/",
+     "/",
+     ""
+    ],
+    "dateOrder": "mdy",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "Testish too",
+    "groupSeparator": ",",
+    "groupSize": 2,
+    "tag": "yy"
+   }
+  },
+  {
+   "expected": "0.5",
+   "input": {
+    "value": "0.5"
+   },
+   "kind": "number",
+   "rules": {
+    "dateMarks": [
+     "/",
+     "/",
+     ""
+    ],
+    "dateOrder": "mdy",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "Testish too",
+    "groupSeparator": ",",
+    "groupSize": 2,
+    "tag": "yy"
+   }
+  },
+  {
+   "expected": "1,23,45,67.89 USD",
+   "input": {
+    "code": "USD",
+    "value": "1234567.89"
+   },
+   "kind": "money",
+   "rules": {
+    "dateMarks": [
+     "/",
+     "/",
+     ""
+    ],
+    "dateOrder": "mdy",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "Testish too",
+    "groupSeparator": ",",
+    "groupSize": 2,
+    "tag": "yy"
+   }
+  },
+  {
+   "expected": "1,23,45,67.89 SGD",
+   "input": {
+    "code": "SGD",
+    "value": "1234567.89"
+   },
+   "kind": "money",
+   "rules": {
+    "dateMarks": [
+     "/",
+     "/",
+     ""
+    ],
+    "dateOrder": "mdy",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "Testish too",
+    "groupSeparator": ",",
+    "groupSize": 2,
+    "tag": "yy"
+   }
+  },
+  {
+   "expected": "1,23,45,67.89 XXX",
+   "input": {
+    "code": "XXX",
+    "value": "1234567.89"
+   },
+   "kind": "money",
+   "rules": {
+    "dateMarks": [
+     "/",
+     "/",
+     ""
+    ],
+    "dateOrder": "mdy",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "Testish too",
+    "groupSeparator": ",",
+    "groupSize": 2,
+    "tag": "yy"
+   }
+  }
+ ],
+ "served": {
+  "currency": "XXX",
+  "default": "en",
+  "locales": [
+   {
+    "dateMarks": [
+     "-",
+     "-",
+     ""
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "English",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "messages": {
+     "console.approvals.approval_list_label": "Approvals waiting for you",
+     "console.approvals.approvals_heading": "Approvals",
+     "console.approvals.approvals_lede": "Actions waiting for you to decide, soonest to lapse first. One nobody decides lapses, and nothing is done.",
+     "console.approvals.approve_label": "Approve",
+     "console.approvals.approved_first_sentence": "Approved. Yours is the first approval of two, so it has not run and waits for a second person.",
+     "console.approvals.approved_sentence": "Approved.",
+     "console.approvals.filters_label": "Narrow the approvals",
+     "console.approvals.keep_it_label": "Keep it waiting",
+     "console.approvals.lapses_label": "Lapses",
+     "console.approvals.more_approvals": "There are more approvals than this page shows.",
+     "console.approvals.needs_two_sentence": "This cannot be taken back, so two different people approve it. Your approval is the first, and it runs only after a second person approves.",
+     "console.approvals.no_approvals": "Nothing is waiting for you.",
+     "console.approvals.no_approvals_more": "An approval appears here when an agent asks before acting on something you may decide.",
+     "console.approvals.no_reason_chosen": "Choose a reason",
+     "console.approvals.one_approval": "Approval",
+     "console.approvals.open_on_its_own": "Open on its own",
+     "console.approvals.raised_label": "Raised",
+     "console.approvals.reading_approval": "Reading the approval.",
+     "console.approvals.reading_approvals": "Reading the approvals waiting for you.",
+     "console.approvals.reason_label": "Reason for rejecting",
+     "console.approvals.reject_label": "Reject",
+     "console.approvals.rejected_sentence": "Rejected.",
+     "console.approvals.runs_as_label": "Runs as",
+     "console.approvals.second_of_two_sentence": "This cannot be taken back, and one person has already approved it. Your approval is the second, and it runs when you give it.",
+     "console.approvals.take_over_consequence": "The agent will not do it, and nothing it prepared is sent or changed. It is recorded as taken over, and three takeovers of the same kind of action inside a week hold this agent a step lower on it, so a person sees more of its work first.",
+     "console.approvals.take_over_label": "Take over",
+     "console.approvals.take_over_question": "Take this over and do it yourself?",
+     "console.approvals.take_over_reason_label": "Reason for taking it over",
+     "console.approvals.taken_over_sentence": "Taken over. The agent will not do it; it is yours to do.",
+     "console.ask.agent_label": "Answer as",
+     "console.ask.answer_copied": "Copied.",
+     "console.ask.answer_label": "Answer",
+     "console.ask.answer_not_copied": "Your browser did not allow copying. Select the answer and copy it by hand.",
+     "console.ask.any_agent": "Whichever agent suits the question",
+     "console.ask.any_kind": "Every kind of knowledge",
+     "console.ask.ask_heading": "Ask",
+     "console.ask.ask_label": "Ask",
+     "console.ask.ask_lede": "Ask a question. The answer is computed for what you are able to see.",
+     "console.ask.asking": "Asking.",
+     "console.ask.based_on": "What this is based on",
+     "console.ask.check_in": "Check the answer in",
+     "console.ask.continuing": "Your next question continues this conversation.",
+     "console.ask.conversations_heading": "Your conversations",
+     "console.ask.copy_answer": "Copy answer",
+     "console.ask.export_conversation": "Export this conversation",
+     "console.ask.freshness_read": "{text}, read {date}",
+     "console.ask.freshness_updated": "{text}, updated {date}",
+     "console.ask.from_your_data": "Or ask about what is connected for your department.",
+     "console.ask.helpful": "Helpful",
+     "console.ask.kind_label": "Search only",
+     "console.ask.mark_wrong": "Mark it wrong",
+     "console.ask.marked_wrong": "Marked. Your conversation now notes that this answer was wrong.",
+     "console.ask.new_conversation": "Start a new conversation",
+     "console.ask.not_exported": "That conversation could not be exported. Nothing was saved.",
+     "console.ask.not_helpful": "Not helpful",
+     "console.ask.not_marked": "That could not be marked. Nothing was changed.",
+     "console.ask.nothing_asked_yet": "Nothing has been asked yet.",
+     "console.ask.nothing_found_in_conversations": "None of your questions holds those words.",
+     "console.ask.progress_label": "While the answer is being made",
+     "console.ask.question_label": "Your question",
+     "console.ask.search_conversations": "Search your questions",
+     "console.ask.search_label": "Search",
+     "console.ask.skip_to_answer": "Skip to answer",
+     "console.ask.start_legend": "How do you want to start?",
+     "console.ask.start_task": "Start a task",
+     "console.ask.start_task_note": "Say what you need. An agent you may call is chosen for it, and it works with only what you are able to see.",
+     "console.ask.starters_heading": "You could ask",
+     "console.ask.talk_note": "Choose who you are talking to.",
+     "console.ask.talk_to_agent": "Talk to an agent",
+     "console.ask.trial_needs_an_agent": "Choose the agent that will use it, then ask.",
+     "console.ask.try_asking": "You could start with one of these.",
+     "console.ask.was_it_helpful": "Was this answer helpful?",
+     "console.ask.was_it_wrong": "Was this answer wrong?",
+     "console.ask.what_is_right": "What is right? (optional)",
+     "console.ask.what_is_right_hint": "Sent to whoever looks after the document this answer used. It changes nothing until they approve it.",
+     "console.shell.language_label": "Language",
+     "console.workspace.agents_caption": "Agents I can call",
+     "console.workspace.cancel_label": "Cancel",
+     "console.workspace.edit_label": "Edit",
+     "console.workspace.evidence_caption": "What was noticed behind",
+     "console.workspace.forget_consequence": "It stops being used in your answers at once. The record that it was learnt stays, and if it replaced something earlier, the earlier one is used again.",
+     "console.workspace.forget_label": "Forget",
+     "console.workspace.inferred": "Inferred",
+     "console.workspace.items_caption": "Knowledge I own",
+     "console.workspace.keep_it": "Keep it",
+     "console.workspace.learned_caption": "What it learned about me",
+     "console.workspace.more_items": "You look after more items than this page reads at once.",
+     "console.workspace.no_agents": "There are no agents you can call.",
+     "console.workspace.no_ceiling": "No budget of your own is set.",
+     "console.workspace.no_items": "You do not look after any knowledge items.",
+     "console.workspace.nothing_learned": "Nothing learnt about you is shown.",
+     "console.workspace.of_them_your_own": "{count} of them your own",
+     "console.workspace.opens_on_the_member_grant": "This page opens for anybody holding the member grant, and for nobody else, whatever else they hold. If you expected to see it, ask your department administrator for it.",
+     "console.workspace.reading_workspace": "Reading your workspace.",
+     "console.workspace.save_label": "Save",
+     "console.workspace.spent_of": "{spent} of {ceiling}, {percent}%",
+     "console.workspace.undo_all_consequence": "Each memory stops being used in your answers at once. The records that they were learnt stay, and nothing you said in a conversation is deleted.",
+     "console.workspace.undo_all_label": "Undo all",
+     "console.workspace.undo_all_question": "Forget everything learnt about you?",
+     "console.workspace.undone_all": "Everything learnt about you has been forgotten.",
+     "console.workspace.what_it_should_say": "What it should say",
+     "console.workspace.what_it_takes": "One sentence about you, up to 280 characters, in your own words.",
+     "console.workspace.workspace_crumb": "Use › My workspace",
+     "console.workspace.workspace_heading": "My workspace",
+     "console.workspace.workspace_lede": "What you asked, the agents you can call, what has been learnt about you, and what you keep. Everything on this page is yours or already visible to you, and it shows nothing your access would not already return in an answer.",
+     "console.workspace.write_something": "Write what it should say before saving, or cancel to keep it.",
+     "console.workspace.you_said_this": "You said this"
+    },
+    "tag": "en"
+   },
+   {
+    "dateMarks": [
+     "年",
+     "月",
+     "日"
+    ],
+    "dateOrder": "ymd",
+    "decimalPoint": ".",
+    "direction": "ltr",
+    "endonym": "简体中文",
+    "groupSeparator": ",",
+    "groupSize": 3,
+    "messages": {
+     "console.approvals.approval_list_label": "等待你处理的审批",
+     "console.approvals.approvals_heading": "审批",
+     "console.approvals.approvals_lede": "等待你决定的操作，按失效时间从近到远排列。无人决定的审批会失效，且不会执行任何操作。",
+     "console.approvals.approve_label": "批准",
+     "console.approvals.approved_first_sentence": "已批准。你的批准是两次中的第一次，因此尚未执行，等待第二位批准。",
+     "console.approvals.approved_sentence": "已批准。",
+     "console.approvals.filters_label": "筛选审批",
+     "console.approvals.keep_it_label": "保持等待",
+     "console.approvals.lapses_label": "失效时间",
+     "console.approvals.more_approvals": "审批数量超过本页可显示的范围。",
+     "console.approvals.needs_two_sentence": "此操作无法撤回，因此需要两位不同的人批准。你的批准是第一次，须待第二位批准后才会执行。",
+     "console.approvals.no_approvals": "目前没有等待你处理的审批。",
+     "console.approvals.no_approvals_more": "当智能体在执行你可以决定的事项之前请求确认时，审批会出现在这里。",
+     "console.approvals.no_reason_chosen": "请选择原因",
+     "console.approvals.one_approval": "审批",
+     "console.approvals.open_on_its_own": "单独打开",
+     "console.approvals.raised_label": "提出时间",
+     "console.approvals.reading_approval": "正在读取该审批。",
+     "console.approvals.reading_approvals": "正在读取等待你处理的审批。",
+     "console.approvals.reason_label": "拒绝原因",
+     "console.approvals.reject_label": "拒绝",
+     "console.approvals.rejected_sentence": "已拒绝。",
+     "console.approvals.runs_as_label": "运行身份",
+     "console.approvals.second_of_two_sentence": "此操作无法撤回，且已有一人批准。你的批准是第二次，你批准后即执行。",
+     "console.approvals.take_over_consequence": "智能体不会执行此事，它已准备的内容也不会被发送或更改。此事会记录为已接管；一周内对同类操作接管三次，该智能体在此类操作上的权限将降低一级，使人能更多地先行查看其工作。",
+     "console.approvals.take_over_label": "接管",
+     "console.approvals.take_over_question": "接管此事并自己完成吗？",
+     "console.approvals.take_over_reason_label": "接管原因",
+     "console.approvals.taken_over_sentence": "已接管。智能体不会执行此事，需由你来完成。",
+     "console.ask.agent_label": "回答者",
+     "console.ask.answer_copied": "已复制。",
+     "console.ask.answer_label": "回答",
+     "console.ask.answer_not_copied": "你的浏览器不允许复制。请选中回答并手动复制。",
+     "console.ask.any_agent": "由最适合该问题的智能体回答",
+     "console.ask.any_kind": "所有类型的知识",
+     "console.ask.ask_heading": "提问",
+     "console.ask.ask_label": "提问",
+     "console.ask.ask_lede": "提出一个问题。回答会按你有权查看的内容生成。",
+     "console.ask.asking": "正在提问。",
+     "console.ask.based_on": "依据",
+     "console.ask.check_in": "在以下位置核对回答",
+     "console.ask.continuing": "你的下一个问题将接续此对话。",
+     "console.ask.conversations_heading": "你的对话",
+     "console.ask.copy_answer": "复制回答",
+     "console.ask.export_conversation": "导出此对话",
+     "console.ask.freshness_read": "{text}，读取于 {date}",
+     "console.ask.freshness_updated": "{text}，更新于 {date}",
+     "console.ask.from_your_data": "或者就你所在部门已连接的内容提问。",
+     "console.ask.helpful": "有帮助",
+     "console.ask.kind_label": "仅搜索",
+     "console.ask.mark_wrong": "标记为有误",
+     "console.ask.marked_wrong": "已标记。你的对话现在会注明此回答有误。",
+     "console.ask.new_conversation": "开始新对话",
+     "console.ask.not_exported": "无法导出该对话。未保存任何内容。",
+     "console.ask.not_helpful": "没有帮助",
+     "console.ask.not_marked": "无法标记。未作任何更改。",
+     "console.ask.nothing_asked_yet": "尚未提出任何问题。",
+     "console.ask.nothing_found_in_conversations": "你的问题中没有包含这些词的内容。",
+     "console.ask.progress_label": "回答生成期间",
+     "console.ask.question_label": "你的问题",
+     "console.ask.search_conversations": "搜索你的问题",
+     "console.ask.search_label": "搜索",
+     "console.ask.skip_to_answer": "跳至回答",
+     "console.ask.start_legend": "你想如何开始？",
+     "console.ask.start_task": "开始一项任务",
+     "console.ask.start_task_note": "说明你需要什么。系统会为它选择一个你可以调用的智能体，且它只使用你有权查看的内容。",
+     "console.ask.starters_heading": "你可以问",
+     "console.ask.talk_note": "选择你要与谁对话。",
+     "console.ask.talk_to_agent": "与智能体对话",
+     "console.ask.trial_needs_an_agent": "请选择将使用它的智能体，然后提问。",
+     "console.ask.try_asking": "你可以从下面任选一个开始。",
+     "console.ask.was_it_helpful": "这个回答有帮助吗？",
+     "console.ask.was_it_wrong": "这个回答有误吗？",
+     "console.ask.what_is_right": "正确的是什么？（选填）",
+     "console.ask.what_is_right_hint": "将发送给负责该回答所用文档的人。在他们批准之前不会改变任何内容。",
+     "console.shell.language_label": "语言",
+     "console.workspace.agents_caption": "我可以调用的智能体",
+     "console.workspace.cancel_label": "取消",
+     "console.workspace.edit_label": "编辑",
+     "console.workspace.evidence_caption": "其背后注意到的内容",
+     "console.workspace.forget_consequence": "它会立即停止用于你的回答。记录它被了解过的内容会保留；若它取代了更早的一条，更早的一条会重新使用。",
+     "console.workspace.forget_label": "忘记",
+     "console.workspace.inferred": "推断得出",
+     "console.workspace.items_caption": "我负责的知识",
+     "console.workspace.keep_it": "保留",
+     "console.workspace.learned_caption": "系统了解到的关于我的信息",
+     "console.workspace.more_items": "你负责的条目多于本页一次可读取的数量。",
+     "console.workspace.no_agents": "没有你可以调用的智能体。",
+     "console.workspace.no_ceiling": "尚未为你设置个人预算。",
+     "console.workspace.no_items": "你没有负责任何知识条目。",
+     "console.workspace.nothing_learned": "没有显示任何关于你的已了解信息。",
+     "console.workspace.of_them_your_own": "其中 {count} 个是你自己的",
+     "console.workspace.opens_on_the_member_grant": "持有成员权限的人可以打开本页，其他人无论持有何种权限都不能。若你应当看到本页，请向你所在部门的管理员申请。",
+     "console.workspace.reading_workspace": "正在读取你的工作区。",
+     "console.workspace.save_label": "保存",
+     "console.workspace.spent_of": "已用 {spent}，共 {ceiling}，{percent}%",
+     "console.workspace.undo_all_consequence": "每条记忆会立即停止用于你的回答。记录它们被了解过的内容会保留，你在对话中说过的内容不会被删除。",
+     "console.workspace.undo_all_label": "全部撤销",
+     "console.workspace.undo_all_question": "忘记所有关于你的已了解信息吗？",
+     "console.workspace.undone_all": "所有关于你的已了解信息均已忘记。",
+     "console.workspace.what_it_should_say": "应该怎么说",
+     "console.workspace.what_it_takes": "一句关于你的话，最多 280 个字符，用你自己的话来写。",
+     "console.workspace.workspace_crumb": "使用 › 我的工作区",
+     "console.workspace.workspace_heading": "我的工作区",
+     "console.workspace.workspace_lede": "你提过的问题、你可以调用的智能体、系统了解到的关于你的信息，以及你所保管的内容。本页所有内容都属于你或本就对你可见，不会显示你的访问权限在回答中不会返回的任何内容。",
+     "console.workspace.write_something": "请先写下应有的内容再保存，或取消以保留原样。",
+     "console.workspace.you_said_this": "这是你说过的"
+    },
+    "tag": "zh-Hans"
+   }
+  ],
+  "timeZone": "UTC"
+ }
+}

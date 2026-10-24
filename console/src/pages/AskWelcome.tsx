@@ -15,18 +15,19 @@
 import { useEffect, useState } from "react";
 import { request } from "../api/client";
 import { FROM_DATA_API_PATH, readFromData, type FromData } from "./adoptionCoverageQuery";
+import { msg } from "../locale";
 
 /** Where the questions are read from. */
 export const WELCOME_API_PATH = "/welcome";
 
 /** The line over them. */
-export const TRY_ASKING = "You could start with one of these.";
+export const TRY_ASKING = msg("console.ask.try_asking", "You could start with one of these.");
 
 /** The line over the questions built from what your department has connected. */
-export const FROM_YOUR_DATA = "Or ask about what is connected for your department.";
+export const FROM_YOUR_DATA = msg("console.ask.from_your_data", "Or ask about what is connected for your department.");
 
 /** Beside a question built from data: where to open the same figure and compare. */
-export const CHECK_IN = "Check the answer in";
+export const CHECK_IN = msg("console.ask.check_in", "Check the answer in");
 
 /** The questions a body carries, or none when it is not the shape the route sends. */
 export function readWelcome(payload: unknown): readonly string[] {

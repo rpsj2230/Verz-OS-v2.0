@@ -70,6 +70,7 @@ import { CallerProvider, readCallerId } from "../components/kit/caller";
 import { forgetAllFlows } from "../components/kit/flowMemory";
 import { SidebarProvider } from "../components/ui/sidebar";
 import { Toaster } from "../components/ui/sonner";
+import { LanguageChoice } from "../locale/LanguageChoice";
 import { ThemeControl } from "../theme/ThemeControl";
 import { signOut } from "../auth/session";
 import { StopControl } from "../pages/operations/StopControl";
@@ -127,6 +128,7 @@ function ShellFrame({ me }: { readonly me: Resource<unknown> }) {
           </div>
           <div className="shell__header-actions">
             <StopControl stop={given?.stop ?? ""} departments={departments} />
+            <LanguageChoice />
             <ThemeControl />
             <button
               type="button"

@@ -67,6 +67,7 @@ arrives the same way, already turned into the colours the console draws with it 
 for contrast in both themes, which `served_accent` argues, and so do its names and logo.
 
 Task ids: M32.5.1.1, M32.5.1.2, M42.5.14, M42.6.1, M27.10.4, M41.1.4, M27.15.81, M27.15.75
+Task ids: M35.1.1.1, M35.1.1.2
 """
 
 from __future__ import annotations
@@ -81,9 +82,18 @@ from fastapi.responses import FileResponse, Response
 from starlette.types import Receive, Scope, Send
 
 from brain.api import API_PREFIX
+from brain.console_messages import CONSOLE_KEYS, CONSOLE_MESSAGES
 from brain.docs_routes import COMING
 from brain.install import InstallError, value_of
-from brain.locale import LocaleError, Theme, accent_set
+from brain.locale import (
+    LocaleError,
+    Theme,
+    accent_set,
+    currency_or_unset,
+    enabled_locales,
+    rules_for,
+    time_zone,
+)
 
 #: Where the built console lives, relative to the installed package.
 #:
@@ -225,12 +235,62 @@ def runtime_config(env: Mapping[str, str] | None = None) -> str:
         "clientId": _optional("INSTALL_OIDC_CLIENT_ID", env),
         "accent": served_accent(env),
         "brand": served_brand(env),
+        "locale": served_locale(env),
     }
     # `json.dumps` rather than an f-string, so a value containing a quote or a line break is
     # escaped by something that knows the grammar. These values come from an install's own
     # environment, which is not hostile, but a document assembled by concatenation is a
     # document that breaks on an apostrophe and nobody tests that case.
     return f"window.{CONSOLE_CONFIG_GLOBAL} = Object.freeze({json.dumps(payload)});\n"
+
+
+def served_locale(env: Mapping[str, str] | None = None) -> dict[str, object]:
+    """The languages this install offers, how each writes a date and a figure, and the words.
+
+    **The rules are `brain.locale.LocaleRules` as they are, and the console applies them.** The
+    console formats a date with `rules.date_order` and `rules.date_marks`, a figure with the
+    separators and the group size, in the install's time zone and currency, so a date on a page
+    and a date the API formats come out as the same characters. `tests/unit/test_console_locale.py`
+    writes the cases both sides must agree on and `console/tests/locale.test.ts` reads them.
+
+    **Every enabled language is sent, with the console's whole catalogue in it.** A person switches
+    language in the header without a round trip, and a hundred sentences a language is small. The
+    first enabled language is the default (`brain.locale.default_locale`), and the console keeps a
+    person's own choice in the browser as it keeps their theme, because it is a property of the
+    screen.
+
+    **A setting that does not resolve is served as English, UTC and no currency rather than
+    refused.** The same choice `served_accent` makes: a misspelled time zone must not blank the
+    console of the person who needs to open Settings and mend it, and `console.configuration` is
+    where the misspelling is refused and named. The unset currency is `XXX`, as everywhere.
+    """
+    try:
+        enabled = enabled_locales(env)
+    except LocaleError:
+        enabled = (rules_for("en"),)
+    try:
+        zone = time_zone(env).key
+    except LocaleError:
+        zone = "UTC"
+    return {
+        "default": enabled[0].tag,
+        "timeZone": zone,
+        "currency": currency_or_unset(env),
+        "locales": [
+            {
+                "tag": one.tag,
+                "endonym": one.endonym,
+                "direction": one.direction.value,
+                "dateOrder": one.date_order.value,
+                "dateMarks": list(one.date_marks),
+                "decimalPoint": one.decimal_point,
+                "groupSeparator": one.group_separator,
+                "groupSize": one.group_size,
+                "messages": {key: CONSOLE_MESSAGES[key][one.tag] for key in CONSOLE_KEYS},
+            }
+            for one in enabled
+        ],
+    }
 
 
 def served_accent(env: Mapping[str, str] | None = None) -> dict[str, str] | None:

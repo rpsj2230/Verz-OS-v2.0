@@ -74,6 +74,10 @@ ignore = [
 # brain.routers mounts every router it imports, read off its own names: each import is the
 # registration, so an import no statement reads is the point rather than dead code.
 "src/brain/routers.py" = ["F401"]
+# The console catalogue holds whole sentences in two languages, one per line so that a translator
+# sees a key and its words together, and Chinese is written with its own punctuation: the
+# full-width comma is the right character there, not an ambiguous look-alike of the Latin one.
+"src/brain/console_messages.py" = ["E501", "RUF001"]
 
 # ---------------------------------------------------------------- mypy
 [tool.mypy]

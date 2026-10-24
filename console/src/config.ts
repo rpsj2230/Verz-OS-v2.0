@@ -47,7 +47,8 @@ import { KEYCLOAK_CLIENT_ID } from "./auth/constants";
  * free choice, and `tests/console-config.test.ts` reads it out of that module so the two
  * cannot drift into a console that silently finds nothing and reports itself unconfigured.
  */
-export const CONFIG_GLOBAL = "__BRAIN_CONFIG__";
+export { CONFIG_GLOBAL } from "./configGlobal";
+import { CONFIG_GLOBAL } from "./configGlobal";
 
 /** Where the document comes from. Written down for the message shown when it is missing. */
 export const CONFIG_DOCUMENT_PATH = "/api/console.js";

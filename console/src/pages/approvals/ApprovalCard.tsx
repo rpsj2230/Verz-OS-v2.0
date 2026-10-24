@@ -48,6 +48,7 @@ import {
   type Confirmation,
 } from "../approvalsQuery";
 import { nameOf } from "../review/parts";
+import { formatTimestamp, msg } from "../../locale";
 
 /** Written down because a button that turns green on click is the easy version of this page. */
 export const A_DECISION_IS_CLAIMED_ONLY_WHEN_THE_API_CONFIRMS_IT =
@@ -56,31 +57,31 @@ export const A_DECISION_IS_CLAIMED_ONLY_WHEN_THE_API_CONFIRMS_IT =
   "approval and that verdict, and a refusal leaves the card and its buttons where they were " +
   "with the API's sentence beside them.";
 
-export const RUNS_AS_LABEL = "Runs as";
-export const RAISED_LABEL = "Raised";
-export const LAPSES_LABEL = "Lapses";
-export const OPEN_ON_ITS_OWN = "Open on its own";
-export const APPROVE_LABEL = "Approve";
-export const REJECT_LABEL = "Reject";
-export const REASON_LABEL = "Reason for rejecting";
-export const NO_REASON_CHOSEN = "Choose a reason";
-export const APPROVED_SENTENCE = "Approved.";
-export const REJECTED_SENTENCE = "Rejected.";
-export const TAKE_OVER_LABEL = "Take over";
-export const TAKE_OVER_REASON_LABEL = "Reason for taking it over";
-export const TAKEN_OVER_SENTENCE = "Taken over. The agent will not do it; it is yours to do.";
-export const TAKE_OVER_QUESTION = "Take this over and do it yourself?";
+export const RUNS_AS_LABEL = msg("console.approvals.runs_as_label", "Runs as");
+export const RAISED_LABEL = msg("console.approvals.raised_label", "Raised");
+export const LAPSES_LABEL = msg("console.approvals.lapses_label", "Lapses");
+export const OPEN_ON_ITS_OWN = msg("console.approvals.open_on_its_own", "Open on its own");
+export const APPROVE_LABEL = msg("console.approvals.approve_label", "Approve");
+export const REJECT_LABEL = msg("console.approvals.reject_label", "Reject");
+export const REASON_LABEL = msg("console.approvals.reason_label", "Reason for rejecting");
+export const NO_REASON_CHOSEN = msg("console.approvals.no_reason_chosen", "Choose a reason");
+export const APPROVED_SENTENCE = msg("console.approvals.approved_sentence", "Approved.");
+export const REJECTED_SENTENCE = msg("console.approvals.rejected_sentence", "Rejected.");
+export const TAKE_OVER_LABEL = msg("console.approvals.take_over_label", "Take over");
+export const TAKE_OVER_REASON_LABEL = msg("console.approvals.take_over_reason_label", "Reason for taking it over");
+export const TAKEN_OVER_SENTENCE = msg("console.approvals.taken_over_sentence", "Taken over. The agent will not do it; it is yours to do.");
+export const TAKE_OVER_QUESTION = msg("console.approvals.take_over_question", "Take this over and do it yourself?");
 export const TAKE_OVER_CONSEQUENCE =
-  "The agent will not do it, and nothing it prepared is sent or changed. It is recorded as taken " +
+  msg("console.approvals.take_over_consequence", "The agent will not do it, and nothing it prepared is sent or changed. It is recorded as taken " +
   "over, and three takeovers of the same kind of action inside a week hold this agent a step lower " +
-  "on it, so a person sees more of its work first.";
-export const KEEP_IT_LABEL = "Keep it waiting";
+  "on it, so a person sees more of its work first.");
+export const KEEP_IT_LABEL = msg("console.approvals.keep_it_label", "Keep it waiting");
 export const NEEDS_TWO_SENTENCE =
-  "This cannot be taken back, so two different people approve it. Your approval is the first, " +
-  "and it runs only after a second person approves.";
+  msg("console.approvals.needs_two_sentence", "This cannot be taken back, so two different people approve it. Your approval is the first, " +
+  "and it runs only after a second person approves.");
 export const SECOND_OF_TWO_SENTENCE =
-  "This cannot be taken back, and one person has already approved it. Your approval is the " +
-  "second, and it runs when you give it.";
+  msg("console.approvals.second_of_two_sentence", "This cannot be taken back, and one person has already approved it. Your approval is the " +
+  "second, and it runs when you give it.");
 
 /** Written down because a take-over button that sends on one press is the easy version. */
 export const TAKING_OVER_IS_CONFIRMED_BECAUSE_IT_LOWERS_THE_AGENT =
@@ -99,7 +100,7 @@ export function approvalAddress(suspensionId: string): string {
 export type { Confirmation, Verdict } from "../approvalsQuery";
 
 export const APPROVED_FIRST_SENTENCE =
-  "Approved. Yours is the first approval of two, so it has not run and waits for a second person.";
+  msg("console.approvals.approved_first_sentence", "Approved. Yours is the first approval of two, so it has not run and waits for a second person.");
 
 export function said(verdict: Confirmation): string {
   switch (verdict) {
@@ -115,7 +116,7 @@ export function said(verdict: Confirmation): string {
 }
 
 function When({ at }: { readonly at: string }) {
-  return <time dateTime={at}>{new Date(at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</time>;
+  return <time dateTime={at}>{formatTimestamp(at)}</time>;
 }
 
 export function ApprovalCard({

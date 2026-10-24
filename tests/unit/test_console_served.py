@@ -40,6 +40,7 @@ from brain.console_static import (
     runtime_config,
     served_accent,
     served_brand,
+    served_locale,
 )
 from brain.docs_routes import COMING
 from brain.install import value_of
@@ -412,6 +413,7 @@ def test_the_served_document_carries_this_installs_values_and_no_others() -> Non
         "clientId": A_DEPLOYMENTS_CLIENT,
         "accent": served_accent(env),
         "brand": served_brand(env),
+        "locale": served_locale(env),
     }
 
 

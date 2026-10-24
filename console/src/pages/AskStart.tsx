@@ -13,14 +13,16 @@
  * Task ids: M40.7.5
  */
 
+import { msg } from "../locale";
+
 export type StartMode = "task" | "agent";
 
-export const START_LEGEND = "How do you want to start?";
-export const START_TASK = "Start a task";
+export const START_LEGEND = msg("console.ask.start_legend", "How do you want to start?");
+export const START_TASK = msg("console.ask.start_task", "Start a task");
 export const START_TASK_NOTE =
-  "Say what you need. An agent you may call is chosen for it, and it works with only what you are able to see.";
-export const TALK_TO_AGENT = "Talk to an agent";
-export const TALK_NOTE = "Choose who you are talking to.";
+  msg("console.ask.start_task_note", "Say what you need. An agent you may call is chosen for it, and it works with only what you are able to see.");
+export const TALK_TO_AGENT = msg("console.ask.talk_to_agent", "Talk to an agent");
+export const TALK_NOTE = msg("console.ask.talk_note", "Choose who you are talking to.");
 
 export function AskStart({
   mode,

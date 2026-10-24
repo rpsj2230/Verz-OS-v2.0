@@ -3430,14 +3430,14 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M35.1.1.1": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): locale.MESSAGES holds en and zh-Hans (67 keys, catalogue_gaps tested) but only the setup wizard and data_steward_routes call text(); the served console draws English strings from TSX (CONSOLE_LANGUAGE en-GB) with no locale switch; enabled_locales and default_locale have no caller. NEXT: Add a locale choice (INSTALL_LOCALES) to the console shell and move console strings to the catalogue; start with Ask and Approvals; then a browser check in zh-Hans.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: the served console document (/api/console.js, brain.console_static.served_locale) now carries every enabled language with its rules and the console's own catalogue (brain.console_messages, one entry per sentence in en and zh-Hans, held to catalogue_gaps), the first of INSTALL_LOCALES is the default, and the shell offers a language choice (console/src/locale, LanguageChoice) that keeps the person's pick in the browser and reads the page again. Ask, My workspace and Approvals draw their sentences through msg(key, english); the English stays written at the call so nothing served means what it always said, and tests/unit/test_console_messages.py holds the TSX English to the catalogue in both directions. Tests: tests/unit/test_console_locale.py, console/tests/locale.test.ts, console/tests/locale-pages.test.tsx. NOT done: the other pages still draw English from their own source (wire them page by page the same way), and a person has not yet looked at zh-Hans on an install. PRIOR WORK (2026-10-13 triage): locale.MESSAGES held en and zh-Hans but only the setup wizard and data_steward_routes called text().",
+    updated: "2026-10-24",
   },
   "M35.1.1.2": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): currency (locale.currency_or_unset) and time_zone are used by routes and workers; format_date, format_timestamp, format_number and format_money have no caller, and console dates use the browser default (Intl en-GB in spendQuery.ts). NEXT: Serve install-formatted dates, numbers and money from the API or a shared console formatter reading INSTALL_LOCALES; then a check on a Spend figure in zh-Hans.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: the console writes dates, moments, numbers and money with the install's rules and not the browser's region. console/src/locale/index.ts has formatDate, formatTimestamp, formatNumber and formatMoney, the install's time zone and currency travel in the served document, and a committed fixture of 80 cases written by brain.locale.format_* (tests/unit/test_console_locale.py regenerates it, console/tests/locale.test.ts reads it back through the browser functions) keeps the two from drifting. Wired into Ask, My workspace and Approvals. NOT done: Spend and the other pages still use their own Intl calls (spendQuery.ts). PRIOR WORK (2026-10-13 triage): format_date, format_timestamp, format_number and format_money had no caller.",
+    updated: "2026-10-24",
   },
   "M35.1.1.3": {
     status: "READY FOR TESTING",
@@ -4935,9 +4935,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M35.4.3": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): rules_for raises LocaleError carrying locale.RIGHT_TO_LEFT.reason for an RTL tag, but console.configuration._locales_problem replaces it with a generic sentence, so the console refusal does not name the deferral; setup path not verified. NEXT: Return the deferral sentence from _locales_problem and the wizard; then a browser run or a settings route check naming M35.4.3.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "built: console.configuration._locales_problem returns the deferral's own sentence (locale.RIGHT_TO_LEFT.reason) for a right-to-left tag, and a language that is merely not shipped is refused in other words; install check a_right_to_left_language_is_refused_by_name names this leaf, and tests/unit/test_configuration.py pins the sentence. The earlier note that the refusal was a generic sentence was stale.. PRIOR WORK (2026-10-13 triage): rules_for raises LocaleError carrying locale.RIGHT_TO_LEFT.reason for an RTL tag.",
+    updated: "2026-10-24",
   },
   "M35.4.4": {
     status: "BLOCKED",

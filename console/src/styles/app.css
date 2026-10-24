@@ -143,6 +143,17 @@ code {
   white-space: nowrap;
 }
 
+/* The language switch: one select, named by its endonyms, the same height as the buttons beside it. */
+.shell__language select {
+  min-height: 2.75rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
 /*
  * The banner for a sign-in without a second factor. The notice inside it has the one appearance
  * every notice has; this only gives it room under the header, and lets it use the width a phone has.
