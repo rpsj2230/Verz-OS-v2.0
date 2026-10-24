@@ -431,6 +431,14 @@ INCLUDED: Final[tuple[Rule, ...]] = (
         "the record of what was run and never the way anybody gets it",
     ),
     Rule(
+        "ops/backup",
+        "the nightly copy, its timer, and the restore drill that proves a copy can be loaded. A "
+        "server that was installed from this archive and is asked to rehearse a restore has to "
+        "have the script that does it from the release it runs, because the day the drill is "
+        "wanted is the day nobody should be fetching a script from a repository by hand, and a "
+        "drill run with a script from another release proves a different system",
+    ),
+    Rule(
         "ops/update",
         "the update and rollback scripts, which are the only two things on a client's server "
         "that write the image variable, so an install that does not carry them is one whose "

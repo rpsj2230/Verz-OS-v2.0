@@ -5055,9 +5055,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M42.7.4": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): ops/backup/brain-backup, brain-restore-drill and brain-install-backup (with a systemd timer) exist, but release.INCLUDED has no ops/backup rule (restore-drill.md: the archive does not carry ops/backup) and install.sh has no step that schedules the backup. NEXT: Add an ops/backup rule to release.INCLUDED and an installer PLAN step running brain-install-backup, regenerate install.sh, then check the timer exists on an install.",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: the release archive now includes ops/backup (brain-backup, its timer, brain-restore-drill, the drill service and brain-install-backup), so a server installed from it has the restore drill from the release it runs; docs/install/restore-drill.md says where it is (/opt/brain/ops/backup). Tested over the archive file list. NOT BUILT: the installer scheduling the nightly copy; brain-install-backup is still run by a person once, as root, because it needs the bucket and the key that may write it (needs-rupash 5853 describes the step). TO PROVE: extract a published archive and see ops/backup/brain-restore-drill in it.",
+    updated: "2026-10-24",
   },
   "M42.7.5": {
     status: "BLOCKED",
