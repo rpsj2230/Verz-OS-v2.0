@@ -19,16 +19,18 @@ from __future__ import annotations
 import inspect
 from collections.abc import Iterator, Sequence
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import get_type_hints
 
 import pytest
 
 from brain.knowledge.ingest import TYPE_LIMITS, IngestRefused, MediaType, ceiling_for
+from brain.knowledge.item import KnowledgeItem, KnowledgeState
 from brain.knowledge.scanning import ScannedContent, scan_for_parsing
 from brain.knowledge.uploads import (
     ORIGINAL_PREFIX,
     UNNAMED_LINK,
+    ReadUpload,
     admit_ingestion,
     assert_declared_length,
     assert_holds_originals,
@@ -42,7 +44,9 @@ from brain.knowledge.uploads import (
     receive_link,
     receive_upload,
     store_original,
+    with_review_by,
 )
+from brain.knowledge.visibility import KnowledgeVisibility, Visibility
 from brain.ops.admission import (
     CapacityState,
     RefusalKind,
@@ -546,3 +550,27 @@ def test_an_accepted_upload_is_logged_as_started_or_queued_and_not_as_a_refusal(
 
     assert admission.log_record()["verdict"] == "queued"
     assert "refusal_kind" not in admission.log_record()
+
+
+def test_a_review_date_is_set_on_a_copy_of_the_read_item_and_no_other_field_moves() -> None:
+    """**M40.3.1.2.** The date lands on the item and nothing else about the read changes, the
+    original read is untouched, and none asked for returns the very same read.
+
+    Delete this and the review cycle asked at upload is set on the wrong field, edits the read in
+    place for the caller that still holds it, or is silently dropped on the way to the store."""
+    item = KnowledgeItem(
+        item_id="k_1",
+        content="what it says",
+        visibility=KnowledgeVisibility(level=Visibility.PERSONAL, owner_id="u_a"),
+        owner_id="u_a",
+        state=KnowledgeState.DRAFT,
+    )
+    read = ReadUpload(item=item, blocks=())
+    due = datetime(2999, 1, 1, tzinfo=UTC) + timedelta(days=90)
+
+    dated = with_review_by(read, due)
+
+    assert dated.item.review_by == due
+    assert dated.item.model_copy(update={"review_by": None}) == item
+    assert read.item.review_by is None
+    assert with_review_by(read, None) is read

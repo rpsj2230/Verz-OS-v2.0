@@ -135,6 +135,7 @@ def upload(
     level: str = "department",
     department: str = "web",
     strong: bool = True,
+    review_in_days: int | None = None,
 ) -> Any:
     sent = {**headers(pid, strong=strong), "content-type": media_type}
     if name:
@@ -143,7 +144,12 @@ def upload(
         UPLOADS,
         content=body,
         headers=sent,
-        params={"kind": kind, "level": level, "department": department},
+        params={
+            "kind": kind,
+            "level": level,
+            "department": department,
+            **({} if review_in_days is None else {"review_in_days": review_in_days}),
+        },
     )
 
 
@@ -224,9 +230,42 @@ def test_a_markdown_file_is_added_to_a_department_as_its_uploader(
         "department": "web",
         "passages": len(read.blocks),
         "found_by": FOUND_BY_TEXT,
+        "review_by": None,
     }
+    assert read.item.review_by is None
     assert read.item.owner_id == "u_admin"
     assert "TEALCHECK" in read.item.content
+
+
+def test_a_review_cycle_asked_at_upload_is_the_date_the_document_is_next_due(
+    served: tuple[TestClient, Stub], kept: Kept
+) -> None:
+    """M40.3.1.2. A document sent with a cycle of ninety days is stored due about ninety days from
+    now and says so in the answer. Delete this and the cycle is accepted and dropped, so a document
+    a member meant to be asked about is outside the sweep for ever."""
+    from datetime import UTC, datetime, timedelta
+
+    client, _ = served
+    before = datetime.now(UTC)
+    response = upload(client, "u_admin", MARKDOWN, review_in_days=90)
+
+    assert response.status_code == 201, response.text
+    (read,) = kept.stored
+    assert read.item.review_by is not None
+    assert timedelta(days=90) <= read.item.review_by - before <= timedelta(days=90, minutes=5)
+    assert datetime.fromisoformat(response.json()["review_by"]) == read.item.review_by
+
+
+def test_a_review_cycle_outside_one_day_to_two_years_is_refused_and_nothing_is_added(
+    served: tuple[TestClient, Stub], kept: Kept
+) -> None:
+    """Nought, a negative number and more than two years are all refused before the file is read.
+    Delete this and a cycle of nought days opens an overdue task on the day of the upload, or one
+    of fifty years is a document nobody is ever asked about."""
+    client, _ = served
+    for days in (0, -3, 731):
+        assert upload(client, "u_admin", MARKDOWN, review_in_days=days).status_code == 422
+    assert kept.stored == []
 
 
 def test_an_upload_is_written_with_its_uploaders_attribution_for_the_ledger(
