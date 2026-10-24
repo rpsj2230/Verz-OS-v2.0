@@ -22,6 +22,7 @@
 
 import type { components } from "../api/schema";
 import { wasRead, type Read } from "./installQuery";
+import { fill, formatMoney, formatNumber, msg, unsetCurrency } from "../locale";
 import { majorUnits } from "./spendQuery";
 
 export type Workspace = components["schemas"]["MineWorkspaceView"];
@@ -85,7 +86,21 @@ export function monthly(ceilings: readonly MyCeiling[]): MyCeiling | null {
  * reads as more headroom than there is. */
 export function spentOf(one: MyCeiling): string {
   const percent = Math.ceil((one.spent_minor * 100) / one.ceiling_minor);
-  return `${majorUnits(one.spent_minor)} of ${majorUnits(one.ceiling_minor)}, ${String(percent)}%`;
+  return fill(msg("console.workspace.spent_of", "{spent} of {ceiling}, {percent}%"), {
+    spent: money(one.spent_minor),
+    ceiling: money(one.ceiling_minor),
+    percent: formatNumber(percent),
+  });
+}
+
+/**
+ * Minor units as the install writes money: grouped and pointed by its language, with its currency
+ * code after the figure, or the figure alone while the install has chosen no currency (the Spend
+ * screen's rule, so a sign this console invented never stands for money nobody named).
+ */
+function money(minor: number): string {
+  const figure = majorUnits(minor);
+  return unsetCurrency() ? formatNumber(figure) : formatMoney(figure);
 }
 
 /** SCREEN 12's source words: a department's or the company's agent, or one of your own. */

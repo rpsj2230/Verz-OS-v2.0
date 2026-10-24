@@ -15,6 +15,7 @@
 
 import { useSearchParams } from "react-router-dom";
 import { useResource } from "../api/useResource";
+import { msg } from "../locale";
 
 export const TRIAL_PARAM = "skill";
 
@@ -29,7 +30,7 @@ export function tryApiPath(digest: string): string {
   return `/me/skills/${encodeURIComponent(digest)}/try`;
 }
 
-export const TRIAL_NEEDS_AN_AGENT = "Choose the agent that will use it, then ask.";
+export const TRIAL_NEEDS_AN_AGENT = msg("console.ask.trial_needs_an_agent", "Choose the agent that will use it, then ask.");
 
 export interface Trial {
   /** The digest to send with the question, or empty when no skill is being tried. */

@@ -60,7 +60,7 @@ const RULES = [
   {
     name: "tokens are never stored",
     pattern: /\blocalStorage\b/,
-    allow: ["src/theme/theme.ts", "src/components/kit/savedFilterStore.ts"],
+    allow: ["src/theme/theme.ts", "src/components/kit/savedFilterStore.ts", "src/locale/index.ts"],
     why:
       "Access and refresh tokens live in memory and die with the page. The realm gives an " +
       "SSO session ten hours, so a refresh token in the local store would be a ten-hour " +

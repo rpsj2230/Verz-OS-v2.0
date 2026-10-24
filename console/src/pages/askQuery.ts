@@ -48,6 +48,7 @@
  */
 
 import type { AnswerEvent } from "../api/events";
+import { fill, formatDay, formatTimestamp, msg } from "../locale";
 import { citedDocumentAddress } from "./citedDocumentQuery";
 import { KIND_WORDS } from "./knowledgeQuery";
 
@@ -277,13 +278,11 @@ export function freshnessWords(citation: CitationView): string {
     return citation.freshnessText;
   }
   const document = citation.kind === "document";
-  const date = parsed.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    ...(document ? {} : { hour: "2-digit", minute: "2-digit" }),
-  });
-  return `${citation.freshnessText}, ${document ? "updated" : "read"} ${date}`;
+  const date = document ? formatDay(parsed) : formatTimestamp(parsed);
+  const template = document
+    ? msg("console.ask.freshness_updated", "{text}, updated {date}")
+    : msg("console.ask.freshness_read", "{text}, read {date}");
+  return fill(template, { text: citation.freshnessText, date });
 }
 
 /**

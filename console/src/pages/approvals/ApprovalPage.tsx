@@ -26,9 +26,10 @@ import { approvalApiPath, readApprovalCard } from "../approvalsQuery";
 import { nameOf, peopleIn, Pill, whenWords } from "../review/parts";
 import { APPROVALS_ADDRESS, ApprovalCard, DecisionControls, type Confirmation } from "./ApprovalCard";
 import { APPROVALS_HEADING, Confirmed, useConfirmationInView } from "./ApprovalsPage";
+import { msg } from "../../locale";
 
-export const READING_APPROVAL = "Reading the approval.";
-export const ONE_APPROVAL = "Approval";
+export const READING_APPROVAL = msg("console.approvals.reading_approval", "Reading the approval.");
+export const ONE_APPROVAL = msg("console.approvals.one_approval", "Approval");
 
 /** The first line of the request names the action, which is what the page is called. */
 function titleOf(request: string): string {

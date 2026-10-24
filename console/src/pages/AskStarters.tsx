@@ -12,8 +12,9 @@
  */
 
 import { useResource } from "../api/useResource";
+import { msg } from "../locale";
 
-export const STARTERS_HEADING = "You could ask";
+export const STARTERS_HEADING = msg("console.ask.starters_heading", "You could ask");
 
 export const STARTERS_API_PATH = "/me/agents";
 

@@ -20,7 +20,7 @@ throwaway application, for `/manifest.webmanifest` and the icons it names. An im
 no built console says so and the check is not run; the install's own bundle is what is judged.
 That the browser offers to install it is the person's half, and this check does not claim it.
 
-Task ids: M35.1.1.3, M35.1.2.1, M35.1.2.2, M35.1.2.3, M35.3.2.1
+Task ids: M35.1.1.3, M35.4.3, M35.1.2.1, M35.1.2.2, M35.1.2.3, M35.3.2.1
 """
 
 from __future__ import annotations
@@ -200,7 +200,7 @@ async def the_console_is_served_as_an_installable_shell(h: Harness) -> None:
 
 
 @check(
-    leaves=("M35.1.1.3",),
+    leaves=("M35.1.1.3", "M35.4.3"),
     sentence=(
         "Asking for a right-to-left language in the install's settings is refused with the "
         "deferral's own sentence, which says what would make it due, while the shipped languages "

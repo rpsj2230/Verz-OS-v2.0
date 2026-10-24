@@ -162,20 +162,21 @@ import { AskStarters } from "./AskStarters";
 import { useTrial } from "./AskTrial";
 import { addItemApiPath, itemBody } from "./myProjectsQuery";
 import { CANNOT_SAVE, saveDocument } from "./dataTransferQuery";
+import { msg } from "../locale";
 
 /** The console address of this screen. */
 export const ASK_ADDRESS = "/ask";
 
 /** The page's heading, and the word it is called by in the navigation. */
-export const ASK_HEADING = "Ask";
+export const ASK_HEADING = msg("console.ask.ask_heading", "Ask");
 
 /** Under the heading. Says what the screen does and promises nothing about the answer. */
-export const ASK_LEDE = "Ask a question. The answer is computed for what you are able to see.";
+export const ASK_LEDE = msg("console.ask.ask_lede", "Ask a question. The answer is computed for what you are able to see.");
 
 /** The field, its button, and what a live region is called. */
-export const QUESTION_LABEL = "Your question";
-export const ASK_LABEL = "Ask";
-export const PROGRESS_LABEL = "While the answer is being made";
+export const QUESTION_LABEL = msg("console.ask.question_label", "Your question");
+export const ASK_LABEL = msg("console.ask.ask_label", "Ask");
+export const PROGRESS_LABEL = msg("console.ask.progress_label", "While the answer is being made");
 
 /**
  * What the progress region says before the first step has arrived.
@@ -184,34 +185,34 @@ export const PROGRESS_LABEL = "While the answer is being made";
  * the region is an empty list for that moment, and a question still being asked reads the same as
  * one nobody asked. `tests/screen-states.test.tsx` holds the page to a loading sentence of its own.
  */
-export const ASKING = "Asking.";
+export const ASKING = msg("console.ask.asking", "Asking.");
 
 /** The heading over what the answer stands on. Never a count, and never a source list. */
-export const BASED_ON = "What this is based on";
+export const BASED_ON = msg("console.ask.based_on", "What this is based on");
 
 /** Before anybody has asked anything. It names no entity; the questions offered under it come from the welcome route. */
-export const NOTHING_ASKED_YET = "Nothing has been asked yet.";
+export const NOTHING_ASKED_YET = msg("console.ask.nothing_asked_yet", "Nothing has been asked yet.");
 
 /**
  * The control that moves focus past the steps and the citations to the answer. The words are
  * `answer.skip_to` in `brain.locale.MESSAGES`, which already carries its translation, and a
  * test holds the two together.
  */
-export const SKIP_TO_ANSWER = "Skip to answer";
+export const SKIP_TO_ANSWER = msg("console.ask.skip_to_answer", "Skip to answer");
 
 /** What the answer is called when focus lands on it, so a screen reader says where it is. */
-export const ANSWER_LABEL = "Answer";
+export const ANSWER_LABEL = msg("console.ask.answer_label", "Answer");
 
 /** The question over the two marks, and the two marks. One action each, and no words. */
-export const WAS_IT_HELPFUL = "Was this answer helpful?";
+export const WAS_IT_HELPFUL = msg("console.ask.was_it_helpful", "Was this answer helpful?");
 
 /** The control that puts the answer on the clipboard, and what a person is told of it. */
-export const COPY_ANSWER = "Copy answer";
-export const ANSWER_COPIED = "Copied.";
+export const COPY_ANSWER = msg("console.ask.copy_answer", "Copy answer");
+export const ANSWER_COPIED = msg("console.ask.answer_copied", "Copied.");
 export const ANSWER_NOT_COPIED =
-  "Your browser did not allow copying. Select the answer and copy it by hand.";
-export const HELPFUL = "Helpful";
-export const NOT_HELPFUL = "Not helpful";
+  msg("console.ask.answer_not_copied", "Your browser did not allow copying. Select the answer and copy it by hand.");
+export const HELPFUL = msg("console.ask.helpful", "Helpful");
+export const NOT_HELPFUL = msg("console.ask.not_helpful", "Not helpful");
 
 /** Why the answer is reached by a control rather than by tabbing past what it stands on. */
 export const THE_ANSWER_IS_ONE_KEYPRESS_FROM_THE_QUESTION =
@@ -228,19 +229,19 @@ export const FOCUS_IS_RETURNED_AND_NEVER_TAKEN =
   "still on the form: a reader who went somewhere else while waiting is not moved.";
 
 /** The agent picker's label, and its first choice, which leaves the choice to the router. */
-export const AGENT_LABEL = "Answer as";
-export const ANY_AGENT = "Whichever agent suits the question";
+export const AGENT_LABEL = msg("console.ask.agent_label", "Answer as");
+export const ANY_AGENT = msg("console.ask.any_agent", "Whichever agent suits the question");
 
 /** The id tying the picker to its label. */
 const AGENT_FIELD_ID = "ask-agent";
 
 /** The conversations panel: its heading, its search, and the control starting a new one (M9.1). */
-export const CONVERSATIONS_HEADING = "Your conversations";
-export const SEARCH_CONVERSATIONS = "Search your questions";
-export const SEARCH_LABEL = "Search";
-export const NEW_CONVERSATION = "Start a new conversation";
-export const CONTINUING = "Your next question continues this conversation.";
-export const NOTHING_FOUND_IN_CONVERSATIONS = "None of your questions holds those words.";
+export const CONVERSATIONS_HEADING = msg("console.ask.conversations_heading", "Your conversations");
+export const SEARCH_CONVERSATIONS = msg("console.ask.search_conversations", "Search your questions");
+export const SEARCH_LABEL = msg("console.ask.search_label", "Search");
+export const NEW_CONVERSATION = msg("console.ask.new_conversation", "Start a new conversation");
+export const CONTINUING = msg("console.ask.continuing", "Your next question continues this conversation.");
+export const NOTHING_FOUND_IN_CONVERSATIONS = msg("console.ask.nothing_found_in_conversations", "None of your questions holds those words.");
 
 /** The id tying the search to its label. */
 const SEARCH_FIELD_ID = "ask-search";
@@ -250,23 +251,23 @@ const SEARCH_FIELD_ID = "ask-search";
  * is right if the person knows (M16.6.5). The kind is the note; the words, when given, are a
  * proposal its document's steward decides: see `threadsQuery.ts`.
  */
-export const WAS_IT_WRONG = "Was this answer wrong?";
-export const WHAT_IS_RIGHT = "What is right? (optional)";
+export const WAS_IT_WRONG = msg("console.ask.was_it_wrong", "Was this answer wrong?");
+export const WHAT_IS_RIGHT = msg("console.ask.what_is_right", "What is right? (optional)");
 export const WHAT_IS_RIGHT_HINT =
-  "Sent to whoever looks after the document this answer used. It changes nothing until they approve it.";
+  msg("console.ask.what_is_right_hint", "Sent to whoever looks after the document this answer used. It changes nothing until they approve it.");
 /** The most a person may say is right, which is what the route takes. */
 export const RIGHT_ANSWER_CHARS = 2000;
-export const MARK_WRONG = "Mark it wrong";
-export const MARKED_WRONG = "Marked. Your conversation now notes that this answer was wrong.";
-export const NOT_MARKED = "That could not be marked. Nothing was changed.";
+export const MARK_WRONG = msg("console.ask.mark_wrong", "Mark it wrong");
+export const MARKED_WRONG = msg("console.ask.marked_wrong", "Marked. Your conversation now notes that this answer was wrong.");
+export const NOT_MARKED = msg("console.ask.not_marked", "That could not be marked. Nothing was changed.");
 
 /**
  * The control exporting the conversation the answer was kept in as a file (M33.3.1.3). The file is
  * the conversation as the page shows it now, and the export is recorded in the person's own name
  * before it is handed over, which the page says rather than leaving it to be discovered.
  */
-export const EXPORT_CONVERSATION = "Export this conversation";
-export const NOT_EXPORTED = "That conversation could not be exported. Nothing was saved.";
+export const EXPORT_CONVERSATION = msg("console.ask.export_conversation", "Export this conversation");
+export const NOT_EXPORTED = msg("console.ask.not_exported", "That conversation could not be exported. Nothing was saved.");
 
 /** The id tying the correction's kind to its label. */
 const CORRECTION_FIELD_ID = "ask-correction";
@@ -278,8 +279,8 @@ const RIGHT_FIELD_ID = "ask-right-answer";
 const FIRST_CORRECTION: CorrectionKind = "wrong_fact";
 
 /** The kind picker's label, and its first choice, which searches every kind (M7.6.1). */
-export const KIND_LABEL = "Search only";
-export const ANY_KIND = "Every kind of knowledge";
+export const KIND_LABEL = msg("console.ask.kind_label", "Search only");
+export const ANY_KIND = msg("console.ask.any_kind", "Every kind of knowledge");
 
 /** The id tying the kind picker to its label. */
 const KIND_FIELD_ID = "ask-kind";

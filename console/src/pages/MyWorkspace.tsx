@@ -56,7 +56,6 @@ import { MySkills } from "../components/MySkills";
 import { BY_THE_INSTALL, ConfirmDialog, EmptyList } from "../components/kit";
 import { Button } from "../components/ui/button";
 import { FailureNotice } from "../ui/FailureNotice";
-import { when } from "./artifactsQuery";
 import {
   EDIT_API_PATH,
   FORGET_ALL_API_PATH,
@@ -75,55 +74,56 @@ import {
   type Learned,
   type Workspace,
 } from "./myWorkspaceQuery";
+import { fill, formatNumber, formatTimestamp, msg } from "../locale";
 
-export const WORKSPACE_HEADING = "My workspace";
-export const WORKSPACE_CRUMB = "Use › My workspace";
+export const WORKSPACE_HEADING = msg("console.workspace.workspace_heading", "My workspace");
+export const WORKSPACE_CRUMB = msg("console.workspace.workspace_crumb", "Use › My workspace");
 export const WORKSPACE_LEDE =
-  "What you asked, the agents you can call, what has been learnt about you, and what you keep. " +
+  msg("console.workspace.workspace_lede", "What you asked, the agents you can call, what has been learnt about you, and what you keep. " +
   "Everything on this page is yours or already visible to you, and it shows nothing your access " +
-  "would not already return in an answer.";
+  "would not already return in an answer.");
 
-export const READING_WORKSPACE = "Reading your workspace.";
+export const READING_WORKSPACE = msg("console.workspace.reading_workspace", "Reading your workspace.");
 
 /** Under a refusal: which grant opens the page, which is the same sentence for everybody. */
 export const OPENS_ON_THE_MEMBER_GRANT =
-  "This page opens for anybody holding the member grant, and for nobody else, whatever else they " +
-  "hold. If you expected to see it, ask your department administrator for it.";
+  msg("console.workspace.opens_on_the_member_grant", "This page opens for anybody holding the member grant, and for nobody else, whatever else they " +
+  "hold. If you expected to see it, ask your department administrator for it.");
 export { THE_BRAIN_COULD_NOT_BE_REACHED } from "../ui/FailureNotice";
 
-export const NO_AGENTS = "There are no agents you can call.";
-export const NO_CEILING = "No budget of your own is set.";
-export const NOTHING_LEARNED = "Nothing learnt about you is shown.";
-export const NO_ITEMS = "You do not look after any knowledge items.";
-export const MORE_ITEMS = "You look after more items than this page reads at once.";
+export const NO_AGENTS = msg("console.workspace.no_agents", "There are no agents you can call.");
+export const NO_CEILING = msg("console.workspace.no_ceiling", "No budget of your own is set.");
+export const NOTHING_LEARNED = msg("console.workspace.nothing_learned", "Nothing learnt about you is shown.");
+export const NO_ITEMS = msg("console.workspace.no_items", "You do not look after any knowledge items.");
+export const MORE_ITEMS = msg("console.workspace.more_items", "You look after more items than this page reads at once.");
 
-export const EDIT_LABEL = "Edit";
-export const FORGET_LABEL = "Forget";
-export const SAVE_LABEL = "Save";
-export const CANCEL_LABEL = "Cancel";
-export const KEEP_IT = "Keep it";
-export const UNDO_ALL_LABEL = "Undo all";
-export const UNDO_ALL_QUESTION = "Forget everything learnt about you?";
+export const EDIT_LABEL = msg("console.workspace.edit_label", "Edit");
+export const FORGET_LABEL = msg("console.workspace.forget_label", "Forget");
+export const SAVE_LABEL = msg("console.workspace.save_label", "Save");
+export const CANCEL_LABEL = msg("console.workspace.cancel_label", "Cancel");
+export const KEEP_IT = msg("console.workspace.keep_it", "Keep it");
+export const UNDO_ALL_LABEL = msg("console.workspace.undo_all_label", "Undo all");
+export const UNDO_ALL_QUESTION = msg("console.workspace.undo_all_question", "Forget everything learnt about you?");
 export const UNDO_ALL_CONSEQUENCE =
-  "Each memory stops being used in your answers at once. The records that they were learnt stay, " +
-  "and nothing you said in a conversation is deleted.";
-export const UNDONE_ALL = "Everything learnt about you has been forgotten.";
-export const WHAT_IT_SHOULD_SAY = "What it should say";
-export const WHAT_IT_TAKES = "One sentence about you, up to 280 characters, in your own words.";
-export const WRITE_SOMETHING = "Write what it should say before saving, or cancel to keep it.";
+  msg("console.workspace.undo_all_consequence", "Each memory stops being used in your answers at once. The records that they were learnt stay, " +
+  "and nothing you said in a conversation is deleted.");
+export const UNDONE_ALL = msg("console.workspace.undone_all", "Everything learnt about you has been forgotten.");
+export const WHAT_IT_SHOULD_SAY = msg("console.workspace.what_it_should_say", "What it should say");
+export const WHAT_IT_TAKES = msg("console.workspace.what_it_takes", "One sentence about you, up to 280 characters, in your own words.");
+export const WRITE_SOMETHING = msg("console.workspace.write_something", "Write what it should say before saving, or cancel to keep it.");
 export const FORGET_CONSEQUENCE =
-  "It stops being used in your answers at once. The record that it was learnt stays, and if it " +
-  "replaced something earlier, the earlier one is used again.";
+  msg("console.workspace.forget_consequence", "It stops being used in your answers at once. The record that it was learnt stays, and if it " +
+  "replaced something earlier, the earlier one is used again.");
 
 /** The longest statement the API keeps: `brain.memory.turn.MAX_STATEMENT_CHARS`. */
 export const STATEMENT_CHARS = 280;
 
-export const AGENTS_CAPTION = "Agents I can call";
-export const ITEMS_CAPTION = "Knowledge I own";
-export const LEARNED_CAPTION = "What it learned about me";
+export const AGENTS_CAPTION = msg("console.workspace.agents_caption", "Agents I can call");
+export const ITEMS_CAPTION = msg("console.workspace.items_caption", "Knowledge I own");
+export const LEARNED_CAPTION = msg("console.workspace.learned_caption", "What it learned about me");
 
 /** The caption of the list of what was noticed behind one learned line (M40.4.1.1). */
-export const EVIDENCE_CAPTION = "What was noticed behind";
+export const EVIDENCE_CAPTION = msg("console.workspace.evidence_caption", "What was noticed behind");
 
 function Figures({ workspace }: { readonly workspace: Workspace }) {
   const budget = readBudget(workspace);
@@ -135,15 +135,15 @@ function Figures({ workspace }: { readonly workspace: Workspace }) {
         <div className="fields__row">
           <dt>Questions this month</dt>
           <dd>
-            <span>{String(workspace.asked.questions)}</span>
+            <span>{formatNumber(workspace.asked.questions)}</span>
             <p className="note">{workspace.asked.corrections}</p>
           </dd>
         </div>
         <div className="fields__row">
           <dt>Agents I can call</dt>
           <dd>
-            <span>{String(workspace.agents.length)}</span>
-            <p className="note">{`${String(ownAgents(workspace.agents))} of them your own`}</p>
+            <span>{formatNumber(workspace.agents.length)}</span>
+            <p className="note">{fill(msg("console.workspace.of_them_your_own", "{count} of them your own"), { count: formatNumber(ownAgents(workspace.agents)) })}</p>
           </dd>
         </div>
         <div className="fields__row">
@@ -161,7 +161,7 @@ function Figures({ workspace }: { readonly workspace: Workspace }) {
         <div className="fields__row">
           <dt>Learned about me</dt>
           <dd>
-            <span>{String(workspace.learned.length)}</span>
+            <span>{formatNumber(workspace.learned.length)}</span>
           </dd>
         </div>
       </dl>
@@ -191,7 +191,7 @@ const AGENT_COLUMNS: GridColumn<OwnAgent>[] = [
     cell: ({ row }) => PROVISION_WORDS[row.original.provision] ?? row.original.provision,
   },
   { id: "where", header: "Where it runs", cell: ({ row }) => whereItRuns(row.original) },
-  { id: "uses", header: "Used 30d", cell: ({ row }) => String(row.original.uses) },
+  { id: "uses", header: "Used 30d", cell: ({ row }) => formatNumber(row.original.uses) },
 ];
 
 const ITEM_COLUMNS: GridColumn<OwnItem>[] = [
@@ -363,7 +363,7 @@ function WhatItLearned({
                 <strong>{one.statement}</strong>
               )}
               <p className="note">
-                {`${one.stated ? "You said this" : "Inferred"}, ${when(one.formed_at)}`}
+                {`${one.stated ? msg("console.workspace.you_said_this", "You said this") : msg("console.workspace.inferred", "Inferred")}, ${formatTimestamp(one.formed_at)}`}
               </p>
               {one.evidence_told === "" ? null : <p className="note">{one.evidence_told}</p>}
               {one.evidence.length === 0 ? null : (

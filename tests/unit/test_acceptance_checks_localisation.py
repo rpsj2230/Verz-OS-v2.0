@@ -6,7 +6,7 @@ lexical search dropped (a Chinese question finds nothing), and the language not 
 The shell check says it was not run where the image carries no built console, and passes over a
 bundle carrying the shell, and fails over one whose manifest names an icon nothing serves.
 
-Task ids: M35.1.1.3, M35.1.2.1, M35.1.2.2, M35.1.2.3, M35.3.2.1
+Task ids: M35.1.1.3, M35.4.3, M35.1.2.1, M35.1.2.2, M35.1.2.3, M35.3.2.1
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ def test_each_check_names_the_leaves_it_proves_and_every_one_is_a_leaf() -> None
     assert {name: one.leaves for name, one in mine().items()} == {
         RETRIEVAL: ("M35.1.2.1", "M35.1.2.2", "M35.1.2.3"),
         SHELL: ("M35.3.2.1",),
-        RTL: ("M35.1.1.3",),
+        RTL: ("M35.1.1.3", "M35.4.3"),
     }
     wbs = json.loads((ROOT / "docs" / "wbs.json").read_text(encoding="utf-8"))
     leaves = {one for module in wbs["modules"] for one in module["leaf_ids"]}

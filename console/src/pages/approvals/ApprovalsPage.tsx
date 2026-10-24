@@ -25,6 +25,7 @@ import { WaitingPublishes } from "../agents/WaitingPublishes";
 import { APPROVALS_API_PATH, readApprovalQueue } from "../approvalsQuery";
 import { nameOf, peopleIn } from "../review/parts";
 import { ApprovalCard, DecisionControls, said, type Confirmation } from "./ApprovalCard";
+import { msg } from "../../locale";
 
 /** Why the page moves focus to the sentence confirming a decision. */
 export const A_CONFIRMATION_IS_DRAWN_WHERE_THE_THUMB_IS =
@@ -34,15 +35,15 @@ export const A_CONFIRMATION_IS_DRAWN_WHERE_THE_THUMB_IS =
   "page they are not looking at. Focus goes to that sentence, which scrolls it onto the " +
   "screen and has a screen reader read it, and only after the API has confirmed the decision.";
 
-export const APPROVALS_HEADING = "Approvals";
+export const APPROVALS_HEADING = msg("console.approvals.approvals_heading", "Approvals");
 export const APPROVALS_LEDE =
-  "Actions waiting for you to decide, soonest to lapse first. One nobody decides lapses, and nothing is done.";
-export const NO_APPROVALS = "Nothing is waiting for you.";
-export const NO_APPROVALS_MORE = "An approval appears here when an agent asks before acting on something you may decide.";
-export const MORE_APPROVALS = "There are more approvals than this page shows.";
-export const APPROVAL_LIST_LABEL = "Approvals waiting for you";
-export const FILTERS_LABEL = "Narrow the approvals";
-export const READING_APPROVALS = "Reading the approvals waiting for you.";
+  msg("console.approvals.approvals_lede", "Actions waiting for you to decide, soonest to lapse first. One nobody decides lapses, and nothing is done.");
+export const NO_APPROVALS = msg("console.approvals.no_approvals", "Nothing is waiting for you.");
+export const NO_APPROVALS_MORE = msg("console.approvals.no_approvals_more", "An approval appears here when an agent asks before acting on something you may decide.");
+export const MORE_APPROVALS = msg("console.approvals.more_approvals", "There are more approvals than this page shows.");
+export const APPROVAL_LIST_LABEL = msg("console.approvals.approval_list_label", "Approvals waiting for you");
+export const FILTERS_LABEL = msg("console.approvals.filters_label", "Narrow the approvals");
+export const READING_APPROVALS = msg("console.approvals.reading_approvals", "Reading the approvals waiting for you.");
 
 type QueueRow = components["schemas"]["ApprovalCardView"];
 
