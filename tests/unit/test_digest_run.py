@@ -12,9 +12,11 @@ from __future__ import annotations
 import asyncio
 import json
 import shutil
-from collections.abc import Callable, Mapping
+from collections.abc import AsyncIterator, Callable, Mapping
+from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from unittest import mock
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -29,6 +31,7 @@ from brain.ops.digest_delivery import Delivery
 from brain.ops.digest_run import (
     HISTORY_DAYS,
     OFF,
+    SWITCHED_OFF,
     DigestRecord,
     DigestWire,
     next_record,
@@ -37,6 +40,7 @@ from brain.ops.digest_run import (
 )
 from brain.ops.idempotency import OperationLedger
 from brain.ops.leases import SealedSecret
+from brain.ops.notices import NoticeKind
 from brain.ops.secrets import SecretRef, VaultRole
 from tests.fixtures.operation_ledger import MemoryLedger
 
@@ -149,9 +153,19 @@ def docs(tmp_path: Path) -> Path:
     return tmp_path
 
 
+class Sessions:
+    """What `run_digest` opens to ask a notice's switch: a session with nothing behind it, since
+    the switch itself is stood in for below."""
+
+    @asynccontextmanager
+    async def __call__(self) -> AsyncIterator[None]:
+        yield None
+
+
 def run(
     docs: Path,
     *,
+    notice_on: bool = True,
     saved: str = "lark:oc_1",
     record: ChannelRecord | None = None,
     wire: object | None = None,
@@ -167,20 +181,26 @@ def run(
     def through(work: Callable[[OperationLedger], Delivery]) -> Delivery:
         return work(held)
 
-    return asyncio.run(
-        run_digest(
-            kept if kept is not None else Kept(),
-            now=now,
-            saved=saved,
-            zone=ZONE,
-            records=Records(None if missing else (a_record() if record is None else record)),
-            secrets=lender if lender is not None else Lender(),
-            transport=transport if transport is not None else Transport(),
-            ledger=through,
-            docs=docs,
-            wires=lambda: {Channel.LARK: Wire() if wire is None else wire},
+    async def switch(session: object, kind: NoticeKind) -> bool:
+        assert kind is NoticeKind.EVENING_DIGEST
+        return notice_on
+
+    with mock.patch("brain.ops.digest_run.notice_is_on", switch):
+        return asyncio.run(
+            run_digest(
+                kept if kept is not None else Kept(),
+                sessions=Sessions(),  # type: ignore[arg-type]
+                now=now,
+                saved=saved,
+                zone=ZONE,
+                records=Records(None if missing else (a_record() if record is None else record)),
+                secrets=lender if lender is not None else Lender(),
+                transport=transport if transport is not None else Transport(),
+                ledger=through,
+                docs=docs,
+                wires=lambda: {Channel.LARK: Wire() if wire is None else wire},
+            )
         )
-    )
 
 
 def test_off_until_chosen_sends_nothing_and_borrows_nothing(docs: Path) -> None:
@@ -299,3 +319,23 @@ def test_the_windows_file_is_what_render_js_writes_now() -> None:
     before = (ROOT / "docs" / "wave-windows.json").read_text(encoding="utf-8")
     subprocess.run([node, "docs/wbs/render.js"], cwd=ROOT, check=True, capture_output=True)
     assert (ROOT / "docs" / "wave-windows.json").read_text(encoding="utf-8") == before
+
+
+def test_a_digest_switched_off_on_the_notifications_screen_is_not_sent_or_keyed(docs: Path) -> None:
+    """**The switch reaches the send.** The notice is asked first: switched off, nothing is leased,
+    nothing is posted and no record is kept for tomorrow. Delete this and the Notifications screen
+    offers a switch for the evening digest that nothing consults, which is what it did."""
+    lender, transport, kept = Lender(), Transport(), Kept()
+
+    said = run(docs, notice_on=False, lender=lender, transport=transport, kept=kept)
+
+    assert said == SWITCHED_OFF
+    assert lender.leases == [] and transport.sent == [] and kept.record is None
+
+
+def test_a_digest_switched_on_is_sent_as_before(docs: Path) -> None:
+    """The positive sibling. Delete this and the switch test above is satisfied by a digest that is
+    never sent."""
+    transport = Transport()
+
+    assert run(docs, transport=transport).endswith(": sent") and len(transport.sent) == 1
