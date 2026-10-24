@@ -1735,9 +1735,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M17.4.6": {
-    status: "IN PROGRESS",
-    why: "TRIAGE 2026-10-13 class 2 (partly built): Run history exists: console/agent_automations AutomationRun, automations_routes detail and stats, tables/automation_run. Cost per run is not recorded: RUN_COST_IS_NOT_RECORDED in automations_routes says so. unattended.CostedRun/history is unwired. NEXT: record cost per run (spend actuals joined by run id) and surface it in AutomationRun and the stats route",
-    updated: "2026-10-13",
+    status: "BLOCKED",
+    why: "NOT BUILT, 2026-10-24, and why. Run history exists (console/agent_automations AutomationRun, automations_routes detail and stats, tables/automation_run) and says each run's outcome. A run's cost cannot be recorded because no run spends: the one performer this install has reads a table and calls no model, a flow's tool calls go through the gate with no model, and the tasks that would ask one are unbuilt behind needs-rupash 210 (may an automation call a model with nobody present). Recording nought for every run would be the thing automations_routes.RUN_COST_IS_NOT_RECORDED declines to do: a figure that reads as a measurement and is not one. The sentence is true today and the stats route keeps saying it. WHAT BUILDS IT, once 210 is answered: the performer that calls a model hands the run's id as the request's trace id, the spend ledger already records what each request cost, and unattended.CostedRun/history joins the two by that id; the stats route then sums it per period and the unrecorded entry goes. unattended.CostedRun is unwired until then.",
+    updated: "2026-10-24",
   },
   "M17.5.1": {
     status: "READY FOR TESTING",
@@ -4621,8 +4621,8 @@ const PROGRESS = {
   },
   "M17.7.6": {
     status: "IN PROGRESS",
-    why: "PARTLY BUILT 2026-10-14: control_not_run now has a sender through tell_later and the mail relay (brain.control_not_run_told), so seven of the fourteen notice kinds are sent. Still unsent: evening_digest (sent by the digest destination, not through tell_later), approval_request, budget_stopped, access_request, backup_exposure, emergency_access and self_grant. Not built: an undelivered state per notice on the Notifications screen. Delivery outcomes are already kept in ops.channel_delivery (refused and unknown included) but carry no notice kind, so showing them per notice needs the kind or the intent prefix recorded beside the outcome",
-    updated: "2026-10-14",
+    why: "PARTLY BUILT, 2026-10-24 count: eleven of the fifteen notice kinds are sent by something that runs. Wired this week: the evening digest now asks its switch (digest_run.run_digest asks notice_is_on; until now the Notifications screen offered a switch nothing consulted, and its row said nothing posts it) and the daily backup report is registered as the sender of the backup-exposure notice (backup_report_run.run_backup_report, which already posted each alert once a day to the digest's conversation and now asks the notice's switch, which that notice does not have). Still unsent, and each needs your decision on who hears it and in which chat tool: approval_request, access_request, emergency_access and self_grant. They are needs-rupash 267, with a recommendation (B: the two that report misuse, to the people they name, in chat with the email fallback; leave an approval on its screen until the measured wait of 222 says people are slow to find them). Not built: an undelivered state per notice on the Notifications screen. Delivery outcomes are already kept in ops.channel_delivery (refused and unknown included) but carry no notice kind, so showing them per notice needs the kind or the intent prefix recorded beside the outcome. NOT CLAIMED: the leaf stays open until 267 is answered and the four are built to it.",
+    updated: "2026-10-24",
   },
   "M17.7.7": {
     status: "IN PROGRESS",

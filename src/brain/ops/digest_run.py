@@ -33,7 +33,7 @@ why the chosen channel cannot carry it now, in `brain.ops.digest_destination`'s 
 the day and the channel and never the content, because a run record is read by whoever reads the
 Scheduled jobs screen.
 
-Task ids: M38.3.3.1, M38.3.3.2, M38.3.3.3, M38.3.3.4
+Task ids: M38.3.3.1, M38.3.3.2, M38.3.3.3, M38.3.3.4, M17.7.6
 """
 
 from __future__ import annotations
@@ -66,6 +66,7 @@ from brain.ops.digest import (
 from brain.ops.digest_delivery import Delivery, DeliveryOutcome, DigestChannel, deliver_digest
 from brain.ops.digest_destination import ConversationLister, connected_problem, destination_of
 from brain.ops.idempotency import OperationLedger
+from brain.ops.notices import NoticeKind, notice_is_on
 from brain.ops.setting_store import put, read_namespace
 from brain.tables.audit import attributed_to
 from brain.tables.config import SettingType
@@ -95,6 +96,9 @@ WINDOWS_FILE: Final = "wave-windows.json"
 
 #: What an off digest says.
 OFF: Final = "the evening digest is off: nobody has chosen where it goes"
+
+#: What a digest an administrator switched off on the Notifications screen says.
+SWITCHED_OFF: Final = "the evening digest is switched off on the Notifications screen"
 
 
 class DigestRunError(Exception):
@@ -303,6 +307,7 @@ class StoredDigestRecords:
 async def run_digest(
     kept: DigestRecords,
     *,
+    sessions: async_sessionmaker[AsyncSession],
     now: datetime,
     saved: str,
     zone: ZoneInfo,
@@ -313,7 +318,16 @@ async def run_digest(
     docs: Path,
     wires: Callable[[], Mapping[Channel, object]] = channel_wires,
 ) -> str:
-    """One evening's digest: off, stopped with its reason, or sent once to the chosen place."""
+    """One evening's digest: off, stopped with its reason, or sent once to the chosen place.
+
+    **The notice's switch is asked first, as every sender asks it**, so the switch the
+    Notifications screen offers for the evening digest reaches this send. Until 2026-10-24 it did
+    not: the screen offered a switch and nothing consulted it, which `brain.ops.notices` says every
+    sender must not be.
+    """
+    async with sessions() as session:
+        if not await notice_is_on(session, NoticeKind.EVENING_DIGEST):
+            return SWITCHED_OFF
     chosen = destination_of(saved)
     if chosen is None:
         return OFF
@@ -389,6 +403,7 @@ def run_evening_digest_now(
             sessions = make_session_factory(engine)
             return await run_digest(
                 StoredDigestRecords(sessions),
+                sessions=sessions,
                 now=now,
                 saved=value_of(DESTINATION_SETTING),
                 zone=time_zone(),
