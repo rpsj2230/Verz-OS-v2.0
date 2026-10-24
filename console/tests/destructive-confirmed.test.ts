@@ -44,6 +44,13 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "without a digest, parses the document and names what it holds and keeps no row, which " +
     "tests/unit/test_template_withdrawal.py holds. Adding it is the same address with the digest that was " +
     "shown, and is sent only from a confirmation.",
+  "src/components/LogoUpload.tsx LOGO_UPLOAD_PATH":
+    "Choosing a logo on the first-run screen stores one picture file and nothing else: " +
+    "brain.logo_routes refuses it without the setup code and once an administrator exists, refuses anything that is " +
+    "not a small raster image, and replaces the earlier logo only whole, so a failed write leaves the earlier one " +
+    "(tests/unit/test_logo_upload.py holds both). A second upload does discard the first file, and the first is the " +
+    "company's own picture that the person still holds and can send again before finishing, which " +
+    "tests/unit/test_logo_upload.py holds as a second upload replacing the first.",
   "src/pages/install/BrowserPanel.tsx TARGETS_API_PATH":
     "Declaring a website adds a row to agent.browser_target and opens no browser: brain.browser_routes.declare_target " +
     "is behind the browser_declarations switch, the table is insert-only so every earlier declaration is kept, and " +
