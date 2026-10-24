@@ -5025,9 +5025,9 @@ const PROGRESS = {
     updated: "2026-10-13",
   },
   "M42.5.16": {
-    status: "OPEN",
-    why: "TRIAGE 2026-10-13 class 4 (unbuilt): No channels step exists: setup_wizard.StepId has setup_code, company, administrator, data_steward, staff_source, model_provider, connections, review, finish; channel connection exists elsewhere (channel routes, console Channels pages).",
-    updated: "2026-10-13",
+    status: "READY FOR TESTING",
+    why: "BUILT: the wizard has a Chat and email channels screen after the data sources (skippable, commits no installation value, names checked for shape). The channels named are set up after the finishing screen has signed the administrator in, each through the Channels screen's own set-up form followed by its test message (setup/ConnectChannelsStep.tsx reusing ChannelProfile), with the administrator's own token. Tested over the wizard's order and answers, the catalogue sentence, and the real first run in the console (named channel, a name with no channel, and a skip). NOT SHOWN: a real vendor accepting a channel's secret or delivering the test message. TO PROVE: on an install, name a channel in first run, finish, set it up and send its test message.",
+    updated: "2026-10-24",
   },
   "M42.5.17": {
     status: "BLOCKED",

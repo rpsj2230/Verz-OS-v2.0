@@ -150,7 +150,7 @@ def body(
     *,
     code: str = SECRET,
     answers: Mapping[StepId, Mapping[str, str]] = EVERY_SCREEN,
-    skipped: tuple[StepId, ...] = (StepId.CONNECTIONS,),
+    skipped: tuple[StepId, ...] = (StepId.CONNECTIONS, StepId.CHANNELS),
     **extra: object,
 ) -> dict[str, Any]:
     return {
@@ -445,7 +445,7 @@ def test_problems_with_the_answers_are_told_by_screen_and_field_and_appoint_nobo
             c,
             body(
                 answers={k: v for k, v in EVERY_SCREEN.items() if k is not StepId.ADMINISTRATOR},
-                skipped=(StepId.CONNECTIONS, StepId.ADMINISTRATOR),
+                skipped=(StepId.CONNECTIONS, StepId.CHANNELS, StepId.ADMINISTRATOR),
             ),
         )
 

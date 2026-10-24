@@ -61,6 +61,10 @@
  * form and request, skippable and said to be repeatable from Connectors. A person who skipped the
  * screen lands exactly as before. See that module's `CONNECTING_WAITS_FOR_THE_ADMINISTRATOR`.
  *
+ * **Channels named on the Channels screen are offered after the sources**, by
+ * `setup/ConnectChannelsStep.tsx`, each through the Channels screen's own set-up form and test
+ * message. See that module for why it comes after the appointment.
+ *
  * **Nothing sends a person here.** The root address does not detect an unfinished install and
  * redirect, because there is no route that says whether an install is finished, and there must
  * not be: that is the fact `EVERY_REFUSAL_BEFORE_THE_ANSWERS_IS_ONE_ANSWER` hides. The install
@@ -75,7 +79,7 @@
  * which reads the chosen list once and holds what it needs in its own state, so nothing it asks
  * for is an answer, in the review or in the appointment.
  *
- * Task ids: M42.5.14, M27.8.7, M42.5.7, M42.5.9, M27.9.9
+ * Task ids: M42.5.14, M27.8.7, M42.5.7, M42.5.9, M27.9.9, M42.5.16
  */
 
 import { useState, useSyncExternalStore } from "react";
@@ -85,6 +89,7 @@ import type { ApiFailure } from "../api/errors";
 import type { components } from "../api/schema";
 import { clearSignInAttempts } from "../auth/pkce";
 import { accessToken, beginSignIn, getSessionState, subscribe } from "../auth/session";
+import { ConnectChannelsStep, namedChannels } from "../setup/ConnectChannelsStep";
 import { ConnectSourcesStep, namedSources } from "../setup/ConnectSourcesStep";
 import {
   APPOINTMENT_PATH,
@@ -319,6 +324,7 @@ function Wizard() {
   const [finishing, setFinishing] = useState(false);
   const [finished, setFinished] = useState(false);
   const [connectingSources, setConnectingSources] = useState(false);
+  const [connectingChannels, setConnectingChannels] = useState(false);
 
   function valueOf(screen: Screen, question: Question): string {
     if (screen.key === "setup_code") {
@@ -416,6 +422,11 @@ function Wizard() {
       setConnectingSources(true);
       return;
     }
+    // M42.5.16: the same for the channels named on the Channels screen.
+    if (namedChannels(answers, skipped).length > 0) {
+      setConnectingChannels(true);
+      return;
+    }
     if (keptSentence(kept, restart) === null) {
       navigate("/", { replace: true });
       return;
@@ -478,6 +489,22 @@ function Wizard() {
     return (
       <ConnectSourcesStep
         named={namedSources(answers, skipped)}
+        kept={kept}
+        onDone={() => {
+          setConnectingSources(false);
+          if (namedChannels(answers, skipped).length > 0) {
+            setConnectingChannels(true);
+            return;
+          }
+          navigate("/", { replace: true });
+        }}
+      />
+    );
+  }
+  if (connectingChannels) {
+    return (
+      <ConnectChannelsStep
+        named={namedChannels(answers, skipped)}
         kept={kept}
         onDone={() => navigate("/", { replace: true })}
       />
